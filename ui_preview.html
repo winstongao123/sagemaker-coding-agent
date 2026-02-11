@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SageMaker Coding Agent - UI Preview (Dark Mode)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1e1e1e; color: #d4d4d4; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .widget { background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 15px; margin-bottom: 30px; }
+        h1 { color: #569cd6; border-bottom: 2px solid #569cd6; padding-bottom: 10px; }
+        h2 { color: #4ec9b0; margin-top: 0; font-size: 18px; }
+        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #3c3c3c; border-radius: 4px; padding: 10px; background: #1e1e1e; }
+        .msg { padding: 10px; margin: 8px 0; border-radius: 6px; }
+        .msg-user { background: #264f78; }
+        .msg-agent { background: #2d2d2d; }
+        .msg-tool { background: #3d3222; font-size: 13px; }
+        .msg-system { background: #4d2222; }
+        .msg-time { color: #9cdcfe; font-size: 12px; font-weight: bold; }
+        .msg pre { margin: 5px 0 0 0; white-space: pre-wrap; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; color: #d4d4d4; }
+        .input-area { margin-top: 10px; }
+        .input-box { width: 100%; height: 60px; padding: 10px; border: 1px solid #3c3c3c; border-radius: 4px; font-size: 14px; resize: none; background: #1e1e1e; color: #d4d4d4; box-sizing: border-box; }
+        .btn-row { margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .btn { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #0e639c; color: white; }
+        .btn-default { background: #3c3c3c; color: #d4d4d4; }
+        .btn-success { background: #388a34; color: white; }
+        .btn-danger { background: #c42b1c; color: white; }
+        .status { margin-left: auto; color: #9cdcfe; font-size: 13px; }
+        .tokens { color: #6a9955; font-size: 12px; margin-top: 8px; }
+        .approval-box { background: #332b00; border: 2px solid #cca700; border-radius: 8px; padding: 15px; margin: 15px 0; }
+        .approval-box h4 { margin: 0 0 10px 0; color: #cca700; }
+        .approval-box pre { background: #1e1e1e; padding: 10px; border-radius: 4px; font-size: 12px; color: #ce9178; }
+        .checkbox { margin-right: 5px; }
+        .config-row { display: flex; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+        .config-label { width: 120px; font-weight: 500; color: #9cdcfe; }
+        .config-select { padding: 8px; border: 1px solid #3c3c3c; border-radius: 4px; min-width: 280px; background: #1e1e1e; color: #d4d4d4; }
+        .section-title { background: #2d2d2d; padding: 10px; margin: 20px 0 10px 0; border-left: 4px solid #569cd6; color: #569cd6; }
+        label { color: #d4d4d4; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SageMaker Coding Agent - Dark Mode Preview</h1>
+
+        <!-- Configuration Section -->
+        <div class="section-title"><strong>1. Configuration UI</strong></div>
+        <div class="widget">
+            <h2>Agent Configuration</h2>
+            <div class="config-row">
+                <span class="config-label">Model:</span>
+                <select class="config-select">
+                    <option selected>Claude 3.5 Sonnet v2 (Recommended)</option>
+                    <option>Claude 3.5 Sonnet</option>
+                    <option>Claude 3 Opus</option>
+                    <option>Claude 3 Haiku (Fast)</option>
+                </select>
+            </div>
+            <div class="config-row">
+                <span class="config-label">Region:</span>
+                <span style="color:#9cdcfe;">Sydney (ap-southeast-2)</span>
+            </div>
+            <div class="config-row">
+                <span class="config-label">Workspace:</span>
+                <input type="text" value="." class="config-select">
+            </div>
+            <div class="config-row">
+                <input type="checkbox" class="checkbox" id="mock">
+                <label for="mock">Mock Mode (test without API)</label>
+            </div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="section-title"><strong>2. Chat Interface</strong></div>
+        <div class="widget">
+            <h2>SageMaker Coding Agent</h2>
+            <div class="chat-area">
+                <div class="msg msg-user">
+                    <span class="msg-time">[10:30:15] You:</span>
+                    <pre>Help me understand the codebase structure</pre>
+                </div>
+                <div class="msg msg-agent">
+                    <span class="msg-time">[10:30:16] Agent:</span>
+                    <pre>I'll analyze the project structure for you.</pre>
+                </div>
+                <div class="msg msg-tool">
+                    <span class="msg-time">[10:30:16] Tool (list_dir):</span>
+                    <pre>[DIR]  core/
+[DIR]  tools/
+[FILE] config.py (2,145 bytes)
+[FILE] agent.ipynb (15,320 bytes)</pre>
+                </div>
+                <div class="msg msg-agent">
+                    <span class="msg-time">[10:30:17] Agent:</span>
+                    <pre>The project has 2 main directories:
+- core/ - Agent logic, security, memory
+- tools/ - All 15 tools for file ops, bash, docs</pre>
+                </div>
+            </div>
+            <div class="input-area">
+                <textarea class="input-box" placeholder="Type your message here..."></textarea>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-primary">Send</button>
+                <button class="btn btn-default">Clear</button>
+                <span class="status"><strong>Status:</strong> Ready</span>
+            </div>
+            <div class="tokens">Tokens: In:2,847 Out:1,203 | Total:4,050 | Calls:3</div>
+        </div>
+
+        <!-- Approval Dialog - Separate Box -->
+        <div class="section-title"><strong>3. Approval Dialog</strong> (separate popup)</div>
+        <div class="widget">
+            <div class="approval-box">
+                <h4>! Approval Required</h4>
+                <p><strong>Tool:</strong> bash</p>
+                <p><strong>Input:</strong></p>
+                <pre>{
+  "command": "git status"
+}</pre>
+                <div class="btn-row" style="margin-top: 15px;">
+                    <button class="btn btn-success">Approve</button>
+                    <button class="btn btn-danger">Deny</button>
+                    <input type="checkbox" class="checkbox" id="remember">
+                    <label for="remember">Remember for session</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Message -->
+        <div class="section-title"><strong>4. System Messages</strong></div>
+        <div class="widget">
+            <div class="msg msg-system">
+                <span class="msg-time">[10:31:00] System:</span>
+                <pre>Context warning: 80% usage (160,000 / 200,000 tokens)</pre>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

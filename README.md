@@ -1,355 +1,171 @@
 # SageMaker Coding Agent
 
-A secure, fully functional AI coding assistant for AWS SageMaker, powered by Amazon Bedrock Claude models.
+A secure AI coding assistant for AWS SageMaker and GCP, powered by Amazon Bedrock Claude or Google Vertex AI Gemini.
+
+**Tested: 10/10 use cases pass on both AWS versions** (see [test results](#test-results))
+
+---
+
+## Three Versions Available
+
+| Version | Platform | Model | Best For |
+|---------|----------|-------|----------|
+| **[compact/](compact/)** | AWS Bedrock | Claude 3.5 Sonnet | Quick setup, sharing |
+| **[complete/](complete/)** | AWS Bedrock | Claude 3.5 Sonnet | Teams, development |
+| **[compact_GCP/](compact_GCP/)** | GCP Vertex AI | Gemini 1.5 Pro | GCP/Colab users |
+
+**AWS versions have IDENTICAL features and pass all tests. GCP version has 14 tools (no semantic_search).**
+
+---
 
 ## Features
 
-### Core Capabilities
-- **Chat Interface** - ipywidgets-based chat in Jupyter notebook
-- **Code Assistance** - Read, search, edit, write files
-- **Shell Execution** - Run bash commands with approval
-- **Python Execution** - Run Python code for data processing
-- **Document Generation** - Create Word, Excel, Markdown files
-- **Vision** - Analyze images and screenshots
-- **Session Memory** - Save/load conversation history
+### 15 Tools
+| Category | Tools |
+|----------|-------|
+| File Operations | `read_file`, `write_file`, `edit_file`, `glob`, `list_dir` |
+| Search | `grep`, `semantic_search` (AI-powered) |
+| Execution | `bash`, `python_exec` |
+| Documents | `create_word`, `create_excel`, `create_markdown` |
+| Other | `view_image`, `todo_write`, `todo_read` |
 
-### Security (for Sensitive Data)
-- **Workspace Boundary** - Cannot access files outside project
-- **Secret Detection** - Warns on API keys, passwords, credentials
-- **Command Filtering** - Blocks dangerous commands (rm -rf, sudo, etc.)
-- **Network Isolation** - curl, wget, ssh blocked by default
-- **Audit Logging** - Immutable log with integrity verification
-- **Approval System** - Write operations need user confirmation
+### Security
+- **Workspace Boundary**: Cannot access files outside project
+- **Secret Detection**: Warns about API keys, passwords
+- **Command Filtering**: Blocks dangerous commands (`rm -rf`, etc.)
+- **Audit Logging**: Records all actions with timestamps
 
-### AI Features
-- **OpenCode-style Prompts** - Professional, task-focused responses
-- **Todo Tracking** - Automatic task management
-- **Doom Loop Detection** - Stops repetitive tool calls
-- **Context Warnings** - Alerts at 80%, 90%, 95% context usage
-- **Semantic Search** - Find code by meaning (optional)
+### Model Parameters
+- **Temperature**: 0.0 - 1.0 (creativity control)
+- **Extended Thinking**: Enable deep reasoning mode
+- **Thinking Budget**: 1024 - 16000 tokens for thinking
+
+### Other Features
+- **Sessions**: Save and resume conversations
+- **Approval System**: Confirms before write operations
+- **Context Warnings**: Alerts at 80/90/95% usage
+- **Progress Visibility**: See tool calls and results in real-time
 
 ---
 
 ## Quick Start
 
-### Option A: Run in SageMaker (Recommended)
-
-Upload the entire `sagemaker-coding-agent/` folder to your SageMaker notebook instance.
-
-### Option B: Run Locally (for Testing)
-
-You can test locally if you have AWS credentials:
+### Option 1: AWS Compact (Recommended for First Use)
 
 ```bash
-# 1. Configure AWS credentials
-aws configure
-# Enter: Access Key, Secret Key, Region (ap-southeast-2)
-
-# 2. Ensure Bedrock access is enabled in your AWS account
-
-# 3. Install Jupyter
-pip install jupyter
-
-# 4. Run
-cd sagemaker-coding-agent
-jupyter notebook
+cd compact/
 ```
 
-Open `setup.ipynb` first, then `agent.ipynb`.
+1. Open `chat.ipynb`
+2. Run Cell 1 (install dependencies)
+3. Run Cell 2 (configure model/region)
+4. Run Cell 3 (start chatting!)
 
----
-
-### 1. Upload to SageMaker (if using SageMaker)
-
-Upload the entire `sagemaker-coding-agent/` folder to your SageMaker notebook instance.
-
-### 2. Install Dependencies
+### Option 2: AWS Complete
 
 ```bash
-pip install -r requirements.txt
+cd complete/
 ```
 
-Or in a notebook cell:
-```python
-!pip install boto3 ipywidgets pandas openpyxl python-docx Pillow numpy
+1. Run `pip install -r requirements.txt`
+2. Open `setup.ipynb` (check Bedrock access)
+3. Open `agent.ipynb` (start chatting)
+
+### Option 3: GCP Vertex AI (Gemini)
+
+```bash
+cd compact_GCP/
 ```
 
-### 3. Run Setup
-
-Open **`setup.ipynb`** and run all cells to:
-- Discover available Bedrock models in your region
-- Check permissions
-- Save configuration
-
-### 4. Start Chatting
-
-Open **`agent.ipynb`** and run the cells to start the chat interface.
-
----
-
-## Usage Guide
-
-### Basic Chat
-
-Type your request in the input box and click **Send**:
-
-```
-"List all Python files in this project"
-"Read the config.py file"
-"Create a hello.py file that prints Hello World"
-"Run git status"
-```
-
-### Approval System
-
-When the agent wants to:
-- **Write/edit files** → Asks once per session
-- **Run bash commands** → Asks every time
-- **Run Python code** → Asks every time
-- **Create documents** → Asks every time
-
-Click **Approve** or **Deny** in the dialog.
-
-### Task Tracking
-
-The agent automatically tracks tasks. For complex requests:
-
-```
-"Help me refactor the authentication module"
-```
-
-The agent will:
-1. Create a todo list
-2. Mark tasks in progress
-3. Complete tasks one by one
-4. Show progress throughout
-
-### Document Generation
-
-```
-"Create a Word document summarizing the project"
-"Create an Excel file with user data: name=Alice age=30, name=Bob age=25"
-"Create a README.md for this project"
-```
-
-### Code Search
-
-**Keyword search (grep):**
-```
-"Search for 'def authenticate' in all Python files"
-```
-
-**Semantic search (meaning-based):**
-```
-"Find code that handles user login"
-```
-
-Note: Semantic search requires indexing first (see setup.ipynb).
-
-### Image Analysis
-
-```
-"Analyze the screenshot at ./error.png"
-"What does the diagram in architecture.png show?"
-```
-
----
-
-## Configuration
-
-### Default Settings (config.py)
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| region | ap-southeast-2 | AWS region (Sydney) |
-| primary_model | claude-3-5-sonnet | Main model |
-| max_turns | 50 | Max agent loop iterations |
-| max_tokens | 4096 | Max response tokens |
-| allow_network | False | Block network commands |
-
-### Change Configuration
-
-Edit `agent_config.json` after running setup, or:
-
-```python
-from config import AgentConfig
-config = AgentConfig.load()
-config.region = "us-east-1"
-config.save()
-```
-
-### Project Instructions (AGENTS.md)
-
-Create an `AGENTS.md` file in your project root to give the agent custom instructions:
-
-```markdown
-# Project Instructions
-
-## Code Style
-- Use type hints for all functions
-- Follow PEP 8
-
-## Important Files
-- config.py - Main configuration
-- core/ - Core modules
-
-## Testing
-- Run tests with: pytest tests/
-```
-
----
-
-## File Structure
-
-```
-sagemaker-coding-agent/
-├── agent.ipynb          # Main chat interface
-├── setup.ipynb          # Setup & model discovery
-├── config.py            # Configuration class
-├── requirements.txt     # Python dependencies
-│
-├── core/
-│   ├── agent_loop.py    # ReAct loop + doom detection
-│   ├── audit.py         # Audit logging
-│   ├── bedrock_client.py# Bedrock API
-│   ├── context_manager.py# Context warnings
-│   ├── memory.py        # Session persistence
-│   ├── permissions.py   # Approval system
-│   ├── project_config.py# AGENTS.md loading
-│   ├── prompts.py       # Prompt builder
-│   ├── security.py      # Security controls
-│   ├── semantic_search.py# Titan Embeddings
-│   └── tools.py         # Tool registry
-│
-├── tools/
-│   ├── bash.py          # Shell execution
-│   ├── document.py      # Word/Excel/MD
-│   ├── file_ops.py      # File operations
-│   ├── python_exec.py   # Python execution
-│   ├── search.py        # Grep + semantic
-│   ├── todo.py          # Task tracking
-│   └── vision.py        # Image analysis
-│
-├── prompts/
-│   └── system.txt       # System prompt
-│
-├── sessions/            # Saved conversations
-└── audit_logs/          # Action audit trail
-```
-
----
-
-## Available Tools
-
-### Read-Only (No Approval)
-| Tool | Description |
-|------|-------------|
-| `read_file` | Read file with line numbers |
-| `glob` | Find files by pattern |
-| `grep` | Search file contents |
-| `list_dir` | List directory |
-| `view_image` | Analyze images |
-| `todo_read` | Check task list |
-| `semantic_search` | Search by meaning |
-
-### Write Operations (Approval Required)
-| Tool | Description |
-|------|-------------|
-| `write_file` | Create/overwrite file |
-| `edit_file` | Replace text in file |
-| `create_word` | Create .docx |
-| `create_excel` | Create .xlsx |
-| `create_markdown` | Create .md |
-
-### Execution (Always Asks)
-| Tool | Description |
-|------|-------------|
-| `bash` | Run shell commands |
-| `python_exec` | Run Python code |
-
----
-
-## Security Details
-
-### Blocked Commands
-- `rm -rf /` - Recursive delete
-- `sudo` - Privilege escalation
-- `curl | bash` - Pipe to shell
-- `dd if=` - Direct disk access
-- Network commands (when disabled)
-
-### Secret Detection
-Warns when content contains:
-- API keys
-- AWS credentials
-- Passwords
-- Private keys
-- Database connection strings
-- JWT tokens
-
-### Audit Log
-Every action is logged to `audit_logs/` with:
-- Timestamp
-- Tool name
-- Parameters (sanitized)
-- Result summary
-- Hash for integrity verification
-
-Check integrity:
-```python
-from core.audit import AuditLogger
-audit = AuditLogger()
-is_valid, issues = audit.verify_integrity("session_id")
-```
-
----
-
-## Troubleshooting
-
-### "Access denied" for Bedrock models
-
-1. Go to AWS Console → Amazon Bedrock
-2. Click "Model access" → "Manage model access"
-3. Enable Claude models
-4. Re-run setup.ipynb
-
-### "Must read file before editing"
-
-The agent must call `read_file` before `edit_file`. This is a safety feature. Ask the agent to read the file first.
-
-### Context limit warnings
-
-At 80% context, a checkpoint is saved. At 95%, consider starting a new session. The agent will warn you.
-
-### Tool execution denied
-
-Click **Approve** in the dialog, or check if the command is blocked for security reasons.
+1. Set up GCP credentials:
+   ```bash
+   gcloud auth application-default login
+   export GCP_PROJECT_ID="your-project-id"
+   ```
+2. Run `pip install -r requirements.txt`
+3. Start in Jupyter/Colab:
+   ```python
+   from gcp_coding_agent import create_chat_ui
+   create_chat_ui()
+   ```
 
 ---
 
 ## Requirements
 
-- AWS SageMaker notebook instance
+### AWS Versions
+- AWS SageMaker or local Jupyter with AWS credentials
 - Bedrock access with Claude models enabled
 - Python 3.8+
-- IAM permissions: `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`
+
+### GCP Version
+- GCP project with Vertex AI API enabled
+- Application Default Credentials (ADC)
+- Python 3.8+
 
 ---
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [README.md](README.md) | This file - overview and usage |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Full technical design |
-| [docs/AWS_SETUP_VERIFICATION.md](docs/AWS_SETUP_VERIFICATION.md) | AWS credential setup guide |
-| [docs/test_bedrock.py](docs/test_bedrock.py) | Bedrock access test script |
+Each version has its own `GUIDE.md` with:
+- Beginner explanations of all concepts
+- Complete architecture diagrams
+- User interaction guide
+- Security details
+- Troubleshooting
+
+---
+
+## Test Results
+
+Both versions pass all 10 comprehensive use cases with 5+ step flows:
+
+| Test | Description | Compact | Complete |
+|------|-------------|---------|----------|
+| 1 | Explore codebase | PASS | PASS |
+| 2 | Code analysis | PASS | PASS |
+| 3 | Project setup with todos | PASS | PASS |
+| 4 | Search and analyze | PASS | PASS |
+| 5 | Bash operations | PASS | PASS |
+| 6 | Python execution | PASS | PASS |
+| 7 | Multi-file reading | PASS | PASS |
+| 8 | Error handling | PASS | PASS |
+| 9 | Security validation | PASS | PASS |
+| 10 | Combined workflow | PASS | PASS |
+
+Run tests: `python test_10_cases.py`
+
+---
+
+## Comparison with Anthropic Skills
+
+| Feature | Anthropic Skills | This Agent |
+|---------|-----------------|------------|
+| Word (.docx) | Prompt-based skill | Direct `create_word` tool |
+| Excel (.xlsx) | Prompt-based skill | Direct `create_excel` tool |
+| PDF | Yes | Not yet (can add) |
+| PowerPoint | Yes | Not yet (can add) |
+| Infrastructure | Requires Claude Pro/Max | Self-contained (AWS Bedrock) |
+| Deployment | Cloud-dependent | Works in SageMaker |
+
+Our approach uses native Python libraries (python-docx, openpyxl) for direct document creation without external dependencies.
+
+---
+
+## AWS vs GCP Version Comparison
+
+| Feature | AWS (Bedrock/Claude) | GCP (Vertex AI/Gemini) |
+|---------|---------------------|------------------------|
+| Model | Claude 3.5 Sonnet | Gemini 1.5 Pro |
+| Context Window | 200K tokens | 2M tokens |
+| Extended Thinking | Yes | Limited (2.0 exp only) |
+| Semantic Search | Yes (Titan Embeddings) | Not included |
+| Tools | 15 | 14 |
+| Auth | IAM Role | ADC / Service Account |
+| Best For | SageMaker users | Colab/GCP users |
 
 ---
 
 ## Based On
 
-This agent is inspired by [OpenCode](https://github.com/sst/opencode) with adaptations for:
-- AWS Bedrock (instead of direct Anthropic API)
-- Jupyter notebook interface (instead of CLI)
-- Enhanced security for sensitive data processing
+Inspired by [OpenCode](https://github.com/anthropics/anthropic-quickstarts) with adaptations for AWS Bedrock, GCP Vertex AI, and Jupyter.

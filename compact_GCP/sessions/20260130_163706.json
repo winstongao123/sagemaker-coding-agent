@@ -1,0 +1,40 @@
+{
+  "id": "20260130_163706",
+  "created_at": "2026-01-30T16:37:06.012942",
+  "updated_at": "2026-01-30T16:37:24.872842",
+  "title": "hello",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello"
+    },
+    {
+      "role": "user",
+      "content": "check waht code inside D:\\Github\\sagemaker-coding-agent\\compact_GCP"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "cac21102",
+          "name": "list_dir",
+          "input": {
+            "path": "D:\\Github\\sagemaker-coding-agent\\compact_GCP"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "cac21102",
+          "content": "[FILE] GUIDE.md (486 bytes)\n[DIR]  __pycache__/\n[DIR]  audit_logs/\n[FILE] chat.ipynb (7,565 bytes)\n[FILE] gemini_agent.py (75,740 bytes)\n[DIR]  sessions/"
+        }
+      ]
+    }
+  ],
+  "metadata": {}
+}

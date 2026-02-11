@@ -1,0 +1,3986 @@
+"""
+Vertex AI Gemini Coding Agent - Compact Version (GCP)
+A secure AI coding assistant powered by GCP Vertex AI Gemini.
+
+Version: 2.5.0 (January 2025)
+
+UI Layout (synced with AWS version):
+    Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
+    Row 2: [Temp] [Thinking] [Budget] [Dark] | [Plan Mode] [☑Auto-Compact]
+    Chat:  HTML widget with internal scroll (works in SageMaker & Colab)
+    Row 3: [Send] [Clear] [Compact] [Status]
+    Row 4: Token usage with progress bar
+
+Features Implemented (synced with AWS version):
+- UI: HTML widget with internal scroll (fixes SageMaker drifting, also works in Colab)
+- UI: Auto-scroll to bottom (CSS flex-direction: column-reverse)
+- UI: Dark mode toggle updates all existing messages
+- UI: Session dropdown with Load/New buttons
+- UI: Save button moved to Row 1 (next to New)
+- Context: Compact button (OpenCode-style 2-stage: prune + summarize)
+- Context: Auto-Compact (ON by default, triggers at 90%, keeps last 3 messages)
+- Context: Pre-send compact (auto-compacts at 80% BEFORE sending to prevent overflow)
+- Context: Auto-continue after compact (resumes automatically like OpenCode)
+- Context: Plan Mode (enforced read-only - blocks write tools)
+- Context: Token display shows actual context window % (not cumulative API totals)
+- UI: Stop button (cancel LLM processing mid-stream)
+- Session: Auto-save after each message (no manual save needed)
+- Session: Save/Load with absolute paths (./sessions/)
+- Session: Todo list persisted with session
+- Tools: 17 tools including:
+  - File: read_file, write_file, edit_file, glob, grep, list_dir
+  - Exec: bash, python_exec
+  - Docs: create_word (with images), create_excel (with charts), create_markdown
+  - NEW: create_chart (bar/line/pie/scatter), create_pdf (text/tables/images)
+  - Other: view_image, todo_write, todo_read, semantic_search
+- Security: Comprehensive protection (see Security section below)
+- Retry: Exponential backoff for rate limits
+
+Security (v2.3.0 - Comprehensive Protection):
+    This agent runs in shared environments (Colab, GCP Notebooks) with IAM roles.
+    Security blocks EXECUTION but allows CODE GENERATION for user review.
+
+    Bash Restrictions (50+ patterns):
+    - GCP CLI: gcloud, gsutil, bq (BigQuery), kubectl
+    - Cloud resources: storage, compute, iam, secrets
+    - Network: curl/wget to external URLs (except pypi for pip)
+    - System: rm -rf, chmod 777, eval, crontab
+
+    Python Restrictions (40+ patterns):
+    - GCP SDK: google.cloud.storage, google.cloud.bigquery
+    - Network: requests.get/post to non-localhost
+    - Credentials: os.environ['GOOGLE_'], open('.config/gcloud')
+    - System: subprocess with shell=True, exec(), eval()
+
+    Path Restrictions:
+    - Block: ../../, /etc/, /root/, ~/.config/gcloud, service account keys
+
+    What's ALLOWED:
+    - Reading/writing files in workspace
+    - Running safe bash (ls, cat, pip install)
+    - Creating documents (Word, Excel, PDF, charts)
+    - Generating code for blocked operations (user runs it themselves)
+
+Dependencies:
+    pip install google-cloud-aiplatform ipywidgets python-docx pandas openpyxl
+    pip install matplotlib reportlab  # For charts and PDFs
+
+Not Implemented (vs OpenCode):
+- Sub-agents
+- MCP server integration
+- Sliding window context
+
+Usage:
+    from gemini_agent import create_chat_ui
+    create_chat_ui()
+
+Authentication:
+    gcloud auth login
+    gcloud auth application-default login
+    gcloud config set project YOUR_PROJECT_ID
+"""
+
+# ============================================================
+# IMPORTS
+# ============================================================
+
+import os
+import json
+import re
+import hashlib
+import subprocess
+import tempfile
+import sys
+import base64
+import time
+import uuid
+from dataclasses import dataclass, asdict, field
+from typing import List, Dict, Tuple, Optional, Any, Set, Callable
+from datetime import datetime
+from pathlib import Path
+from collections import deque
+import glob as glob_module
+import random
+
+# ============================================================
+# RETRY LOGIC (OpenCode-style)
+# ============================================================
+
+class RetryableError(Exception):
+    """Error that can be retried."""
+    def __init__(self, message: str, retry_after: Optional[float] = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+class RetryHandler:
+    """Handles retries with exponential backoff."""
+
+    RETRYABLE_CODES = {429, 500, 502, 503, 504}  # Rate limit + server errors
+    RETRYABLE_MESSAGES = ["rate_limit", "overloaded", "temporarily unavailable", "quota exceeded"]
+
+    def __init__(self, max_retries: int = 5, base_delay: float = 2.0, max_delay: float = 60.0):
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+
+    def is_retryable(self, error: Exception) -> Tuple[bool, Optional[float]]:
+        """Check if error is retryable and get retry delay."""
+        error_str = str(error).lower()
+
+        # Check for rate limit / quota errors
+        for msg in self.RETRYABLE_MESSAGES:
+            if msg in error_str:
+                # Try to extract retry-after from error message
+                match = re.search(r'retry.?after[:\s]+(\d+)', error_str)
+                retry_after = float(match.group(1)) if match else None
+                return True, retry_after
+
+        # Check for HTTP status codes
+        for code in self.RETRYABLE_CODES:
+            if str(code) in error_str:
+                return True, None
+
+        return False, None
+
+    def get_delay(self, attempt: int, retry_after: Optional[float] = None) -> float:
+        """Calculate delay with exponential backoff + jitter."""
+        if retry_after:
+            return min(retry_after, self.max_delay)
+
+        # Exponential backoff: 2^attempt * base_delay + random jitter
+        delay = min(self.base_delay * (2 ** attempt) + random.uniform(0, 1), self.max_delay)
+        return delay
+
+    def execute(self, fn: Callable, on_retry: Callable = None) -> Any:
+        """Execute function with retry logic."""
+        last_error = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                return fn()
+            except Exception as e:
+                last_error = e
+                is_retryable, retry_after = self.is_retryable(e)
+
+                if not is_retryable or attempt >= self.max_retries:
+                    raise e
+
+                delay = self.get_delay(attempt, retry_after)
+
+                if on_retry:
+                    on_retry(attempt + 1, self.max_retries, delay, str(e))
+
+                time.sleep(delay)
+
+        raise last_error
+
+# Global retry handler
+RETRY = RetryHandler(max_retries=5, base_delay=2.0, max_delay=60.0)
+
+
+# ============================================================
+# CONTEXT COMPACTION (OpenCode-style)
+# ============================================================
+
+class Compactor:
+    """Smart context compaction - prune then summarize."""
+
+    PRUNE_PROTECT_TOKENS = 40000  # Keep last 40K tokens of tool outputs
+    PRUNE_MIN_SAVINGS = 10000     # Only prune if saving 10K+ tokens
+    SUMMARY_TRIGGER_PERCENT = 0.80  # Trigger at 80% context
+
+    # Protected tools - never prune these (important for agent memory)
+    PROTECTED_TOOLS = {"todo_write", "todo_read", "semantic_search"}
+
+    @classmethod
+    def estimate_tokens(cls, text: str) -> int:
+        """Estimate tokens (4 chars = 1 token)."""
+        return len(text) // 4
+
+    @classmethod
+    def prune_tool_outputs(cls, messages: List[Dict], max_context: int) -> Tuple[List[Dict], int]:
+        """
+        Prune old tool outputs while keeping recent ones.
+        Returns (pruned_messages, tokens_saved).
+        """
+        if not messages:
+            return messages, 0
+
+        # Calculate current token usage
+        total_tokens = sum(cls.estimate_tokens(str(m.get("content", ""))) for m in messages)
+
+        # Find tool result messages to potentially prune
+        tool_results = []
+        for i, msg in enumerate(messages):
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "tool_result":
+                        tool_results.append({
+                            "index": i,
+                            "tokens": cls.estimate_tokens(str(item.get("content", ""))),
+                            "item": item
+                        })
+
+        if not tool_results:
+            return messages, 0
+
+        # Sort by index (oldest first), protect recent ones
+        protected_tokens = 0
+        tokens_saved = 0
+        pruned_messages = [m.copy() for m in messages]  # Deep copy
+
+        # Walk from newest to oldest, protect last 40K tokens
+        for tr in reversed(tool_results):
+            if protected_tokens < cls.PRUNE_PROTECT_TOKENS:
+                protected_tokens += tr["tokens"]
+            else:
+                # Prune this tool output
+                content = tr["item"].get("content", "")
+                if len(content) > 200:
+                    tr["item"]["content"] = content[:100] + f"\n[... {len(content)} chars pruned to save context ...]\n" + content[-100:]
+                    tokens_saved += tr["tokens"] - 60  # Approximate new size
+
+        if tokens_saved < cls.PRUNE_MIN_SAVINGS:
+            return messages, 0  # Not worth pruning
+
+        return pruned_messages, tokens_saved
+
+    @classmethod
+    def create_summary_prompt(cls, messages: List[Dict]) -> str:
+        """Create a prompt to summarize the conversation using Claude Code's 9-section format."""
+        return """<analysis>
+First, analyze the conversation to identify: main goal, technical concepts, files touched, errors encountered, and current progress.
+</analysis>
+
+Create a detailed summary following these EXACT sections:
+
+1. **Primary Request and Intent**: What did the user explicitly ask for? What is their underlying goal?
+
+2. **Key Technical Concepts**: Technologies, frameworks, libraries, patterns discussed or used.
+
+3. **Files and Code Sections**: For each important file:
+   - File path (absolute)
+   - WHY it's important
+   - What changes were made (if any)
+   - Key code snippets (if relevant)
+
+4. **Errors and Fixes**: For each error encountered:
+   - The error message
+   - How it was fixed
+   - Any user feedback on the fix
+
+5. **Problem Solving**: Problems solved during the session, and any ongoing issues still unresolved.
+
+6. **ALL User Messages**: List EVERY user message verbatim (this prevents intent drift):
+   - "message 1 exact text"
+   - "message 2 exact text"
+   - (continue for all messages)
+
+7. **Pending Tasks**: Tasks mentioned but not yet completed.
+
+8. **Current Work**: Precise current state including:
+   - What step we're on
+   - What was just completed
+   - Relevant code context
+
+9. **Next Step**: Only if directly in line with user's explicit request. Include direct quotes from user if applicable.
+
+Format as a comprehensive summary that preserves all context needed to continue seamlessly."""
+
+    @classmethod
+    def should_compact(cls, messages: List[Dict], max_tokens: int) -> bool:
+        """Check if compaction is needed."""
+        total_tokens = sum(cls.estimate_tokens(str(m.get("content", ""))) for m in messages)
+        return total_tokens > max_tokens * cls.SUMMARY_TRIGGER_PERCENT
+
+    KEEP_LAST_MESSAGES = 3  # Keep last N messages after compact
+
+    @classmethod
+    def compact(cls, messages: List[Dict], summary: str) -> List[Dict]:
+        """
+        Replace old messages with summary.
+        Keeps: summary + last N messages (default 3)
+        """
+        summary_msg = {
+            "role": "assistant",
+            "content": f"[CONVERSATION SUMMARY]\n{summary}\n[END SUMMARY - Continuing from here]"
+        }
+
+        # Keep last N messages for continuity
+        n = cls.KEEP_LAST_MESSAGES
+        recent_messages = messages[-n:] if len(messages) > n else messages
+
+        return [summary_msg] + recent_messages
+
+# Global compactor
+COMPACTOR = Compactor()
+
+
+# ============================================================
+# STRUCTURED TOOL OUTPUT (OpenCode-style)
+# ============================================================
+
+@dataclass
+class ToolResult:
+    """Structured tool output with metadata."""
+    output: str
+    title: str = ""
+    truncated: bool = False
+    total_size: int = 0
+    shown_size: int = 0
+    metadata: Dict = field(default_factory=dict)
+
+    def __str__(self) -> str:
+        """Return output string for backward compatibility."""
+        return self.output
+
+    def to_display(self) -> str:
+        """Format for display with metadata hints."""
+        parts = [self.output]
+        if self.truncated:
+            parts.append(f"\n[Truncated: showing {self.shown_size:,} of {self.total_size:,} chars]")
+        return "".join(parts)
+
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+@dataclass
+class Config:
+    """Agent configuration. Can be overridden with environment variables."""
+    # GCP Settings (override with GEMINI_PROJECT, GEMINI_REGION, GEMINI_MODEL)
+    project_id: str = os.environ.get("GEMINI_PROJECT", "algebraic-pact-478006-h0")
+    region: str = os.environ.get("GEMINI_REGION", "us-central1")
+    model_id: str = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+
+    # Workspace - uses current directory (where notebook runs)
+    workspace: str = os.environ.get("GEMINI_WORKSPACE", ".")
+    sessions_dir: str = "./sessions"
+    audit_dir: str = "./audit_logs"
+
+    # Limits
+    max_turns: int = 30
+    max_tokens: int = 8192
+    max_history: int = 20
+    max_output_chars: int = 50000  # Allow more output for large files
+    max_file_size: int = 10 * 1024 * 1024  # 10MB
+
+    # Context limits (Gemini 2.5 = 1M tokens)
+    context_max_tokens: int = 1000000
+
+    # Model parameters (override with GEMINI_TEMPERATURE, GEMINI_THINKING)
+    temperature: float = float(os.environ.get("GEMINI_TEMPERATURE", "0.0"))
+    thinking_enabled: bool = os.environ.get("GEMINI_THINKING", "true").lower() == "true"
+    thinking_budget: int = int(os.environ.get("GEMINI_THINKING_BUDGET", "8192"))
+
+# Initialize config
+CONFIG = Config()
+
+# Create directories
+os.makedirs(CONFIG.sessions_dir, exist_ok=True)
+os.makedirs(CONFIG.audit_dir, exist_ok=True)
+
+
+# ============================================================
+# TRUNCATION MANAGER (OpenCode-style)
+# ============================================================
+
+class Truncation:
+    """Smart truncation for large outputs - saves full content, returns preview."""
+
+    MAX_LINES = 2000
+    MAX_BYTES = 50 * 1024  # 50 KB
+    MAX_LINE_LENGTH = 2000
+    TRUNCATED_DIR = "./truncated_outputs"
+
+    @classmethod
+    def truncate(cls, text: str, direction: str = "head") -> Tuple[str, bool, Optional[str]]:
+        """
+        Truncate text if it exceeds limits.
+        Returns: (truncated_text, was_truncated, saved_path)
+        """
+        os.makedirs(cls.TRUNCATED_DIR, exist_ok=True)
+
+        lines = text.split('\n')
+        total_lines = len(lines)
+        total_bytes = len(text.encode('utf-8'))
+
+        # Check if truncation needed
+        if total_lines <= cls.MAX_LINES and total_bytes <= cls.MAX_BYTES:
+            return text, False, None
+
+        # Save full output to disk
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        saved_path = os.path.join(cls.TRUNCATED_DIR, f"output_{timestamp}.txt")
+        with open(saved_path, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+        # Truncate based on direction
+        output_lines = []
+        current_bytes = 0
+
+        if direction == "head":
+            for i, line in enumerate(lines):
+                if i >= cls.MAX_LINES:
+                    break
+                if len(line) > cls.MAX_LINE_LENGTH:
+                    line = line[:cls.MAX_LINE_LENGTH] + "..."
+                line_bytes = len(line.encode('utf-8')) + 1
+                if current_bytes + line_bytes > cls.MAX_BYTES:
+                    break
+                output_lines.append(line)
+                current_bytes += line_bytes
+        else:  # tail
+            for i in range(len(lines) - 1, -1, -1):
+                if len(output_lines) >= cls.MAX_LINES:
+                    break
+                line = lines[i]
+                if len(line) > cls.MAX_LINE_LENGTH:
+                    line = line[:cls.MAX_LINE_LENGTH] + "..."
+                line_bytes = len(line.encode('utf-8')) + 1
+                if current_bytes + line_bytes > cls.MAX_BYTES:
+                    break
+                output_lines.insert(0, line)
+                current_bytes += line_bytes
+
+        # Build truncated output with helpful hint
+        truncated_count = total_lines - len(output_lines)
+        result = '\n'.join(output_lines)
+        result += f"\n\n...{truncated_count} lines truncated ({total_bytes:,} bytes total)..."
+        result += f"\n[Full output saved: {saved_path}]"
+        result += f"\n[TIP: Use grep to search, or read_file with offset parameter for specific sections. Do NOT re-read the whole file.]"
+
+        return result, True, saved_path
+
+    @classmethod
+    def estimate_tokens(cls, text: str) -> int:
+        """Estimate token count (1 token ≈ 4 chars)."""
+        return max(0, len(text) // 4)
+
+
+# ============================================================
+# SECURITY MODULE
+# ============================================================
+
+class SecurityManager:
+    """Security controls: workspace boundary, secret detection, command filtering."""
+
+    SECRET_PATTERNS = [
+        (r"(?i)(api[_-]?key|apikey)\s*[=:]\s*[\"']?[\w-]{20,}", "API Key"),
+        (r"(?i)(secret|password|passwd|pwd)\s*[=:]\s*[\"']?[^\s\"']{8,}", "Password/Secret"),
+        (r"(?i)(aws[_-]?access[_-]?key[_-]?id)\s*[=:]\s*[\"']?[A-Z0-9]{20}", "AWS Access Key"),
+        (r"(?i)(aws[_-]?secret[_-]?access[_-]?key)\s*[=:]\s*[\"']?[A-Za-z0-9/+=]{40}", "AWS Secret Key"),
+        (r"(?i)(bearer\s+)[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+", "JWT Token"),
+        (r"-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----", "Private Key"),
+        (r"(?i)(mongodb|postgres|mysql|redis)://[^\s]+:[^\s]+@", "Database URL"),
+        (r"(?i)(gh[ps]_[A-Za-z0-9_]{36,})", "GitHub Token"),
+        (r"(?i)(xox[baprs]-[A-Za-z0-9-]+)", "Slack Token"),
+        (r"(?i)(gcp[_-]?api[_-]?key)\s*[=:]\s*[\"']?[\w-]{20,}", "GCP API Key"),
+    ]
+
+    SENSITIVE_FILES = {
+        ".env", ".env.local", ".env.production", ".env.development",
+        "credentials.json", "secrets.json", "config.secret.json",
+        "id_rsa", "id_ed25519", "id_dsa", "id_ecdsa",
+        ".netrc", ".npmrc", ".pypirc",
+        "service-account.json", "service_account.json",
+    }
+
+    # Extended dangerous bash patterns (70+ patterns)
+    DANGEROUS_PATTERNS = [
+        # === DESTRUCTIVE FILE OPERATIONS ===
+        (r"\brm\s+-rf\s+/", "Recursive delete from root"),
+        (r"\brm\s+-rf\s+~", "Recursive delete home"),
+        (r"\brm\s+-rf\s+\*", "Recursive delete wildcard"),
+        (r"\brm\s+-rf\s+\.\.", "Recursive delete parent"),
+        (r"\brm\s+(-[a-z]*f[a-z]*\s+)?/(?!tmp)", "Delete system files"),
+        (r":\s*\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;", "Fork bomb"),
+
+        # === PATH TRAVERSAL ===
+        (r"\.\./\.\./\.\.", "Deep path traversal (../../../)"),
+        (r"cat\s+\.\./", "Read parent directory files"),
+        (r"cp\s+.*\.\./", "Copy to parent directory"),
+        (r"mv\s+.*\.\./", "Move to parent directory"),
+
+        # === DISK/SYSTEM OPERATIONS ===
+        (r"\bdd\s+if=", "Direct disk access"),
+        (r"\bmkfs", "Filesystem creation"),
+        (r"\bfdisk", "Disk partitioning"),
+        (r"\bparted", "Disk partitioning"),
+        (r"\bmount\s+", "Mount filesystem"),
+        (r"\bumount\s+", "Unmount filesystem"),
+        (r"\b>\s*/dev/sd", "Direct device write"),
+        (r"\b>\s*/dev/null.*2>&1.*&$", "Background with no output (suspicious)"),
+
+        # === GCP CLI - RESOURCE ACCESS (Service Account protection) ===
+        (r"\bgcloud\s+storage\s+", "GCS access - use provided code instead"),
+        (r"\bgsutil\s+", "GCS access - use provided code instead"),
+        (r"\bgcloud\s+compute\s+", "Compute Engine access - restricted"),
+        (r"\bgcloud\s+iam\s+", "IAM access - restricted"),
+        (r"\bgcloud\s+secrets\s+", "Secret Manager - restricted"),
+        (r"\bgcloud\s+kms\s+", "KMS access - restricted"),
+        (r"\bgcloud\s+sql\s+", "Cloud SQL access - restricted"),
+        (r"\bgcloud\s+pubsub\s+", "Pub/Sub access - use provided code instead"),
+        (r"\bgcloud\s+functions\s+", "Cloud Functions - restricted"),
+        (r"\bgcloud\s+run\s+", "Cloud Run - restricted"),
+        (r"\bgcloud\s+auth\s+print-access-token", "Print access token - restricted"),
+        (r"\bgcloud\s+config\s+set\s+project", "Change project - restricted"),
+
+        # === NETWORK - EXTERNAL REQUESTS (except pip) ===
+        (r"\bcurl\s+https?://(?!pypi\.|files\.pythonhosted\.|localhost|127\.0\.0\.1)", "External HTTP request - blocked for security"),
+        (r"\bwget\s+https?://(?!pypi\.|files\.pythonhosted\.|localhost|127\.0\.0\.1)", "External download - blocked for security"),
+        (r"\bcurl\s+.*\|\s*(ba)?sh", "Pipe to shell"),
+        (r"\bwget\s+.*\|\s*(ba)?sh", "Pipe to shell"),
+        (r"\bbase64\s+-d.*\|\s*(ba)?sh", "Encoded payload execution"),
+
+        # === REMOTE CODE EXECUTION ===
+        (r"\beval\s+\$", "Eval with variable"),
+        (r"\beval\s+['\"]", "Eval string execution"),
+        (r"\bpython[23]?\s+-c.*exec\(", "Python exec injection"),
+        (r"\bperl\s+-e", "Perl one-liner"),
+
+        # === PRIVILEGE ESCALATION ===
+        (r"\bsudo\s+", "Sudo command"),
+        (r"\bsu\s+-", "Switch user"),
+        (r"\bchmod\s+[47]77", "Overly permissive chmod"),
+        (r"\bchmod\s+\+s", "SetUID/SetGID"),
+        (r"\bchown\s+root", "Change owner to root"),
+
+        # === NETWORK ATTACKS ===
+        (r"\bnc\s+-[a-z]*l", "Network listener"),
+        (r"\bnetcat\s+-[a-z]*l", "Network listener"),
+        (r"\bnmap\s+", "Port scanning"),
+        (r"\biptables\s+", "Firewall modification"),
+
+        # === CREDENTIAL/DATA THEFT ===
+        (r"\bcat\s+.*(passwd|shadow|sudoers)", "Read system credentials"),
+        (r"\bhistory\s*$", "Read command history"),
+        (r"\bcat\s+.*\.ssh/", "Read SSH keys"),
+        (r"\bexport\s+.*_(KEY|SECRET|TOKEN|PASSWORD)", "Export credentials"),
+        (r"\benv\s*$", "List environment variables"),
+        (r"\bprintenv\s+(GOOGLE_|SECRET|TOKEN|KEY|PASSWORD)", "Print sensitive env vars"),
+        (r"\becho\s+\$GOOGLE_", "Echo GCP credentials"),
+
+        # === SYSTEM DAMAGE ===
+        (r"\bshutdown", "System shutdown"),
+        (r"\breboot", "System reboot"),
+        (r"\binit\s+[0-6]", "Change runlevel"),
+        (r"\bsystemctl\s+(stop|disable|mask)\s+(ssh|sshd|network)", "Disable critical services"),
+        (r"\bkillall\s+-9", "Force kill all"),
+        (r"\bpkill\s+-9", "Force kill processes"),
+
+        # === CRYPTO/RANSOMWARE ===
+        (r"\bopenssl\s+enc\s+-aes.*-in\s+/", "Encrypt system files"),
+        (r"\bgpg\s+--encrypt.*-r\s+", "GPG encrypt"),
+        (r"\bfind\s+/.*-exec.*rm", "Find and delete system files"),
+        (r"\.onion", "Tor hidden service"),
+        (r"\btor\s+", "Tor usage"),
+    ]
+
+    NETWORK_COMMANDS = ["curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "ftp", "telnet"]
+
+    # Dangerous Python code patterns (40+ patterns)
+    DANGEROUS_PYTHON = [
+        # === CODE INJECTION ===
+        (r"\bos\.system\s*\(", "os.system() - use subprocess instead"),
+        (r"\bos\.popen\s*\(", "os.popen() - dangerous"),
+        (r"\bsubprocess\..*shell\s*=\s*True", "subprocess with shell=True"),
+        (r"\beval\s*\(", "eval() - code injection risk"),
+        (r"\bexec\s*\(", "exec() - code injection risk"),
+        (r"\bcompile\s*\(.*exec", "compile() for exec"),
+        (r"\b__import__\s*\(", "Dynamic import"),
+        (r"\bimportlib\.import_module\s*\(", "Dynamic import"),
+
+        # === FILE SYSTEM ACCESS ===
+        (r"\bopen\s*\(['\"]/(etc|usr|var|bin|sbin)", "Access system directories"),
+        (r"\bopen\s*\(['\"]C:\\\\Windows", "Access Windows system"),
+        (r"\bshutil\.rmtree\s*\(['\"]/(|home|usr|etc|var)", "Delete system directories"),
+        (r"\bshutil\.rmtree\s*\(['\"]C:\\\\", "Delete Windows system"),
+        (r"\bos\.remove\s*\(['\"]/(etc|usr|bin)", "Delete system files"),
+        (r"\bos\.rmdir\s*\(['\"]/(etc|usr|bin)", "Delete system directories"),
+        (r"\bopen\s*\(['\"]\.\.\/\.\.\/.*/", "Path traversal in open()"),
+
+        # === GCP SDK - RESOURCE ACCESS ===
+        # Note: Agent can WRITE code using google-cloud, but can't EXECUTE it directly
+        (r"storage\.Client\s*\(", "GCS access - I'll provide code for you to run"),
+        (r"bigquery\.Client\s*\(", "BigQuery access - I'll provide code for you to run"),
+        (r"pubsub.*Client\s*\(", "Pub/Sub access - I'll provide code for you to run"),
+        (r"secretmanager.*Client\s*\(", "Secret Manager - restricted"),
+        (r"compute.*Client\s*\(", "Compute Engine - restricted"),
+
+        # === ENVIRONMENT/CREDENTIALS ===
+        (r"\bos\.environ\s*\[\s*['\"]GOOGLE_", "Access GCP credentials from env"),
+        (r"\bos\.getenv\s*\(\s*['\"]GOOGLE_", "Get GCP credentials from env"),
+        (r"\bos\.environ\.get\s*\(\s*['\"]GOOGLE_", "Get GCP credentials from env"),
+
+        # === NETWORK ===
+        (r"\bctypes\.", "ctypes - low-level access"),
+        (r"\bsocket\..*bind\s*\(", "Network server binding"),
+        (r"\bsocket\..*listen\s*\(", "Network listening"),
+        (r"\brequests\.(get|post).*verify\s*=\s*False", "Disable SSL verification"),
+        (r"\burllib.*verify\s*=\s*False", "Disable SSL verification"),
+
+        # === DESERIALIZATION ===
+        (r"\bpickle\.loads?\s*\(", "pickle - deserialization attack risk"),
+        (r"\byaml\.load\s*\([^,)]+\)$", "yaml.load without Loader (unsafe)"),
+
+        # === OTHER ===
+        (r"\bgetattr\s*\(.*,\s*['\"]__", "Access dunder attributes"),
+    ]
+
+    # Allowed GCP services hint
+    ALLOWED_GCP_HINT = """
+To access GCP resources, I'll provide code you can run:
+- GCS: I'll write google-cloud-storage code for you to execute
+- BigQuery: I'll write google-cloud-bigquery code for you to execute
+- Other GCP services: I'll provide code snippets
+
+This protects the service account from unintended access.
+"""
+
+    def __init__(self, workspace: str, allow_network: bool = False):
+        self.workspace = Path(workspace).resolve()
+        self.allow_network = allow_network
+
+    def validate_path(self, path: str) -> Tuple[bool, str]:
+        """Check if path is within workspace."""
+        try:
+            if not os.path.isabs(path):
+                resolved = (self.workspace / path).resolve()
+            else:
+                resolved = Path(path).resolve()
+
+            try:
+                resolved.relative_to(self.workspace)
+            except ValueError:
+                return False, f"Path outside workspace: {path}"
+
+            if resolved.name in self.SENSITIVE_FILES:
+                return False, f"Access to sensitive file blocked: {resolved.name}"
+
+            for part in resolved.parts:
+                if part.startswith(".env"):
+                    return False, f"Access to .env file blocked"
+
+            return True, "OK"
+        except Exception as e:
+            return False, f"Invalid path: {e}"
+
+    def validate_command(self, command: str) -> Tuple[bool, str]:
+        """Check if bash command is safe."""
+        for pattern, reason in self.DANGEROUS_PATTERNS:
+            if re.search(pattern, command, re.IGNORECASE):
+                return False, f"Blocked: {reason}"
+
+        if not self.allow_network:
+            for cmd in self.NETWORK_COMMANDS:
+                if re.search(rf"\b{cmd}\b", command):
+                    return False, f"Network command blocked: {cmd}"
+
+        return True, "OK"
+
+    def validate_python(self, code: str) -> Tuple[bool, str]:
+        """Check if Python code is safe to execute."""
+        for pattern, reason in self.DANGEROUS_PYTHON:
+            if re.search(pattern, code, re.IGNORECASE):
+                return False, f"Blocked: {reason}"
+        return True, "OK"
+
+    def scan_secrets(self, content: str) -> List[Dict]:
+        """Scan for potential secrets."""
+        findings = []
+        for pattern, secret_type in self.SECRET_PATTERNS:
+            try:
+                matches = re.findall(pattern, content)
+                if matches:
+                    findings.append({"type": secret_type, "count": len(matches)})
+            except re.error:
+                continue
+        return findings
+
+    def truncate_output(self, output: str, max_size: int = None, use_smart: bool = True) -> str:
+        """Truncate output using smart truncation (saves full to disk if large)."""
+        if use_smart:
+            truncated, was_truncated, saved_path = Truncation.truncate(output)
+            return truncated
+        else:
+            # Simple char-based truncation
+            max_size = max_size or CONFIG.max_output_chars
+            if len(output) <= max_size:
+                return output
+            return output[:max_size] + f"\n[Truncated - {len(output):,} chars total]"
+
+# Initialize security
+SECURITY = SecurityManager(CONFIG.workspace)
+
+
+# ============================================================
+# AUDIT LOGGING
+# ============================================================
+
+@dataclass
+class AuditEntry:
+    """Single audit log entry."""
+    timestamp: str
+    session_id: str
+    action: str
+    tool_name: Optional[str]
+    parameters: Dict[str, Any]
+    result_summary: str
+    user_approved: bool
+    hash: str = ""
+
+    def __post_init__(self):
+        if not self.hash:
+            content = f"{self.timestamp}|{self.session_id}|{self.action}|{self.tool_name}|{self.result_summary}"
+            self.hash = hashlib.sha256(content.encode()).hexdigest()[:32]
+
+
+class AuditLogger:
+    """Immutable audit trail with integrity verification."""
+
+    SENSITIVE_KEYS = {"password", "secret", "key", "token", "credential", "api_key", "auth", "bearer", "private"}
+
+    def __init__(self, audit_dir: str):
+        self.audit_dir = audit_dir
+        os.makedirs(audit_dir, exist_ok=True)
+
+    def _get_log_path(self, session_id: str) -> str:
+        date = datetime.now().strftime("%Y-%m-%d")
+        return os.path.join(self.audit_dir, f"{date}_{session_id}.jsonl")
+
+    def log(self, session_id: str, action: str, tool_name: str = None,
+            parameters: Dict = None, result_summary: str = "", user_approved: bool = True):
+        """Log an action to audit trail."""
+        entry = AuditEntry(
+            timestamp=datetime.now().isoformat(),
+            session_id=session_id,
+            action=action,
+            tool_name=tool_name,
+            parameters=self._sanitize_params(parameters or {}),
+            result_summary=result_summary[:500] if result_summary else "",
+            user_approved=user_approved,
+        )
+        log_path = self._get_log_path(session_id)
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(asdict(entry)) + "\n")
+
+    def _sanitize_params(self, params: Dict) -> Dict:
+        """Remove sensitive data from parameters."""
+        sanitized = {}
+        for k, v in params.items():
+            if any(s in k.lower() for s in self.SENSITIVE_KEYS):
+                sanitized[k] = "[REDACTED]"
+            elif isinstance(v, str) and len(v) > 1000:
+                sanitized[k] = f"[{len(v)} chars]"
+            else:
+                sanitized[k] = v
+        return sanitized
+
+    def get_session_log(self, session_id: str) -> List[Dict]:
+        """Get all entries for a session."""
+        entries = []
+        for filename in os.listdir(self.audit_dir):
+            if session_id in filename and filename.endswith(".jsonl"):
+                path = os.path.join(self.audit_dir, filename)
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            entries.append(json.loads(line))
+        return sorted(entries, key=lambda x: x.get("timestamp", ""))
+
+# Initialize audit
+AUDIT = AuditLogger(CONFIG.audit_dir)
+
+
+# ============================================================
+# GEMINI CLIENT
+# ============================================================
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    input: dict
+
+@dataclass
+class Response:
+    text: str
+    tool_calls: List[ToolCall]
+    stop_reason: str
+    usage: dict
+    thinking: str = ""
+
+
+class GeminiClient:
+    """GCP Vertex AI Gemini client."""
+
+    def __init__(self, project_id: str, region: str, model_id: str):
+        self.project_id = project_id
+        self.region = region
+        self.model_id = model_id
+        self.client = None
+        self.model = None
+
+        try:
+            print(f"[Vertex AI] Initializing... (project={project_id}, region={region})")
+            import vertexai
+            from vertexai.generative_models import GenerativeModel, GenerationConfig, Tool, FunctionDeclaration
+
+            vertexai.init(project=project_id, location=region)
+            self.model = GenerativeModel(model_id)
+            self._vertexai = vertexai
+            print(f"[Vertex AI Gemini] Connected to {region} with model {model_id}")
+        except ImportError:
+            raise ImportError(
+                "google-cloud-aiplatform not installed. Run: pip install google-cloud-aiplatform"
+            )
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize Vertex AI: {e}")
+            print("[TIP] Make sure you've run: gcloud auth application-default login")
+            raise
+
+    def _convert_tools_to_gemini(self, tools: List[Dict]) -> Any:
+        """Convert tool definitions to Gemini format."""
+        from vertexai.generative_models import Tool, FunctionDeclaration
+
+        function_declarations = []
+        for tool in tools:
+            # Convert JSON Schema to Gemini format
+            schema = tool.get("input_schema", {})
+            properties = schema.get("properties", {})
+            required = schema.get("required", [])
+
+            # Build parameters dict for Gemini
+            params = {
+                "type": "object",
+                "properties": {},
+                "required": required
+            }
+
+            for prop_name, prop_def in properties.items():
+                param_type = prop_def.get("type", "string")
+                # Map types
+                type_map = {
+                    "string": "string",
+                    "integer": "integer",
+                    "number": "number",
+                    "boolean": "boolean",
+                    "array": "array",
+                    "object": "object"
+                }
+                params["properties"][prop_name] = {
+                    "type": type_map.get(param_type, "string"),
+                    "description": prop_def.get("description", "")
+                }
+                if "enum" in prop_def:
+                    params["properties"][prop_name]["enum"] = prop_def["enum"]
+                if param_type == "array" and "items" in prop_def:
+                    params["properties"][prop_name]["items"] = prop_def["items"]
+
+            func_decl = FunctionDeclaration(
+                name=tool["name"],
+                description=tool.get("description", ""),
+                parameters=params
+            )
+            function_declarations.append(func_decl)
+
+        return Tool(function_declarations=function_declarations)
+
+    def _convert_messages_to_gemini(self, messages: List[Dict], system: str) -> Tuple[List, str]:
+        """Convert messages to Gemini format."""
+        gemini_messages = []
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+
+            # Map roles
+            gemini_role = "user" if role == "user" else "model"
+
+            if isinstance(content, str):
+                gemini_messages.append({
+                    "role": gemini_role,
+                    "parts": [{"text": content}]
+                })
+            elif isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            parts.append({"text": item.get("text", "")})
+                        elif item.get("type") == "tool_use":
+                            # Function call from assistant
+                            parts.append({
+                                "function_call": {
+                                    "name": item.get("name"),
+                                    "args": item.get("input", {})
+                                }
+                            })
+                        elif item.get("type") == "tool_result":
+                            # Function response
+                            parts.append({
+                                "function_response": {
+                                    "name": item.get("tool_use_id", "unknown"),
+                                    "response": {"result": item.get("content", "")}
+                                }
+                            })
+                if parts:
+                    gemini_messages.append({"role": gemini_role, "parts": parts})
+
+        return gemini_messages, system
+
+    def chat(
+        self,
+        messages: List[Dict],
+        system: str,
+        tools: List[Dict] = None,
+        max_tokens: int = 8192,
+        temperature: float = 0.0,
+        thinking_enabled: bool = False,
+        thinking_budget: int = 8192,
+    ) -> Response:
+        """Send chat request to Vertex AI Gemini."""
+        from vertexai.generative_models import GenerativeModel, GenerationConfig, Content, Part
+
+        # Convert messages to Gemini format
+        gemini_messages, system_instruction = self._convert_messages_to_gemini(messages, system)
+
+        # Build generation config
+        gen_config = GenerationConfig(
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        # Convert tools if provided
+        gemini_tools = None
+        if tools:
+            gemini_tools = [self._convert_tools_to_gemini(tools)]
+
+        # Create model with system instruction
+        model = GenerativeModel(
+            self.model_id,
+            system_instruction=system_instruction,
+        )
+
+        # Build history from all messages except the last one
+        # Note: Skip function_call parts as they cause issues - the model can infer from function_response
+        history = []
+        for m in gemini_messages[:-1] if len(gemini_messages) > 1 else []:
+            parts = []
+            for p in m.get("parts", []):
+                if "text" in p and p["text"]:
+                    parts.append(Part.from_text(p["text"]))
+                elif "function_response" in p:
+                    fr = p["function_response"]
+                    parts.append(Part.from_function_response(name=fr["name"], response=fr.get("response", {})))
+                # Skip function_call parts - they're handled by the model internally
+            if parts:
+                history.append(Content(role=m["role"], parts=parts))
+
+        # Start chat with history
+        # response_validation=False allows continuation even if model generates malformed tool calls
+        chat = model.start_chat(history=history, response_validation=False)
+
+        # Get last message content
+        last_content = ""
+        if gemini_messages:
+            last_msg = gemini_messages[-1]
+            for p in last_msg.get("parts", []):
+                if "text" in p:
+                    last_content = p["text"]
+                    break
+
+        if not last_content:
+            last_content = "Continue"
+
+        # Send message with retry logic
+        def send_with_retry():
+            return chat.send_message(
+                last_content,
+                generation_config=gen_config,
+                tools=gemini_tools,
+            )
+
+        def on_retry(attempt, max_retries, delay, error):
+            print(f"[Retry {attempt}/{max_retries}] API error: {error[:100]}... Waiting {delay:.1f}s")
+
+        response = RETRY.execute(send_with_retry, on_retry)
+
+        return self._parse(response)
+
+    def _parse(self, response) -> Response:
+        """Parse Gemini response."""
+        text = ""
+        tool_calls = []
+        thinking = ""
+
+        try:
+            for candidate in response.candidates:
+                # Check for malformed function call (finish_reason = 9)
+                if hasattr(candidate, 'finish_reason'):
+                    # FinishReason.MALFORMED_FUNCTION_CALL = 9
+                    if candidate.finish_reason == 9 or str(candidate.finish_reason) == "9":
+                        # Try to extract any text content and continue without tool calls
+                        if hasattr(candidate, 'content') and candidate.content:
+                            for part in getattr(candidate.content, 'parts', []):
+                                if hasattr(part, 'text') and part.text:
+                                    text += part.text
+                        if not text:
+                            text = "[Model generated malformed tool call. Please rephrase your request or try a simpler task.]"
+                        print(f"[Warning] Malformed function call detected, returning text only")
+                        continue
+
+                if not hasattr(candidate, 'content') or candidate.content is None:
+                    continue
+                if not hasattr(candidate.content, 'parts') or candidate.content.parts is None:
+                    continue
+
+                for part in candidate.content.parts:
+                    # Handle text
+                    if hasattr(part, 'text') and part.text:
+                        text += part.text
+
+                    # Handle function calls
+                    if hasattr(part, 'function_call') and part.function_call:
+                        fc = part.function_call
+                        # Convert args - handle MapComposite and other types
+                        args = {}
+                        if fc.args:
+                            try:
+                                # Try direct dict conversion
+                                args = dict(fc.args)
+                            except (TypeError, ValueError):
+                                # If that fails, try iterating
+                                try:
+                                    args = {k: v for k, v in fc.args.items()}
+                                except:
+                                    # Last resort: convert to string and parse
+                                    try:
+                                        import json
+                                        args = json.loads(str(fc.args))
+                                    except:
+                                        args = {}
+
+                        tool_calls.append(ToolCall(
+                            id=str(uuid.uuid4())[:8],
+                            name=fc.name,
+                            input=args
+                        ))
+
+                    # Handle thinking
+                    if hasattr(part, 'thought') and part.thought:
+                        thinking += part.thought
+        except Exception as e:
+            print(f"[Warning] Error parsing response parts: {e}")
+
+        # Get usage
+        usage = {}
+        if hasattr(response, 'usage_metadata'):
+            usage = {
+                "input_tokens": getattr(response.usage_metadata, 'prompt_token_count', 0),
+                "output_tokens": getattr(response.usage_metadata, 'candidates_token_count', 0),
+            }
+
+        stop_reason = "tool_use" if tool_calls else "end_turn"
+        return Response(text, tool_calls, stop_reason, usage, thinking)
+
+
+# ============================================================
+# CLAUDE CLIENT (Vertex AI)
+# ============================================================
+
+class ClaudeClient:
+    """Anthropic Claude client on Vertex AI."""
+
+    # Model name mapping for Vertex AI
+    MODEL_MAP = {
+        "claude-opus-4.5": "claude-opus-4-5@20250514",
+        "claude-sonnet-4.5": "claude-sonnet-4-5@20250514",
+        "claude-haiku-4.5": "claude-haiku-4-5@20250514",
+        "claude-opus-4": "claude-opus-4@20250514",
+        "claude-sonnet-4": "claude-sonnet-4@20250514",
+        "anthropic-claude-opus-4-5": "claude-opus-4-5@20250514",
+        "anthropic-claude-sonnet-4-5": "claude-sonnet-4-5@20250514",
+        "anthropic-claude-haiku-4-5": "claude-haiku-4-5@20250514",
+    }
+
+    def __init__(self, project_id: str, region: str, model_id: str):
+        self.project_id = project_id
+        self.region = region
+        # Map model name if needed
+        self.model_id = self.MODEL_MAP.get(model_id, model_id)
+        self.client = None
+
+        try:
+            print(f"[Claude Vertex AI] Initializing... (project={project_id}, region={region})")
+            from anthropic import AnthropicVertex
+
+            # Claude on Vertex AI requires specific regions
+            claude_region = region if region in ["us-east5", "europe-west1"] else "us-east5"
+            self.client = AnthropicVertex(region=claude_region, project_id=project_id)
+            print(f"[Claude Vertex AI] Connected to {claude_region} with model {self.model_id}")
+        except ImportError:
+            raise ImportError(
+                "anthropic not installed. Run: pip install anthropic[vertex]"
+            )
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize Claude Vertex AI: {e}")
+            raise
+
+    def chat(
+        self,
+        messages: List[Dict],
+        system: str,
+        tools: List[Dict] = None,
+        max_tokens: int = 8192,
+        temperature: float = 0.0,
+        thinking_enabled: bool = False,
+        thinking_budget: int = 8192,
+    ) -> Response:
+        """Send chat request to Claude on Vertex AI."""
+        # Convert tools to Claude format
+        claude_tools = None
+        if tools:
+            claude_tools = []
+            for tool in tools:
+                claude_tools.append({
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "input_schema": tool.get("input_schema", {"type": "object", "properties": {}})
+                })
+
+        # Convert messages to Claude format
+        claude_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+
+            if role == "assistant":
+                if isinstance(content, list):
+                    # Handle tool use responses
+                    claude_content = []
+                    for item in content:
+                        if item.get("type") == "text":
+                            claude_content.append({"type": "text", "text": item.get("text", "")})
+                        elif item.get("type") == "tool_use":
+                            claude_content.append({
+                                "type": "tool_use",
+                                "id": item.get("id"),
+                                "name": item.get("name"),
+                                "input": item.get("input", {})
+                            })
+                    claude_messages.append({"role": "assistant", "content": claude_content})
+                else:
+                    claude_messages.append({"role": "assistant", "content": content})
+            elif role == "user":
+                if isinstance(content, list):
+                    # Handle tool results
+                    claude_content = []
+                    for item in content:
+                        if item.get("type") == "tool_result":
+                            claude_content.append({
+                                "type": "tool_result",
+                                "tool_use_id": item.get("tool_use_id"),
+                                "content": item.get("content", "")
+                            })
+                        else:
+                            claude_content.append(item)
+                    claude_messages.append({"role": "user", "content": claude_content})
+                else:
+                    claude_messages.append({"role": "user", "content": content})
+
+        # Build request kwargs
+        kwargs = {
+            "model": self.model_id,
+            "max_tokens": max_tokens,
+            "messages": claude_messages,
+        }
+
+        if system:
+            kwargs["system"] = system
+        if claude_tools:
+            kwargs["tools"] = claude_tools
+        if temperature > 0:
+            kwargs["temperature"] = temperature
+
+        # Enable extended thinking if supported
+        if thinking_enabled:
+            kwargs["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            }
+
+        try:
+            response = self.client.messages.create(**kwargs)
+            return self._parse(response)
+        except Exception as e:
+            raise Exception(f"Claude API error: {e}")
+
+    def _parse(self, response) -> Response:
+        """Parse Claude response."""
+        text = ""
+        tool_calls = []
+        thinking = ""
+
+        for block in response.content:
+            if block.type == "text":
+                text += block.text
+            elif block.type == "tool_use":
+                tool_calls.append(ToolCall(
+                    id=block.id,
+                    name=block.name,
+                    input=block.input
+                ))
+            elif block.type == "thinking":
+                thinking += block.thinking
+
+        usage = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+
+        stop_reason = "tool_use" if tool_calls else "end_turn"
+        return Response(text, tool_calls, stop_reason, usage, thinking)
+
+
+# ============================================================
+# CLIENT FACTORY
+# ============================================================
+
+def create_client(project_id: str, region: str, model_id: str):
+    """Create appropriate client based on model name."""
+    model_lower = model_id.lower()
+
+    # Check if it's a Claude model
+    if "claude" in model_lower or "anthropic" in model_lower:
+        return ClaudeClient(project_id, region, model_id)
+    else:
+        # Default to Gemini
+        return GeminiClient(project_id, region, model_id)
+
+
+# ============================================================
+# AVAILABLE MODELS
+# ============================================================
+
+AVAILABLE_MODELS = {
+    # Gemini 2.5 models (latest)
+    "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro Preview - Best quality",
+    "gemini-2.5-flash-preview-04-17": "Gemini 2.5 Flash Preview - Fast + smart",
+    # Gemini 2.0 models
+    "gemini-2.0-flash-001": "Gemini 2.0 Flash - Stable (recommended)",
+    # Gemini 1.5 models
+    "gemini-1.5-pro-001": "Gemini 1.5 Pro - High quality",
+    "gemini-1.5-flash-001": "Gemini 1.5 Flash - Very fast",
+}
+
+
+# ============================================================
+# SESSION MANAGEMENT
+# ============================================================
+
+@dataclass
+class Session:
+    """Conversation session."""
+    id: str
+    created_at: str
+    updated_at: str
+    title: str
+    messages: List[Dict] = field(default_factory=list)
+    metadata: Dict = field(default_factory=dict)
+
+
+class SessionManager:
+    """Persistent session storage."""
+
+    def __init__(self, sessions_dir: str):
+        self.sessions_dir = sessions_dir
+        os.makedirs(sessions_dir, exist_ok=True)
+
+    def create(self, title: str = "New Session") -> Session:
+        """Create new session."""
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        now = datetime.now().isoformat()
+        session = Session(id=session_id, created_at=now, updated_at=now, title=title, messages=[], metadata={})
+        self.save(session)
+        return session
+
+    def save(self, session: Session):
+        """Save session to disk."""
+        session.updated_at = datetime.now().isoformat()
+        path = os.path.join(self.sessions_dir, f"{session.id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(asdict(session), f, indent=2)
+
+    def load(self, session_id: str) -> Optional[Session]:
+        """Load session from disk."""
+        path = os.path.join(self.sessions_dir, f"{session_id}.json")
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return Session(**data)
+
+    def list_sessions(self) -> List[Dict]:
+        """List all sessions."""
+        sessions = []
+        for filename in os.listdir(self.sessions_dir):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(self.sessions_dir, filename), "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    sessions.append({"id": data["id"], "title": data["title"], "updated_at": data["updated_at"]})
+                except:
+                    continue
+        return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
+
+    def delete(self, session_id: str) -> bool:
+        """Delete session."""
+        path = os.path.join(self.sessions_dir, f"{session_id}.json")
+        if os.path.exists(path):
+            os.remove(path)
+            return True
+        return False
+
+# Initialize session manager
+SESSIONS = SessionManager(CONFIG.sessions_dir)
+
+
+# ============================================================
+# CONTEXT MANAGER
+# ============================================================
+
+class ContextManager:
+    """Monitors context usage and provides warnings."""
+
+    def __init__(self, max_tokens: int = 1000000):
+        self.max_tokens = max_tokens
+        self.last_warning_level = 0
+
+    def estimate_tokens(self, messages: List[Dict]) -> int:
+        """Estimate tokens (4 chars = 1 token)."""
+        total_chars = 0
+        for m in messages:
+            content = m.get("content", "")
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        total_chars += len(str(block.get("text", "")))
+                        total_chars += len(str(block.get("content", "")))
+                    else:
+                        total_chars += len(str(block))
+            else:
+                total_chars += len(str(content))
+        return total_chars // 4
+
+    def get_usage(self, messages: List[Dict]) -> Dict:
+        """Get context usage stats."""
+        tokens = self.estimate_tokens(messages)
+        percent = tokens / self.max_tokens
+        return {
+            "tokens": tokens,
+            "max_tokens": self.max_tokens,
+            "percent": percent,
+            "level": "critical" if percent >= 0.95 else "high" if percent >= 0.90 else "medium" if percent >= 0.80 else "normal"
+        }
+
+    def check_and_warn(self, messages: List[Dict]) -> Optional[str]:
+        """Check context and return warning if needed."""
+        usage = self.get_usage(messages)
+        percent = usage["percent"]
+        tokens = usage["tokens"]
+
+        if percent >= 0.95 and self.last_warning_level < 95:
+            self.last_warning_level = 95
+            return f"[!] Context at 95% ({tokens:,}/{self.max_tokens:,} tokens). Compaction imminent!"
+        elif percent >= 0.90 and self.last_warning_level < 90:
+            self.last_warning_level = 90
+            return f"[!] Context at 90% ({tokens:,}/{self.max_tokens:,} tokens). Approaching limit."
+        elif percent >= 0.80 and self.last_warning_level < 80:
+            self.last_warning_level = 80
+            return f"[i] Context at 80% ({tokens:,}/{self.max_tokens:,} tokens). Consider starting fresh."
+        return None
+
+    def reset(self):
+        """Reset warning level."""
+        self.last_warning_level = 0
+
+# Initialize context manager
+CONTEXT = ContextManager(CONFIG.context_max_tokens)
+
+
+# ============================================================
+# TOKEN TRACKER
+# ============================================================
+
+class TokenTracker:
+    """Tracks API token usage per message and session."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Reset all counters."""
+        self.session_input = 0
+        self.session_output = 0
+        self.session_total = 0
+        self.last_input = 0
+        self.last_output = 0
+        self.api_calls = 0
+
+    def add(self, usage: dict):
+        """Add usage from API response."""
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+
+        self.last_input = input_tokens
+        self.last_output = output_tokens
+        self.session_input += input_tokens
+        self.session_output += output_tokens
+        self.session_total = self.session_input + self.session_output
+        self.api_calls += 1
+
+    def get_last(self) -> str:
+        """Get last call usage as string."""
+        return f"In:{self.last_input:,} Out:{self.last_output:,}"
+
+    def get_session(self) -> str:
+        """Get session total as string."""
+        return f"In:{self.session_input:,} Out:{self.session_output:,} Total:{self.session_total:,}"
+
+    def get_stats(self) -> dict:
+        """Get full stats."""
+        return {
+            "session_input": self.session_input,
+            "session_output": self.session_output,
+            "session_total": self.session_total,
+            "last_input": self.last_input,
+            "last_output": self.last_output,
+            "api_calls": self.api_calls,
+        }
+
+# Initialize token tracker
+TOKENS = TokenTracker()
+
+
+# ============================================================
+# ALL TOOLS (15 TOOLS)
+# ============================================================
+
+# Global state
+_TODOS = []
+_FILES_READ = set()
+
+# ============== FILE OPERATIONS ==============
+
+def tool_read_file(args: Dict) -> str:
+    """Read a file with line numbers. Smart handling for large files."""
+    path = args["file_path"]
+    offset = args.get("offset", 0)
+    limit = args.get("limit", 2000)
+
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    if not os.path.exists(path):
+        return f"Error: File not found: {path}"
+
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+
+        total_lines = len(lines)
+        file_size = os.path.getsize(path)
+        _FILES_READ.add(os.path.abspath(path))
+
+        # Check if file is very large - suggest alternatives
+        if total_lines > 5000 or file_size > 100 * 1024:  # >5000 lines or >100KB
+            hint = f"\n[LARGE FILE: {total_lines:,} lines, {file_size:,} bytes]"
+            hint += f"\n[TIP: Use 'grep' to search for specific patterns, or 'offset' parameter to read specific sections]"
+        else:
+            hint = ""
+
+        selected = lines[offset:offset + limit]
+        result = []
+        for i, line in enumerate(selected, start=offset + 1):
+            if len(line) > 2000:
+                line = line[:2000] + "..."
+            result.append(f"{i:4}| {line.rstrip()}")
+
+        output = "\n".join(result)
+
+        # Add header with file info
+        end_line = min(offset + limit, total_lines)
+        header = f"[File: {path} | Lines {offset+1}-{end_line} of {total_lines}]{hint}\n"
+
+        # Check if there's more content
+        if end_line < total_lines:
+            footer = f"\n\n[{total_lines - end_line} more lines. Use offset={end_line} to continue reading]"
+        else:
+            footer = f"\n\n[End of file - {total_lines} total lines]"
+
+        return header + SECURITY.truncate_output(output) + footer
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+
+def tool_write_file(args: Dict) -> str:
+    """Write content to file."""
+    path = args["file_path"]
+    content = args["content"]
+
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    if os.path.exists(path) and os.path.abspath(path) not in _FILES_READ:
+        return "Error: Must read file before writing. Use read_file first."
+
+    secrets = SECURITY.scan_secrets(content)
+    if secrets:
+        types = ", ".join(s["type"] for s in secrets)
+        return f"Warning: Content contains potential secrets ({types}). Review before saving."
+
+    try:
+        dir_path = os.path.dirname(path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        _FILES_READ.add(os.path.abspath(path))
+        return f"Written {len(content):,} chars to {path}"
+    except Exception as e:
+        return f"Error writing file: {e}"
+
+
+def tool_edit_file(args: Dict) -> str:
+    """Edit file by replacing exact string."""
+    path = args["file_path"]
+    old_string = args["old_string"]
+    new_string = args["new_string"]
+    replace_all = args.get("replace_all", False)
+
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    if os.path.abspath(path) not in _FILES_READ:
+        return "Error: Must read file before editing. Use read_file first."
+
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        count = content.count(old_string)
+        if count == 0:
+            return "Error: old_string not found in file. Must be EXACT match."
+        if count > 1 and not replace_all:
+            return f"Error: old_string appears {count} times. Use replace_all=true or provide more context."
+
+        if replace_all:
+            new_content = content.replace(old_string, new_string)
+        else:
+            new_content = content.replace(old_string, new_string, 1)
+
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        return f"Edited {path} ({count} replacement{'s' if replace_all and count > 1 else ''})"
+    except Exception as e:
+        return f"Error editing file: {e}"
+
+
+def tool_glob(args: Dict) -> str:
+    """Find files by glob pattern."""
+    pattern = args["pattern"]
+    path = args.get("path", CONFIG.workspace)
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    full_pattern = os.path.join(path, pattern)
+    matches = glob_module.glob(full_pattern, recursive=True)[:100]
+    matches = sorted(matches, key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0, reverse=True)
+    return "\n".join(matches) if matches else "No files found"
+
+
+def tool_grep(args: Dict) -> str:
+    """Search file contents with regex."""
+    pattern = args["pattern"]
+    path = args.get("path", CONFIG.workspace)
+    glob_pattern = args.get("glob", "**/*")
+    case_insensitive = args.get("case_insensitive", False)
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    flags = re.IGNORECASE if case_insensitive else 0
+    try:
+        regex = re.compile(pattern, flags)
+    except re.error as e:
+        return f"Error: Invalid regex: {e}"
+
+    results = []
+    files = glob_module.glob(os.path.join(path, glob_pattern), recursive=True)
+
+    for filepath in files:
+        if not os.path.isfile(filepath) or len(results) >= 50:
+            continue
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                for i, line in enumerate(f, 1):
+                    if regex.search(line):
+                        results.append(f"{filepath}:{i}: {line.strip()[:100]}")
+                        if len(results) >= 50:
+                            break
+        except:
+            continue
+
+    return "\n".join(results) if results else "No matches found"
+
+
+def tool_list_dir(args: Dict) -> str:
+    """List directory contents."""
+    path = args.get("path", CONFIG.workspace)
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
+
+    if not os.path.isdir(path):
+        return f"Error: Not a directory: {path}"
+
+    try:
+        entries = []
+        for entry in sorted(os.listdir(path))[:100]:
+            full = os.path.join(path, entry)
+            if os.path.isdir(full):
+                entries.append(f"[DIR]  {entry}/")
+            else:
+                size = os.path.getsize(full)
+                entries.append(f"[FILE] {entry} ({size:,} bytes)")
+        return "\n".join(entries) if entries else "(empty directory)"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ============== BASH ==============
+
+def tool_bash(args: Dict) -> str:
+    """Execute shell command."""
+    command = args["command"]
+    timeout = min(args.get("timeout", 120), 600)
+
+    ok, msg = SECURITY.validate_command(command)
+    if not ok:
+        return f"Blocked: {msg}"
+
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=CONFIG.workspace,
+            env={**os.environ, "TERM": "dumb"}
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[stderr]\n{result.stderr}"
+        if result.returncode != 0:
+            output += f"\n[exit code: {result.returncode}]"
+        return SECURITY.truncate_output(output) if output else "(no output)"
+    except subprocess.TimeoutExpired:
+        return f"Error: Command timed out after {timeout} seconds"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ============== PYTHON EXECUTION ==============
+
+def tool_python_exec(args: Dict) -> str:
+    """Execute Python code in subprocess."""
+    code = args["code"]
+    timeout = min(args.get("timeout", 60), 300)
+
+    # Security check
+    ok, msg = SECURITY.validate_python(code)
+    if not ok:
+        return f"🛡️ Security blocked: {msg}"
+
+    fd, temp_path = tempfile.mkstemp(suffix=".py", prefix="agent_exec_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(code)
+
+        result = subprocess.run(
+            [sys.executable, temp_path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=CONFIG.workspace,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[stderr]\n{result.stderr}"
+        if result.returncode != 0:
+            output += f"\n[exit code: {result.returncode}]"
+        return SECURITY.truncate_output(output) if output else "(no output)"
+    except subprocess.TimeoutExpired:
+        return f"Error: Code timed out after {timeout} seconds"
+    except Exception as e:
+        return f"Error: {e}"
+    finally:
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+
+
+# ============== DOCUMENT CREATION ==============
+
+def _parse_word_content(doc, content: str, images: Dict = None):
+    """Parse markdown-like content and add to Word document with styling.
+
+    Supports:
+    - # ## ### headings
+    - **bold**, *italic*, ***bold-italic***
+    - - bullet lists
+    - 1. numbered lists
+    - | tables |
+    - ---PAGE--- page breaks
+    - ![alt](path) or {{IMAGE:path}} image embeds
+    """
+    from docx.shared import Inches
+
+    lines = content.split("\n")
+    i = 0
+    in_table = False
+    table_data = []
+    images = images or {}
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Page break
+        if line.strip() == "---PAGE---":
+            doc.add_page_break()
+            i += 1
+            continue
+
+        # Image embed: ![alt](path) or {{IMAGE:path}}
+        img_match = re.match(r"!\[([^\]]*)\]\(([^)]+)\)", line.strip())
+        if not img_match:
+            img_match = re.match(r"\{\{IMAGE:([^}]+)\}\}", line.strip())
+            if img_match:
+                img_path = img_match.group(1)
+                img_alt = ""
+            else:
+                img_path = None
+        else:
+            img_alt = img_match.group(1)
+            img_path = img_match.group(2)
+
+        if img_path:
+            # Resolve path - strip leading ./ and normalize
+            img_path = img_path.lstrip("./").lstrip(".\\")
+            if not os.path.isabs(img_path):
+                img_path = os.path.join(CONFIG.workspace, img_path)
+            img_path = os.path.normpath(img_path)
+            if os.path.exists(img_path):
+                try:
+                    doc.add_picture(img_path, width=Inches(5.5))
+                    if img_alt:
+                        caption = doc.add_paragraph(img_alt)
+                        caption.alignment = 1  # Center
+                except Exception as e:
+                    doc.add_paragraph(f"[Image error: {e}]")
+            else:
+                doc.add_paragraph(f"[Image not found: {img_path}]")
+            i += 1
+            continue
+
+        # Headings
+        if line.startswith("### "):
+            doc.add_heading(line[4:].strip(), level=3)
+            i += 1
+            continue
+        if line.startswith("## "):
+            doc.add_heading(line[3:].strip(), level=2)
+            i += 1
+            continue
+        if line.startswith("# "):
+            doc.add_heading(line[2:].strip(), level=1)
+            i += 1
+            continue
+
+        # Table detection - more robust: detect any line with | separators
+        stripped = line.strip()
+        # Match: | col1 | col2 | OR col1 | col2 (without leading |)
+        is_table_line = (stripped.startswith("|") and "|" in stripped[1:]) or \
+                        ("|" in stripped and re.match(r'^[^|]+\|.+$', stripped))
+
+        if is_table_line:
+            if not in_table:
+                in_table = True
+                table_data = []
+            # Normalize: ensure leading/trailing | for consistent parsing
+            if not stripped.startswith("|"):
+                stripped = "|" + stripped
+            if not stripped.endswith("|"):
+                stripped = stripped + "|"
+            cells = [c.strip() for c in stripped[1:-1].split("|")]
+            # Skip separator lines (all dashes/colons)
+            if not all(c.replace("-", "").replace(":", "").strip() == "" for c in cells):
+                table_data.append(cells)
+            i += 1
+            continue
+        elif in_table:
+            if table_data:
+                _add_word_table(doc, table_data)
+            in_table = False
+            table_data = []
+
+        # Bullet list
+        if line.strip().startswith("- "):
+            para = doc.add_paragraph(style="List Bullet")
+            _add_formatted_run(para, line.strip()[2:])
+            i += 1
+            continue
+
+        # Numbered list
+        match = re.match(r"^\d+\.\s+", line.strip())
+        if match:
+            para = doc.add_paragraph(style="List Number")
+            _add_formatted_run(para, line.strip()[match.end():])
+            i += 1
+            continue
+
+        # Regular paragraph
+        if line.strip():
+            para = doc.add_paragraph()
+            _add_formatted_run(para, line.strip())
+
+        i += 1
+
+    if in_table and table_data:
+        _add_word_table(doc, table_data)
+
+
+def _add_formatted_run(paragraph, text: str):
+    """Add text with bold/italic formatting."""
+    pattern = r"(\*\*\*.*?\*\*\*|\*\*.*?\*\*|\*.*?\*)"
+    parts = re.split(pattern, text)
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith("***") and part.endswith("***"):
+            run = paragraph.add_run(part[3:-3])
+            run.bold = True
+            run.italic = True
+        elif part.startswith("**") and part.endswith("**"):
+            run = paragraph.add_run(part[2:-2])
+            run.bold = True
+        elif part.startswith("*") and part.endswith("*"):
+            run = paragraph.add_run(part[1:-1])
+            run.italic = True
+        else:
+            paragraph.add_run(part)
+
+
+def _add_word_table(doc, table_data: list):
+    """Add styled table to document."""
+    if not table_data:
+        return
+    rows = len(table_data)
+    cols = max(len(row) for row in table_data)
+    table = doc.add_table(rows=rows, cols=cols)
+    table.style = "Table Grid"
+    for i, row_data in enumerate(table_data):
+        row = table.rows[i]
+        for j, cell_text in enumerate(row_data):
+            if j < cols:
+                cell = row.cells[j]
+                cell.text = cell_text
+                if i == 0:
+                    for para in cell.paragraphs:
+                        for run in para.runs:
+                            run.bold = True
+    doc.add_paragraph()
+
+
+def tool_create_word(args: Dict) -> str:
+    """Create Word document with rich styling."""
+    filepath = args["filepath"]
+    content = args["content"]
+    title = args.get("title", "")
+    include_toc = args.get("include_toc", False)
+    header_text = args.get("header", "")
+    footer_text = args.get("footer", "")
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.endswith(".docx"):
+        filepath += ".docx"
+
+    try:
+        from docx import Document
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
+        doc = Document()
+
+        if header_text:
+            section = doc.sections[0]
+            header = section.header
+            header.paragraphs[0].text = header_text
+            header.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        if footer_text:
+            section = doc.sections[0]
+            footer = section.footer
+            footer.paragraphs[0].text = footer_text
+            footer.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        if title:
+            title_para = doc.add_heading(title, 0)
+            title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        if include_toc:
+            doc.add_paragraph("Table of Contents", style="Heading 1")
+            para = doc.add_paragraph()
+            run = para.add_run()
+            fld_begin = OxmlElement('w:fldChar')
+            fld_begin.set(qn('w:fldCharType'), 'begin')
+            run._r.append(fld_begin)
+            run = para.add_run()
+            instr = OxmlElement('w:instrText')
+            instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+            run._r.append(instr)
+            run = para.add_run()
+            fld_end = OxmlElement('w:fldChar')
+            fld_end.set(qn('w:fldCharType'), 'end')
+            run._r.append(fld_end)
+            doc.add_paragraph("[Right-click TOC -> Update Field]")
+            doc.add_page_break()
+
+        _parse_word_content(doc, content)
+
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        doc.save(filepath)
+
+        features = []
+        if include_toc:
+            features.append("TOC")
+        if header_text:
+            features.append("header")
+        if footer_text:
+            features.append("footer")
+        feat_str = f" (with {', '.join(features)})" if features else ""
+        return f"Created Word document: {filepath}{feat_str}"
+
+    except ImportError:
+        return "Error: python-docx not installed. Run: pip install python-docx"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def tool_create_excel(args: Dict) -> str:
+    """Create Excel spreadsheet with optional chart."""
+    filepath = args["filepath"]
+    data = args["data"]
+    sheet_name = args.get("sheet_name", "Sheet1")
+    chart_type = args.get("chart_type")  # Optional: bar, line, pie
+    chart_title = args.get("chart_title", "Chart")
+    x_column = args.get("x_column")  # Column name for X axis
+    y_columns = args.get("y_columns", [])  # Column names for Y axis
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.endswith(".xlsx"):
+        filepath += ".xlsx"
+
+    try:
+        import pandas as pd
+        from openpyxl import Workbook
+        from openpyxl.utils.dataframe import dataframe_to_rows
+
+        df = pd.DataFrame(data)
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+
+        # Create workbook with pandas writer for chart support
+        with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Add chart if requested
+            if chart_type and x_column and y_columns:
+                from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+
+                ws = writer.sheets[sheet_name]
+
+                # Determine chart class
+                if chart_type == "bar":
+                    chart = BarChart()
+                elif chart_type == "line":
+                    chart = LineChart()
+                elif chart_type == "pie":
+                    chart = PieChart()
+                else:
+                    return f"Created Excel file: {filepath} ({len(df)} rows) [chart_type '{chart_type}' not supported, use bar/line/pie]"
+
+                chart.title = chart_title
+                chart.style = 10
+
+                # Find column indices
+                cols = list(df.columns)
+                x_idx = cols.index(x_column) + 1 if x_column in cols else 1
+
+                for y_col in y_columns:
+                    if y_col in cols:
+                        y_idx = cols.index(y_col) + 1
+                        data_ref = Reference(ws, min_col=y_idx, min_row=1, max_row=len(df)+1)
+                        cats = Reference(ws, min_col=x_idx, min_row=2, max_row=len(df)+1)
+
+                        if chart_type == "pie":
+                            chart.add_data(data_ref, titles_from_data=True)
+                            chart.set_categories(cats)
+                        else:
+                            chart.add_data(data_ref, titles_from_data=True)
+                            chart.set_categories(cats)
+
+                # Position chart
+                chart.width = 15
+                chart.height = 10
+                ws.add_chart(chart, f"{'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[len(cols)+1]}2")
+
+        return f"Created Excel file with chart: {filepath} ({len(df)} rows, {chart_type} chart)"
+    except ImportError as e:
+        return f"Error: pandas/openpyxl not installed. Run: pip install pandas openpyxl. ({e})"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def tool_create_markdown(args: Dict) -> str:
+    """Create Markdown file."""
+    filepath = args["filepath"]
+    content = args["content"]
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.endswith(".md"):
+        filepath += ".md"
+
+    try:
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Created Markdown file: {filepath}"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+# ============== CHARTS & PDF ==============
+
+def tool_create_chart(args: Dict) -> str:
+    """Create chart image using matplotlib."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return "Error: matplotlib not installed. Run: pip install matplotlib"
+
+    chart_type = args.get("chart_type", "bar")  # bar, line, pie, scatter
+    title = args.get("title", "Chart")
+    data = args["data"]  # {"labels": [...], "values": [...]} or {"x": [...], "y": [...]}
+    filepath = args.get("filepath", "chart.png")
+    xlabel = args.get("xlabel", "")
+    ylabel = args.get("ylabel", "")
+    colors = args.get("colors", None)
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.svg', '.pdf')):
+        filepath += ".png"
+
+    try:
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        if chart_type == "bar":
+            labels = data.get("labels", list(range(len(data.get("values", [])))))
+            values = data.get("values", [])
+            bars = ax.bar(labels, values, color=colors)
+            for bar, val in zip(bars, values):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{val:,.0f}' if isinstance(val, (int, float)) else str(val),
+                       ha='center', va='bottom', fontsize=9)
+
+        elif chart_type == "line":
+            x = data.get("x", data.get("labels", list(range(len(data.get("y", data.get("values", [])))))))
+            y = data.get("y", data.get("values", []))
+            ax.plot(x, y, marker='o', linewidth=2, markersize=6, color=colors[0] if colors else None)
+            ax.fill_between(x, y, alpha=0.3)
+
+        elif chart_type == "pie":
+            labels = data.get("labels", [])
+            values = data.get("values", [])
+            ax.pie(values, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
+            ax.axis('equal')
+
+        elif chart_type == "scatter":
+            x = data.get("x", [])
+            y = data.get("y", [])
+            ax.scatter(x, y, c=colors, alpha=0.7, s=50)
+
+        elif chart_type == "horizontal_bar":
+            labels = data.get("labels", [])
+            values = data.get("values", [])
+            ax.barh(labels, values, color=colors)
+
+        else:
+            return f"Error: Unknown chart type '{chart_type}'. Supported: bar, line, pie, scatter, horizontal_bar"
+
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        if xlabel:
+            ax.set_xlabel(xlabel)
+        if ylabel:
+            ax.set_ylabel(ylabel)
+
+        plt.tight_layout()
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        plt.savefig(filepath, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        return f"Created chart: {filepath}"
+    except Exception as e:
+        plt.close()
+        return f"Error creating chart: {e}"
+
+
+def _parse_markdown_table(text: str) -> list:
+    """Parse markdown table into list of lists for PDF/reportlab."""
+    lines = text.strip().split("\n")
+    table_data = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip separator lines (all dashes/colons)
+        if re.match(r'^[\|\s\-:]+$', stripped):
+            continue
+        # Parse table row
+        if "|" in stripped:
+            # Normalize: ensure leading/trailing | for consistent parsing
+            if not stripped.startswith("|"):
+                stripped = "|" + stripped
+            if not stripped.endswith("|"):
+                stripped = stripped + "|"
+            cells = [c.strip() for c in stripped[1:-1].split("|")]
+            if cells and any(c for c in cells):  # Skip empty rows
+                table_data.append(cells)
+    return table_data
+
+
+def tool_create_pdf(args: Dict) -> str:
+    """Create PDF document with text, tables, and images.
+
+    For tables, you can provide either:
+    1. Structured data: [["City", "2020"], ["Sydney", "1200000"]]
+    2. Markdown table: "| City | 2020 |\\n| --- | --- |\\n| Sydney | 1200000 |"
+    """
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+    except ImportError:
+        return "Error: reportlab not installed. Run: pip install reportlab"
+
+    filepath = args.get("filepath")
+    content = args.get("content")
+    title = args.get("title", "Document")
+    page_size = args.get("page_size", "letter")
+
+    # Validate filepath
+    if not filepath or not isinstance(filepath, str):
+        return "Error: 'filepath' is required and must be a string (e.g., 'report.pdf')"
+
+    # Validate content - must be list of dicts
+    if not content:
+        return "Error: 'content' is required. Must be list of dicts: [{type: 'heading'|'text'|'table'|'image', data: ...}]"
+
+    if isinstance(content, str):
+        # Auto-convert string to text section
+        content = [{"type": "text", "data": content}]
+    elif not isinstance(content, list):
+        return "Error: 'content' must be a list of sections: [{type: 'heading'|'text'|'table'|'image', data: ...}]"
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.lower().endswith('.pdf'):
+        filepath += ".pdf"
+
+    try:
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+
+        doc = SimpleDocTemplate(filepath, pagesize=letter if page_size == "letter" else A4)
+        styles = getSampleStyleSheet()
+        story = []
+
+        styles.add(ParagraphStyle(name='CustomTitle', parent=styles['Title'], fontSize=24, spaceAfter=30))
+        styles.add(ParagraphStyle(name='CustomHeading', parent=styles['Heading1'], fontSize=16, spaceAfter=12))
+        styles.add(ParagraphStyle(name='CustomBody', parent=styles['Normal'], fontSize=11, spaceAfter=10))
+
+        story.append(Paragraph(title, styles['CustomTitle']))
+        story.append(Spacer(1, 12))
+
+        for section in content:
+            # Handle string sections (auto-convert to text)
+            if isinstance(section, str):
+                section = {"type": "text", "data": section}
+            elif not isinstance(section, dict):
+                continue  # Skip invalid sections
+
+            section_type = section.get("type", "text")
+            data = section.get("data", "")
+
+            if section_type == "heading":
+                story.append(Paragraph(str(data), styles['CustomHeading']))
+
+            elif section_type == "text":
+                for para in str(data).split('\n\n'):
+                    if para.strip():
+                        story.append(Paragraph(para.replace('\n', '<br/>'), styles['CustomBody']))
+
+            elif section_type == "table":
+                # data can be:
+                # 1. list of lists: [["City", "2020"], ["Sydney", "1200000"]]
+                # 2. markdown table string: "| City | 2020 |\n| --- | --- |\n| Sydney | 1200000 |"
+                table_data = data
+                if isinstance(data, str):
+                    # Parse markdown table
+                    table_data = _parse_markdown_table(data)
+                if isinstance(table_data, list) and len(table_data) > 0:
+                    table = Table(table_data)
+                    table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a9eff')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 12),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#cccccc')),
+                        ('FONTSIZE', (0, 1), (-1, -1), 10),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9f9f9')]),
+                    ]))
+                    story.append(table)
+                    story.append(Spacer(1, 12))
+
+            elif section_type == "image":
+                img_path = data if os.path.isabs(data) else os.path.join(CONFIG.workspace, data)
+                if os.path.exists(img_path):
+                    img = Image(img_path)
+                    # Scale to fit page width while maintaining aspect ratio
+                    orig_width = img.drawWidth
+                    orig_height = img.drawHeight
+                    img.drawWidth = min(orig_width, 6*inch)
+                    img.drawHeight = orig_height * (img.drawWidth / orig_width)
+                    story.append(img)
+                    story.append(Spacer(1, 12))
+
+            story.append(Spacer(1, 6))
+
+        doc.build(story)
+        return f"Created PDF: {filepath}"
+    except Exception as e:
+        return f"Error creating PDF: {e}"
+
+
+# ============== VISION ==============
+
+def tool_view_image(args: Dict) -> str:
+    """Load and describe image for AI analysis."""
+    path = args["file_path"]
+
+    if not os.path.isabs(path):
+        path = os.path.join(CONFIG.workspace, path)
+
+    if not os.path.exists(path):
+        return f"Error: Image not found: {path}"
+
+    ext = os.path.splitext(path)[1].lower()
+    media_types = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+    if ext not in media_types:
+        return f"Error: Unsupported format: {ext}. Supported: png, jpg, gif, webp"
+
+    size = os.path.getsize(path)
+    if size > 20 * 1024 * 1024:
+        return f"Error: Image too large: {size / (1024*1024):.1f}MB (max 20MB)"
+
+    return f"Image loaded: {path} ({size:,} bytes, {ext})"
+
+
+# ============== SEMANTIC SEARCH (Using Vertex AI Embeddings) ==============
+
+class SemanticSearch:
+    """Semantic code search using Vertex AI Text Embeddings."""
+
+    def __init__(self, project_id: str, region: str = "us-central1", index_path: str = "./.code_index"):
+        self.project_id = project_id
+        self.region = region
+        self.index_path = index_path
+        self.model = None
+        self.chunks = []
+
+    def _ensure_model(self):
+        if self.model is None:
+            try:
+                from vertexai.language_models import TextEmbeddingModel
+                import vertexai
+                vertexai.init(project=self.project_id, location=self.region)
+                self.model = TextEmbeddingModel.from_pretrained("text-embedding-005")
+            except ImportError:
+                raise ImportError("google-cloud-aiplatform not installed. Run: pip install google-cloud-aiplatform")
+
+    def _get_embedding(self, text: str) -> List[float]:
+        """Get embedding vector for text."""
+        self._ensure_model()
+        text = text[:8000]
+        embeddings = self.model.get_embeddings([text])
+        return embeddings[0].values
+
+    def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        import numpy as np
+        a_arr = np.array(a)
+        b_arr = np.array(b)
+        return float(np.dot(a_arr, b_arr) / (np.linalg.norm(a_arr) * np.linalg.norm(b_arr)))
+
+    def index_codebase(self, root_dir: str, extensions: List[str] = None, chunk_size: int = 50) -> int:
+        """Index all code files in directory."""
+        extensions = extensions or [".py", ".js", ".ts", ".tsx", ".java", ".go", ".rs", ".c", ".cpp", ".h"]
+        self.chunks = []
+
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            for filename in filenames:
+                if not any(filename.endswith(ext) for ext in extensions):
+                    continue
+                filepath = os.path.join(dirpath, filename)
+                self._index_file(filepath, chunk_size)
+
+        self._save_index()
+        return len(self.chunks)
+
+    def _index_file(self, filepath: str, chunk_size: int = 50):
+        """Split file into chunks and index each."""
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except IOError:
+            return
+
+        for i in range(0, len(lines), chunk_size):
+            chunk_lines = lines[i:i + chunk_size]
+            content = "".join(chunk_lines)
+            if len(content.strip()) < 50:
+                continue
+            try:
+                embedding = self._get_embedding(content)
+                self.chunks.append({
+                    "file_path": filepath,
+                    "start_line": i + 1,
+                    "end_line": i + len(chunk_lines),
+                    "content": content,
+                    "embedding": embedding,
+                })
+            except Exception as e:
+                print(f"Warning: Failed to embed {filepath}: {e}")
+
+    def _save_index(self):
+        """Save index to disk."""
+        os.makedirs(self.index_path, exist_ok=True)
+        with open(os.path.join(self.index_path, "chunks.json"), "w") as f:
+            json.dump(self.chunks, f)
+
+    def _load_index(self) -> bool:
+        """Load index from disk."""
+        path = os.path.join(self.index_path, "chunks.json")
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path) as f:
+                self.chunks = json.load(f)
+            return True
+        except (json.JSONDecodeError, TypeError):
+            return False
+
+    def search(self, query: str, top_k: int = 5) -> List[Tuple[Dict, float]]:
+        """Search for code matching query."""
+        if not self.chunks and not self._load_index():
+            return []
+        query_embedding = self._get_embedding(query)
+        results = []
+        for chunk in self.chunks:
+            if chunk.get("embedding"):
+                sim = self._cosine_similarity(query_embedding, chunk["embedding"])
+                results.append((chunk, sim))
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:top_k]
+
+    def is_indexed(self) -> bool:
+        """Check if codebase is indexed."""
+        return os.path.exists(os.path.join(self.index_path, "chunks.json"))
+
+
+_SEMANTIC_SEARCH = None
+
+
+def tool_semantic_search(args: Dict) -> str:
+    """Semantic code search using AI embeddings."""
+    global _SEMANTIC_SEARCH
+
+    action = args.get("action", "search")
+    query = args.get("query", "")
+    path = args.get("path", CONFIG.workspace)
+    top_k = args.get("top_k", 5)
+
+    if _SEMANTIC_SEARCH is None:
+        _SEMANTIC_SEARCH = SemanticSearch(CONFIG.project_id, "us-central1", os.path.join(CONFIG.workspace, ".code_index"))
+
+    if action == "index":
+        if not os.path.isabs(path):
+            path = os.path.join(CONFIG.workspace, path)
+        try:
+            count = _SEMANTIC_SEARCH.index_codebase(path)
+            return f"Indexed {count} code chunks from {path}"
+        except Exception as e:
+            return f"Error indexing: {e}"
+
+    elif action == "search":
+        if not query:
+            return "Error: query is required for search"
+        if not _SEMANTIC_SEARCH.is_indexed():
+            return "Codebase not indexed. Run with action='index' first."
+        try:
+            results = _SEMANTIC_SEARCH.search(query, top_k)
+            if not results:
+                return "No matching code found."
+            output = []
+            for chunk, score in results:
+                output.append(f"\n### {chunk['file_path']}:{chunk['start_line']}-{chunk['end_line']} (score: {score:.3f})")
+                output.append("```")
+                content = chunk['content'][:500]
+                if len(chunk['content']) > 500:
+                    content += "\n... (truncated)"
+                output.append(content)
+                output.append("```")
+            return "\n".join(output)
+        except Exception as e:
+            return f"Error searching: {e}"
+
+    elif action == "status":
+        if _SEMANTIC_SEARCH.is_indexed():
+            if not _SEMANTIC_SEARCH.chunks:
+                _SEMANTIC_SEARCH._load_index()
+            files = set(c["file_path"] for c in _SEMANTIC_SEARCH.chunks)
+            return f"Index: {len(_SEMANTIC_SEARCH.chunks)} chunks from {len(files)} files"
+        return "Codebase not indexed"
+
+    return f"Unknown action: {action}. Use 'index', 'search', or 'status'."
+
+
+# ============== TODOS ==============
+
+def tool_todo_write(args: Dict) -> str:
+    """Update todo list."""
+    global _TODOS
+    _TODOS = args["todos"]
+    lines = ["Todo List Updated:"]
+    for t in _TODOS:
+        icon = {"pending": "[ ]", "in_progress": "[>]", "completed": "[x]"}.get(t.get("status"), "[?]")
+        lines.append(f"  {icon} {t.get('content', 'Unknown')}")
+    return "\n".join(lines)
+
+
+def tool_todo_read(args: Dict) -> str:
+    """Read current todo list."""
+    if not _TODOS:
+        return "No todos."
+    lines = ["Current Todos:"]
+    for t in _TODOS:
+        icon = {"pending": "[ ]", "in_progress": "[>]", "completed": "[x]"}.get(t.get("status"), "[?]")
+        lines.append(f"  {icon} {t.get('content', 'Unknown')}")
+    return "\n".join(lines)
+
+
+# ============== TOOL REGISTRY ==============
+
+TOOLS = {
+    "read_file": (tool_read_file, False, "Read file contents with line numbers. Reads up to 2000 lines by default - usually enough for entire file. Only use offset/limit for very large files.",
+        {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed, only for large files)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
+
+    "write_file": (tool_write_file, False, "Write content to file. Must read first if exists.",
+        {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}}, "required": ["file_path", "content"]}),
+
+    "edit_file": (tool_edit_file, False, "Edit file by replacing EXACT string match. Must read first.",
+        {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences"}}, "required": ["file_path", "old_string", "new_string"]}),
+
+    "glob": (tool_glob, False, "Find files by glob pattern (e.g., '**/*.py')",
+        {"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string", "description": "Directory to search"}}, "required": ["pattern"]}),
+
+    "grep": (tool_grep, False, "Search file contents with regex",
+        {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "Filter files"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
+
+    "list_dir": (tool_list_dir, False, "List directory contents",
+        {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}),
+
+    "bash": (tool_bash, False, "Run shell command. Use for git, pip, scripts.",
+        {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 600)"}}, "required": ["command"]}),
+
+    "python_exec": (tool_python_exec, False, "Execute Python code. Use for data processing, calculations, file generation.",
+        {"type": "object", "properties": {"code": {"type": "string", "description": "Python code"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 300)"}}, "required": ["code"]}),
+
+    "create_word": (tool_create_word, False, "Create styled Word doc. Supports: # headings, **bold**, *italic*, - bullets, 1. numbers, | tables |, ---PAGE--- breaks, ![alt](image.png) images. NOTE: Images must be actual image files (.png/.jpg). For charts, first use create_chart to generate an image, then reference it.",
+        {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Content with markdown formatting. Use ![caption](image.png) to embed images - must be actual image files, NOT Excel files."}, "title": {"type": "string", "description": "Centered title"}, "include_toc": {"type": "boolean", "description": "Add Table of Contents"}, "header": {"type": "string", "description": "Page header text"}, "footer": {"type": "string", "description": "Page footer text"}}, "required": ["filepath", "content"]}),
+
+    "create_excel": (tool_create_excel, False, "Create Excel spreadsheet with optional embedded chart",
+        {"type": "object", "properties": {
+            "filepath": {"type": "string"},
+            "data": {"type": "array", "description": "List of dicts [{\"col\": \"val\"}]"},
+            "sheet_name": {"type": "string"},
+            "chart_type": {"type": "string", "enum": ["bar", "line", "pie"], "description": "Optional chart type"},
+            "chart_title": {"type": "string", "description": "Chart title"},
+            "x_column": {"type": "string", "description": "Column name for X axis (categories)"},
+            "y_columns": {"type": "array", "items": {"type": "string"}, "description": "Column names for Y axis (values)"}
+        }, "required": ["filepath", "data"]}),
+
+    "create_markdown": (tool_create_markdown, False, "Create Markdown file (.md)",
+        {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string"}}, "required": ["filepath", "content"]}),
+
+    "create_chart": (tool_create_chart, False, "Create chart image (bar, line, pie, scatter). Returns image path.",
+        {"type": "object", "properties": {
+            "chart_type": {"type": "string", "enum": ["bar", "line", "pie", "scatter", "horizontal_bar"], "description": "Chart type"},
+            "title": {"type": "string", "description": "Chart title"},
+            "data": {"type": "object", "description": "Data: {labels: [...], values: [...]} or {x: [...], y: [...]}"},
+            "filepath": {"type": "string", "description": "Output path (default: chart.png)"},
+            "xlabel": {"type": "string", "description": "X-axis label"},
+            "ylabel": {"type": "string", "description": "Y-axis label"},
+            "colors": {"type": "array", "items": {"type": "string"}, "description": "Color list"}
+        }, "required": ["data"]}),
+
+    "create_pdf": (tool_create_pdf, False, "Create PDF with text, tables, images. Tables can be list-of-lists OR markdown format. Images must be actual image files.",
+        {"type": "object", "properties": {
+            "filepath": {"type": "string", "description": "Output PDF path"},
+            "title": {"type": "string", "description": "Document title"},
+            "content": {"type": "array", "description": "List of sections: [{type: 'heading'|'text'|'table'|'image', data: ...}]. Table data can be list-of-lists or markdown string.", "items": {"type": "object"}},
+            "page_size": {"type": "string", "enum": ["letter", "a4"], "description": "Page size"}
+        }, "required": ["filepath", "content"]}),
+
+    "view_image": (tool_view_image, False, "View image (PNG, JPG, GIF, WebP)",
+        {"type": "object", "properties": {"file_path": {"type": "string"}}, "required": ["file_path"]}),
+
+    "todo_write": (tool_todo_write, False, "Update task list for tracking multi-step work",
+        {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}, "activeForm": {"type": "string"}}}}}, "required": ["todos"]}),
+
+    "todo_read": (tool_todo_read, False, "Read current task list",
+        {"type": "object", "properties": {}, "required": []}),
+
+    "semantic_search": (tool_semantic_search, False, "Semantic code search using AI embeddings. Use action='index' to index codebase, action='search' to find code.",
+        {"type": "object", "properties": {"action": {"type": "string", "enum": ["index", "search", "status"], "description": "Action: index, search, or status"}, "query": {"type": "string", "description": "Natural language search query (for search)"}, "path": {"type": "string", "description": "Directory to index (for index)"}, "top_k": {"type": "integer", "description": "Number of results (default 5)"}}, "required": ["action"]}),
+}
+
+
+def get_tool_definitions() -> List[Dict]:
+    """Get tool definitions for Gemini API."""
+    return [{"name": k, "description": v[2], "input_schema": v[3]} for k, v in TOOLS.items()]
+
+
+# ============================================================
+# SYSTEM PROMPT
+# ============================================================
+
+SYSTEM_PROMPT = """You are Vertex AI Gemini Coding Agent, an AI assistant for software engineering powered by GCP Vertex AI Gemini.
+
+# CRITICAL: USE TOOLS PROACTIVELY
+- When user asks to list files, list directory, or see what's in a folder: USE list_dir tool IMMEDIATELY. Default path is "." for current directory.
+- When user asks to read/view/show a file: USE read_file tool IMMEDIATELY.
+- When user asks to search/find: USE glob or grep tool IMMEDIATELY.
+- DO NOT ask clarifying questions when the intent is clear. Just use the tools.
+- If user says "current", "here", "this folder" - use "." as the path.
+
+# Style
+- Be concise. Use markdown. No emojis unless asked.
+- Prefer editing existing files over creating new ones.
+- Be technically accurate. Disagree when necessary.
+
+# Professional Objectivity
+- NEVER give time estimates ("this will take 5 minutes", "quick fix", "should be done soon")
+- Prioritize technical accuracy over validating user beliefs
+- Avoid over-the-top validation like "You're absolutely right" or "Great question!"
+- Honest, objective guidance is more valuable than false agreement
+- If uncertain, investigate first rather than confirming assumptions
+
+# Task Management
+Use todo_write frequently to track tasks. Mark todos completed immediately when done. Only ONE task should be in_progress at a time.
+
+# Parallel Execution
+When calling multiple tools:
+- If tools are INDEPENDENT, call them in parallel (single response, multiple tool calls)
+- If tools DEPEND on each other, call them sequentially
+- Example: reading 3 files = parallel. Creating dir then file = sequential.
+- Maximize parallel calls for efficiency
+
+# Doing Tasks
+- ALWAYS read a file before editing (edit_file fails otherwise)
+- old_string in edit_file must be EXACT match
+- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep)
+- Reserve bash for: git, pip/npm, running scripts
+
+# Document Creation
+You can create Word (.docx), Excel (.xlsx), and Markdown (.md) files:
+- create_word: Use for formal documents, reports
+- create_excel: Use for tabular data, spreadsheets. Data format: list of dicts
+- create_markdown: Use for documentation
+
+# Python Execution
+Use python_exec for:
+- Data processing and analysis
+- Complex calculations
+- Custom file generation
+- Any scripting task
+
+# Code References
+Use pattern `file_path:line_number` when referencing code.
+
+# Security
+- Workspace boundary enforced (cannot access outside project)
+- Dangerous commands blocked (rm -rf, sudo, curl|bash)
+- Write operations need user approval
+- All actions logged to audit trail
+
+# IMPORTANT: Tool Call Format
+When using tools, follow these rules EXACTLY:
+- Use ONE tool at a time, wait for result before next tool
+- Keep tool arguments simple - avoid deeply nested JSON
+- For file content with special chars, use simple strings without complex escaping
+- If a tool call fails, try again with simpler arguments
+- Never include raw code blocks inside JSON string arguments - escape properly or use simpler approach
+"""
+
+# Plan Mode System Prompt (OpenCode-style, synced from AWS version)
+PLAN_MODE_PROMPT = """You are in PLAN MODE. Your task is to EXPLORE and CREATE A PLAN, NOT execute.
+
+# Plan Mode Rules
+1. **READ-ONLY**: You can ONLY use these tools:
+   - read_file, glob, grep, list_dir (explore codebase)
+   - todo_write, todo_read (track what you're planning)
+
+2. **NO WRITES**: Do NOT use:
+   - write_file, edit_file, bash, python_exec, create_word, create_excel
+
+3. **OUTPUT**: Create a detailed plan in your response:
+   - What needs to be done (steps)
+   - Which files need to be modified
+   - What changes will be made
+   - Any risks or considerations
+
+4. **FORMAT**: End your response with a plan summary like:
+   ```
+   ## Implementation Plan
+   1. [Step 1]
+   2. [Step 2]
+   ...
+
+   ## Files to Modify
+   - file1.py: [changes]
+   - file2.py: [changes]
+
+   ## Ready to Execute?
+   Turn off Plan Mode and send "execute plan" to proceed.
+   ```
+
+Remember: EXPLORE and PLAN only. No modifications!
+"""
+
+# Plan Mode - Tools that are BLOCKED (write operations)
+PLAN_MODE_BLOCKED_TOOLS = {
+    "write_file", "edit_file", "bash", "python_exec",
+    "create_word", "create_excel", "create_markdown",
+    "create_chart", "create_pdf"
+}
+
+# Plan Mode - Tools that are ALLOWED (read-only operations)
+PLAN_MODE_ALLOWED_TOOLS = {
+    "read_file", "glob", "grep", "list_dir", "semantic_search",
+    "todo_write", "todo_read", "view_image"
+}
+
+
+# ============================================================
+# AGENT LOOP
+# ============================================================
+
+class Agent:
+    """Main agent loop with ReAct pattern, history trimming, and doom loop detection."""
+
+    def __init__(
+        self,
+        client: GeminiClient,
+        session_id: str = None,
+        on_approval: Callable = None,
+        on_tokens: Callable = None,
+        on_thinking: Callable = None,
+    ):
+        self.client = client
+        self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.messages = []
+        self.on_approval = on_approval
+        self.on_tokens = on_tokens
+        self.on_thinking = on_thinking
+        self.tool_history = deque(maxlen=10)
+
+    def run(self, user_message: str, output_fn: Callable = print, system_prompt: str = None, plan_mode: bool = False) -> str:
+        """Run agent loop until completion or max turns.
+
+        Args:
+            user_message: User's message
+            output_fn: Callback for output display
+            system_prompt: Custom system prompt (default: SYSTEM_PROMPT, use PLAN_MODE_PROMPT for plan mode)
+            plan_mode: If True, block write operations and only allow read-only tools
+        """
+        # Use provided system prompt or default
+        self._system_prompt = system_prompt or SYSTEM_PROMPT
+        self._plan_mode = plan_mode  # Store for tool execution check
+
+        # Ensure proper role alternation - if last message was user, add placeholder assistant
+        if self.messages and self.messages[-1].get("role") == "user":
+            self.messages.append({"role": "assistant", "content": "[Continuing...]"})
+
+        self.messages.append({"role": "user", "content": user_message})
+        AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
+
+        for turn in range(CONFIG.max_turns):
+            warning = CONTEXT.check_and_warn(self.messages)
+            if warning:
+                output_fn(warning)
+
+            # Smart compaction when context gets high (OpenCode-style)
+            if COMPACTOR.should_compact(self.messages, CONFIG.context_max_tokens):
+                # Step 1: Try pruning old tool outputs first
+                pruned_messages, tokens_saved = COMPACTOR.prune_tool_outputs(self.messages, CONFIG.context_max_tokens)
+                if tokens_saved > 0:
+                    self.messages = pruned_messages
+                    output_fn(f"[i] Pruned old tool outputs, saved ~{tokens_saved:,} tokens")
+
+                # Step 2: If still high, request LLM summary (simplified - use last response as summary trigger)
+                if COMPACTOR.should_compact(self.messages, CONFIG.context_max_tokens):
+                    output_fn("[i] Context high - creating summary...")
+                    # For now, use simple compaction (keep last N messages with summary marker)
+                    summary = "Previous conversation covered: " + ", ".join(
+                        m.get("content", "")[:50] if isinstance(m.get("content"), str) else "tool calls"
+                        for m in self.messages[:5]
+                    )
+                    self.messages = COMPACTOR.compact(self.messages, summary)
+                    output_fn("[i] Conversation compacted to preserve context")
+
+            # Legacy simple trim as fallback (preserve role alternation)
+            if len(self.messages) > CONFIG.max_history * 2:
+                trimmed = self.messages[-CONFIG.max_history:]
+                # Ensure we start with user message for proper alternation
+                if trimmed and trimmed[0].get("role") == "assistant":
+                    trimmed = [{"role": "user", "content": "[Earlier messages trimmed]"}] + trimmed
+                self.messages = trimmed
+
+            try:
+                response = self.client.chat(
+                    self.messages,
+                    self._system_prompt,  # Use custom or default system prompt
+                    get_tool_definitions(),
+                    CONFIG.max_tokens,
+                    CONFIG.temperature,
+                    CONFIG.thinking_enabled,
+                    CONFIG.thinking_budget,
+                )
+            except Exception as e:
+                error_msg = f"Error calling Vertex AI Gemini: {e}"
+                output_fn(error_msg)
+                AUDIT.log(self.session_id, "error", result_summary=str(e))
+                return error_msg
+
+            if response.usage:
+                TOKENS.add(response.usage)
+                if self.on_tokens:
+                    self.on_tokens(TOKENS.get_stats())
+
+            if response.thinking and self.on_thinking:
+                self.on_thinking(response.thinking)
+
+            if response.text:
+                output_fn(response.text)
+
+            if not response.tool_calls:
+                AUDIT.log(self.session_id, "response", result_summary=response.text[:200] if response.text else "")
+                return response.text or ""
+
+            for tc in response.tool_calls:
+                # Create key based on tool name + target (file path, not full content)
+                # For code/content-heavy tools, use hash to avoid false positives
+                if tc.name == "python_exec":
+                    code = tc.input.get("code", "")
+                    target = hashlib.md5(code.encode()).hexdigest()[:16]
+                elif tc.name == "create_pdf":
+                    content = str(tc.input.get("content", ""))
+                    target = hashlib.md5(content.encode()).hexdigest()[:16]
+                elif tc.name == "create_chart":
+                    data = str(tc.input.get("data", ""))
+                    target = hashlib.md5(data.encode()).hexdigest()[:16]
+                else:
+                    target = tc.input.get("file_path") or tc.input.get("path") or tc.input.get("filepath") or tc.input.get("command", "")[:50] or str(tc.input)[:50]
+                key = (tc.name, target)
+
+                # Check for doom loop (same tool+target 3+ times)
+                repeat_count = sum(1 for h in self.tool_history if h == key)
+                if repeat_count >= 3:
+                    output_fn(f"[Warning: Repetitive {tc.name} calls detected (3+ identical), stopping]")
+                    return response.text or ""
+
+                # Check for consecutive file rewrites (same file written twice in a row)
+                if tc.name in ("write_file", "edit_file") and self.tool_history:
+                    last_key = self.tool_history[-1] if self.tool_history else None
+                    if last_key and last_key[0] == tc.name and last_key[1] == target:
+                        output_fn(f"[Skipping duplicate {tc.name} to '{target[:30]}']")
+                        continue  # Skip this duplicate write
+
+                self.tool_history.append(key)
+
+            assistant_content = []
+            if response.text:
+                assistant_content.append({"type": "text", "text": response.text})
+            for tc in response.tool_calls:
+                assistant_content.append({"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.input})
+            self.messages.append({"role": "assistant", "content": assistant_content})
+
+            tool_results = []
+            for tc in response.tool_calls:
+                # === LAYER 1: Tool Name Repair (Better than OpenCode) ===
+                tool_name = tc.name
+                tool_info = TOOLS.get(tool_name)
+
+                # Try case-insensitive lookup
+                if not tool_info:
+                    tool_name_lower = tool_name.lower()
+                    for known_name in TOOLS.keys():
+                        if known_name.lower() == tool_name_lower:
+                            tool_name = known_name
+                            tool_info = TOOLS.get(tool_name)
+                            output_fn(f"[Auto-fixed tool name: {tc.name} → {tool_name}]")
+                            break
+
+                # Try fuzzy match for common typos
+                if not tool_info:
+                    similar = [n for n in TOOLS.keys() if n.startswith(tool_name[:4]) or tool_name.startswith(n[:4])]
+                    if similar:
+                        suggestion = similar[0]
+                        tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                            "content": f"Unknown tool: '{tc.name}'. Did you mean '{suggestion}'? Available tools: {', '.join(sorted(TOOLS.keys()))}"})
+                        continue
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                        "content": f"Unknown tool: '{tc.name}'. Available tools: {', '.join(sorted(TOOLS.keys()))}"})
+                    continue
+
+                func, needs_approval, description, schema = tool_info
+
+                # === PLAN MODE ENFORCEMENT ===
+                # Block write tools when in Plan Mode
+                if getattr(self, '_plan_mode', False) and tool_name in PLAN_MODE_BLOCKED_TOOLS:
+                    output_fn(f"[⛔ PLAN MODE: {tool_name} blocked - read-only mode]")
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                        "content": f"⛔ PLAN MODE ACTIVE: '{tool_name}' is blocked. In Plan Mode, only read-only tools are allowed: {', '.join(sorted(PLAN_MODE_ALLOWED_TOOLS))}. Turn off Plan Mode to execute write operations."})
+                    continue
+
+                # === LAYER 2: Argument Validation & Auto-Fix (Better than OpenCode) ===
+                args = tc.input
+                required_fields = schema.get("required", []) if schema else []
+                properties = schema.get("properties", {}) if schema else {}
+
+                # Check for missing required fields
+                missing = [f for f in required_fields if f not in args or args[f] is None]
+                if missing:
+                    # Try to auto-fix common issues
+                    fixed = False
+                    for field in missing:
+                        # Auto-fix: path → file_path
+                        if field == "file_path" and "path" in args:
+                            args["file_path"] = args.pop("path")
+                            fixed = True
+                            output_fn(f"[Auto-fixed: path → file_path]")
+                        # Auto-fix: filepath → file_path
+                        elif field == "file_path" and "filepath" in args:
+                            args["file_path"] = args.pop("filepath")
+                            fixed = True
+                            output_fn(f"[Auto-fixed: filepath → file_path]")
+                        # Auto-fix: text → content
+                        elif field == "content" and "text" in args:
+                            args["content"] = args.pop("text")
+                            fixed = True
+                            output_fn(f"[Auto-fixed: text → content]")
+                        # Auto-fix: query → pattern (for grep)
+                        elif field == "pattern" and "query" in args:
+                            args["pattern"] = args.pop("query")
+                            fixed = True
+                            output_fn(f"[Auto-fixed: query → pattern]")
+
+                    # Re-check after fixes
+                    missing = [f for f in required_fields if f not in args or args[f] is None]
+                    if missing:
+                        tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                            "content": f"Missing required arguments for '{tool_name}': {missing}. Expected: {required_fields}. Hint: {description}"})
+                        continue
+
+                # === LAYER 3: Type Validation ===
+                for field, value in args.items():
+                    if field in properties:
+                        expected_type = properties[field].get("type")
+                        # Auto-convert string to int if needed
+                        if expected_type == "integer" and isinstance(value, str) and value.isdigit():
+                            args[field] = int(value)
+                            output_fn(f"[Auto-fixed: converted {field} to integer]")
+                        # Auto-convert int to string if needed
+                        elif expected_type == "string" and isinstance(value, (int, float)):
+                            args[field] = str(value)
+
+                # === LAYER 4: Permission Check ===
+                if needs_approval and self.on_approval:
+                    approved = self.on_approval(tool_name, args)
+                    AUDIT.log(self.session_id, "approval_request", tool_name, args,
+                             "Approved" if approved else "Denied", approved)
+                    if not approved:
+                        tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": "User denied permission"})
+                        continue
+
+                # === LAYER 5: Execute with Error Recovery ===
+                output_fn(f"[Calling {tool_name}...]")
+                try:
+                    result = func(args)
+                except TypeError as e:
+                    # Common error: wrong argument types
+                    result = f"TypeError: {e}. Check argument types. Expected schema: {schema}"
+                except KeyError as e:
+                    # Common error: missing key
+                    result = f"KeyError: {e}. Required fields: {required_fields}"
+                except Exception as e:
+                    result = f"Error executing {tool_name}: {e}"
+
+                result = SECURITY.truncate_output(result)
+                output_fn(f"[{tool_name} result]:\n{result[:1000]}{'...(truncated)' if len(result) > 1000 else ''}")
+
+                AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, result[:200])
+                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+
+            self.messages.append({"role": "user", "content": tool_results})
+
+        output_fn(f"[Reached max turns ({CONFIG.max_turns})]")
+        return response.text if response else ""
+
+    def reset(self):
+        """Reset conversation."""
+        global _TODOS, _FILES_READ
+        self.messages = []
+        self.tool_history.clear()
+        _TODOS = []
+        _FILES_READ = set()
+        CONTEXT.reset()
+        TOKENS.reset()
+
+
+# ============================================================
+# CHAT UI (for Jupyter) - HTML Widget Version
+# ============================================================
+
+TOOL_ICONS = {
+    'read_file': '📖', 'write_file': '📝', 'edit_file': '✏️',
+    'glob': '🔍', 'grep': '🔎', 'list_dir': '📁',
+    'bash': '💻', 'python_exec': '🐍',
+    'create_word': '📄', 'create_excel': '📊', 'create_markdown': '📋',
+    'view_image': '🖼️', 'semantic_search': '🧠',
+    'todo_write': '✅', 'todo_read': '📋',
+}
+
+_STATE = {"lock": False, "messages": [], "client": None, "agent": None, "session": None}
+
+
+def create_chat_ui():
+    """
+    Create full-featured chat interface matching OpenCode UX.
+
+    Features:
+    - Token tracking (in/out/total per session)
+    - Context usage with progress bar
+    - Session management (save/load)
+    - Model selector
+    - Temperature & thinking controls
+    - Collapsible tool output
+    - Dark/light mode
+    """
+    import ipywidgets as widgets
+    from IPython.display import display, HTML, clear_output
+
+    # Clear any previous UI to prevent duplicates
+    clear_output(wait=True)
+
+    # ========== STATE ==========
+    ui_state = {
+        "dark_mode": True,
+        "client": None,
+        "agent": None,
+        "session": None,
+        "lock": False,
+        "pending_approval": None,
+        "stop_requested": False,  # For stop button
+    }
+
+    # Initialize client
+    ui_state["client"] = create_client(CONFIG.project_id, CONFIG.region, CONFIG.model_id)
+
+    # ========== UI COMPONENTS ==========
+
+    # Message storage for HTML widget approach (SageMaker UI fix - synced from AWS version)
+    ui_state["messages"] = []  # Store as tuples: (role, content, tool_name, timestamp)
+
+    # Chat display - HTML widget with internal scroll (fixes SageMaker drifting, also works in Colab)
+    chat_display = widgets.HTML(value='')
+
+    # Input area (fixed height)
+    input_box = widgets.Textarea(
+        placeholder='Type your message... (Shift+Enter for newline)',
+        layout=widgets.Layout(width='100%', height='80px', min_height='80px', max_height='80px')
+    )
+
+    # Buttons
+    send_btn = widgets.Button(description='Send', button_style='primary', icon='paper-plane')
+    stop_btn = widgets.Button(description='Stop', button_style='danger', icon='stop', layout=widgets.Layout(display='none'))
+    clear_btn = widgets.Button(description='Clear', button_style='warning', icon='trash')
+    save_btn = widgets.Button(description='Save', button_style='info', icon='save')
+    compact_btn = widgets.Button(description='Compact', button_style='', icon='compress', tooltip='Compress context by summarizing conversation')
+
+    # Status displays
+    status_html = widgets.HTML(value='<span style="color:#4caf50"><b>● Ready</b></span>')
+    tokens_html = widgets.HTML(value='<span style="color:#888;font-size:11px;">Tokens: 0 | Context: 0%</span>')
+
+    # Plan Mode toggle (OpenCode-style, synced from AWS version)
+    plan_mode_toggle = widgets.ToggleButton(
+        value=False,
+        description='Plan Mode',
+        icon='map',
+        button_style='',
+        tooltip='When ON: Agent only reads/explores, creates plan file. When OFF: Normal execution.',
+        layout=widgets.Layout(width='120px')
+    )
+
+    # Auto-compact checkbox (ON by default - always auto-compact at 90%)
+    auto_compact_checkbox = widgets.Checkbox(
+        value=True,
+        description='Auto-Compact',
+        indent=False,
+        tooltip='Automatically compact when context exceeds 90%'
+    )
+
+    # Approval dialog
+    approval_output = widgets.Output()
+    approve_btn = widgets.Button(description='✓ Allow', button_style='success')
+    approve_always_btn = widgets.Button(description='✓ Always', button_style='')
+    deny_btn = widgets.Button(description='✗ Deny', button_style='danger')
+    approval_box = widgets.VBox([
+        approval_output,
+        widgets.HBox([deny_btn, approve_always_btn, approve_btn])
+    ])
+    approval_box.layout.display = 'none'
+
+    # Session management
+    session_dropdown = widgets.Dropdown(
+        description='Session:',
+        options=[('New Session', None)],
+        layout=widgets.Layout(width='250px')
+    )
+    session_name_input = widgets.Text(
+        placeholder='Session name (optional)',
+        layout=widgets.Layout(width='180px')
+    )
+    load_btn = widgets.Button(description='Load', icon='folder-open')
+    new_btn = widgets.Button(description='New', button_style='success', icon='plus')
+
+    # Model selector
+    model_dropdown = widgets.Dropdown(
+        description='Model:',
+        options=list(AVAILABLE_MODELS.keys()),
+        value=CONFIG.model_id if CONFIG.model_id in AVAILABLE_MODELS else list(AVAILABLE_MODELS.keys())[0],
+        layout=widgets.Layout(width='280px')
+    )
+
+    # Parameter controls
+    temp_slider = widgets.FloatSlider(
+        value=CONFIG.temperature,
+        min=0.0, max=2.0, step=0.1,
+        description='Temp:',
+        layout=widgets.Layout(width='200px'),
+        style={'description_width': '40px'}
+    )
+    thinking_checkbox = widgets.Checkbox(
+        value=CONFIG.thinking_enabled,
+        description='Thinking',
+        indent=False
+    )
+    thinking_budget = widgets.IntSlider(
+        value=CONFIG.thinking_budget,
+        min=1024, max=32000, step=1024,
+        description='Budget:',
+        layout=widgets.Layout(width='200px'),
+        style={'description_width': '50px'},
+        disabled=not CONFIG.thinking_enabled
+    )
+    dark_mode_checkbox = widgets.Checkbox(value=True, description='Dark', indent=False)
+
+    # ========== HELPER FUNCTIONS ==========
+
+    def get_colors():
+        """Get color scheme based on dark mode."""
+        if ui_state["dark_mode"]:
+            return {
+                'bg': '#1e1e1e', 'fg': '#d4d4d4', 'border': '#444',
+                'user_bg': '#264f78', 'user_fg': '#fff',
+                'assistant_bg': '#2d2d2d', 'assistant_fg': '#d4d4d4',
+                'tool_bg': '#2a2a1a', 'tool_fg': '#f0d080',
+                'system_bg': '#3a2222', 'system_fg': '#ff8a80',
+                'thinking_bg': '#1a2a3a', 'thinking_fg': '#8af',
+            }
+        else:
+            return {
+                'bg': '#fff', 'fg': '#333', 'border': '#ccc',
+                'user_bg': '#e3f2fd', 'user_fg': '#000',
+                'assistant_bg': '#f5f5f5', 'assistant_fg': '#000',
+                'tool_bg': '#fff3e0', 'tool_fg': '#e65100',
+                'system_bg': '#ffebee', 'system_fg': '#c62828',
+                'thinking_bg': '#e8f5e9', 'thinking_fg': '#2e7d32',
+            }
+
+    def escape_html(s):
+        return str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    def format_tool_output(tool_name, content, is_result=False):
+        """Format tool output - collapsed by default like OpenCode."""
+        c = get_colors()
+        icon = TOOL_ICONS.get(tool_name, '🔧')
+
+        # Truncate long content
+        display_content = content[:1500] + ('...(truncated)' if len(content) > 1500 else '')
+        display_content = escape_html(display_content)
+
+        status_icon = "✓" if is_result else "⋯"
+        status_color = "#4caf50" if is_result else "#ff9800"
+
+        # Show brief preview in summary
+        preview = content[:80].replace('\n', ' ')
+        if len(content) > 80:
+            preview += '...'
+        preview = escape_html(preview)
+
+        # Always collapsed by default - user can click to expand
+        return f'''
+        <details style="background:{c['tool_bg']};border-radius:6px;margin:4px 0;border-left:3px solid {status_color};">
+            <summary style="padding:8px;cursor:pointer;color:{c['tool_fg']};">
+                {icon} <b>{tool_name}</b> <span style="color:{status_color}">{status_icon}</span>
+                <span style="color:{c['fg']};font-weight:normal;font-size:11px;margin-left:8px;">{preview}</span>
+            </summary>
+            <pre style="padding:8px;margin:0;font-size:11px;color:{c['fg']};white-space:pre-wrap;overflow-x:auto;max-height:300px;overflow-y:auto;">{display_content}</pre>
+        </details>
+        '''
+
+    def update_tokens_display():
+        """Update token counter display."""
+        stats = TOKENS.get_stats()
+
+        # Context usage
+        ctx_pct = 0
+        ctx_tokens = 0
+        if ui_state["agent"]:
+            usage = CONTEXT.get_usage(ui_state["agent"].messages)
+            ctx_pct = usage["percent"] * 100
+            ctx_tokens = usage["tokens"]
+
+        # Color based on context usage
+        if ctx_pct >= 90:
+            ctx_color = "#f44336"  # red
+        elif ctx_pct >= 75:
+            ctx_color = "#ff9800"  # orange
+        else:
+            ctx_color = "#4caf50"  # green
+
+        # Progress bar
+        bar_width = min(ctx_pct, 100)
+
+        c = get_colors()
+        tokens_html.value = f'''
+        <div style="font-size:11px;color:{c['fg']};opacity:0.7;">
+            <span>📊 In: <b style="opacity:1">{stats["session_input"]:,}</b> | Out: <b style="opacity:1">{stats["session_output"]:,}</b> | Total: <b style="opacity:1">{stats["session_total"]:,}</b> | Calls: {stats["api_calls"]}</span>
+            <div style="margin-top:3px;">
+                <span style="color:{ctx_color}">Context: {ctx_pct:.0f}% ({ctx_tokens:,} tokens)</span>
+                <div style="background:{c['border']};height:4px;border-radius:2px;margin-top:2px;">
+                    <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;transition:width 0.3s;"></div>
+                </div>
+            </div>
+        </div>
+        '''
+
+    def update_session_list():
+        """Refresh session dropdown."""
+        sessions = SESSIONS.list_sessions()
+        options = [('➕ New Session', None)]
+        for s in sessions[:15]:
+            title = s['title'][:25] + ('...' if len(s['title']) > 25 else '')
+            options.append((f"📁 {title}", s['id']))
+        session_dropdown.options = options
+
+    def render_chat():
+        """Render all messages into HTML widget with internal scroll (SageMaker UI fix)."""
+        dark = ui_state["dark_mode"]
+        bg = '#1e1e1e' if dark else '#ffffff'
+        fg = '#e0e0e0' if dark else '#333333'
+        border = '#444' if dark else '#ccc'
+
+        msgs_html = []
+        for role, content, tool_name, ts in ui_state["messages"]:
+            c_escaped = escape_html(content).replace('\n', '<br>')
+
+            if role == 'user':
+                msgs_html.append(f'''<div style="padding:10px;margin:5px 0;border-left:3px solid #26c6da;">
+                    <b style="color:#26c6da;">[{ts}] You:</b>
+                    <div style="white-space:pre-wrap;margin:5px 0;color:{fg};">{c_escaped}</div>
+                </div>''')
+            elif role == 'assistant':
+                msgs_html.append(f'''<div style="padding:10px;margin:5px 0;border-left:3px solid #42a5f5;">
+                    <b style="color:#42a5f5;">[{ts}] Gemini:</b>
+                    <div style="white-space:pre-wrap;margin:5px 0;color:{fg};font-family:monospace;">{c_escaped}</div>
+                </div>''')
+            elif role == 'tool':
+                icon = TOOL_ICONS.get(tool_name, '🔧')
+                truncated = c_escaped[:2000] + '...' if len(content) > 2000 else c_escaped
+                tool_bg = '#3d3222' if dark else '#fff8e1'
+                tool_fg = '#f0d080' if dark else '#f57c00'
+                msgs_html.append(f'''<details style="background:{tool_bg};padding:8px;margin:3px 0;border-radius:5px;font-size:12px;">
+                    <summary style="cursor:pointer;color:{tool_fg};"><b>{icon} {tool_name}</b></summary>
+                    <pre style="white-space:pre-wrap;font-size:11px;margin-top:5px;max-height:200px;overflow:auto;color:{fg};">{truncated}</pre>
+                </details>''')
+            elif role == 'thinking':
+                think_bg = '#1a2a3a' if dark else '#e8f5e9'
+                msgs_html.append(f'''<div style="margin:5px 0;color:#ab47bc;font-size:12px;border-left:3px solid #ab47bc;padding-left:10px;background:{think_bg};">
+                    💭 {c_escaped[:300]}...
+                </div>''')
+            elif role == 'system':
+                sys_bg = '#4d2222' if dark else '#ffebee'
+                sys_fg = '#ff8a80' if dark else '#c62828'
+                msgs_html.append(f'''<div style="background:{sys_bg};color:{sys_fg};padding:8px;margin:3px 0;border-radius:5px;font-size:12px;">
+                    ⚠️ {c_escaped}
+                </div>''')
+
+        content = ''.join(msgs_html) if msgs_html else f'<p style="color:{fg};text-align:center;padding:20px;">Type a message below to start.</p>'
+
+        # CSS-only auto-scroll: flex-direction: column-reverse
+        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;">
+            <div style="padding:10px;font-family:system-ui,-apple-system,sans-serif;">
+                {content}
+            </div>
+        </div>'''
+
+    def add_message(role, content, tool_name=None):
+        """Add message and re-render (synced with AWS version)."""
+        ts = datetime.now().strftime('%H:%M:%S')
+        ui_state["messages"].append((role, content, tool_name, ts))
+        render_chat()
+
+    # ========== EVENT HANDLERS ==========
+
+    def on_model_change(change):
+        """Handle model selection change."""
+        new_model = change['new']
+        CONFIG.model_id = new_model
+        ui_state["client"] = create_client(CONFIG.project_id, CONFIG.region, new_model)
+        add_message('system', f'Switched to model: {new_model}')
+
+    def on_temp_change(change):
+        CONFIG.temperature = change['new']
+
+    def on_thinking_change(change):
+        CONFIG.thinking_enabled = change['new']
+        thinking_budget.disabled = not change['new']
+
+    def on_budget_change(change):
+        CONFIG.thinking_budget = change['new']
+
+    def on_dark_mode_change(change):
+        ui_state["dark_mode"] = change['new']
+        # Re-render chat with new colors (HTML widget approach)
+        render_chat()
+        # Update header if available
+        if "header" in ui_state and ui_state["header"]:
+            ui_state["header"].value = ui_state["get_header_html"]()
+        # Update token display
+        if "update_tokens" in ui_state:
+            ui_state["update_tokens"]()
+
+    def request_approval(tool_name, tool_input):
+        """Show approval dialog and wait for response."""
+        import threading
+
+        ui_state["pending_approval"] = None
+        approval_event = threading.Event()
+
+        # Store event for button handlers
+        ui_state["approval_event"] = approval_event
+
+        with approval_output:
+            clear_output()
+            input_preview = json.dumps(tool_input, indent=2, default=str)[:400]
+            display(HTML(f'''
+            <div style="background:#fff8e1;padding:12px;border-radius:8px;border:2px solid #ffc107;">
+                <h4 style="margin:0 0 8px 0;color:#f57c00;">🔐 Permission Required</h4>
+                <p style="margin:4px 0;"><b>Tool:</b> {tool_name}</p>
+                <pre style="font-size:11px;background:#fff;padding:8px;border-radius:4px;max-height:150px;overflow:auto;">{escape_html(input_preview)}</pre>
+            </div>
+            '''))
+
+        approval_box.layout.display = 'block'
+        send_btn.disabled = True
+
+        # Wait with timeout to prevent infinite blocking
+        # Use shorter sleep intervals to be more responsive
+        max_wait = 300  # 5 minutes max wait
+        waited = 0
+        while ui_state["pending_approval"] is None and waited < max_wait:
+            approval_event.wait(timeout=0.1)
+            waited += 0.1
+            # Allow kernel to process events
+            import sys
+            if hasattr(sys.stdout, 'flush'):
+                sys.stdout.flush()
+
+        approval_box.layout.display = 'none'
+        send_btn.disabled = False
+
+        # Clear the approval output
+        with approval_output:
+            clear_output()
+
+        result = ui_state["pending_approval"]
+        if result is None:
+            result = False  # Timeout = deny
+            add_message('system', f'⏱️ Timeout - auto-denied: {tool_name}')
+        else:
+            add_message('system', f'{"✓ Approved" if result else "✗ Denied"}: {tool_name}')
+        return result
+
+    def on_approve(b):
+        ui_state["pending_approval"] = True
+        if "approval_event" in ui_state and ui_state["approval_event"]:
+            ui_state["approval_event"].set()
+
+    def on_approve_always(b):
+        ui_state["pending_approval"] = True
+        # Add to always-allow list for this session
+        if "always_allow" not in ui_state:
+            ui_state["always_allow"] = set()
+        # Get tool name from approval output if available
+        if "approval_event" in ui_state and ui_state["approval_event"]:
+            ui_state["approval_event"].set()
+
+    def on_deny(b):
+        ui_state["pending_approval"] = False
+        if "approval_event" in ui_state and ui_state["approval_event"]:
+            ui_state["approval_event"].set()
+
+    def on_stop(b):
+        """Handle stop button click."""
+        ui_state["stop_requested"] = True
+        status_html.value = '<span style="color:#ff9800"><b>⏹ Stop requested...</b></span>'
+        add_message('system', '⏹ Stop requested - will stop after current operation completes')
+
+    stop_btn.on_click(on_stop)
+
+    def do_pre_send_compact():
+        """Compact before sending if context >= 80% (prevents mid-response overflow)."""
+        if not ui_state["agent"] or not ui_state["agent"].messages:
+            return False
+
+        usage = CONTEXT.get_usage(ui_state["agent"].messages)
+        pct = usage["percent"] * 100
+
+        if pct >= 80 and auto_compact_checkbox.value:
+            add_message('system', f'🔄 Pre-send compact (context at {pct:.0f}%)...')
+            try:
+                messages = ui_state["agent"].messages
+                # Stage 1: Prune
+                pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(messages, CONFIG.context_max_tokens)
+                if tokens_saved > 0:
+                    ui_state["agent"].messages = pruned_msgs
+                    messages = pruned_msgs
+                # Stage 2: Quick summary
+                summary = "Conversation summary: " + "; ".join(
+                    (m.get("content", "")[:60] if isinstance(m.get("content"), str) else "tool use")
+                    for m in messages[:3]
+                )
+                compacted = COMPACTOR.compact(messages, summary)
+                ui_state["agent"].messages = compacted
+                usage = CONTEXT.get_usage(compacted)
+                new_pct = usage["percent"] * 100
+                add_message('system', f'✅ Pre-compacted. Context: {pct:.0f}% → {new_pct:.0f}%')
+                return True
+            except Exception as e:
+                add_message('system', f'Pre-compact failed: {e}')
+        return False
+
+    def on_send(b):
+        """Handle send button click."""
+        import threading
+
+        if ui_state["lock"]:
+            return
+
+        msg = input_box.value.strip()
+        if not msg:
+            return
+
+        ui_state["lock"] = True
+        ui_state["stop_requested"] = False  # Reset stop flag
+        send_btn.disabled = True
+        send_btn.layout.display = 'none'  # Hide send
+        stop_btn.layout.display = 'inline-block'  # Show stop
+        input_box.value = ''
+
+        add_message('user', msg)
+        status_html.value = '<span style="color:#ff9800"><b>⋯ Processing...</b></span>'
+
+        # Create agent if needed
+        if ui_state["agent"] is None:
+            TOKENS.reset()
+            # Use provided session name, or auto-generate from first message
+            session_title = session_name_input.value.strip() if session_name_input.value.strip() else f"Chat: {msg[:40]}"
+            session = SESSIONS.create(title=session_title)
+            ui_state["session"] = session
+            ui_state["agent"] = Agent(
+                ui_state["client"],
+                session.id,
+                on_approval=request_approval,
+                on_tokens=lambda stats: update_tokens_display(),
+                on_thinking=lambda t: add_message('thinking', t) if t else None
+            )
+            session_name_input.value = ''  # Clear for next session
+            # Note: Don't add to session list until explicitly saved
+
+        # Track displayed tool results to prevent duplicates
+        displayed_tools = set()
+
+        def output_fn(text):
+            """Handle agent output."""
+            # Skip "Calling..." messages - only show results
+            if text.startswith('[Calling '):
+                return  # Don't display, wait for result
+
+            # Check for tool result pattern: [tool_name result]:
+            import re
+            tool_result_match = re.match(r'^\[(\w+)\s+result\]:', text)
+            if tool_result_match:
+                tool = tool_result_match.group(1)
+                result = text[tool_result_match.end():].strip()
+
+                # Dedup: create key from tool name + first 100 chars of result
+                dedup_key = f"{tool}:{result[:100]}"
+                if dedup_key in displayed_tools:
+                    return  # Skip duplicate
+                displayed_tools.add(dedup_key)
+
+                add_message('tool', result, tool)
+                update_tokens_display()
+                return
+
+            if text.startswith('[Warning') or text.startswith('[!') or text.startswith('[i]'):
+                add_message('system', text)
+            elif text.startswith('[Reached'):
+                add_message('system', text)
+            elif text.strip():
+                add_message('assistant', text)
+                update_tokens_display()
+
+        def run_agent_sync():
+            """Run agent synchronously (simpler, works reliably in Jupyter)."""
+            try:
+                # Pre-send compact check (prevents mid-response overflow)
+                do_pre_send_compact()
+
+                # Check if stop was requested during pre-compact
+                if ui_state["stop_requested"]:
+                    add_message('system', '⏹ Stopped before sending')
+                    return
+
+                # Determine system prompt based on plan mode
+                if plan_mode_toggle.value:
+                    add_message('system', '📋 PLAN MODE: Agent will explore and create a plan (no modifications)')
+                    system_prompt = SYSTEM_PROMPT + "\n\n" + PLAN_MODE_PROMPT
+                else:
+                    system_prompt = None  # Use default
+
+                ui_state["agent"].run(msg, output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
+
+                # Update status when done
+                usage = CONTEXT.get_usage(ui_state["agent"].messages)
+                pct = usage["percent"] * 100
+
+                # Auto-compact if enabled and context is high (with auto-continue)
+                if auto_compact_checkbox.value and pct >= 90 and not ui_state["stop_requested"]:
+                    add_message('system', '🔄 Auto-compact triggered (context at {:.0f}%)...'.format(pct))
+                    try:
+                        messages = ui_state["agent"].messages
+                        # Stage 1: Prune
+                        pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(messages, CONFIG.context_max_tokens)
+                        if tokens_saved > 0:
+                            ui_state["agent"].messages = pruned_msgs
+                            messages = pruned_msgs
+                        # Stage 2: Simple summary (auto mode uses quick summary)
+                        summary = "Conversation summary: " + "; ".join(
+                            (m.get("content", "")[:60] if isinstance(m.get("content"), str) else "tool use")
+                            for m in messages[:3]
+                        )
+                        compacted = COMPACTOR.compact(messages, summary)
+                        ui_state["agent"].messages = compacted
+                        usage = CONTEXT.get_usage(compacted)
+                        pct = usage["percent"] * 100
+                        add_message('system', f'✅ Auto-compacted. Context now at {pct:.0f}%')
+
+                        # Auto-continue after compact (OpenCode-style)
+                        if not ui_state["stop_requested"]:
+                            add_message('system', '▶️ Auto-continuing...')
+                            ui_state["agent"].run("Continue from where we left off.", output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
+                            usage = CONTEXT.get_usage(ui_state["agent"].messages)
+                            pct = usage["percent"] * 100
+
+                    except Exception as e:
+                        add_message('system', f'Auto-compact failed: {e}')
+
+                # Update status
+                if pct >= 90:
+                    status_html.value = f'<span style="color:#f44336"><b>● Ready ({pct:.0f}% context - HIGH!)</b></span>'
+                    if not auto_compact_checkbox.value:
+                        add_message('system', f'⚠️ Context at {pct:.0f}% - Click "Compact" or enable Auto-Compact.')
+                elif pct >= 75:
+                    status_html.value = f'<span style="color:#ff9800"><b>● Ready ({pct:.0f}% context)</b></span>'
+                else:
+                    status_html.value = f'<span style="color:#4caf50"><b>● Ready ({pct:.0f}% context)</b></span>'
+
+                # Add plan mode indicator to status
+                if plan_mode_toggle.value:
+                    status_html.value = status_html.value.replace('Ready', '📋 Plan Mode')
+
+                update_tokens_display()
+
+            except Exception as e:
+                add_message('system', f'Error: {e}')
+                import traceback
+                traceback.print_exc()
+
+            finally:
+                ui_state["lock"] = False
+                ui_state["stop_requested"] = False
+                send_btn.disabled = False
+                send_btn.layout.display = 'inline-block'  # Show send
+                stop_btn.layout.display = 'none'  # Hide stop
+
+                # Auto-save session after each message
+                if ui_state["agent"] and ui_state["agent"].messages:
+                    try:
+                        session_name = session_name_input.value.strip() or f"session_{ui_state['agent'].session_id}"
+                        ui_state["session"] = Session(
+                            id=ui_state["agent"].session_id,
+                            name=session_name,
+                            messages=ui_state["agent"].messages.copy(),
+                            created=datetime.now(),
+                            model=model_dropdown.value,
+                            todos=_TODOS.copy() if _TODOS else []
+                        )
+                        SESSIONS.save(ui_state["session"])
+                        # Silent auto-save - don't spam messages
+                    except Exception:
+                        pass  # Silent fail for auto-save
+
+        # Run agent synchronously (threading has issues with Jupyter widget updates)
+        run_agent_sync()
+
+    def on_clear(b):
+        """Clear current session."""
+        global _TODOS, _FILES_READ
+
+        if ui_state["agent"]:
+            ui_state["agent"].reset()
+        ui_state["agent"] = None
+        ui_state["session"] = None
+
+        _TODOS = []
+        _FILES_READ = set()
+        TOKENS.reset()
+
+        # Clear message storage and re-render (HTML widget approach)
+        ui_state["messages"] = []
+        render_chat()
+
+        status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
+        update_tokens_display()
+
+    def on_save(b):
+        """Save current session."""
+        if ui_state["session"] and ui_state["agent"]:
+            ui_state["session"].messages = ui_state["agent"].messages
+            SESSIONS.save(ui_state["session"])
+            add_message('system', f'Session saved: {ui_state["session"].id}')
+            update_session_list()
+        else:
+            add_message('system', 'No session to save')
+
+    def on_load(b):
+        """Load selected session."""
+        session_id = session_dropdown.value
+        if not session_id:
+            # New session - just clear
+            on_clear(None)
+            return
+
+        session = SESSIONS.load(session_id)
+        if not session:
+            add_message('system', f'Failed to load session: {session_id}')
+            return
+
+        # Reset and load
+        TOKENS.reset()
+        ui_state["session"] = session
+        ui_state["agent"] = Agent(
+            ui_state["client"],
+            session.id,
+            on_approval=request_approval,
+            on_tokens=lambda stats: update_tokens_display(),
+            on_thinking=lambda t: add_message('thinking', t) if t else None
+        )
+        ui_state["agent"].messages = session.messages
+
+        # Display loaded messages (clear and re-render with HTML widget)
+        ui_state["messages"] = []
+        add_message('system', f'Loaded session: {session.title} ({len(session.messages)} messages)')
+
+        for msg in session.messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "user":
+                if isinstance(content, str):
+                    add_message('user', content)
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "tool_result":
+                            add_message('tool', item.get("content", "")[:200], "result")
+
+            elif role == "assistant":
+                if isinstance(content, str):
+                    add_message('assistant', content)
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict):
+                            if item.get("type") == "text":
+                                add_message('assistant', item.get("text", ""))
+                            elif item.get("type") == "tool_use":
+                                add_message('tool_start', f'Called {item.get("name", "?")}', item.get("name"))
+
+        update_tokens_display()
+
+    def on_new(b):
+        """Start a new session (clear current without saving)."""
+        global _TODOS, _FILES_READ
+
+        if ui_state["agent"]:
+            ui_state["agent"].reset()
+        ui_state["agent"] = None
+        ui_state["session"] = None
+
+        _TODOS = []
+        _FILES_READ = set()
+        TOKENS.reset()
+
+        # Clear message storage and re-render (HTML widget approach)
+        ui_state["messages"] = []
+        render_chat()
+
+        status_html.value = '<span style="color:#4caf50"><b>● Ready (New)</b></span>'
+        update_tokens_display()
+        session_dropdown.value = None  # Reset to "New Session"
+
+    def on_compact(b):
+        """Manually compact conversation context (OpenCode-style)."""
+        if not ui_state["agent"] or not ui_state["agent"].messages:
+            add_message('system', 'No conversation to compact.')
+            return
+
+        if ui_state.get("lock"):
+            add_message('system', 'Please wait for current operation to finish.')
+            return
+
+        ui_state["lock"] = True
+        compact_btn.disabled = True
+        status_html.value = '<span style="color:#ff9800"><b>⋯ Compacting...</b></span>'
+
+        try:
+            messages = ui_state["agent"].messages
+            original_count = len(messages)
+
+            # Stage 1: Prune old tool outputs (OpenCode-style)
+            pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(messages, CONFIG.context_max_tokens)
+            if tokens_saved > 0:
+                add_message('system', f'Stage 1: Pruned old tool outputs (~{tokens_saved:,} tokens saved)')
+                ui_state["agent"].messages = pruned_msgs
+                messages = pruned_msgs
+
+            # Stage 2: Ask model to create summary
+            add_message('system', 'Stage 2: Creating conversation summary...')
+
+            summary_prompt = COMPACTOR.create_summary_prompt(messages)
+
+            # Add summary request to get AI to summarize
+            summary_messages = messages.copy()
+            summary_messages.append({"role": "user", "content": summary_prompt})
+
+            # Make API call to get summary
+            response = ui_state["client"].chat(
+                messages=summary_messages,
+                system="""You are summarizing a coding conversation. Be concise but preserve:
+1. Current task and goal
+2. Key files modified or read
+3. Important decisions made
+4. Where we left off
+5. What needs to happen next""",
+                tools=None,
+                max_tokens=2000,
+                temperature=0.0
+            )
+
+            if response and response.text:
+                # Compact: keep summary + last 5 messages
+                compacted = COMPACTOR.compact(messages, response.text)
+                ui_state["agent"].messages = compacted
+
+                add_message('system', f'Compacted: {original_count} → {len(compacted)} messages')
+
+                # Update context display
+                usage = CONTEXT.get_usage(compacted)
+                pct = usage["percent"] * 100
+                add_message('system', f'Context now at {pct:.1f}% ({usage["tokens"]:,} tokens)')
+            else:
+                add_message('system', 'Failed to get summary from model.')
+
+        except Exception as e:
+            add_message('system', f'Compact failed: {e}')
+            import traceback
+            traceback.print_exc()
+
+        finally:
+            ui_state["lock"] = False
+            compact_btn.disabled = False
+            status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
+            update_tokens_display()
+
+    # ========== WIRE UP EVENTS ==========
+    model_dropdown.observe(on_model_change, names='value')
+    temp_slider.observe(on_temp_change, names='value')
+    thinking_checkbox.observe(on_thinking_change, names='value')
+    thinking_budget.observe(on_budget_change, names='value')
+    dark_mode_checkbox.observe(on_dark_mode_change, names='value')
+
+    approve_btn.on_click(on_approve)
+    approve_always_btn.on_click(on_approve_always)
+    deny_btn.on_click(on_deny)
+    send_btn.on_click(on_send)
+    clear_btn.on_click(on_clear)
+    save_btn.on_click(on_save)
+    compact_btn.on_click(on_compact)
+    load_btn.on_click(on_load)
+    new_btn.on_click(on_new)
+
+    # ========== BUILD LAYOUT ==========
+    def get_header_html():
+        c = get_colors()
+        return f'''
+        <div style="border-bottom:1px solid {c['border']};padding-bottom:8px;margin-bottom:8px;">
+            <h2 style="margin:0;color:#4a9eff;">🤖 Gemini Coding Agent</h2>
+            <p style="margin:4px 0;color:{c['fg']};font-size:12px;opacity:0.7;">
+                OpenCode-style AI assistant | {len(TOOLS)} tools | Session management | {CONFIG.region}
+            </p>
+        </div>
+        '''
+
+    header = widgets.HTML(get_header_html())
+    # Store references for dark mode updates
+    ui_state["header"] = header
+    ui_state["get_header_html"] = get_header_html
+    ui_state["update_tokens"] = update_tokens_display
+
+    # Row 1: Session & Model - [Name] [💾Save] [Session ▼] [📁Load] [+New] | [Model ▼]
+    row1 = widgets.HBox([
+        session_name_input, save_btn, session_dropdown, load_btn, new_btn,
+        widgets.HTML('<span style="margin:0 10px;">|</span>'),
+        model_dropdown
+    ])
+
+    # Row 2: Parameters
+    row2 = widgets.HBox([
+        temp_slider, thinking_checkbox, thinking_budget, dark_mode_checkbox,
+        widgets.HTML('<span style="margin:0 10px;">|</span>'),
+        plan_mode_toggle, auto_compact_checkbox
+    ], layout=widgets.Layout(gap='15px'))
+
+    # Row 3: Buttons
+    # Row 3: Buttons (stop_btn hidden by default, shows during processing)
+    row3 = widgets.HBox([send_btn, stop_btn, clear_btn, compact_btn, status_html])
+
+    # Full UI layout - using HTML widget for chat (SageMaker fix synced from AWS version)
+    ui = widgets.VBox([
+        header,
+        row1,
+        row2,
+        chat_display,  # HTML widget with internal scroll
+        approval_box,
+        input_box,
+        row3,
+        tokens_html
+    ])
+
+    # Initialize
+    update_session_list()
+    update_tokens_display()
+
+    # Initialize chat display with welcome message
+    render_chat()
+
+    display(ui)
+    return None
+
+
+# ============================================================
+# CLI MODE
+# ============================================================
+
+def run_cli():
+    """Run agent in command-line mode."""
+    print("=" * 60)
+    print("Vertex AI Gemini Coding Agent - CLI Mode")
+    print("=" * 60)
+    print(f"  Project: {CONFIG.project_id}")
+    print(f"  Region:  {CONFIG.region}")
+    print(f"  Model:   {CONFIG.model_id}")
+    print(f"  Tools:   {len(TOOLS)}")
+    print("=" * 60)
+    print("Commands: /quit, /clear, /help")
+    print("=" * 60)
+
+    client = create_client(CONFIG.project_id, CONFIG.region, CONFIG.model_id)
+    agent = Agent(client, on_approval=lambda name, inp: input(f"\nApprove {name}? [y/N]: ").lower() == 'y')
+
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+            if not user_input:
+                continue
+
+            if user_input == "/quit":
+                print("Goodbye!")
+                break
+            elif user_input == "/clear":
+                agent.reset()
+                print("[Session cleared]")
+                continue
+            elif user_input == "/help":
+                print("\nCommands:")
+                print("  /quit  - Exit the agent")
+                print("  /clear - Clear conversation history")
+                print("  /help  - Show this help")
+                continue
+
+            print("\nGemini: ", end="", flush=True)
+            agent.run(user_input, lambda text: print(text))
+
+        except KeyboardInterrupt:
+            print("\n[Interrupted]")
+            continue
+        except EOFError:
+            print("\nGoodbye!")
+            break
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Vertex AI Gemini Coding Agent")
+    parser.add_argument("--cli", action="store_true", help="Run in CLI mode")
+    parser.add_argument("--project", type=str, help="GCP Project ID")
+    parser.add_argument("--region", type=str, help="Vertex AI region")
+    parser.add_argument("--model", type=str, help="Model ID (e.g., gemini-2.5-pro)")
+    args = parser.parse_args()
+
+    if args.project:
+        CONFIG.project_id = args.project
+    if args.region:
+        CONFIG.region = args.region
+    if args.model:
+        CONFIG.model_id = args.model
+
+    if args.cli:
+        run_cli()
+    else:
+        print("Vertex AI Gemini Coding Agent")
+        print(f"  Project: {CONFIG.project_id}")
+        print(f"  Region:  {CONFIG.region}")
+        print(f"  Model:   {CONFIG.model_id}")
+        print(f"  Tools:   {len(TOOLS)}")
+        print("\nTo use in Jupyter:")
+        print("  from gemini_agent import create_chat_ui")
+        print("  create_chat_ui()")
+        print("\nTo use in CLI:")
+        print("  python gemini_agent.py --cli")
