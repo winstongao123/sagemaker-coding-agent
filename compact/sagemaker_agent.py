@@ -79,7 +79,7 @@ import base64
 import time
 from dataclasses import dataclass, asdict, field
 from typing import List, Dict, Tuple, Optional, Any, Set, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from collections import deque
 import copy
@@ -87,6 +87,7 @@ import glob as glob_module
 import random
 import shlex
 import threading
+import shutil
 
 # ============================================================
 # RETRY LOGIC (OpenCode-style)
@@ -531,6 +532,24 @@ class Config:
     bash_allow_interpreters: bool = False  # If True, allow python/node/etc via bash tool
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
+    # Runtime isolation / execution limits
+    execution_mode: str = "local"  # local | docker
+    exec_docker_image: str = "python:3.11-slim"
+    exec_docker_network_disabled: bool = True
+    exec_docker_readonly_rootfs: bool = True
+    exec_docker_cpus: float = 1.0
+    exec_docker_memory: str = "1g"
+    exec_docker_pids_limit: int = 128
+
+    # Operational controls
+    require_auth: bool = False
+    auth_token_env: str = "SAGEMAKER_AGENT_AUTH_TOKEN"
+    max_user_messages_per_minute: int = 20
+    max_user_messages_per_session: int = 300
+    max_exec_calls_per_session: int = 100
+    max_exec_seconds_per_session: int = 1800
+    audit_retention_days: int = 30
+
 # Initialize config
 CONFIG = Config()
 
@@ -922,6 +941,13 @@ This protects the SageMaker IAM role from unintended access.
         "google.cloud", "azure",  # cloud SDKs
     }
 
+    # Dangerous members that are blocked even when module is generally allowed.
+    BLOCKED_PYTHON_MEMBERS = {
+        "os": {"system", "popen", "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe", "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe", "startfile"},
+        "shutil": {"rmtree"},
+        "pathlib": {"Path.unlink", "Path.rmdir"},
+    }
+
     def validate_python(self, code: str) -> Tuple[bool, str]:
         """Check if Python code is safe using regex denylist + AST import allowlist."""
         # Layer 1: Regex denylist (catches obfuscated patterns like __import__, exec, etc.)
@@ -940,6 +966,8 @@ This protects the SageMaker IAM role from unintended access.
             # If code can't parse, let it fail at runtime
             return True, "OK"
 
+        alias_to_module = {}
+
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
@@ -950,6 +978,7 @@ This protects the SageMaker IAM role from unintended access.
                     # Then check allowlist (must be explicitly allowed)
                     if mod not in self.ALLOWED_PYTHON_MODULES and not mod.startswith("_"):
                         return False, f"Import not allowed: {alias.name}. Only approved modules are permitted."
+                    alias_to_module[alias.asname or mod] = mod
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
                     mod = node.module.split(".")[0]
@@ -957,6 +986,31 @@ This protects the SageMaker IAM role from unintended access.
                         return False, f"Blocked import: {node.module}"
                     if mod not in self.ALLOWED_PYTHON_MODULES and not mod.startswith("_"):
                         return False, f"Import not allowed: {node.module}. Only approved modules are permitted."
+                    for alias in node.names:
+                        member = alias.name
+                        if mod in self.BLOCKED_PYTHON_MEMBERS and member in self.BLOCKED_PYTHON_MEMBERS[mod]:
+                            return False, f"Blocked import member: from {node.module} import {member}"
+                        alias_to_module[alias.asname or member] = f"{mod}.{member}"
+
+        # Layer 3: AST call validation for blocked members and aliases.
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+
+            # Pattern: os.system(...)
+            if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                base_name = node.func.value.id
+                resolved = alias_to_module.get(base_name, base_name)
+                top = resolved.split(".")[0]
+                attr = node.func.attr
+                if top in self.BLOCKED_PYTHON_MEMBERS and attr in self.BLOCKED_PYTHON_MEMBERS[top]:
+                    return False, f"Blocked call: {top}.{attr}()"
+
+            # Pattern: from os import system as s; s(...)
+            if isinstance(node.func, ast.Name):
+                resolved = alias_to_module.get(node.func.id, "")
+                if resolved.startswith("os.") and resolved.split(".", 1)[1] in self.BLOCKED_PYTHON_MEMBERS["os"]:
+                    return False, f"Blocked call via imported alias: {resolved}()"
 
         return True, "OK"
 
@@ -1022,6 +1076,7 @@ class AuditLogger:
     def __init__(self, audit_dir: str):
         self.audit_dir = audit_dir
         os.makedirs(audit_dir, exist_ok=True)
+        self.prune_old_logs(CONFIG.audit_retention_days)
 
     def _get_log_path(self, session_id: str) -> str:
         date = datetime.now().strftime("%Y-%m-%d")
@@ -1066,6 +1121,25 @@ class AuditLogger:
                         if line.strip():
                             entries.append(json.loads(line))
         return sorted(entries, key=lambda x: x.get("timestamp", ""))
+
+    def prune_old_logs(self, retention_days: int):
+        """Delete audit logs older than retention_days based on filename date prefix."""
+        if retention_days <= 0:
+            return
+        cutoff = datetime.now().date() - timedelta(days=retention_days)
+        for filename in os.listdir(self.audit_dir):
+            if not filename.endswith(".jsonl"):
+                continue
+            date_str = filename.split("_", 1)[0]
+            try:
+                file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if file_date < cutoff:
+                try:
+                    os.remove(os.path.join(self.audit_dir, filename))
+                except OSError:
+                    pass
 
 # Initialize audit
 AUDIT = AuditLogger(CONFIG.audit_dir)
@@ -1661,6 +1735,56 @@ def _kill_active_process():
             except OSError:
                 pass
 
+def _safe_exec_env() -> Dict[str, str]:
+    """Build a minimally-sensitive environment for local execution."""
+    env = {k: v for k, v in os.environ.items()
+           if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
+           and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")}
+    env["TERM"] = "dumb"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+def _run_subprocess(cmd_arg, timeout: int, shell: bool, cwd: str, env: Dict[str, str] = None) -> subprocess.CompletedProcess:
+    """Run subprocess with active-process tracking for Stop support."""
+    global _active_process
+    proc = subprocess.Popen(
+        cmd_arg,
+        shell=shell,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=cwd,
+        env=env
+    )
+    with _active_process_lock:
+        _active_process = proc
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    finally:
+        with _active_process_lock:
+            _active_process = None
+    return subprocess.CompletedProcess(cmd_arg, proc.returncode, stdout, stderr)
+
+def _docker_base_cmd() -> List[str]:
+    """Build hardened docker run args for isolated command execution."""
+    if not shutil.which("docker"):
+        raise RuntimeError("Docker runtime requested but 'docker' is not available")
+
+    cmd = [
+        "docker", "run", "--rm",
+        "--workdir", "/workspace",
+        "--volume", f"{CONFIG.workspace}:/workspace",
+        "--user", "65534:65534",
+        "--cpus", str(CONFIG.exec_docker_cpus),
+        "--memory", str(CONFIG.exec_docker_memory),
+        "--pids-limit", str(CONFIG.exec_docker_pids_limit),
+    ]
+    if CONFIG.exec_docker_network_disabled:
+        cmd.extend(["--network", "none"])
+    if CONFIG.exec_docker_readonly_rootfs:
+        cmd.extend(["--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m"])
+    return cmd
+
 def tool_bash(args: Dict) -> str:
     """Execute shell command with allowlist enforcement and no shell=True."""
     global _active_process
@@ -1671,46 +1795,25 @@ def tool_bash(args: Dict) -> str:
     if not ok:
         return f"Blocked: {msg}"
 
-    # Detect shell operators that require shell=True
-    # Pipes, redirects, &&, ||, ; semicolons, $() substitution, backticks
-    needs_shell = bool(re.search(r'[|><;]|&&|\|\||`|\$\(', command))
-
     try:
-        if needs_shell:
-            # Shell mode: required for pipes/redirects/chains
-            # Safety comes from allowlist + denylist validation above
-            cmd_arg = command
-            use_shell = True
+        if CONFIG.execution_mode == "docker":
+            docker_cmd = _docker_base_cmd()
+            docker_cmd.extend([CONFIG.exec_docker_image, "sh", "-lc", command])
+            result = _run_subprocess(docker_cmd, timeout=timeout, shell=False, cwd=CONFIG.workspace, env=_safe_exec_env())
         else:
-            # No-shell mode: parse into argv list (immune to injection)
-            try:
-                cmd_arg = shlex.split(command)
-            except ValueError:
-                cmd_arg = command.split()
-            use_shell = False
+            # Detect shell operators that require shell=True in local mode
+            needs_shell = bool(re.search(r'[|><;]|&&|\|\||`|\$\(', command))
+            if needs_shell:
+                cmd_arg = command
+                use_shell = True
+            else:
+                try:
+                    cmd_arg = shlex.split(command)
+                except ValueError:
+                    cmd_arg = command.split()
+                use_shell = False
+            result = _run_subprocess(cmd_arg, timeout=timeout, shell=use_shell, cwd=CONFIG.workspace, env=_safe_exec_env())
 
-        safe_env = {k: v for k, v in os.environ.items()
-                 if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
-                 and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
-                 } | {"TERM": "dumb"}
-
-        proc = subprocess.Popen(
-            cmd_arg,
-            shell=use_shell,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=CONFIG.workspace,
-            env=safe_env
-        )
-        with _active_process_lock:
-            _active_process = proc
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        finally:
-            with _active_process_lock:
-                _active_process = None
-        result = subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
         output = result.stdout
         if result.stderr:
             output += f"\n[stderr]\n{result.stderr}"
@@ -1785,41 +1888,29 @@ def tool_python_exec(args: Dict) -> str:
     if not ok:
         return f"Security blocked: {msg}"
 
-    fd, temp_path = tempfile.mkstemp(suffix=".py", prefix="agent_exec_")
+    fd, temp_path = tempfile.mkstemp(suffix=".py", prefix="agent_exec_", dir=CONFIG.workspace)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             # Prepend runtime import hook, then user code
             f.write(_PYTHON_EXEC_PREAMBLE)
             f.write(code)
 
-        # Sandboxed env: strip credentials and sensitive vars
-        safe_env = {k: v for k, v in os.environ.items()
-                    if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
-                    and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")}
-        safe_env["PYTHONIOENCODING"] = "utf-8"
-        proc = subprocess.Popen(
-            [sys.executable, temp_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=CONFIG.workspace,
-            env=safe_env
-        )
-        with _active_process_lock:
-            _active_process = proc
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        finally:
-            with _active_process_lock:
-                _active_process = None
-        output = stdout
+        if CONFIG.execution_mode == "docker":
+            rel = os.path.relpath(temp_path, CONFIG.workspace).replace("\\", "/")
+            docker_cmd = _docker_base_cmd()
+            docker_cmd.extend([CONFIG.exec_docker_image, "python", "-I", f"/workspace/{rel}"])
+            result = _run_subprocess(docker_cmd, timeout=timeout, shell=False, cwd=CONFIG.workspace, env=_safe_exec_env())
+        else:
+            result = _run_subprocess([sys.executable, temp_path], timeout=timeout, shell=False, cwd=CONFIG.workspace, env=_safe_exec_env())
+
+        output = result.stdout
+        stderr = result.stderr
         if stderr:
             output += f"\n[stderr]\n{stderr}"
-        if proc.returncode != 0:
-            output += f"\n[exit code: {proc.returncode}]"
+        if result.returncode != 0:
+            output += f"\n[exit code: {result.returncode}]"
         return SECURITY.truncate_output(output) if output else "(no output)"
     except subprocess.TimeoutExpired:
-        proc.kill()
         return f"Error: Code timed out after {timeout} seconds"
     except Exception as e:
         return f"Error: {e}"
@@ -2897,6 +2988,10 @@ class Agent:
         self.on_thinking = on_thinking  # Callback for thinking output
         self.on_stop_check = on_stop_check  # Callback to check if stop was requested
         self.tool_history = deque(maxlen=10)
+        self.exec_calls = 0
+        self.exec_seconds = 0.0
+        self.user_msg_timestamps = deque()
+        self.user_msg_count = 0
 
     def run(self, user_message: str, output_fn: Callable = print, system_prompt: str = None, plan_mode: bool = False) -> str:
         """Run agent loop until completion or max turns.
@@ -2910,6 +3005,23 @@ class Agent:
         # Use provided system prompt or default
         self._system_prompt = system_prompt or SYSTEM_PROMPT
         self._plan_mode = plan_mode  # Store for tool execution check
+
+        # Session/user rate limiting
+        now = time.time()
+        while self.user_msg_timestamps and now - self.user_msg_timestamps[0] > 60:
+            self.user_msg_timestamps.popleft()
+        if len(self.user_msg_timestamps) >= CONFIG.max_user_messages_per_minute:
+            msg = f"Rate limit exceeded: max {CONFIG.max_user_messages_per_minute} messages/min"
+            output_fn(msg)
+            AUDIT.log(self.session_id, "rate_limit", result_summary=msg, user_approved=False)
+            return msg
+        if self.user_msg_count >= CONFIG.max_user_messages_per_session:
+            msg = f"Session message limit reached: {CONFIG.max_user_messages_per_session}"
+            output_fn(msg)
+            AUDIT.log(self.session_id, "session_limit", result_summary=msg, user_approved=False)
+            return msg
+        self.user_msg_timestamps.append(now)
+        self.user_msg_count += 1
 
         # Ensure proper role alternation - if last message was user, add placeholder assistant
         if self.messages and self.messages[-1].get("role") == "user":
@@ -3135,7 +3247,23 @@ class Agent:
                 # === LAYER 5: Execute with Error Recovery ===
                 output_fn(f"[Calling {tool_name}...]")
                 try:
+                    if tool_name in {"bash", "python_exec"}:
+                        if self.exec_calls >= CONFIG.max_exec_calls_per_session:
+                            result = f"Blocked: execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
+                            tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                            AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                            continue
+                        if self.exec_seconds >= CONFIG.max_exec_seconds_per_session:
+                            result = f"Blocked: execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
+                            tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                            AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                            continue
+                    start_ts = time.time()
                     result = func(args)
+                    elapsed = time.time() - start_ts
+                    if tool_name in {"bash", "python_exec"}:
+                        self.exec_calls += 1
+                        self.exec_seconds += elapsed
                 except TypeError as e:
                     result = f"TypeError: {e}. Check argument types. Expected schema: {schema}"
                 except KeyError as e:
@@ -3224,7 +3352,9 @@ def create_chat_ui(mock_mode: bool = None):
         "session": None,
         "lock": False,
         "stop_requested": False,  # For stop button
+        "authenticated": not CONFIG.require_auth,
     }
+    auth_token = os.getenv(CONFIG.auth_token_env, "")
 
     # NEW APPROACH: HTML widget with scrollable div inside
     # Browser handles scrolling, not Jupyter widgets
@@ -3630,6 +3760,21 @@ def create_chat_ui(mock_mode: bool = None):
 
         msg = input_box.value.strip()
         if not msg:
+            return
+
+        # Optional auth gate for multi-user/shared notebook setups.
+        if CONFIG.require_auth and not ui_state.get("authenticated", False):
+            if msg.startswith("/auth "):
+                provided = msg[len("/auth "):].strip()
+                input_box.value = ""
+                if auth_token and provided == auth_token:
+                    ui_state["authenticated"] = True
+                    add_message('system', 'Authentication successful.')
+                else:
+                    add_message('system', 'Authentication failed. Use /auth <token>.')
+                return
+            add_message('system', f'Authentication required. Send /auth <token> (env: {CONFIG.auth_token_env}).')
+            input_box.value = ""
             return
 
         ui_state["lock"] = True

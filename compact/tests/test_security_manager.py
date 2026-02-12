@@ -53,6 +53,11 @@ class SecurityManagerTests(unittest.TestCase):
         ok, msg = self.sec.validate_python("import json\nprint(json.dumps({'a': 1}))")
         self.assertTrue(ok, msg)
 
+    def test_validate_python_blocks_from_os_import_system(self):
+        ok, msg = self.sec.validate_python("from os import system\nsystem('echo x')")
+        self.assertFalse(ok)
+        self.assertTrue("Blocked import member" in msg or "Blocked call via imported alias" in msg)
+
 
 if __name__ == "__main__":
     unittest.main()
