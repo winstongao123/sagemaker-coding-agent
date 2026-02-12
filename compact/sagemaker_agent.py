@@ -553,6 +553,9 @@ class SecurityManager:
         (r"(?i)(gh[ps]_[A-Za-z0-9_]{36,})", "GitHub Token"),
         (r"(?i)(xox[baprs]-[A-Za-z0-9-]+)", "Slack Token"),
         (r"(?i)(gcp[_-]?api[_-]?key)\s*[=:]\s*[\"']?[\w-]{20,}", "GCP API Key"),
+        (r"sk-ant-[A-Za-z0-9_\-]{20,}", "Anthropic API Key"),
+        (r"AKIA[A-Z0-9]{16}", "AWS Access Key ID (bare)"),
+        (r"(?i)(ANTHROPIC_API_KEY)\s*[=:]\s*[\"']?\S+", "Anthropic API Key assignment"),
     ]
 
     SENSITIVE_FILES = {
@@ -614,9 +617,16 @@ class SecurityManager:
         (r"\bwget\s+.*\|\s*(ba)?sh", "Pipe to shell"),
         (r"\bbase64\s+-d.*\|\s*(ba)?sh", "Encoded payload execution"),
 
+        # === COMMAND SUBSTITUTION / VARIABLE EXPANSION ===
+        (r"\$\(.*\baws\s+", "Command substitution with AWS CLI"),
+        (r"`.*\baws\s+", "Backtick substitution with AWS CLI"),
+        (r"\$\(.*\bcurl\s+", "Command substitution with curl"),
+        (r"\$\(.*\bwget\s+", "Command substitution with wget"),
+
         # === REMOTE CODE EXECUTION ===
         (r"\beval\s+\$", "Eval with variable"),
         (r"\beval\s+['\"]", "Eval string execution"),
+        (r"\beval\s+.*\$\(", "Eval with command substitution"),
         (r"\bpython[23]?\s+-c.*exec\(", "Python exec injection"),
         (r"\bperl\s+-e", "Perl one-liner"),
 
@@ -917,10 +927,7 @@ class BedrockClient:
         self.region = region
         self.mock_mode = mock_mode
         if not mock_mode:
-            import botocore.session
-            session = boto3.Session()
-            session._session = botocore.session.Session()
-            self.client = session.client("bedrock-runtime", region_name=region)
+            self.client = boto3.client("bedrock-runtime", region_name=region)
         else:
             self.client = None
             print("[MOCK MODE] No API calls will be made")
@@ -1057,7 +1064,9 @@ class SessionManager:
             return None
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return Session(**data)
+        # Filter to known fields to handle schema changes gracefully
+        known_fields = {"id", "created_at", "updated_at", "title", "messages", "metadata", "todos"}
+        return Session(**{k: v for k, v in data.items() if k in known_fields})
 
     def list_sessions(self) -> List[Dict]:
         """List all sessions."""
@@ -1347,8 +1356,9 @@ def tool_edit_file(args: Dict) -> str:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(new_content)
 
-        # Invalidate cache for this file
+        # Invalidate cache for this file and clear context marker so re-read shows updated content
         FILE_CACHE.put(abs_path, new_content)
+        FILE_CACHE._in_context.discard(abs_path)
 
         # DIFF-ONLY OUTPUT: Show only the change context, not whole file
         # Find the line number where change occurred
@@ -1467,7 +1477,10 @@ def tool_bash(args: Dict) -> str:
             text=True,
             timeout=timeout,
             cwd=CONFIG.workspace,
-            env={**os.environ, "TERM": "dumb"}
+            env={k: v for k, v in os.environ.items()
+                 if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
+                 and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
+                 } | {"TERM": "dumb"}
         )
         output = result.stdout
         if result.stderr:
@@ -2149,10 +2162,7 @@ class SemanticSearch:
 
     def _ensure_client(self):
         if self.client is None:
-            import botocore.session
-            session = boto3.Session()
-            session._session = botocore.session.Session()
-            self.client = session.client("bedrock-runtime", region_name=self.region)
+            self.client = boto3.client("bedrock-runtime", region_name=self.region)
 
     def _get_embedding(self, text: str) -> List[float]:
         """Get embedding vector for text."""
@@ -2429,57 +2439,63 @@ def get_tool_definitions() -> List[Dict]:
 # SYSTEM PROMPT
 # ============================================================
 
-SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI assistant for software engineering in AWS SageMaker.
+SYSTEM_PROMPT = """You are SageMaker Coding Agent, a secure AI coding assistant running in AWS SageMaker Studio.
 
-# Style
-- Be concise. Use markdown. No emojis unless asked.
-- Prefer editing existing files over creating new ones.
-- Be technically accurate. Disagree when necessary.
+You help users with software engineering tasks: solving bugs, adding features, refactoring, explaining code, creating documents, and data analysis.
 
-# Professional Objectivity
-- NEVER give time estimates ("this will take 5 minutes", "quick fix", "should be done soon")
-- Prioritize technical accuracy over validating user beliefs
-- Avoid over-the-top validation like "You're absolutely right" or "Great question!"
-- Honest, objective guidance is more valuable than false agreement
-- If uncertain, investigate first rather than confirming assumptions
+# Core Principles
+- Be concise. Use markdown formatting. No emojis unless asked.
+- Prioritize technical accuracy over validating user beliefs. Disagree when necessary.
+- Avoid hollow validation ("Great question!", "You're absolutely right!"). Focus on facts and problem-solving.
+- If uncertain, investigate first rather than confirming assumptions.
+- NEVER give time estimates or predictions.
 
-# Task Management
-Use todo_write frequently to track tasks. Mark todos completed immediately when done. Only ONE task should be in_progress at a time.
-
-# Parallel Execution
-When calling multiple tools:
-- If tools are INDEPENDENT, call them in parallel (single response, multiple tool calls)
-- If tools DEPEND on each other, call them sequentially
-- Example: reading 3 files = parallel. Creating dir then file = sequential.
-- Maximize parallel calls for efficiency
+# Conventions
+- Follow existing code conventions. Match the style and patterns of surrounding code.
+- Make minimal, focused changes. Don't add features, refactoring, or "improvements" beyond what was asked.
+- Don't add unnecessary error handling, comments, docstrings, or abstractions to code you didn't change.
+- Prefer editing existing files over creating new ones. Never create files unless necessary.
 
 # Doing Tasks
-- ALWAYS read a file before editing (edit_file fails otherwise)
-- old_string in edit_file must be EXACT match
-- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep)
-- Reserve bash for: git, pip/npm, running scripts
+- ALWAYS read a file before editing it. Understand existing code before suggesting modifications.
+- old_string in edit_file must be an EXACT match from the file content.
+- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep).
+- Reserve bash for: git commands, pip/npm install, running scripts, system operations.
+- If a tool call fails, don't retry the same call. Investigate the error and adapt your approach.
+- When exploring unfamiliar code, use grep/glob to locate relevant files before reading entire files.
 
-# Document Creation
-You can create Word (.docx), Excel (.xlsx), and Markdown (.md) files:
-- create_word: Use for formal documents, reports
-- create_excel: Use for tabular data, spreadsheets. Data format: list of dicts
-- create_markdown: Use for documentation
+# Parallel Execution
+Call multiple tools in a single response when they are independent:
+- Reading 3 different files = parallel
+- glob + grep in different directories = parallel
+- Creating a directory THEN writing a file into it = sequential
+Maximize parallel calls for efficiency.
+
+# Task Management
+Use todo_write frequently to plan and track tasks. Break complex tasks into clear steps.
+Mark each todo completed IMMEDIATELY when done - do not batch completions.
+Only ONE todo should be in_progress at a time.
+
+# Document & Chart Creation
+- create_word: Formal documents, reports (.docx). Supports headings, paragraphs, tables, images.
+- create_excel: Tabular data, spreadsheets (.xlsx). Data format: list of dicts. Supports charts.
+- create_markdown: Documentation, notes (.md).
+- create_chart: Visualizations (.png) - bar, line, pie, scatter charts.
+- create_pdf: Reports (.pdf) - text, tables, images combined.
 
 # Python Execution
-Use python_exec for:
-- Data processing and analysis
-- Complex calculations
-- Custom file generation
-- Any scripting task
-
-# Code References
-Use pattern `file_path:line_number` when referencing code.
+Use python_exec for data processing, calculations, custom file generation, and scripting.
+Code runs in the workspace directory with access to installed packages.
 
 # Security
-- Workspace boundary enforced (cannot access outside project)
-- Dangerous commands blocked (rm -rf, sudo, curl|bash)
-- Write operations need user approval
-- All actions logged to audit trail
+- Workspace boundary enforced - cannot access files outside project directory.
+- Dangerous commands blocked (rm -rf, sudo, curl|bash, direct AWS CLI).
+- Write operations require user approval before execution.
+- All actions logged to immutable audit trail.
+- To access AWS resources: provide boto3 code for the user to run, don't execute directly.
+
+# Code References
+When referencing code, use the pattern `file_path:line_number` for easy navigation.
 """
 
 # Plan Mode System Prompt (OpenCode-style)
@@ -2895,7 +2911,8 @@ def create_chat_ui(mock_mode: bool = None):
                 msgs_html.append(f'<div style="margin:8px 0;border-left:3px solid #42a5f5;padding-left:10px;"><b style="color:#42a5f5;">[{ts}] Agent:</b><div style="color:{fg};margin-top:4px;">{c}</div></div>')
             elif role == 'tool':
                 icon = TOOL_ICONS.get(tool_name, '🔧') if tool_name else '🔧'
-                msgs_html.append(f'<details style="margin:5px 0;border-left:3px solid #ffa726;padding-left:10px;"><summary style="color:#ffa726;cursor:pointer;">{icon} {tool_name or "Tool"}</summary><pre style="color:{fg};white-space:pre-wrap;max-height:150px;overflow:auto;font-size:11px;margin:4px 0;">{c}</pre></details>')
+                tool_label = escape_html(tool_name or "Tool")
+                msgs_html.append(f'<details style="margin:5px 0;border-left:3px solid #ffa726;padding-left:10px;"><summary style="color:#ffa726;cursor:pointer;">{icon} {tool_label}</summary><pre style="color:{fg};white-space:pre-wrap;max-height:150px;overflow:auto;font-size:11px;margin:4px 0;">{c}</pre></details>')
             elif role == 'thinking':
                 msgs_html.append(f'<div style="margin:5px 0;color:#ab47bc;font-size:12px;border-left:3px solid #ab47bc;padding-left:10px;">💭 {c[:300]}...</div>')
             elif role == 'system':
@@ -2944,6 +2961,7 @@ def create_chat_ui(mock_mode: bool = None):
         </details>'''
 
         # Sync global _TODOS
+        global _TODOS
         _TODOS = ui_state["todos"]
 
     def sync_todos_from_global():
@@ -3041,11 +3059,14 @@ def create_chat_ui(mock_mode: bool = None):
     # Model change handler
     def on_model_change(change):
         new_model = change['new']
+        old_model = CONFIG.model_id
         CONFIG.model_id = new_model
         new_client = BedrockClient(new_model, CONFIG.region, CONFIG.mock_mode)
         ui_state["client"] = new_client
         if ui_state["agent"]:
             ui_state["agent"].client = new_client
+            AUDIT.log(ui_state["agent"].session_id, "config_change", "model",
+                      {"old": old_model, "new": new_model})
         add_message('system', f'Switched to model: {new_model}')
 
     def on_temp_change(change):
@@ -3153,7 +3174,12 @@ def create_chat_ui(mock_mode: bool = None):
 
     def request_approval(tool_name: str, tool_input: Dict) -> bool:
         import threading
+        # Check if tool was previously approved with "Always"
+        if tool_name in ui_state.get("always_allow", set()):
+            add_message('system', f'✓ Auto-approved: {tool_name}')
+            return True
         pending_approval["result"] = None
+        pending_approval["tool_name"] = tool_name
         approval_event = threading.Event()
         pending_approval["event"] = approval_event
 
@@ -3192,9 +3218,11 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_approve_always(b):
         pending_approval["result"] = True
-        # Add to always-allow list for this session
+        # Add tool to always-allow list for this session
         if "always_allow" not in ui_state:
             ui_state["always_allow"] = set()
+        if pending_approval.get("tool_name"):
+            ui_state["always_allow"].add(pending_approval["tool_name"])
         if pending_approval.get("event"):
             pending_approval["event"].set()
 
@@ -3402,16 +3430,16 @@ def create_chat_ui(mock_mode: bool = None):
                     session_name = session_name_input.value.strip() or f"session_{ui_state['agent'].session_id}"
                     ui_state["session"] = Session(
                         id=ui_state["agent"].session_id,
-                        name=session_name,
+                        created_at=ui_state["session"].created_at if ui_state["session"] else datetime.now().isoformat(),
+                        updated_at=datetime.now().isoformat(),
+                        title=session_name,
                         messages=ui_state["agent"].messages.copy(),
-                        created=datetime.now(),
-                        model=model_dropdown.value,
+                        metadata={"model": model_dropdown.value},
                         todos=_TODOS.copy() if _TODOS else []
                     )
                     SESSIONS.save(ui_state["session"])
-                    # Silent auto-save - don't spam messages
-                except Exception:
-                    pass  # Silent fail for auto-save
+                except Exception as e:
+                    print(f"[Auto-save error: {e}]")  # Log instead of silent fail
 
     def on_clear(b):
         """Clear current session."""
