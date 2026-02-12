@@ -1315,11 +1315,14 @@ class SessionManager:
         path = os.path.join(self.sessions_dir, f"{session_id}.json")
         if not os.path.exists(path):
             return None
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # Filter to known fields to handle schema changes gracefully
-        known_fields = {"id", "created_at", "updated_at", "title", "messages", "metadata", "todos"}
-        return Session(**{k: v for k, v in data.items() if k in known_fields})
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # Filter to known fields to handle schema changes gracefully
+            known_fields = {"id", "created_at", "updated_at", "title", "messages", "metadata", "todos"}
+            return Session(**{k: v for k, v in data.items() if k in known_fields})
+        except Exception:
+            return None
 
     def list_sessions(self) -> List[Dict]:
         """List all sessions."""
@@ -3524,7 +3527,6 @@ def create_chat_ui(mock_mode: bool = None):
 
     def render_todos():
         """Render todos in a collapsible panel (OpenCode-style)."""
-        global _TODOS
         dark = ui_state["dark_mode"]
         bg = '#2d2d2d' if dark else '#f5f5f5'
         fg = '#e0e0e0' if dark else '#333'
