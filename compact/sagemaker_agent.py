@@ -1552,6 +1552,9 @@ def tool_write_file(args: Dict) -> str:
 
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
 
     if os.path.exists(path) and os.path.abspath(path) not in _FILES_READ:
         return "Error: Must read file before writing. Use read_file first."
@@ -1586,6 +1589,9 @@ def tool_edit_file(args: Dict) -> str:
 
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
 
     abs_path = os.path.abspath(path)
     if abs_path not in _FILES_READ:
@@ -1730,6 +1736,8 @@ def tool_list_dir(args: Dict) -> str:
 # Active subprocess tracking - allows stop handler to kill running processes
 _active_process = None  # type: subprocess.Popen | None
 _active_process_lock = threading.Lock()
+_docker_image_ready = False
+_docker_image_lock = threading.Lock()
 
 def _kill_active_process():
     """Kill the active subprocess if one is running. Called by stop handler."""
@@ -1770,6 +1778,41 @@ def _run_subprocess(cmd_arg, timeout: int, shell: bool, cwd: str, env: Dict[str,
         with _active_process_lock:
             _active_process = None
     return subprocess.CompletedProcess(cmd_arg, proc.returncode, stdout, stderr)
+
+
+def _ensure_docker_image_ready() -> None:
+    """Ensure docker image exists locally so first pull time doesn't count against exec budget."""
+    global _docker_image_ready
+    if CONFIG.execution_mode != "docker":
+        return
+    if _docker_image_ready:
+        return
+
+    with _docker_image_lock:
+        if _docker_image_ready:
+            return
+
+        inspect_cmd = ["docker", "image", "inspect", CONFIG.exec_docker_image]
+        inspect = _run_subprocess(
+            inspect_cmd,
+            timeout=20,
+            shell=False,
+            cwd=CONFIG.workspace,
+            env=_safe_exec_env(),
+        )
+        if inspect.returncode != 0:
+            pull_cmd = ["docker", "pull", CONFIG.exec_docker_image]
+            pull = _run_subprocess(
+                pull_cmd,
+                timeout=240,
+                shell=False,
+                cwd=CONFIG.workspace,
+                env=_safe_exec_env(),
+            )
+            if pull.returncode != 0:
+                err = (pull.stderr or pull.stdout or "docker pull failed").strip()
+                raise RuntimeError(f"Docker image unavailable: {err[:200]}")
+        _docker_image_ready = True
 
 
 def _validate_shell_redirections(command: str) -> Tuple[bool, str]:
@@ -3314,6 +3357,8 @@ class Agent:
                             tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
                             AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
                             continue
+                        if CONFIG.execution_mode == "docker":
+                            _ensure_docker_image_ready()
                     start_ts = time.time()
                     result = func(args)
                     elapsed = time.time() - start_ts
