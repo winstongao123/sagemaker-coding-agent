@@ -4256,7 +4256,11 @@ def create_chat_ui(mock_mode: bool = None):
     render_chat()
     render_todos()
 
-    display(ui)
+    try:
+        display(ui)
+    except UnicodeEncodeError:
+        # Some Windows terminals use cp1252 and fail on widget/unicode rendering.
+        print("UI created. Open this in Jupyter/Studio to render widgets.")
     return None  # Don't return ui - Jupyter would display it twice
 
 
