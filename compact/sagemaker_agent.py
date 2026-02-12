@@ -3454,6 +3454,8 @@ def create_chat_ui(mock_mode: bool = None):
         "lock": False,
         "stop_requested": False,  # For stop button
         "authenticated": not CONFIG.require_auth,
+        "model_connection_ok": None,  # True/False/None(unknown)
+        "model_connection_msg": "Not validated yet",
     }
     ui_state["model_change_lock"] = False
 
@@ -3627,6 +3629,24 @@ def create_chat_ui(mock_mode: bool = None):
         style={'description_width': 'initial'}
     )
 
+    def validate_model_connection(model_id: str) -> Tuple[bool, str]:
+        """Validate the selected model is actually callable in current account/region."""
+        try:
+            test_client = BedrockClient(model_id, CONFIG.region, CONFIG.mock_mode)
+            if CONFIG.mock_mode:
+                return True, "Mock mode (no Bedrock call)"
+            _ = test_client.chat(
+                messages=[{"role": "user", "content": "ping"}],
+                system="Reply with OK.",
+                tools=None,
+                max_tokens=8,
+                temperature=0.0,
+            )
+            return True, "Connected and available"
+        except Exception as e:
+            err = str(e).strip().replace("\n", " ")
+            return False, err[:180] if err else "Model not available"
+
     # Model change handler
     def on_model_change(change):
         if ui_state.get("model_change_lock"):
@@ -3634,29 +3654,27 @@ def create_chat_ui(mock_mode: bool = None):
         new_model = change['new']
         old_model = CONFIG.model_id
         try:
+            ok, conn_msg = validate_model_connection(new_model)
+            if not ok:
+                raise RuntimeError(conn_msg)
             new_client = BedrockClient(new_model, CONFIG.region, CONFIG.mock_mode)
-            # Lightweight validation in real mode.
-            if not CONFIG.mock_mode:
-                _ = new_client.chat(
-                    messages=[{"role": "user", "content": "ping"}],
-                    system="Reply with OK.",
-                    tools=None,
-                    max_tokens=8,
-                    temperature=0.0
-                )
             CONFIG.model_id = new_model
             ui_state["client"] = new_client
+            ui_state["model_connection_ok"] = True
+            ui_state["model_connection_msg"] = conn_msg
             if ui_state["agent"]:
                 ui_state["agent"].client = new_client
                 AUDIT.log(ui_state["agent"].session_id, "config_change", "model",
                           {"old": old_model, "new": new_model})
-            add_message('system', f'Switched to model: {new_model}')
+            add_message('system', f'Model connected: {new_model}')
         except Exception as e:
             ui_state["model_change_lock"] = True
             try:
                 model_dropdown.value = old_model
             finally:
                 ui_state["model_change_lock"] = False
+            ui_state["model_connection_ok"] = False
+            ui_state["model_connection_msg"] = str(e)[:180]
             add_message('system', f'Model switch failed: {new_model}. Kept {old_model}. Error: {str(e)[:120]}')
         update_mode_display()
 
@@ -3686,6 +3704,7 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["dark_mode"] = change['new']
         # Re-render chat with new colors (colors are in HTML now)
         render_chat()
+        render_todos()
         # Update header
         if "header" in ui_state and ui_state["header"]:
             ui_state["header"].value = ui_state["get_header_html"]()
@@ -3708,9 +3727,23 @@ def create_chat_ui(mock_mode: bool = None):
         plan = "ON" if plan_mode_toggle.value else "OFF"
         thinking = "ON" if CONFIG.thinking_enabled else "OFF"
         auth = "ON" if CONFIG.require_auth else "OFF"
+        dark = ui_state.get("dark_mode", True)
+        text_color = "#aab4be" if dark else "#666"
+        if ui_state.get("model_connection_ok") is True:
+            model_state = "Connected"
+            model_color = "#4caf50"
+        elif ui_state.get("model_connection_ok") is False:
+            model_state = "Unavailable"
+            model_color = "#f44336"
+        else:
+            model_state = "Unknown"
+            model_color = "#ff9800"
+        model_msg = escape_html(ui_state.get("model_connection_msg", "Not validated yet"))
         mode_html.value = (
-            f'<div style="font-size:12px;color:#777;margin:4px 0;">'
+            f'<div style="font-size:12px;color:{text_color};margin:4px 0;">'
             f'Model: <b>{escape_html(CONFIG.model_id)}</b> | '
+            f'Status: <b style="color:{model_color}">{model_state}</b> '
+            f'(<span>{model_msg}</span>) | '
             f'Plan: <b>{plan}</b> | '
             f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
             f'Auth: <b>{auth}</b> | '
@@ -3739,6 +3772,7 @@ def create_chat_ui(mock_mode: bool = None):
     def update_tokens_display():
         """Update token display with progress bar."""
         stats = TOKENS.get_stats()
+        c = get_colors()
 
         # Use message-based estimation for context % (consistent with auto-compact trigger)
         # This shows actual context window usage, not cumulative API call totals
@@ -3762,11 +3796,11 @@ def create_chat_ui(mock_mode: bool = None):
 
         # Show both: cumulative totals (info) and context window % (important)
         tokens_html.value = f'''
-        <div style="font-size:11px;color:#666;">
+        <div style="font-size:11px;color:{c["fg_muted"]};">
             <span>📊 API Totals - In: <b>{stats["session_input"]:,}</b> | Out: <b>{stats["session_output"]:,}</b> | Calls: {stats["api_calls"]}</span>
             <div style="margin-top:3px;">
                 <span style="color:{ctx_color}">Context Window: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,})</span>
-                <div style="background:#ddd;height:4px;border-radius:2px;margin-top:2px;">
+                <div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">
                     <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;"></div>
                 </div>
             </div>
@@ -4357,6 +4391,10 @@ def create_chat_ui(mock_mode: bool = None):
 
     update_session_list()
     update_tokens_display()
+    # Validate initial model once so status line reflects real connectivity.
+    init_ok, init_msg = validate_model_connection(CONFIG.model_id)
+    ui_state["model_connection_ok"] = init_ok
+    ui_state["model_connection_msg"] = init_msg
     update_mode_display()
 
     # Initialize displays
