@@ -3996,6 +3996,14 @@ def create_chat_ui(mock_mode: bool = None):
         import threading
         if not CONFIG.require_tool_approval:
             return True
+        is_sagemaker = bool(
+            os.getenv("SAGEMAKER_DOMAIN_ID")
+            or os.getenv("SAGEMAKER_INTERNAL_IMAGE_URI")
+            or "SAGEMAKER" in os.getenv("AWS_EXECUTION_ENV", "").upper()
+        )
+        if is_sagemaker:
+            add_message('system', 'Approval UI can block in this SageMaker kernel. Turn OFF "Require Approval" to continue.')
+            return False
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
@@ -4040,6 +4048,9 @@ def create_chat_ui(mock_mode: bool = None):
         max_wait = 300
         waited = 0
         while pending_approval["result"] is None and waited < max_wait:
+            if ui_state.get("stop_requested"):
+                pending_approval["result"] = False
+                break
             approval_event.wait(timeout=0.1)
             waited += 0.1
 
@@ -4085,6 +4096,13 @@ def create_chat_ui(mock_mode: bool = None):
         """Handle stop button click - also kills active subprocesses."""
         ui_state["stop_requested"] = True
         _kill_active_process()  # Kill any running bash/python_exec subprocess
+        if pending_approval.get("event"):
+            pending_approval["result"] = False
+            pending_approval["event"].set()
+        approval_box.layout.display = 'none'
+        with approval_output:
+            clear_output()
+        send_btn.disabled = False
         status_html.value = '<span style="color:#ff9800"><b>⏹ Stop requested...</b></span>'
         add_message('system', '⏹ Stop requested - killing active processes')
 
