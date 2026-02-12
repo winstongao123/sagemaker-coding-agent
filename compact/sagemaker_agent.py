@@ -3461,7 +3461,7 @@ def create_chat_ui(mock_mode: bool = None):
         icon='map',
         button_style='',
         tooltip='When ON: Agent only reads/explores, creates plan file. When OFF: Normal execution.',
-        layout=widgets.Layout(width='120px')
+        layout=widgets.Layout(width='140px')
     )
 
     # Auto-compact checkbox (ON by default - always auto-compact at 90%)
@@ -4155,16 +4155,16 @@ def create_chat_ui(mock_mode: bool = None):
     # Row 1: Session & Model - [Name] [💾Save] [Session ▼] [📁Load] [+New] | [Model ▼]
     row1 = widgets.HBox([
         session_name_input, save_btn, session_dropdown, load_btn, new_btn,
-        widgets.HTML('<span style="margin:0 10px;">|</span>'),
-        model_dropdown
+        widgets.HTML('<span style="margin:0 8px;color:#777;">|</span>'),
+        model_dropdown, plan_mode_toggle, auto_compact_checkbox
     ])
+    row1.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 10px')
 
     # Row 2: Parameters
     row2 = widgets.HBox([
-        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox,
-        widgets.HTML('<span style="margin:0 10px;">|</span>'),
-        plan_mode_toggle, auto_compact_checkbox
+        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox
     ])
+    row2.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 12px')
 
     # Row 3: Buttons (stop_btn hidden by default, shows during processing)
     row3 = widgets.HBox([send_btn, stop_btn, clear_btn, compact_btn, status_html])
