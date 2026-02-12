@@ -47,9 +47,17 @@ This is practical and good for long sessions, but like all compactors, extremely
 - high-risk tools (`bash`, `python_exec`) require per-use approval
 
 ### Isolation
-- default execution mode is Docker
+- default execution mode is Docker in code
 - workspace mounted to `/workspace`
 - optional no-network, read-only rootfs, non-root user, resource limits
+
+If Docker daemon is unavailable in SageMaker, switch to local mode:
+
+```python
+execution_mode = "local"
+```
+
+This keeps policy controls but removes container isolation.
 
 ### Operational controls
 - auth gate (`/auth <token>`)

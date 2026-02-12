@@ -12,11 +12,20 @@ Copy these into SageMaker workspace:
 
 ## 2) Install dependencies
 
+If using SageMaker terminal:
+
+```bash
+pip install -U pip
+pip install boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib reportlab
+```
+
+If using a notebook cell:
+
 ```python
 !pip install -q boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib reportlab
 ```
 
-## 3) Verify Docker (recommended mode)
+## 3) Check whether Docker is usable
 
 ```powershell
 docker --version
@@ -24,7 +33,15 @@ docker ps
 docker pull python:3.11-slim
 ```
 
-If Docker is unavailable, set `execution_mode = "local"` in `sagemaker_agent.py` (less secure).
+If you see `Cannot connect to the Docker daemon...`, Docker mode will not work in your current SageMaker environment.
+
+In that case, set this once in `sagemaker_agent.py`:
+
+```python
+execution_mode = "local"
+```
+
+Then restart kernel and run UI again.
 
 ## 4) Set auth token
 
