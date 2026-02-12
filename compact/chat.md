@@ -30,6 +30,8 @@ If the app errors with Docker daemon connection issues, set in `sagemaker_agent.
 execution_mode = "local"
 ```
 
+This is common in SageMaker Studio where Docker daemon is not exposed in user terminals.
+
 ## First command in chat
 
 ```text
