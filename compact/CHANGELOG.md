@@ -1,4 +1,32 @@
-# Changelog - SageMaker Coding Agent v2.7.0
+# Changelog - SageMaker Coding Agent v2.8.0
+
+## v2.8.0 - Allowlist Security Model
+
+### bash: Command Allowlist + Conditional shell=True (Critical)
+
+| What | Details |
+|------|---------|
+| **Problem** | `shell=True` with regex denylist was fundamentally bypassable. Obfuscated commands (`p''ython`, `$'\x63\x75\x72\x6c'`, hex escapes) could evade all patterns. |
+| **Fix** | **3-layer validation**: (1) Extract base command from input, check against `ALLOWED_COMMANDS` allowlist (~50 safe commands: git, ls, pip, python, etc.). (2) Denylist patterns as second layer for dangerous arguments. (3) Network command blocking. For simple commands (no pipes/redirects), uses `shlex.split()` without `shell=True`. For pipe/redirect commands, `shell=True` is used but only after allowlist validation. |
+| **Impact** | Unknown commands are rejected by default. The denylist is now defense-in-depth, not the primary control. |
+
+### python_exec: AST Import Validation + Runtime Import Hook (High)
+
+| What | Details |
+|------|---------|
+| **Problem** | Regex-only validation was bypassable via `__import__('subp'+'rocess')`, `getattr()`, `exec(bytes(...).decode())`, etc. |
+| **Fix** | **3-layer validation**: (1) Regex denylist for obfuscation patterns. (2) AST parsing walks the code tree and blocks `import` statements for dangerous modules (`subprocess`, `socket`, `requests`, `boto3`, etc.). (3) Runtime import hook (`_PYTHON_EXEC_PREAMBLE`) prepended to all executed code - overrides `builtins.__import__` to block dangerous modules even from dynamic imports at runtime. |
+| **Blocked modules** | `subprocess`, `socket`, `http`, `urllib`, `urllib3`, `requests`, `httpx`, `aiohttp`, `asyncio`, `ctypes`, `cffi`, `pickle`, `shelve`, `marshal`, `importlib`, `multiprocessing`, `concurrent`, `signal`, `boto3`, `botocore`, `shlex`. |
+| **Allowed modules** | Standard library safe modules (math, json, re, collections, etc.), data science (numpy, pandas, scipy, sklearn, matplotlib), document creation (openpyxl, docx, PIL, reportlab). |
+
+### "Approve Always" Scoped to Low-Risk Tools (High)
+
+| What | Details |
+|------|---------|
+| **Problem** | One "Always" click on `bash` auto-approved all future bash commands regardless of arguments. Approving `bash ls` implicitly approved `bash rm -rf /`. |
+| **Fix** | `bash` and `python_exec` are now marked as `HIGH_RISK_TOOLS`. For these: (1) "Always" button is hidden in the approval dialog. (2) Every invocation requires explicit approval with full argument display. (3) A "[HIGH RISK - review carefully]" label is shown. Low-risk tools (write_file, create_word, etc.) still support "Always" approval. |
+
+---
 
 ## v2.7.0 - Final Security Hardening
 

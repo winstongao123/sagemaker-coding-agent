@@ -85,6 +85,7 @@ from collections import deque
 import copy
 import glob as glob_module
 import random
+import shlex
 import threading
 
 # ============================================================
@@ -747,6 +748,37 @@ This protects the SageMaker IAM role from unintended access.
 
     NETWORK_COMMANDS = ["curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "ftp", "telnet"]
 
+    # Allowlist: only these base commands can be executed via bash tool.
+    # Anything not on this list is blocked regardless of denylist patterns.
+    ALLOWED_COMMANDS = {
+        # Version control
+        "git",
+        # File operations (safe subset)
+        "ls", "dir", "cat", "head", "tail", "wc", "sort", "uniq", "diff", "file",
+        "find", "tree", "du", "df", "stat", "md5sum", "sha256sum",
+        "cp", "mv", "mkdir", "touch",  # write ops still need approval
+        # Text processing
+        "grep", "rg", "awk", "sed", "cut", "tr", "xargs", "tee",
+        "echo", "printf",
+        # Package management
+        "pip", "pip3", "conda", "npm", "yarn", "pnpm", "bun",
+        # Language runtimes (for running scripts, not -c oneliners)
+        "python", "python3", "node", "ruby", "go", "cargo", "rustc", "javac", "java",
+        # Build tools
+        "make", "cmake", "gcc", "g++", "clang",
+        # Containers
+        "docker", "docker-compose",
+        # System info (read-only)
+        "pwd", "whoami", "hostname", "uname", "date", "which", "where", "type",
+        "env", "printenv",  # denylist still blocks sensitive patterns
+        # Archive
+        "tar", "zip", "unzip", "gzip", "gunzip",
+        # Testing
+        "pytest", "jest", "mocha", "cargo",
+        # Misc safe utilities
+        "jq", "yq", "less", "more", "true", "false", "test",
+    }
+
     def __init__(self, workspace: str, allow_network: bool = False):
         self.workspace = Path(workspace).resolve()
         self.allow_network = allow_network
@@ -775,8 +807,43 @@ This protects the SageMaker IAM role from unintended access.
         except Exception as e:
             return False, f"Invalid path: {e}"
 
+    def _extract_base_command(self, command: str) -> list:
+        """Extract base command names from a shell command string.
+        Handles: env vars prefix, pipes (checks first segment), && chains (checks all)."""
+        # Strip leading env assignments like VAR=val cmd
+        stripped = re.sub(r'^(\s*\w+=\S+\s+)*', '', command.strip())
+        # For pipes, only check the first command's base
+        # For && / || chains, check each segment
+        segments = re.split(r'\s*(?:&&|\|\|)\s*', stripped)
+        bases = []
+        for seg in segments:
+            # Take first pipe segment
+            first_pipe = seg.split("|")[0].strip()
+            # Strip leading env vars again
+            first_pipe = re.sub(r'^(\s*\w+=\S+\s+)*', '', first_pipe).strip()
+            try:
+                parts = shlex.split(first_pipe)
+            except ValueError:
+                parts = first_pipe.split()
+            if parts:
+                bases.append(Path(parts[0]).name)  # basename only: /usr/bin/git -> git
+        return bases
+
     def validate_command(self, command: str) -> Tuple[bool, str]:
-        """Check if bash command is safe."""
+        """Check if bash command is safe.
+        Layer 1: Allowlist - base command must be in ALLOWED_COMMANDS
+        Layer 2: Denylist - regex patterns block dangerous argument patterns
+        Layer 3: Network - block network commands unless explicitly allowed
+        """
+        # === LAYER 1: Command allowlist ===
+        bases = self._extract_base_command(command)
+        if not bases:
+            return False, "Empty command"
+        for base in bases:
+            if base not in self.ALLOWED_COMMANDS:
+                return False, f"Command not allowed: '{base}'. Allowed: {', '.join(sorted(self.ALLOWED_COMMANDS))}"
+
+        # === LAYER 2: Denylist patterns (catch dangerous arguments/patterns) ===
         for pattern, reason in self.DANGEROUS_PATTERNS:
             try:
                 if re.search(pattern, command, re.IGNORECASE):
@@ -784,6 +851,7 @@ This protects the SageMaker IAM role from unintended access.
             except re.error:
                 continue
 
+        # === LAYER 3: Network commands ===
         if not self.allow_network:
             for cmd in self.NETWORK_COMMANDS:
                 if re.search(rf"\b{cmd}\b", command):
@@ -791,14 +859,76 @@ This protects the SageMaker IAM role from unintended access.
 
         return True, "OK"
 
+    # Modules allowed in python_exec. Anything not here is blocked at import time.
+    ALLOWED_PYTHON_MODULES = {
+        # Standard library - safe data processing
+        "math", "statistics", "decimal", "fractions", "random", "string",
+        "re", "json", "csv", "collections", "itertools", "functools",
+        "datetime", "time", "calendar", "textwrap", "pprint",
+        "pathlib", "io", "struct", "base64", "hashlib", "hmac",
+        "copy", "typing", "dataclasses", "enum", "abc",
+        "operator", "bisect", "heapq", "array",
+        "difflib", "unicodedata", "html", "xml",
+        # File I/O (workspace-restricted by other controls)
+        "os.path", "glob", "fnmatch", "shutil",
+        # Data science / analysis
+        "numpy", "np", "pandas", "pd", "scipy", "sklearn",
+        "matplotlib", "matplotlib.pyplot", "plt", "seaborn", "sns",
+        "plotly", "altair",
+        # Document creation
+        "openpyxl", "xlsxwriter", "docx", "python-docx",
+        "PIL", "Pillow", "reportlab", "fpdf",
+        # Misc safe
+        "tabulate", "yaml", "toml", "configparser",
+        "logging", "warnings", "traceback", "inspect",
+        "argparse", "textwrap",
+    }
+
+    # Modules explicitly blocked (even if someone tries to sneak them in)
+    BLOCKED_PYTHON_MODULES = {
+        "subprocess", "os.system", "shlex",
+        "socket", "http", "urllib", "urllib3", "requests", "httpx", "aiohttp",
+        "asyncio",  # can be used to run network code
+        "ctypes", "cffi",  # FFI
+        "pickle", "shelve", "marshal",  # deserialization
+        "importlib", "runpy",  # dynamic imports
+        "code", "codeop", "compileall",  # code execution
+        "multiprocessing", "concurrent",  # process spawning
+        "signal",  # signal manipulation
+        "boto3", "botocore",  # AWS SDK
+        "google.cloud", "azure",  # cloud SDKs
+    }
+
     def validate_python(self, code: str) -> Tuple[bool, str]:
-        """Check if Python code is safe."""
+        """Check if Python code is safe using regex denylist + AST import analysis."""
+        # Layer 1: Regex denylist (catches obfuscated patterns)
         for pattern, reason in self.DANGEROUS_PYTHON:
             try:
                 if re.search(pattern, code, re.IGNORECASE | re.MULTILINE):
                     return False, reason
             except re.error:
                 continue
+
+        # Layer 2: AST-based import validation
+        import ast
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # If code can't parse, let it fail at runtime
+            return True, "OK"
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    mod = alias.name.split(".")[0]
+                    if mod in self.BLOCKED_PYTHON_MODULES or alias.name in self.BLOCKED_PYTHON_MODULES:
+                        return False, f"Blocked import: {alias.name}"
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    mod = node.module.split(".")[0]
+                    if mod in self.BLOCKED_PYTHON_MODULES or node.module in self.BLOCKED_PYTHON_MODULES:
+                        return False, f"Blocked import: {node.module}"
+
         return True, "OK"
 
     def scan_secrets(self, content: str) -> List[Dict]:
@@ -1499,7 +1629,7 @@ def _kill_active_process():
                 pass
 
 def tool_bash(args: Dict) -> str:
-    """Execute shell command with smart truncation for large outputs."""
+    """Execute shell command with allowlist enforcement and no shell=True."""
     global _active_process
     command = args["command"]
     timeout = min(args.get("timeout", 120), 600)
@@ -1508,18 +1638,37 @@ def tool_bash(args: Dict) -> str:
     if not ok:
         return f"Blocked: {msg}"
 
+    # Detect shell operators that require shell=True
+    # Pipes, redirects, &&, ||, ; semicolons, $() substitution, backticks
+    needs_shell = bool(re.search(r'[|><;]|&&|\|\||`|\$\(', command))
+
     try:
+        if needs_shell:
+            # Shell mode: required for pipes/redirects/chains
+            # Safety comes from allowlist + denylist validation above
+            cmd_arg = command
+            use_shell = True
+        else:
+            # No-shell mode: parse into argv list (immune to injection)
+            try:
+                cmd_arg = shlex.split(command)
+            except ValueError:
+                cmd_arg = command.split()
+            use_shell = False
+
+        safe_env = {k: v for k, v in os.environ.items()
+                 if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
+                 and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
+                 } | {"TERM": "dumb"}
+
         proc = subprocess.Popen(
-            command,
-            shell=True,
+            cmd_arg,
+            shell=use_shell,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             cwd=CONFIG.workspace,
-            env={k: v for k, v in os.environ.items()
-                 if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
-                 and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
-                 } | {"TERM": "dumb"}
+            env=safe_env
         )
         with _active_process_lock:
             _active_process = proc
@@ -1549,13 +1698,33 @@ def tool_bash(args: Dict) -> str:
 
 # ============== PYTHON EXECUTION ==============
 
+# Runtime import hook prepended to all python_exec code.
+# Blocks dangerous modules even if imported dynamically (e.g., __import__, importlib).
+_PYTHON_EXEC_PREAMBLE = '''
+import builtins as _builtins
+_original_import = _builtins.__import__
+_BLOCKED = {
+    "subprocess", "socket", "http", "urllib", "urllib3", "requests", "httpx",
+    "aiohttp", "asyncio", "ctypes", "cffi", "pickle", "shelve", "marshal",
+    "importlib", "runpy", "code", "codeop", "multiprocessing", "concurrent",
+    "signal", "boto3", "botocore", "shlex",
+}
+def _safe_import(name, *args, **kwargs):
+    top = name.split(".")[0]
+    if top in _BLOCKED:
+        raise ImportError(f"Security: import '{name}' is blocked in agent sandbox")
+    return _original_import(name, *args, **kwargs)
+_builtins.__import__ = _safe_import
+del _builtins, _original_import, _BLOCKED, _safe_import
+'''
+
 def tool_python_exec(args: Dict) -> str:
-    """Execute Python code in subprocess."""
+    """Execute Python code in sandboxed subprocess with import restrictions."""
     global _active_process
     code = args["code"]
     timeout = min(args.get("timeout", 60), 300)
 
-    # Security check for dangerous Python patterns
+    # Security check: regex denylist + AST import validation
     ok, msg = SECURITY.validate_python(code)
     if not ok:
         return f"Security blocked: {msg}"
@@ -1563,6 +1732,8 @@ def tool_python_exec(args: Dict) -> str:
     fd, temp_path = tempfile.mkstemp(suffix=".py", prefix="agent_exec_")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
+            # Prepend runtime import hook, then user code
+            f.write(_PYTHON_EXEC_PREAMBLE)
             f.write(code)
 
         # Sandboxed env: strip credentials and sensitive vars
@@ -3284,10 +3455,14 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["messages"].append((role, content, tool_name, ts))
         render_chat()
 
+    # Tools where "Always" approve is too dangerous (each invocation has different risk)
+    HIGH_RISK_TOOLS = {"bash", "python_exec"}
+
     def request_approval(tool_name: str, tool_input: Dict) -> bool:
         import threading
-        # Check if tool was previously approved with "Always"
-        if tool_name in ui_state.get("always_allow", set()):
+        # "Always" only works for low-risk tools (file creation, etc.)
+        # bash and python_exec require per-invocation approval since args vary wildly
+        if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
             add_message('system', f'✓ Auto-approved: {tool_name}')
             return True
         pending_approval["result"] = None
@@ -3295,11 +3470,15 @@ def create_chat_ui(mock_mode: bool = None):
         approval_event = threading.Event()
         pending_approval["event"] = approval_event
 
+        # Hide "Always" button for high-risk tools
+        approve_always_btn.layout.display = 'none' if tool_name in HIGH_RISK_TOOLS else 'inline-block'
+
         with approval_output:
             clear_output()
             input_str = escape_html(json.dumps(tool_input, indent=2, default=str)[:500])
             safe_tool_name = escape_html(tool_name)
-            display(HTML(f'<div style="padding:10px;background:#fff8e1;border-radius:5px;"><h4>Approval Required</h4><p><b>Tool:</b> {safe_tool_name}</p><pre style="font-size:11px;">{input_str}</pre></div>'))
+            risk_label = ' <span style="color:#f44336">[HIGH RISK - review carefully]</span>' if tool_name in HIGH_RISK_TOOLS else ''
+            display(HTML(f'<div style="padding:10px;background:#fff8e1;border-radius:5px;"><h4>Approval Required{risk_label}</h4><p><b>Tool:</b> {safe_tool_name}</p><pre style="font-size:11px;">{input_str}</pre></div>'))
         approval_box.layout.display = 'block'
         send_btn.disabled = True
 
