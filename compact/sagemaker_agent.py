@@ -533,7 +533,7 @@ class Config:
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
     # Runtime isolation / execution limits
-    execution_mode: str = "docker"  # local | docker
+    execution_mode: str = "local"  # local | docker
     exec_docker_image: str = "python:3.11-slim"
     exec_docker_network_disabled: bool = True
     exec_docker_readonly_rootfs: bool = True
@@ -542,7 +542,7 @@ class Config:
     exec_docker_pids_limit: int = 128
 
     # Operational controls
-    require_auth: bool = True
+    require_auth: bool = False
     auth_token_env: str = "SAGEMAKER_AGENT_AUTH_TOKEN"
     max_user_messages_per_minute: int = 10
     max_user_messages_per_session: int = 150

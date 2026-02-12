@@ -47,7 +47,7 @@ This is practical and good for long sessions, but like all compactors, extremely
 - high-risk tools (`bash`, `python_exec`) require per-use approval
 
 ### Isolation
-- default execution mode in code is Docker
+- default execution mode in code is Local (personal path)
 - workspace mounted to `/workspace`
 - optional no-network, read-only rootfs, non-root user, resource limits
 
@@ -62,9 +62,15 @@ This keeps policy controls but removes container isolation.
 In many SageMaker Studio environments, Docker daemon access is not enabled by default, so local mode is the practical path unless your admin enables Docker access for the domain/app.
 
 ### Operational controls
-- auth gate (`/auth <token>`)
+- auth gate is optional (off by default for personal use)
 - rate/session/exec quotas
 - audit log retention
+
+For shared/team use, turn auth on in `sagemaker_agent.py`:
+
+```python
+require_auth = True
+```
 
 ## Is This App Good?
 

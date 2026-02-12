@@ -39,3 +39,7 @@ This is common in SageMaker Studio where Docker daemon is not exposed in user te
 ```
 
 For full setup details, use `SETUP_AND_USE.md`.
+
+Default personal mode:
+- `execution_mode = "local"`
+- `require_auth = False`

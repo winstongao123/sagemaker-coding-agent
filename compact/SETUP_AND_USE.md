@@ -1,5 +1,10 @@
 # Setup and Use Guide (Beginner)
 
+This guide now has **two paths**:
+
+1. `Path A (Personal default)` - easiest, works in most SageMaker environments.
+2. `Path B (Shared/Secure)` - auth on, optional Docker isolation.
+
 ## 1) Required files
 
 Copy these into SageMaker workspace:
@@ -25,7 +30,65 @@ If using a notebook cell:
 !pip install -q boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib reportlab
 ```
 
-## 3) Check whether Docker is usable (optional)
+## Path A (Personal default - recommended for you)
+
+Use this if you are the only user.
+
+### A1) Default config (already set in code)
+
+In `sagemaker_agent.py` defaults:
+
+```python
+execution_mode = "local"
+require_auth = False
+```
+
+No auth token is needed in this path.
+
+### A2) Launch UI
+
+```python
+from sagemaker_agent import create_chat_ui
+create_chat_ui()
+```
+
+You can use it directly. No `/auth` step.
+
+---
+
+## Path B (Shared/Secure mode)
+
+Use this if other users might access the notebook/session.
+
+### B1) Turn on auth
+
+Set in `sagemaker_agent.py`:
+
+```python
+require_auth = True
+```
+
+Set token (terminal/bash):
+
+```bash
+export SAGEMAKER_AGENT_AUTH_TOKEN="replace-with-strong-token"
+```
+
+Then authenticate in chat:
+
+```text
+/auth replace-with-strong-token
+```
+
+### B2) Optional: Docker isolation
+
+Keep/set:
+
+```python
+execution_mode = "docker"
+```
+
+Then check Docker:
 
 ```powershell
 docker --version
@@ -35,7 +98,7 @@ docker pull python:3.11-slim
 
 In many SageMaker Studio environments, Docker daemon is not exposed to notebook users by default.
 
-If you see `Cannot connect to the Docker daemon...`, this is expected for that environment.
+If you see `Cannot connect to the Docker daemon...`, Docker isolation is unavailable in your current SageMaker environment.
 
 In that case, set this once in `sagemaker_agent.py`:
 
@@ -47,7 +110,7 @@ Then restart kernel and run UI again.
 
 This app still works in local mode (no container isolation).
 
-### If you want Docker isolation in SageMaker Studio
+#### If you want Docker isolation in SageMaker Studio
 
 This is possible, but requires admin/domain setup:
 
@@ -67,41 +130,20 @@ If `docker info` works, switch back to docker mode:
 execution_mode = "docker"
 ```
 
-## 4) Set auth token
-
-PowerShell:
-
-```powershell
-$env:SAGEMAKER_AGENT_AUTH_TOKEN="replace-with-strong-token"
-```
-
-Notebook alternative:
-
-```python
-import os
-os.environ["SAGEMAKER_AGENT_AUTH_TOKEN"] = "replace-with-strong-token"
-```
-
-## 5) Launch UI
+## 4) Launch UI
 
 ```python
 from sagemaker_agent import create_chat_ui
 create_chat_ui()
 ```
 
-## 6) Authenticate in chat
-
-```text
-/auth replace-with-strong-token
-```
-
-## 7) Quick test
+## 5) Quick test
 
 1. Ask: `list files in current folder`
 2. Ask: `read sagemaker_agent.py`
 3. Ask: `create a plan to refactor logging`
 
-## 8) Security smoke test
+## 6) Security smoke test
 
 1. Try risky bash command via agent:
    - `git status; powershell -Command whoami`
@@ -110,7 +152,7 @@ create_chat_ui()
    - `from os import system`
    - should be blocked.
 
-## 9) Pre-release check
+## 7) Pre-release check
 
 ```powershell
 python -m py_compile sagemaker_agent.py

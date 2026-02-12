@@ -8,6 +8,7 @@ This file explains where to change key behavior in `sagemaker_agent.py`.
 - execution mode, docker limits, auth requirement, quotas
 - if Docker daemon unavailable in SageMaker, set `execution_mode = "local"`
 - this is common in SageMaker Studio terminals
+- personal defaults are now `execution_mode = "local"` and `require_auth = False`
 
 2. Command security: `SecurityManager`
 - `BASE_ALLOWED_COMMANDS`
