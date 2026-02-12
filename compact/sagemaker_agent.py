@@ -2336,6 +2336,7 @@ def tool_create_excel(args: Dict) -> str:
             # Add chart if requested
             if chart_type and x_column and y_columns:
                 from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+                from openpyxl.utils import get_column_letter
 
                 ws = writer.sheets[sheet_name]
 
@@ -2372,7 +2373,8 @@ def tool_create_excel(args: Dict) -> str:
                 # Position chart
                 chart.width = 15
                 chart.height = 10
-                ws.add_chart(chart, f"{'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[len(cols)+1]}2")
+                anchor_col = get_column_letter(len(cols) + 2)
+                ws.add_chart(chart, f"{anchor_col}2")
 
         return f"Created Excel file with chart: {filepath} ({len(df)} rows, {chart_type} chart)"
     except ImportError as e:
@@ -2588,13 +2590,15 @@ def tool_create_pdf(args: Dict) -> str:
             data = section.get("data", "")
 
             if section_type == "heading":
-                story.append(Paragraph(str(data), styles['CustomHeading']))
+                safe_heading = escape_html(str(data))
+                story.append(Paragraph(safe_heading, styles['CustomHeading']))
 
             elif section_type == "text":
                 # Handle multi-line text
                 for para in str(data).split('\n\n'):
                     if para.strip():
-                        story.append(Paragraph(para.replace('\n', '<br/>'), styles['CustomBody']))
+                        safe_para = escape_html(para).replace('\n', '<br/>')
+                        story.append(Paragraph(safe_para, styles['CustomBody']))
 
             elif section_type == "table":
                 # data can be:
