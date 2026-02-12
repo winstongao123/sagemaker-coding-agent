@@ -3501,7 +3501,17 @@ def create_chat_ui(mock_mode: bool = None):
 
     def _render_assistant_markdown(text: str, fg: str, dark: bool) -> str:
         """Render common markdown blocks (tables/lists/code/headers) into HTML."""
-        lines = str(text).splitlines()
+        text = str(text)
+        # Preserve alignment for unicode/ascii charts and box-drawing output.
+        if re.search(r"[\u2500-\u257F\u2580-\u259F]", text):
+            chart_bg = "#171717" if dark else "#f6f8fa"
+            return (
+                f'<pre style="background:{chart_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;'
+                f'white-space:pre;line-height:1.3;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">'
+                f'{escape_html(text)}</pre>'
+            )
+
+        lines = text.splitlines()
         out = []
         i = 0
         code_bg = "#171717" if dark else "#f6f8fa"
