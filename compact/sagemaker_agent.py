@@ -4009,16 +4009,28 @@ def create_chat_ui(mock_mode: bool = None):
         # Hide "Always" button for high-risk tools
         approve_always_btn.layout.display = 'none' if tool_name in HIGH_RISK_TOOLS else 'inline-block'
 
+        dark = ui_state.get("dark_mode", True)
+        card_bg = "#2b2b1f" if dark else "#fff8e1"
+        card_fg = "#f0f0f0" if dark else "#111"
+        card_border = "#555" if dark else "#e6d9aa"
+        pre_bg = "#1f1f1f" if dark else "#fff"
+        pre_border = "#444" if dark else "#ddd"
+
+        approval_box.layout.border = f"1px solid {card_border}"
+        approval_box.layout.padding = "6px"
+        approval_box.layout.border_radius = "6px"
+        approval_box.layout.background = "#1e1e1e" if dark else "#fafafa"
+
         with approval_output:
             clear_output()
             input_str = escape_html(json.dumps(tool_input, indent=2, default=str)[:500])
             safe_tool_name = escape_html(tool_name)
             risk_label = ' <span style="color:#f44336">[HIGH RISK - review carefully]</span>' if tool_name in HIGH_RISK_TOOLS else ''
             display(HTML(
-                f'<div style="padding:10px;background:#fff8e1;border-radius:5px;color:#111;">'
-                f'<h4 style="margin:0 0 8px 0;color:#111;">Approval Required{risk_label}</h4>'
-                f'<p style="margin:0 0 8px 0;color:#111;"><b>Tool:</b> {safe_tool_name}</p>'
-                f'<pre style="font-size:11px;color:#111;background:#fff;margin:0;padding:8px;border-radius:4px;max-height:220px;overflow:auto;">{input_str}</pre>'
+                f'<div style="padding:10px;background:{card_bg};border:1px solid {card_border};border-radius:5px;color:{card_fg};">'
+                f'<h4 style="margin:0 0 8px 0;color:{card_fg};">Approval Required{risk_label}</h4>'
+                f'<p style="margin:0 0 8px 0;color:{card_fg};"><b>Tool:</b> {safe_tool_name}</p>'
+                f'<pre style="font-size:11px;color:{card_fg};background:{pre_bg};border:1px solid {pre_border};margin:0;padding:8px;border-radius:4px;max-height:220px;overflow:auto;">{input_str}</pre>'
                 f'</div>'
             ))
         approval_box.layout.display = 'block'
