@@ -27,6 +27,10 @@ class SecurityIntegrationTests(unittest.TestCase):
         self.assertIn("Blocked:", out)
         self.assertIn("redirection target", out)
 
+    def test_tool_bash_allows_fd_duplication_redirection(self):
+        out = sa.tool_bash({"command": "git status 2>&1"})
+        self.assertNotIn("Blocked:", out)
+
     def test_tool_python_exec_blocks_from_import_system(self):
         code = "from os import system\nsystem('echo should_not_run')"
         out = sa.tool_python_exec({"code": code, "timeout": 10})

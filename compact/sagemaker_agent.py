@@ -854,7 +854,7 @@ This protects the SageMaker IAM role from unintended access.
             return []
 
         # Split on common shell command separators so every executed segment is validated.
-        segments = re.split(r'\s*(?:\|\||&&|[|;&\n])\s*', stripped)
+        segments = re.split(r'\s*(?:\|\||&&|[|;\n]|(?<![<>])&(?![>]))\s*', stripped)
         bases = []
         for seg in segments:
             seg = seg.strip()
@@ -1823,11 +1823,26 @@ def _validate_shell_redirections(command: str) -> Tuple[bool, str]:
         # If parsing fails, block rather than guessing redirection targets.
         return False, "invalid shell syntax for redirection validation"
 
-    redir_ops = {">", ">>", "<", "<<", "1>", "1>>", "2>", "2>>", "&>", "&>>"}
+    redir_ops = {">", ">>", "<", "1>", "1>>", "2>", "2>>", "&>", "&>>"}
     idx = 0
     while idx < len(tokens):
         token = tokens[idx]
         target = None
+
+        # File descriptor duplication like 2>&1 or 0<&1 is safe and has no path target.
+        if re.match(r"^\d*(?:<|>)&\d+$", token):
+            idx += 1
+            continue
+
+        # Heredoc markers are inline literals, not filesystem paths.
+        if token in {"<<", "<<-"}:
+            if idx + 1 >= len(tokens):
+                return False, "heredoc missing marker"
+            idx += 2
+            continue
+        if token.startswith("<<"):
+            idx += 1
+            continue
 
         if token in redir_ops:
             if idx + 1 >= len(tokens):
@@ -3667,6 +3682,7 @@ def create_chat_ui(mock_mode: bool = None):
                 AUDIT.log(ui_state["agent"].session_id, "config_change", "model",
                           {"old": old_model, "new": new_model})
             add_message('system', f'Model connected: {new_model}')
+            status_html.value = '<span style="color:#4caf50"><b>● Ready (model connected)</b></span>'
         except Exception as e:
             ui_state["model_change_lock"] = True
             try:
@@ -3676,6 +3692,7 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["model_connection_ok"] = False
             ui_state["model_connection_msg"] = str(e)[:180]
             add_message('system', f'Model switch failed: {new_model}. Kept {old_model}. Error: {str(e)[:120]}')
+            status_html.value = '<span style="color:#f44336"><b>● Ready (model unavailable)</b></span>'
         update_mode_display()
 
     def on_temp_change(change):
@@ -4177,12 +4194,24 @@ def create_chat_ui(mock_mode: bool = None):
             finally:
                 ui_state["model_change_lock"] = False
             try:
+                ok, conn_msg = validate_model_connection(saved_model)
+                if not ok:
+                    raise RuntimeError(conn_msg)
                 restored_client = BedrockClient(saved_model, CONFIG.region, CONFIG.mock_mode)
                 CONFIG.model_id = saved_model
                 ui_state["client"] = restored_client
+                ui_state["model_connection_ok"] = True
+                ui_state["model_connection_msg"] = conn_msg
                 add_message('system', f'Restored model from session: {saved_model}')
             except Exception as e:
+                ui_state["model_connection_ok"] = False
+                ui_state["model_connection_msg"] = str(e)[:180]
                 add_message('system', f'Failed to restore saved model {saved_model}: {str(e)[:120]}')
+
+        # Refresh active model health so status line is always current after load.
+        active_ok, active_msg = validate_model_connection(CONFIG.model_id)
+        ui_state["model_connection_ok"] = active_ok
+        ui_state["model_connection_msg"] = active_msg
 
         # Reset and load
         TOKENS.reset()
