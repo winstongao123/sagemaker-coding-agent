@@ -3506,16 +3506,48 @@ def create_chat_ui(mock_mode: bool = None):
     def _render_assistant_markdown(text: str, fg: str, dark: bool) -> str:
         """Render common markdown blocks (tables/lists/code/headers) into HTML."""
         text = str(text)
+        lines = text.splitlines()
+        chart_bg = "#171717" if dark else "#f6f8fa"
+
+        def _has_markdown_table(ls: List[str]) -> bool:
+            for j in range(len(ls) - 1):
+                if ls[j].strip().startswith("|") and re.match(r"^\s*\|?[\s:-]+\|[\s|:-]*$", ls[j + 1]):
+                    return True
+            return False
+
+        def _looks_ascii_art(ls: List[str]) -> bool:
+            non_empty = [ln for ln in ls if ln.strip()]
+            if len(non_empty) < 3:
+                return False
+            score = 0
+            for ln in non_empty:
+                s = ln.rstrip()
+                if len(s) - len(s.lstrip()) >= 2:
+                    score += 1
+                if re.search(r"\+\-[-+]+", s):
+                    score += 2
+                if re.search(r"^\s*[\d.]+\s*\|", s):
+                    score += 2
+                if "|" in s:
+                    score += 1
+                if re.search(r"[*#xXoO]{2,}", s):
+                    score += 1
+            return score >= 6
+
         # Preserve alignment for unicode/ascii charts and box-drawing output.
         if re.search(r"[\u2500-\u257F\u2580-\u259F]", text):
-            chart_bg = "#171717" if dark else "#f6f8fa"
+            return (
+                f'<pre style="background:{chart_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;'
+                f'white-space:pre;line-height:1.3;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">'
+                f'{escape_html(text)}</pre>'
+            )
+        if _looks_ascii_art(lines) and not _has_markdown_table(lines):
             return (
                 f'<pre style="background:{chart_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;'
                 f'white-space:pre;line-height:1.3;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">'
                 f'{escape_html(text)}</pre>'
             )
 
-        lines = text.splitlines()
         out = []
         i = 0
         code_bg = "#171717" if dark else "#f6f8fa"
