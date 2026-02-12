@@ -3489,6 +3489,89 @@ def create_chat_ui(mock_mode: bool = None):
     chat_display = widgets.HTML(value='')  # Will be updated by render_chat()
     todo_display = widgets.HTML(value='')  # Todo list display
 
+    def _format_inline_md(text: str, dark: bool) -> str:
+        """Render a safe subset of inline markdown."""
+        s = escape_html(text)
+        code_bg = "#2b2b2b" if dark else "#f3f4f6"
+        s = re.sub(r"`([^`]+)`", rf'<code style="background:{code_bg};padding:1px 4px;border-radius:4px;">\1</code>', s)
+        s = re.sub(r"\*\*\*([^*]+)\*\*\*", r"<b><i>\1</i></b>", s)
+        s = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
+        s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<i>\1</i>", s)
+        return s
+
+    def _render_assistant_markdown(text: str, fg: str, dark: bool) -> str:
+        """Render common markdown blocks (tables/lists/code/headers) into HTML."""
+        lines = str(text).splitlines()
+        out = []
+        i = 0
+        code_bg = "#171717" if dark else "#f6f8fa"
+        table_border = "#444" if dark else "#d0d7de"
+
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if stripped.startswith("```"):
+                i += 1
+                code_lines = []
+                while i < len(lines) and not lines[i].strip().startswith("```"):
+                    code_lines.append(lines[i])
+                    i += 1
+                out.append(
+                    f'<pre style="background:{code_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;">'
+                    f'{escape_html(chr(10).join(code_lines))}</pre>'
+                )
+                i += 1
+                continue
+
+            if stripped.startswith("|") and (i + 1) < len(lines) and re.match(r"^\s*\|?[\s:-]+\|[\s|:-]*$", lines[i + 1]):
+                headers = [escape_html(c.strip()) for c in stripped.strip("|").split("|")]
+                i += 2
+                rows = []
+                while i < len(lines) and lines[i].strip().startswith("|"):
+                    cols = [escape_html(c.strip()) for c in lines[i].strip().strip("|").split("|")]
+                    rows.append(cols)
+                    i += 1
+                head_html = "".join([f'<th style="text-align:left;padding:6px;border:1px solid {table_border};">{h}</th>' for h in headers])
+                body_html = []
+                for row in rows:
+                    cells = "".join([f'<td style="padding:6px;border:1px solid {table_border};">{c}</td>' for c in row])
+                    body_html.append(f"<tr>{cells}</tr>")
+                out.append(
+                    f'<table style="border-collapse:collapse;margin:8px 0;color:{fg};">'
+                    f"<thead><tr>{head_html}</tr></thead><tbody>{''.join(body_html)}</tbody></table>"
+                )
+                continue
+
+            if stripped.startswith("- ") or stripped.startswith("* "):
+                items = []
+                while i < len(lines):
+                    s = lines[i].strip()
+                    if s.startswith("- ") or s.startswith("* "):
+                        items.append(_format_inline_md(s[2:].strip(), dark))
+                        i += 1
+                    else:
+                        break
+                out.append("<ul style=\"margin:6px 0 6px 18px;\">" + "".join([f"<li>{x}</li>" for x in items]) + "</ul>")
+                continue
+
+            m = re.match(r"^(#{1,3})\s+(.*)$", stripped)
+            if m:
+                level = len(m.group(1))
+                text_part = _format_inline_md(m.group(2), dark)
+                size = "18px" if level == 1 else "16px" if level == 2 else "14px"
+                out.append(f'<div style="font-weight:700;font-size:{size};margin:8px 0 4px 0;color:{fg};">{text_part}</div>')
+                i += 1
+                continue
+
+            if stripped:
+                out.append(f'<div style="margin:2px 0;color:{fg};">{_format_inline_md(line, dark)}</div>')
+            else:
+                out.append("<div style=\"height:6px;\"></div>")
+            i += 1
+
+        return "".join(out)
+
     def render_chat():
         """Render all messages into the HTML widget with internal scroll."""
         dark = ui_state["dark_mode"]
@@ -3498,11 +3581,13 @@ def create_chat_ui(mock_mode: bool = None):
 
         msgs_html = []
         for role, content, tool_name, ts in ui_state["messages"]:
-            c = escape_html(content).replace('\n', '<br>')  # Convert newlines to <br>
+            raw = str(content)
+            c = escape_html(raw).replace('\n', '<br>')
             if role == 'user':
                 msgs_html.append(f'<div style="margin:8px 0;border-left:3px solid #26c6da;padding-left:10px;"><b style="color:#26c6da;">[{ts}] You:</b><div style="color:{fg};margin-top:4px;">{c}</div></div>')
             elif role == 'assistant':
-                msgs_html.append(f'<div style="margin:8px 0;border-left:3px solid #42a5f5;padding-left:10px;"><b style="color:#42a5f5;">[{ts}] Agent:</b><div style="color:{fg};margin-top:4px;">{c}</div></div>')
+                rendered = _render_assistant_markdown(raw, fg, dark)
+                msgs_html.append(f'<div style="margin:8px 0;border-left:3px solid #42a5f5;padding-left:10px;"><b style="color:#42a5f5;">[{ts}] Agent:</b><div style="color:{fg};margin-top:4px;">{rendered}</div></div>')
             elif role == 'tool':
                 icon = TOOL_ICONS.get(tool_name, '🔧') if tool_name else '🔧'
                 tool_label = escape_html(tool_name or "Tool")
