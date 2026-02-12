@@ -808,25 +808,34 @@ This protects the SageMaker IAM role from unintended access.
             return False, f"Invalid path: {e}"
 
     def _extract_base_command(self, command: str) -> list:
-        """Extract base command names from a shell command string.
-        Handles: env vars prefix, pipes (checks first segment), && chains (checks all)."""
-        # Strip leading env assignments like VAR=val cmd
-        stripped = re.sub(r'^(\s*\w+=\S+\s+)*', '', command.strip())
-        # For pipes, only check the first command's base
-        # For && / || chains, check each segment
-        segments = re.split(r'\s*(?:&&|\|\|)\s*', stripped)
+        """Extract base command names from all shell segments.
+        Handles env var prefixes and command chains/pipes (; | && || &)."""
+        stripped = command.strip()
+        if not stripped:
+            return []
+
+        # Split on common shell command separators so every executed segment is validated.
+        segments = re.split(r'\s*(?:\|\||&&|[|;&\n])\s*', stripped)
         bases = []
         for seg in segments:
-            # Take first pipe segment
-            first_pipe = seg.split("|")[0].strip()
-            # Strip leading env vars again
-            first_pipe = re.sub(r'^(\s*\w+=\S+\s+)*', '', first_pipe).strip()
+            seg = seg.strip()
+            if not seg:
+                continue
+
+            # Strip leading env assignments like VAR=val cmd or A=1 B=2 cmd
+            seg = re.sub(r'^(?:\s*[\w.:-]+=\S+\s+)+', '', seg).strip()
+            if not seg:
+                continue
+
             try:
-                parts = shlex.split(first_pipe)
+                parts = shlex.split(seg)
             except ValueError:
-                parts = first_pipe.split()
-            if parts:
-                bases.append(Path(parts[0]).name)  # basename only: /usr/bin/git -> git
+                parts = seg.split()
+            if not parts:
+                continue
+
+            # basename only: /usr/bin/git -> git
+            bases.append(Path(parts[0]).name)
         return bases
 
     def validate_command(self, command: str) -> Tuple[bool, str]:
