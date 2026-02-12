@@ -1,29 +1,27 @@
-# Notebook Quick Cells
+# chat.ipynb Companion
 
-Use these cells in SageMaker.
+This notebook is only a launcher/UI helper.
 
-## Cell 1: Install
+## Minimal cells
 
 ```python
 !pip install -q boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib reportlab
 ```
-
-## Cell 2: Set token (if needed in notebook runtime)
 
 ```python
 import os
 os.environ["SAGEMAKER_AGENT_AUTH_TOKEN"] = "replace-with-strong-token"
 ```
 
-## Cell 3: Launch
-
 ```python
 from sagemaker_agent import create_chat_ui
 create_chat_ui()
 ```
 
-## First chat command
+## First command in chat
 
 ```text
 /auth replace-with-strong-token
 ```
+
+For full setup details, use `SETUP_AND_USE.md`.
