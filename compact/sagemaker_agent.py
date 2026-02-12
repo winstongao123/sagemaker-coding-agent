@@ -533,7 +533,7 @@ class Config:
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
     # Runtime isolation / execution limits
-    execution_mode: str = "local"  # local | docker
+    execution_mode: str = "docker"  # local | docker
     exec_docker_image: str = "python:3.11-slim"
     exec_docker_network_disabled: bool = True
     exec_docker_readonly_rootfs: bool = True
@@ -542,12 +542,12 @@ class Config:
     exec_docker_pids_limit: int = 128
 
     # Operational controls
-    require_auth: bool = False
+    require_auth: bool = True
     auth_token_env: str = "SAGEMAKER_AGENT_AUTH_TOKEN"
-    max_user_messages_per_minute: int = 20
-    max_user_messages_per_session: int = 300
-    max_exec_calls_per_session: int = 100
-    max_exec_seconds_per_session: int = 1800
+    max_user_messages_per_minute: int = 10
+    max_user_messages_per_session: int = 150
+    max_exec_calls_per_session: int = 40
+    max_exec_seconds_per_session: int = 900
     audit_retention_days: int = 30
 
 # Initialize config
@@ -914,12 +914,12 @@ This protects the SageMaker IAM role from unintended access.
         # File I/O (workspace-restricted by other controls)
         "os", "os.path", "glob", "fnmatch", "shutil",
         # Data science / analysis
-        "numpy", "np", "pandas", "pd", "scipy", "sklearn",
-        "matplotlib", "matplotlib.pyplot", "plt", "seaborn", "sns",
+        "numpy", "pandas", "scipy", "sklearn",
+        "matplotlib", "matplotlib.pyplot", "seaborn",
         "plotly", "altair",
         # Document creation
-        "openpyxl", "xlsxwriter", "docx", "python-docx",
-        "PIL", "Pillow", "reportlab", "fpdf",
+        "openpyxl", "xlsxwriter", "docx",
+        "PIL", "reportlab", "fpdf",
         # Misc safe
         "tabulate", "yaml", "toml", "configparser",
         "logging", "warnings", "traceback", "inspect",
@@ -976,7 +976,7 @@ This protects the SageMaker IAM role from unintended access.
                     if mod in self.BLOCKED_PYTHON_MODULES or alias.name in self.BLOCKED_PYTHON_MODULES:
                         return False, f"Blocked import: {alias.name}"
                     # Then check allowlist (must be explicitly allowed)
-                    if mod not in self.ALLOWED_PYTHON_MODULES and not mod.startswith("_"):
+                    if mod not in self.ALLOWED_PYTHON_MODULES:
                         return False, f"Import not allowed: {alias.name}. Only approved modules are permitted."
                     alias_to_module[alias.asname or mod] = mod
             elif isinstance(node, ast.ImportFrom):
@@ -984,7 +984,7 @@ This protects the SageMaker IAM role from unintended access.
                     mod = node.module.split(".")[0]
                     if mod in self.BLOCKED_PYTHON_MODULES or node.module in self.BLOCKED_PYTHON_MODULES:
                         return False, f"Blocked import: {node.module}"
-                    if mod not in self.ALLOWED_PYTHON_MODULES and not mod.startswith("_"):
+                    if mod not in self.ALLOWED_PYTHON_MODULES:
                         return False, f"Import not allowed: {node.module}. Only approved modules are permitted."
                     for alias in node.names:
                         member = alias.name
@@ -1870,7 +1870,7 @@ _ALLOWED = {
 }
 def _safe_import(name, *args, **kwargs):
     top = name.split(".")[0]
-    if top.startswith("_") or top in _ALLOWED:
+    if top in _ALLOWED:
         return _original_import(name, *args, **kwargs)
     raise ImportError(f"Security: import '{name}' is not in the allowed modules list")
 _builtins.__import__ = _safe_import

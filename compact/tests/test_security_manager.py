@@ -58,6 +58,11 @@ class SecurityManagerTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue("Blocked import member" in msg or "Blocked call via imported alias" in msg)
 
+    def test_validate_python_blocks_underscore_module_not_allowlisted(self):
+        ok, msg = self.sec.validate_python("import _ctypes\nprint('x')")
+        self.assertFalse(ok)
+        self.assertIn("Import not allowed", msg)
+
 
 if __name__ == "__main__":
     unittest.main()
