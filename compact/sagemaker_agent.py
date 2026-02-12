@@ -527,6 +527,10 @@ class Config:
     # Testing
     mock_mode: bool = False  # Set True to test without Bedrock API
 
+    # Security policy
+    bash_allow_interpreters: bool = False  # If True, allow python/node/etc via bash tool
+    bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
+
 # Initialize config
 CONFIG = Config()
 
@@ -748,9 +752,9 @@ This protects the SageMaker IAM role from unintended access.
 
     NETWORK_COMMANDS = ["curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "ftp", "telnet"]
 
-    # Allowlist: only these base commands can be executed via bash tool.
+    # Baseline allowlist: only these base commands can be executed via bash tool.
     # Anything not on this list is blocked regardless of denylist patterns.
-    ALLOWED_COMMANDS = {
+    BASE_ALLOWED_COMMANDS = {
         # Version control
         "git",
         # File operations (safe subset)
@@ -762,12 +766,8 @@ This protects the SageMaker IAM role from unintended access.
         "echo", "printf",
         # Package management
         "pip", "pip3", "conda", "npm", "yarn", "pnpm", "bun",
-        # Language runtimes (for running scripts, not -c oneliners)
-        "python", "python3", "node", "ruby", "go", "cargo", "rustc", "javac", "java",
         # Build tools
         "make", "cmake", "gcc", "g++", "clang",
-        # Containers
-        "docker", "docker-compose",
         # System info (read-only)
         "pwd", "whoami", "hostname", "uname", "date", "which", "where", "type",
         "env", "printenv",  # denylist still blocks sensitive patterns
@@ -779,9 +779,23 @@ This protects the SageMaker IAM role from unintended access.
         "jq", "yq", "less", "more", "true", "false", "test",
     }
 
-    def __init__(self, workspace: str, allow_network: bool = False):
+    INTERPRETER_COMMANDS = {"python", "python3", "node", "ruby", "go", "cargo", "rustc", "javac", "java"}
+    CONTAINER_COMMANDS = {"docker", "docker-compose"}
+
+    def __init__(
+        self,
+        workspace: str,
+        allow_network: bool = False,
+        allow_interpreters: bool = False,
+        allow_docker: bool = False,
+    ):
         self.workspace = Path(workspace).resolve()
         self.allow_network = allow_network
+        self.ALLOWED_COMMANDS = set(self.BASE_ALLOWED_COMMANDS)
+        if allow_interpreters:
+            self.ALLOWED_COMMANDS.update(self.INTERPRETER_COMMANDS)
+        if allow_docker:
+            self.ALLOWED_COMMANDS.update(self.CONTAINER_COMMANDS)
 
     def validate_path(self, path: str) -> Tuple[bool, str]:
         """Check if path is within workspace."""
@@ -879,7 +893,7 @@ This protects the SageMaker IAM role from unintended access.
         "operator", "bisect", "heapq", "array",
         "difflib", "unicodedata", "html", "xml",
         # File I/O (workspace-restricted by other controls)
-        "os.path", "glob", "fnmatch", "shutil",
+        "os", "os.path", "glob", "fnmatch", "shutil",
         # Data science / analysis
         "numpy", "np", "pandas", "pd", "scipy", "sklearn",
         "matplotlib", "matplotlib.pyplot", "plt", "seaborn", "sns",
@@ -909,8 +923,8 @@ This protects the SageMaker IAM role from unintended access.
     }
 
     def validate_python(self, code: str) -> Tuple[bool, str]:
-        """Check if Python code is safe using regex denylist + AST import analysis."""
-        # Layer 1: Regex denylist (catches obfuscated patterns)
+        """Check if Python code is safe using regex denylist + AST import allowlist."""
+        # Layer 1: Regex denylist (catches obfuscated patterns like __import__, exec, etc.)
         for pattern, reason in self.DANGEROUS_PYTHON:
             try:
                 if re.search(pattern, code, re.IGNORECASE | re.MULTILINE):
@@ -918,7 +932,7 @@ This protects the SageMaker IAM role from unintended access.
             except re.error:
                 continue
 
-        # Layer 2: AST-based import validation
+        # Layer 2: AST-based import validation (ALLOWLIST - not just denylist)
         import ast
         try:
             tree = ast.parse(code)
@@ -930,13 +944,19 @@ This protects the SageMaker IAM role from unintended access.
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     mod = alias.name.split(".")[0]
+                    # Check denylist first (explicit block with clear message)
                     if mod in self.BLOCKED_PYTHON_MODULES or alias.name in self.BLOCKED_PYTHON_MODULES:
                         return False, f"Blocked import: {alias.name}"
+                    # Then check allowlist (must be explicitly allowed)
+                    if mod not in self.ALLOWED_PYTHON_MODULES and not mod.startswith("_"):
+                        return False, f"Import not allowed: {alias.name}. Only approved modules are permitted."
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
                     mod = node.module.split(".")[0]
                     if mod in self.BLOCKED_PYTHON_MODULES or node.module in self.BLOCKED_PYTHON_MODULES:
                         return False, f"Blocked import: {node.module}"
+                    if mod not in self.ALLOWED_PYTHON_MODULES and not mod.startswith("_"):
+                        return False, f"Import not allowed: {node.module}. Only approved modules are permitted."
 
         return True, "OK"
 
@@ -965,7 +985,11 @@ This protects the SageMaker IAM role from unintended access.
             return output[:max_size] + f"\n[Truncated - {len(output):,} chars total]"
 
 # Initialize security
-SECURITY = SecurityManager(CONFIG.workspace)
+SECURITY = SecurityManager(
+    CONFIG.workspace,
+    allow_interpreters=CONFIG.bash_allow_interpreters,
+    allow_docker=CONFIG.bash_allow_docker,
+)
 
 
 # ============================================================
@@ -1708,23 +1732,46 @@ def tool_bash(args: Dict) -> str:
 # ============== PYTHON EXECUTION ==============
 
 # Runtime import hook prepended to all python_exec code.
-# Blocks dangerous modules even if imported dynamically (e.g., __import__, importlib).
+# Uses ALLOWLIST: only permitted modules can be imported. Everything else is blocked.
 _PYTHON_EXEC_PREAMBLE = '''
 import builtins as _builtins
 _original_import = _builtins.__import__
-_BLOCKED = {
-    "subprocess", "socket", "http", "urllib", "urllib3", "requests", "httpx",
-    "aiohttp", "asyncio", "ctypes", "cffi", "pickle", "shelve", "marshal",
-    "importlib", "runpy", "code", "codeop", "multiprocessing", "concurrent",
-    "signal", "boto3", "botocore", "shlex",
+_ALLOWED = {
+    # Standard library - safe data processing
+    "math", "statistics", "decimal", "fractions", "random", "string",
+    "re", "json", "csv", "collections", "itertools", "functools",
+    "datetime", "time", "calendar", "textwrap", "pprint",
+    "pathlib", "io", "struct", "base64", "hashlib", "hmac",
+    "copy", "typing", "dataclasses", "enum", "abc",
+    "operator", "bisect", "heapq", "array",
+    "difflib", "unicodedata", "html", "xml",
+    # File I/O
+    "os", "glob", "fnmatch", "shutil",
+    # Data science
+    "numpy", "pandas", "scipy", "sklearn",
+    "matplotlib", "seaborn", "plotly", "altair",
+    # Document creation
+    "openpyxl", "xlsxwriter", "docx",
+    "PIL", "reportlab", "fpdf",
+    # Misc safe
+    "tabulate", "yaml", "toml", "configparser",
+    "logging", "warnings", "traceback", "inspect",
+    "argparse", "numbers", "contextlib",
+    # Internal (needed by allowed packages)
+    "builtins", "_thread", "_io", "_collections", "_operator",
+    "encodings", "codecs", "_codecs", "_signal", "_abc",
+    "_stat", "_weakref", "_functools", "_locale",
+    "posixpath", "ntpath", "genericpath", "stat",
+    "sys", "types", "zipimport", "_frozen_importlib",
+    "_frozen_importlib_external", "_bootlocale",
 }
 def _safe_import(name, *args, **kwargs):
     top = name.split(".")[0]
-    if top in _BLOCKED:
-        raise ImportError(f"Security: import '{name}' is blocked in agent sandbox")
-    return _original_import(name, *args, **kwargs)
+    if top.startswith("_") or top in _ALLOWED:
+        return _original_import(name, *args, **kwargs)
+    raise ImportError(f"Security: import '{name}' is not in the allowed modules list")
 _builtins.__import__ = _safe_import
-del _builtins, _original_import, _BLOCKED, _safe_import
+del _builtins, _original_import, _ALLOWED, _safe_import
 '''
 
 def tool_python_exec(args: Dict) -> str:
