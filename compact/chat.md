@@ -26,13 +26,16 @@ Secure AI coding assistant powered by AWS Bedrock Claude.
 import ipywidgets as widgets
 from IPython.display import display, HTML
 
-# Available Claude models in Bedrock (sorted by rate limit)
+# Available Claude models in AU region (ap-southeast-2 Sydney)
 AVAILABLE_MODELS = {
-    "Claude 3 Haiku (8 req/min)": "anthropic.claude-3-haiku-20240307-v1:0",
-    "Claude 3 Sonnet (2 req/min)": "anthropic.claude-3-sonnet-20240229-v1:0",
-    "Claude 3.5 Sonnet v2 (1 req/min)": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "Claude 3.5 Sonnet (1 req/min)": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "Claude 3 Opus": "anthropic.claude-3-opus-20240229-v1:0",
+    "Claude 3 Haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+    "Claude 3 Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+    "Claude 3.5 Sonnet v2": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "Claude 4.5 Sonnet (AU)": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "Claude 4.5 Haiku (AU)": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "Claude 4.5 Opus (Global)": "global.anthropic.claude-opus-4-5-20251101-v1:0",
+    "Claude 4.6 Opus (AU)": "au.anthropic.claude-opus-4-6-v1",
 }
 
 # Temperature options
@@ -61,7 +64,7 @@ display(HTML("<h3>Agent Configuration</h3>"))
 
 model_dropdown = widgets.Dropdown(
     options=list(AVAILABLE_MODELS.keys()),
-    value="Claude 3 Haiku (8 req/min)",
+    value="Claude 3 Haiku",
     description='Model:',
     style={'description_width': '120px'},
     layout=widgets.Layout(width='450px')

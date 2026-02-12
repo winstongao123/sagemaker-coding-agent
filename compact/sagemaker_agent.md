@@ -917,7 +917,10 @@ class BedrockClient:
         self.region = region
         self.mock_mode = mock_mode
         if not mock_mode:
-            self.client = boto3.client("bedrock-runtime", region_name=region)
+            import botocore.session
+            session = boto3.Session()
+            session._session = botocore.session.Session()
+            self.client = session.client("bedrock-runtime", region_name=region)
         else:
             self.client = None
             print("[MOCK MODE] No API calls will be made")
@@ -2146,7 +2149,10 @@ class SemanticSearch:
 
     def _ensure_client(self):
         if self.client is None:
-            self.client = boto3.client("bedrock-runtime", region_name=self.region)
+            import botocore.session
+            session = boto3.Session()
+            session._session = botocore.session.Session()
+            self.client = session.client("bedrock-runtime", region_name=self.region)
 
     def _get_embedding(self, text: str) -> List[float]:
         """Get embedding vector for text."""
@@ -2819,11 +2825,14 @@ def escape_html(text: str) -> str:
 
 # Available Bedrock models (cross-region rates)
 BEDROCK_MODELS = [
-    ("Claude 3 Haiku (8 req/min)", "anthropic.claude-3-haiku-20240307-v1:0"),
-    ("Claude 3 Sonnet (2 req/min)", "anthropic.claude-3-sonnet-20240229-v1:0"),
-    ("Claude 3.5 Sonnet v2 (1 req/min)", "anthropic.claude-3-5-sonnet-20241022-v2:0"),
-    ("Claude 3.5 Sonnet v1 (1 req/min)", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
-    ("Claude 3 Opus", "anthropic.claude-3-opus-20240229-v1:0"),
+    ("Claude 3 Haiku", "anthropic.claude-3-haiku-20240307-v1:0"),
+    ("Claude 3 Sonnet", "anthropic.claude-3-sonnet-20240229-v1:0"),
+    ("Claude 3.5 Sonnet v2", "anthropic.claude-3-5-sonnet-20241022-v2:0"),
+    ("Claude 3.5 Sonnet", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
+    ("Claude 4.5 Sonnet (AU)", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    ("Claude 4.5 Haiku (AU)", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
+    ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
 ]
 
 # Tool icons for display (synced from GCP version)
@@ -3033,7 +3042,10 @@ def create_chat_ui(mock_mode: bool = None):
     def on_model_change(change):
         new_model = change['new']
         CONFIG.model_id = new_model
-        ui_state["client"] = BedrockClient(new_model, CONFIG.region, CONFIG.mock_mode)
+        new_client = BedrockClient(new_model, CONFIG.region, CONFIG.mock_mode)
+        ui_state["client"] = new_client
+        if ui_state["agent"]:
+            ui_state["agent"].client = new_client
         add_message('system', f'Switched to model: {new_model}')
 
     def on_temp_change(change):
