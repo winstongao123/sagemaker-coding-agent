@@ -1,45 +1,40 @@
-# chat.ipynb Companion
+﻿# chat.ipynb Companion
 
-This notebook is only a launcher/UI helper.
+This file mirrors the current notebook usage in `chat.ipynb`.
 
-## Minimal cells
+## Purpose
+
+`chat.ipynb` is a launcher/config notebook for `sagemaker_agent.py`.
+
+## Typical cells
+
+1. Install deps (inside notebook):
 
 ```python
 !pip install -q boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib reportlab
 ```
 
-If you installed from terminal, do not use `!pip` there. Use:
+If using terminal instead of notebook, use plain `pip install` (no `!`).
 
-```bash
-pip install boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib reportlab
-```
+2. Config UI cell:
+- Imports `BEDROCK_MODELS` from `sagemaker_agent.py` (single source of truth)
+- Lets you choose model, temperature, thinking budget
+- Writes values into `CONFIG`
 
-```python
-import os
-os.environ["SAGEMAKER_AGENT_AUTH_TOKEN"] = "replace-with-strong-token"
-```
+3. Launch cell:
 
 ```python
-from sagemaker_agent import create_chat_ui
+from sagemaker_agent import CONFIG, create_chat_ui
 create_chat_ui()
 ```
 
-If the app errors with Docker daemon connection issues, set in `sagemaker_agent.py`:
+## Current behavior notes
 
-```python
-execution_mode = "local"
-```
+- UI shows live model connection status (validated via Bedrock call).
+- `Think Budget` is editable when `Extended Thinking` is ON.
+- `Require Approval` toggle exists in UI and defaults OFF for SageMaker reliability.
+- Tool list/capabilities in notebook markdown are updated to **17 tools**.
 
-This is common in SageMaker Studio where Docker daemon is not exposed in user terminals.
+## If behavior seems stale
 
-## First command in chat
-
-```text
-/auth replace-with-strong-token
-```
-
-For full setup details, use `SETUP_AND_USE.md`.
-
-Default personal mode:
-- `execution_mode = "local"`
-- `require_auth = False`
+Restart kernel and rerun all notebook cells to pick up latest Python changes.

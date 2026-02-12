@@ -1,31 +1,41 @@
-# sagemaker_agent.py Companion
+﻿# sagemaker_agent.py Companion
 
-This file explains where to change key behavior in `sagemaker_agent.py`.
+This companion reflects the current behavior in `sagemaker_agent.py`.
 
-## Common edits
+## Current defaults (Config)
 
-1. Security/ops defaults: `Config` dataclass
-- execution mode, docker limits, auth requirement, quotas
-- if Docker daemon unavailable in SageMaker, set `execution_mode = "local"`
-- this is common in SageMaker Studio terminals
-- personal defaults are now `execution_mode = "local"` and `require_auth = False`
+- `execution_mode = "local"`
+- `require_auth = False`
+- `require_tool_approval = False` (SageMaker-safe default)
+- `max_user_messages_per_minute = 10`
+- `max_user_messages_per_session = 150`
+- `max_exec_calls_per_session = 40`
+- `max_exec_seconds_per_session = 900`
 
-2. Command security: `SecurityManager`
-- `BASE_ALLOWED_COMMANDS`
-- command validation + python validation rules
+## Tooling
 
-3. Execution paths
-- `tool_bash`
-- `tool_python_exec`
+The agent exposes **17 tools**:
+- File: `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `list_dir`
+- Exec: `bash`, `python_exec`
+- Docs/data: `create_word`, `create_excel`, `create_markdown`, `create_pdf`, `create_chart`
+- Other: `view_image`, `semantic_search`, `todo_write`, `todo_read`
 
-4. UI/auth flow
-- `create_chat_ui`
-- `/auth` gate and approval UI
+## Security model
 
-5. Session/memory loop
-- `Agent.run`
-- compaction + rate/session/exec budgets
+- Workspace path boundary enforcement
+- Secret scanning for generated content
+- Command allowlist + dangerous pattern blocking
+- Python execution validation (denylist + AST import checks + runtime import allowlist)
+- Optional tool approval gate (UI toggle: `Require Approval`)
+- Session/audit logging
+
+## UX/runtime notes
+
+- Model switch performs a live Bedrock validation call and updates status.
+- Mode line shows: model, connection status, plan, thinking, auth, approval, exec mode.
+- Approval UI can block in some SageMaker kernels; default keeps approval OFF.
+- Context compaction uses prune + summary flow and preserves alternation safety.
 
 ## Source of truth
 
-Always trust `sagemaker_agent.py` over docs if there is mismatch.
+If this file and code ever differ, trust `sagemaker_agent.py`.
