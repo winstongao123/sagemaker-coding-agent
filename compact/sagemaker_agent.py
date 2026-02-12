@@ -549,6 +549,7 @@ class Config:
 
     # Operational controls
     require_auth: bool = False
+    require_tool_approval: bool = False  # For single-user SageMaker, default OFF avoids stuck approval UI
     auth_token_env: str = "SAGEMAKER_AGENT_AUTH_TOKEN"
     max_user_messages_per_minute: int = 10
     max_user_messages_per_session: int = 150
@@ -3780,6 +3781,12 @@ def create_chat_ui(mock_mode: bool = None):
         description='Dark Mode',
         style={'description_width': 'initial'}
     )
+    approval_checkbox = widgets.Checkbox(
+        value=CONFIG.require_tool_approval,
+        description='Require Approval',
+        style={'description_width': 'initial'},
+        tooltip='If OFF, tool calls execute without manual Approve/Deny prompt.'
+    )
 
     def validate_model_connection(model_id: str) -> Tuple[bool, str]:
         """Validate the selected model is actually callable in current account/region."""
@@ -3867,11 +3874,17 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["update_tokens"]()
         update_mode_display()
 
+    def on_approval_toggle(change):
+        CONFIG.require_tool_approval = change['new']
+        add_message('system', f'Tool approvals {"enabled" if CONFIG.require_tool_approval else "disabled"}')
+        update_mode_display()
+
     model_dropdown.observe(on_model_change, names='value')
     temp_slider.observe(on_temp_change, names='value')
     thinking_checkbox.observe(on_thinking_change, names='value')
     thinking_budget_slider.observe(on_budget_change, names='value')
     dark_mode_checkbox.observe(on_dark_mode_change, names='value')
+    approval_checkbox.observe(on_approval_toggle, names='value')
     plan_mode_toggle.observe(lambda change: update_mode_display(), names='value')
 
     pending_approval = {"result": None}
@@ -3881,6 +3894,7 @@ def create_chat_ui(mock_mode: bool = None):
         plan = "ON" if plan_mode_toggle.value else "OFF"
         thinking = "ON" if CONFIG.thinking_enabled else "OFF"
         auth = "ON" if CONFIG.require_auth else "OFF"
+        approval = "ON" if CONFIG.require_tool_approval else "OFF"
         dark = ui_state.get("dark_mode", True)
         text_color = "#aab4be" if dark else "#666"
         if ui_state.get("model_connection_ok") is True:
@@ -3901,6 +3915,7 @@ def create_chat_ui(mock_mode: bool = None):
             f'Plan: <b>{plan}</b> | '
             f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
             f'Auth: <b>{auth}</b> | '
+            f'Approval: <b>{approval}</b> | '
             f'Exec: <b>{escape_html(CONFIG.execution_mode)}</b>'
             f'</div>'
         )
@@ -3979,6 +3994,8 @@ def create_chat_ui(mock_mode: bool = None):
 
     def request_approval(tool_name: str, tool_input: Dict) -> bool:
         import threading
+        if not CONFIG.require_tool_approval:
+            return True
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
@@ -3997,7 +4014,13 @@ def create_chat_ui(mock_mode: bool = None):
             input_str = escape_html(json.dumps(tool_input, indent=2, default=str)[:500])
             safe_tool_name = escape_html(tool_name)
             risk_label = ' <span style="color:#f44336">[HIGH RISK - review carefully]</span>' if tool_name in HIGH_RISK_TOOLS else ''
-            display(HTML(f'<div style="padding:10px;background:#fff8e1;border-radius:5px;"><h4>Approval Required{risk_label}</h4><p><b>Tool:</b> {safe_tool_name}</p><pre style="font-size:11px;">{input_str}</pre></div>'))
+            display(HTML(
+                f'<div style="padding:10px;background:#fff8e1;border-radius:5px;color:#111;">'
+                f'<h4 style="margin:0 0 8px 0;color:#111;">Approval Required{risk_label}</h4>'
+                f'<p style="margin:0 0 8px 0;color:#111;"><b>Tool:</b> {safe_tool_name}</p>'
+                f'<pre style="font-size:11px;color:#111;background:#fff;margin:0;padding:8px;border-radius:4px;max-height:220px;overflow:auto;">{input_str}</pre>'
+                f'</div>'
+            ))
         approval_box.layout.display = 'block'
         send_btn.disabled = True
 
@@ -4549,7 +4572,7 @@ def create_chat_ui(mock_mode: bool = None):
 
     # Row 2: Parameters
     row2 = widgets.HBox([
-        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox
+        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox, approval_checkbox
     ])
     row2.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 12px')
 
