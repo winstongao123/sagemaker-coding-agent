@@ -3354,7 +3354,7 @@ def create_chat_ui(mock_mode: bool = None):
         "stop_requested": False,  # For stop button
         "authenticated": not CONFIG.require_auth,
     }
-    auth_token = os.getenv(CONFIG.auth_token_env, "")
+    ui_state["model_change_lock"] = False
 
     # NEW APPROACH: HTML widget with scrollable div inside
     # Browser handles scrolling, not Jupyter widgets
@@ -3452,6 +3452,7 @@ def create_chat_ui(mock_mode: bool = None):
     save_btn = widgets.Button(description='Save', button_style='info', icon='save')
     compact_btn = widgets.Button(description='Compact', button_style='', icon='compress', tooltip='Compress context by summarizing conversation')
     status_html = widgets.HTML(value='<span style="color:#4caf50"><b>● Ready</b></span>')
+    mode_html = widgets.HTML(value='')
     tokens_html = widgets.HTML(value='<span style="color:gray;font-size:11px;">Tokens: 0</span>')
 
     # Plan Mode toggle (OpenCode-style)
@@ -3527,32 +3528,58 @@ def create_chat_ui(mock_mode: bool = None):
 
     # Model change handler
     def on_model_change(change):
+        if ui_state.get("model_change_lock"):
+            return
         new_model = change['new']
         old_model = CONFIG.model_id
-        CONFIG.model_id = new_model
-        new_client = BedrockClient(new_model, CONFIG.region, CONFIG.mock_mode)
-        ui_state["client"] = new_client
-        if ui_state["agent"]:
-            ui_state["agent"].client = new_client
-            AUDIT.log(ui_state["agent"].session_id, "config_change", "model",
-                      {"old": old_model, "new": new_model})
-        add_message('system', f'Switched to model: {new_model}')
+        try:
+            new_client = BedrockClient(new_model, CONFIG.region, CONFIG.mock_mode)
+            # Lightweight validation in real mode.
+            if not CONFIG.mock_mode:
+                _ = new_client.chat(
+                    messages=[{"role": "user", "content": "ping"}],
+                    system="Reply with OK.",
+                    tools=None,
+                    max_tokens=8,
+                    temperature=0.0
+                )
+            CONFIG.model_id = new_model
+            ui_state["client"] = new_client
+            if ui_state["agent"]:
+                ui_state["agent"].client = new_client
+                AUDIT.log(ui_state["agent"].session_id, "config_change", "model",
+                          {"old": old_model, "new": new_model})
+            add_message('system', f'Switched to model: {new_model}')
+        except Exception as e:
+            ui_state["model_change_lock"] = True
+            try:
+                model_dropdown.value = old_model
+            finally:
+                ui_state["model_change_lock"] = False
+            add_message('system', f'Model switch failed: {new_model}. Kept {old_model}. Error: {str(e)[:120]}')
+        update_mode_display()
 
     def on_temp_change(change):
         CONFIG.temperature = change['new']
+        update_mode_display()
 
     def on_thinking_change(change):
         CONFIG.thinking_enabled = change['new']
         thinking_budget_slider.disabled = not change['new']
         if change['new']:
             # Thinking requires temperature=1, show notice
+            ui_state["prev_temperature"] = temp_slider.value
             temp_slider.value = 1.0
             temp_slider.disabled = True
         else:
             temp_slider.disabled = False
+            if "prev_temperature" in ui_state:
+                temp_slider.value = ui_state["prev_temperature"]
+        update_mode_display()
 
     def on_budget_change(change):
         CONFIG.thinking_budget = change['new']
+        update_mode_display()
 
     def on_dark_mode_change(change):
         ui_state["dark_mode"] = change['new']
@@ -3564,14 +3591,31 @@ def create_chat_ui(mock_mode: bool = None):
         # Update token display
         if "update_tokens" in ui_state:
             ui_state["update_tokens"]()
+        update_mode_display()
 
     model_dropdown.observe(on_model_change, names='value')
     temp_slider.observe(on_temp_change, names='value')
     thinking_checkbox.observe(on_thinking_change, names='value')
     thinking_budget_slider.observe(on_budget_change, names='value')
     dark_mode_checkbox.observe(on_dark_mode_change, names='value')
+    plan_mode_toggle.observe(lambda change: update_mode_display(), names='value')
 
     pending_approval = {"result": None}
+
+    def update_mode_display():
+        """Render current runtime mode so users can verify active state."""
+        plan = "ON" if plan_mode_toggle.value else "OFF"
+        thinking = "ON" if CONFIG.thinking_enabled else "OFF"
+        auth = "ON" if CONFIG.require_auth else "OFF"
+        mode_html.value = (
+            f'<div style="font-size:12px;color:#777;margin:4px 0;">'
+            f'Model: <b>{escape_html(CONFIG.model_id)}</b> | '
+            f'Plan: <b>{plan}</b> | '
+            f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
+            f'Auth: <b>{auth}</b> | '
+            f'Exec: <b>{escape_html(CONFIG.execution_mode)}</b>'
+            f'</div>'
+        )
 
     def get_colors():
         """Get color scheme based on dark mode."""
@@ -3764,6 +3808,7 @@ def create_chat_ui(mock_mode: bool = None):
 
         # Optional auth gate for multi-user/shared notebook setups.
         if CONFIG.require_auth and not ui_state.get("authenticated", False):
+            auth_token = os.getenv(CONFIG.auth_token_env, "")
             if msg.startswith("/auth "):
                 provided = msg[len("/auth "):].strip()
                 input_box.value = ""
@@ -3980,6 +4025,24 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', f'Failed to load session: {session_id}')
             return
 
+        # Restore saved model from session metadata when possible.
+        saved_model = None
+        if isinstance(session.metadata, dict):
+            saved_model = session.metadata.get("model")
+        if saved_model and saved_model in [m[1] for m in BEDROCK_MODELS] and saved_model != model_dropdown.value:
+            ui_state["model_change_lock"] = True
+            try:
+                model_dropdown.value = saved_model
+            finally:
+                ui_state["model_change_lock"] = False
+            try:
+                restored_client = BedrockClient(saved_model, CONFIG.region, CONFIG.mock_mode)
+                CONFIG.model_id = saved_model
+                ui_state["client"] = restored_client
+                add_message('system', f'Restored model from session: {saved_model}')
+            except Exception as e:
+                add_message('system', f'Failed to restore saved model {saved_model}: {str(e)[:120]}')
+
         # Reset and load
         TOKENS.reset()
         ui_state["session"] = session
@@ -4033,6 +4096,7 @@ def create_chat_ui(mock_mode: bool = None):
             render_todos()
 
         update_tokens_display()
+        update_mode_display()
 
     def on_new(b):
         """Start a new session (clear current without saving)."""
@@ -4050,6 +4114,7 @@ def create_chat_ui(mock_mode: bool = None):
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready (New)</b></span>'
         update_tokens_display()
+        update_mode_display()
         session_dropdown.value = None
 
     def on_compact(b):
@@ -4174,6 +4239,7 @@ def create_chat_ui(mock_mode: bool = None):
         header,
         row1,
         row2,
+        mode_html,
         todo_display,  # Collapsible todo list (OpenCode-style)
         chat_display,  # HTML widget with internal scroll
         approval_box,
@@ -4184,6 +4250,7 @@ def create_chat_ui(mock_mode: bool = None):
 
     update_session_list()
     update_tokens_display()
+    update_mode_display()
 
     # Initialize displays
     render_chat()
