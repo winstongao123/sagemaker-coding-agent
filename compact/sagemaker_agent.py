@@ -711,6 +711,10 @@ class SecurityManager:
         (r"\bctypes\.", "ctypes - low-level access"),
         (r"\bsocket\..*bind\s*\(", "Network server binding"),
         (r"\bsocket\..*listen\s*\(", "Network listening"),
+        (r"\bsocket\..*connect\s*\(", "Network connection - blocked for security"),
+        (r"\brequests\.(get|post|put|delete|patch|head)\s*\(", "HTTP request - blocked for security"),
+        (r"\burllib\.request\.(urlopen|urlretrieve)\s*\(", "HTTP request - blocked for security"),
+        (r"\bhttp\.client\.HTTP", "HTTP client - blocked for security"),
         (r"\brequests\.(get|post).*verify\s*=\s*False", "Disable SSL verification"),
         (r"\burllib.*verify\s*=\s*False", "Disable SSL verification"),
 
@@ -1392,7 +1396,9 @@ def tool_glob(args: Dict) -> str:
         return f"Error: {msg}"
 
     full_pattern = os.path.join(path, pattern)
-    matches = glob_module.glob(full_pattern, recursive=True)[:100]
+    raw_matches = glob_module.glob(full_pattern, recursive=True)[:200]
+    # Per-file boundary check (symlink escape protection)
+    matches = [m for m in raw_matches if SECURITY.validate_path(m)[0]][:100]
     matches = sorted(matches, key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0, reverse=True)
     return "\n".join(matches) if matches else "No files found"
 
@@ -1422,6 +1428,10 @@ def tool_grep(args: Dict) -> str:
 
     for filepath in files:
         if not os.path.isfile(filepath) or len(results) >= 50:
+            continue
+        # Per-file boundary check (symlink escape protection)
+        file_ok, _ = SECURITY.validate_path(filepath)
+        if not file_ok:
             continue
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -1603,6 +1613,12 @@ def _parse_word_content(doc, content: str, images: Dict = None):
             if not os.path.isabs(img_path):
                 img_path = os.path.join(CONFIG.workspace, img_path)
             img_path = os.path.normpath(img_path)
+            # Validate image path is within workspace
+            img_ok, img_msg = SECURITY.validate_path(img_path)
+            if not img_ok:
+                doc.add_paragraph(f"[Image blocked: {img_msg}]")
+                i += 1
+                continue
             if os.path.exists(img_path):
                 try:
                     doc.add_picture(img_path, width=Inches(5.5))
@@ -2137,6 +2153,10 @@ def tool_create_pdf(args: Dict) -> str:
             elif section_type == "image":
                 # data should be file path to image
                 img_path = data if os.path.isabs(data) else os.path.join(CONFIG.workspace, data)
+                img_ok, img_msg = SECURITY.validate_path(img_path)
+                if not img_ok:
+                    story.append(Paragraph(f"[Image blocked: {img_msg}]", styles["Normal"]))
+                    continue
                 if os.path.exists(img_path):
                     img = Image(img_path)
                     # Scale to fit page width while maintaining aspect ratio
@@ -2630,6 +2650,7 @@ class Agent:
         self.messages.append({"role": "user", "content": user_message})
         AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
 
+        response = None
         for turn in range(CONFIG.max_turns):
             # Check if stop was requested
             if self.on_stop_check and self.on_stop_check():
@@ -3235,8 +3256,9 @@ def create_chat_ui(mock_mode: bool = None):
 
         with approval_output:
             clear_output()
-            input_str = json.dumps(tool_input, indent=2, default=str)[:500]
-            display(HTML(f'<div style="padding:10px;background:#fff8e1;border-radius:5px;"><h4>Approval Required</h4><p><b>Tool:</b> {tool_name}</p><pre style="font-size:11px;">{input_str}</pre></div>'))
+            input_str = escape_html(json.dumps(tool_input, indent=2, default=str)[:500])
+            safe_tool_name = escape_html(tool_name)
+            display(HTML(f'<div style="padding:10px;background:#fff8e1;border-radius:5px;"><h4>Approval Required</h4><p><b>Tool:</b> {safe_tool_name}</p><pre style="font-size:11px;">{input_str}</pre></div>'))
         approval_box.layout.display = 'block'
         send_btn.disabled = True
 
