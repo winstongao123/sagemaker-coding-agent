@@ -82,6 +82,7 @@ from typing import List, Dict, Tuple, Optional, Any, Set, Callable
 from datetime import datetime
 from pathlib import Path
 from collections import deque
+import copy
 import glob as glob_module
 import random
 
@@ -189,12 +190,12 @@ class Compactor:
         if not messages:
             return messages, 0
 
-        # Calculate current token usage
-        total_tokens = sum(cls.estimate_tokens(str(m.get("content", ""))) for m in messages)
+        # Deep copy first, then collect and mutate only the copy
+        pruned_messages = copy.deepcopy(messages)
 
-        # Find tool result messages to potentially prune
+        # Find tool result items in the COPY to potentially prune
         tool_results = []
-        for i, msg in enumerate(messages):
+        for i, msg in enumerate(pruned_messages):
             content = msg.get("content", [])
             if isinstance(content, list):
                 for item in content:
@@ -208,24 +209,21 @@ class Compactor:
         if not tool_results:
             return messages, 0
 
-        # Sort by index (oldest first), protect recent ones
+        # Walk from newest to oldest, protect last 40K tokens
         protected_tokens = 0
         tokens_saved = 0
-        pruned_messages = [m.copy() for m in messages]  # Deep copy
-
-        # Walk from newest to oldest, protect last 40K tokens
         for tr in reversed(tool_results):
             if protected_tokens < cls.PRUNE_PROTECT_TOKENS:
                 protected_tokens += tr["tokens"]
             else:
-                # Prune this tool output
+                # Prune this tool output (mutates only the deep copy)
                 content = tr["item"].get("content", "")
                 if len(content) > 200:
                     tr["item"]["content"] = content[:100] + f"\n[... {len(content)} chars pruned to save context ...]\n" + content[-100:]
                     tokens_saved += tr["tokens"] - 60  # Approximate new size
 
         if tokens_saved < cls.PRUNE_MIN_SAVINGS:
-            return messages, 0  # Not worth pruning
+            return messages, 0  # Not worth pruning - return originals untouched
 
         return pruned_messages, tokens_saved
 
@@ -1389,6 +1387,10 @@ def tool_glob(args: Dict) -> str:
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
 
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
+
     full_pattern = os.path.join(path, pattern)
     matches = glob_module.glob(full_pattern, recursive=True)[:100]
     matches = sorted(matches, key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0, reverse=True)
@@ -1404,6 +1406,10 @@ def tool_grep(args: Dict) -> str:
 
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
+
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
 
     flags = re.IGNORECASE if case_insensitive else 0
     try:
@@ -1517,13 +1523,18 @@ def tool_python_exec(args: Dict) -> str:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(code)
 
+        # Sandboxed env: strip credentials and sensitive vars
+        safe_env = {k: v for k, v in os.environ.items()
+                    if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
+                    and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")}
+        safe_env["PYTHONIOENCODING"] = "utf-8"
         result = subprocess.run(
             [sys.executable, temp_path],
             capture_output=True,
             text=True,
             timeout=timeout,
             cwd=CONFIG.workspace,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+            env=safe_env
         )
         output = result.stdout
         if result.stderr:
@@ -1728,6 +1739,10 @@ def tool_create_word(args: Dict) -> str:
     if not filepath.endswith(".docx"):
         filepath += ".docx"
 
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
+
     try:
         from docx import Document
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -1813,6 +1828,10 @@ def tool_create_excel(args: Dict) -> str:
     if not filepath.endswith(".xlsx"):
         filepath += ".xlsx"
 
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
+
     try:
         import pandas as pd
         from openpyxl import Workbook
@@ -1885,6 +1904,10 @@ def tool_create_markdown(args: Dict) -> str:
     if not filepath.endswith(".md"):
         filepath += ".md"
 
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
+
     try:
         dir_path = os.path.dirname(filepath)
         if dir_path:
@@ -1920,6 +1943,10 @@ def tool_create_chart(args: Dict) -> str:
         filepath = os.path.join(CONFIG.workspace, filepath)
     if not filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.svg', '.pdf')):
         filepath += ".png"
+
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
 
     try:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -2041,6 +2068,10 @@ def tool_create_pdf(args: Dict) -> str:
     if not filepath.lower().endswith('.pdf'):
         filepath += ".pdf"
 
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
+
     try:
         dir_path = os.path.dirname(filepath)
         if dir_path:
@@ -2132,6 +2163,10 @@ def tool_view_image(args: Dict) -> str:
 
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
+
+    ok, msg = SECURITY.validate_path(path)
+    if not ok:
+        return f"Error: {msg}"
 
     if not os.path.exists(path):
         return f"Error: Image not found: {path}"
@@ -2279,6 +2314,9 @@ def tool_semantic_search(args: Dict) -> str:
     if action == "index":
         if not os.path.isabs(path):
             path = os.path.join(CONFIG.workspace, path)
+        ok, msg = SECURITY.validate_path(path)
+        if not ok:
+            return f"Error: {msg}"
         try:
             count = _SEMANTIC_SEARCH.index_codebase(path)
             return f"Indexed {count} code chunks from {path}"
@@ -2359,10 +2397,10 @@ TOOLS = {
     "read_file": (tool_read_file, False, "Read file contents with line numbers",
         {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 500)"}}, "required": ["file_path"]}),
 
-    "write_file": (tool_write_file, False, "Write content to file. Must read first if exists.",
+    "write_file": (tool_write_file, True, "Write content to file. Must read first if exists.",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}}, "required": ["file_path", "content"]}),
 
-    "edit_file": (tool_edit_file, False, "Edit file by replacing EXACT string match. Must read first.",
+    "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. Must read first.",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences"}}, "required": ["file_path", "old_string", "new_string"]}),
 
     "glob": (tool_glob, False, "Find files by glob pattern (e.g., '**/*.py')",
@@ -2374,16 +2412,16 @@ TOOLS = {
     "list_dir": (tool_list_dir, False, "List directory contents",
         {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}),
 
-    "bash": (tool_bash, False, "Run shell command. Use for git, pip, scripts.",
+    "bash": (tool_bash, True, "Run shell command. Use for git, pip, scripts.",
         {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 600)"}}, "required": ["command"]}),
 
-    "python_exec": (tool_python_exec, False, "Execute Python code. Use for data processing, calculations, file generation.",
+    "python_exec": (tool_python_exec, True, "Execute Python code. Use for data processing, calculations, file generation.",
         {"type": "object", "properties": {"code": {"type": "string", "description": "Python code"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 300)"}}, "required": ["code"]}),
 
-    "create_word": (tool_create_word, False, "Create styled Word doc. Supports: # headings, **bold**, *italic*, - bullets, 1. numbers, | tables |, ---PAGE--- breaks, ![alt](image.png) images. NOTE: Images must be actual image files (.png/.jpg). For charts, first use create_chart to generate an image, then reference it.",
+    "create_word": (tool_create_word, True, "Create styled Word doc. Supports: # headings, **bold**, *italic*, - bullets, 1. numbers, | tables |, ---PAGE--- breaks, ![alt](image.png) images. NOTE: Images must be actual image files (.png/.jpg). For charts, first use create_chart to generate an image, then reference it.",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Content with markdown formatting. Use ![caption](image.png) to embed images - must be actual image files, NOT Excel files."}, "title": {"type": "string", "description": "Centered title"}, "include_toc": {"type": "boolean", "description": "Add Table of Contents"}, "header": {"type": "string", "description": "Page header text"}, "footer": {"type": "string", "description": "Page footer text"}}, "required": ["filepath", "content"]}),
 
-    "create_excel": (tool_create_excel, False, "Create Excel spreadsheet with optional embedded chart",
+    "create_excel": (tool_create_excel, True, "Create Excel spreadsheet with optional embedded chart",
         {"type": "object", "properties": {
             "filepath": {"type": "string"},
             "data": {"type": "array", "description": "List of dicts [{\"col\": \"val\"}]"},
@@ -2394,10 +2432,10 @@ TOOLS = {
             "y_columns": {"type": "array", "items": {"type": "string"}, "description": "Column names for Y axis (values)"}
         }, "required": ["filepath", "data"]}),
 
-    "create_markdown": (tool_create_markdown, False, "Create Markdown file (.md)",
+    "create_markdown": (tool_create_markdown, True, "Create Markdown file (.md)",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string"}}, "required": ["filepath", "content"]}),
 
-    "create_chart": (tool_create_chart, False, "Create chart image (bar, line, pie, scatter). Returns image path.",
+    "create_chart": (tool_create_chart, True, "Create chart image (bar, line, pie, scatter). Returns image path.",
         {"type": "object", "properties": {
             "chart_type": {"type": "string", "enum": ["bar", "line", "pie", "scatter", "horizontal_bar"], "description": "Chart type"},
             "title": {"type": "string", "description": "Chart title"},
@@ -2408,7 +2446,7 @@ TOOLS = {
             "colors": {"type": "array", "items": {"type": "string"}, "description": "Color list"}
         }, "required": ["data"]}),
 
-    "create_pdf": (tool_create_pdf, False, "Create PDF with text, tables, images. Tables can be list-of-lists OR markdown format. Images must be actual image files.",
+    "create_pdf": (tool_create_pdf, True, "Create PDF with text, tables, images. Tables can be list-of-lists OR markdown format. Images must be actual image files.",
         {"type": "object", "properties": {
             "filepath": {"type": "string", "description": "Output PDF path"},
             "title": {"type": "string", "description": "Document title"},
@@ -2561,6 +2599,7 @@ class Agent:
         on_approval: Callable = None,
         on_tokens: Callable = None,
         on_thinking: Callable = None,
+        on_stop_check: Callable = None,
     ):
         self.client = client
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -2568,6 +2607,7 @@ class Agent:
         self.on_approval = on_approval
         self.on_tokens = on_tokens  # Callback for token updates
         self.on_thinking = on_thinking  # Callback for thinking output
+        self.on_stop_check = on_stop_check  # Callback to check if stop was requested
         self.tool_history = deque(maxlen=10)
 
     def run(self, user_message: str, output_fn: Callable = print, system_prompt: str = None, plan_mode: bool = False) -> str:
@@ -2591,6 +2631,11 @@ class Agent:
         AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
 
         for turn in range(CONFIG.max_turns):
+            # Check if stop was requested
+            if self.on_stop_check and self.on_stop_check():
+                output_fn("[Stopped by user]")
+                return response.text if response else ""
+
             # Check context usage
             warning = CONTEXT.check_and_warn(self.messages)
             if warning:
@@ -2706,6 +2751,10 @@ class Agent:
             # Execute tools with 5-layer error recovery
             tool_results = []
             for tc in response.tool_calls:
+                # Check stop before each tool
+                if self.on_stop_check and self.on_stop_check():
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": "Stopped by user"})
+                    continue
                 # === LAYER 1: Tool Name Repair ===
                 tool_name = tc.name
                 tool_info = TOOLS.get(tool_name)
@@ -2850,6 +2899,7 @@ BEDROCK_MODELS = [
     ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
     ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
 ]
+# Single source of truth: chat.ipynb should import BEDROCK_MODELS instead of duplicating
 
 # Tool icons for display (synced from GCP version)
 TOOL_ICONS = {
@@ -3305,7 +3355,8 @@ def create_chat_ui(mock_mode: bool = None):
                 session.id,
                 on_approval=request_approval,
                 on_tokens=lambda stats: update_tokens_display(),
-                on_thinking=lambda t: add_message('thinking', t) if t else None
+                on_thinking=lambda t: add_message('thinking', t) if t else None,
+                on_stop_check=lambda: ui_state.get("stop_requested", False)
             )
             session_name_input.value = ''  # Clear for next session
 
@@ -3427,7 +3478,9 @@ def create_chat_ui(mock_mode: bool = None):
             # Auto-save session after each message
             if ui_state["agent"] and ui_state["agent"].messages:
                 try:
-                    session_name = session_name_input.value.strip() or f"session_{ui_state['agent'].session_id}"
+                    # Preserve existing session title; only use input if explicitly set
+                    existing_title = ui_state["session"].title if ui_state["session"] else None
+                    session_name = session_name_input.value.strip() or existing_title or f"session_{ui_state['agent'].session_id}"
                     ui_state["session"] = Session(
                         id=ui_state["agent"].session_id,
                         created_at=ui_state["session"].created_at if ui_state["session"] else datetime.now().isoformat(),
@@ -3491,7 +3544,8 @@ def create_chat_ui(mock_mode: bool = None):
             session.id,
             on_approval=request_approval,
             on_tokens=lambda stats: update_tokens_display(),
-            on_thinking=lambda t: add_message('thinking', t) if t else None
+            on_thinking=lambda t: add_message('thinking', t) if t else None,
+            on_stop_check=lambda: ui_state.get("stop_requested", False)
         )
         ui_state["agent"].messages = session.messages
 

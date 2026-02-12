@@ -21,22 +21,14 @@ Secure AI coding assistant powered by AWS Bedrock Claude.
 # ============================================================
 # CONFIGURATION
 # ============================================================
-# Edit these settings before running the chat UI
+# Models are imported from sagemaker_agent.py (single source of truth)
 
 import ipywidgets as widgets
 from IPython.display import display, HTML
+from sagemaker_agent import BEDROCK_MODELS
 
-# Available Claude models in AU region (ap-southeast-2 Sydney)
-AVAILABLE_MODELS = {
-    "Claude 3 Haiku": "anthropic.claude-3-haiku-20240307-v1:0",
-    "Claude 3 Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
-    "Claude 3.5 Sonnet v2": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "Claude 3.5 Sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    "Claude 4.5 Sonnet (AU)": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "Claude 4.5 Haiku (AU)": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "Claude 4.5 Opus (Global)": "global.anthropic.claude-opus-4-5-20251101-v1:0",
-    "Claude 4.6 Opus (AU)": "au.anthropic.claude-opus-4-6-v1",
-}
+# Convert BEDROCK_MODELS list-of-tuples to dict for config cell
+AVAILABLE_MODELS = dict(BEDROCK_MODELS)
 
 # Temperature options
 TEMPERATURE_OPTIONS = {
