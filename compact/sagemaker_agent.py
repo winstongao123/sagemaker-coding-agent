@@ -293,7 +293,13 @@ Format as a comprehensive summary that preserves all context needed to continue 
 
         # Keep last N messages for continuity
         n = cls.KEEP_LAST_MESSAGES
-        recent_messages = messages[-n:] if len(messages) > n else messages
+        recent_messages = copy.deepcopy(messages[-n:] if len(messages) > n else messages)
+
+        # Ensure summary assistant message is followed by user role for Bedrock alternation.
+        while recent_messages and recent_messages[0].get("role") != "user":
+            recent_messages.pop(0)
+        if not recent_messages:
+            recent_messages = [{"role": "user", "content": "[Conversation compacted. Continue from summary.]"}]
 
         return [summary_msg] + recent_messages
 
@@ -1765,6 +1771,45 @@ def _run_subprocess(cmd_arg, timeout: int, shell: bool, cwd: str, env: Dict[str,
             _active_process = None
     return subprocess.CompletedProcess(cmd_arg, proc.returncode, stdout, stderr)
 
+
+def _validate_shell_redirections(command: str) -> Tuple[bool, str]:
+    """Validate shell redirection targets stay inside workspace."""
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        # If parsing fails, block rather than guessing redirection targets.
+        return False, "invalid shell syntax for redirection validation"
+
+    redir_ops = {">", ">>", "<", "<<", "1>", "1>>", "2>", "2>>", "&>", "&>>"}
+    idx = 0
+    while idx < len(tokens):
+        token = tokens[idx]
+        target = None
+
+        if token in redir_ops:
+            if idx + 1 >= len(tokens):
+                return False, "redirection missing target"
+            target = tokens[idx + 1]
+            idx += 2
+        else:
+            m = re.match(r"^(?:\d*>>?|\d*<<?|&>>?)(.+)$", token)
+            if m:
+                target = m.group(1).strip()
+            idx += 1
+
+        if not target:
+            continue
+        if target in {"/dev/null", "/dev/stdout", "/dev/stderr"}:
+            continue
+        if any(sym in target for sym in ["$", "*", "?", "~"]):
+            return False, f"dynamic redirection target not allowed: {target}"
+
+        ok, msg = SECURITY.validate_path(target)
+        if not ok:
+            return False, f"redirection target blocked: {msg}"
+
+    return True, "OK"
+
 def _docker_base_cmd() -> List[str]:
     """Build hardened docker run args for isolated command execution."""
     if not shutil.which("docker"):
@@ -1804,6 +1849,9 @@ def tool_bash(args: Dict) -> str:
             # Detect shell operators that require shell=True in local mode
             needs_shell = bool(re.search(r'[|><;]|&&|\|\||`|\$\(', command))
             if needs_shell:
+                redir_ok, redir_msg = _validate_shell_redirections(command)
+                if not redir_ok:
+                    return f"Blocked: {redir_msg}"
                 cmd_arg = command
                 use_shell = True
             else:
@@ -2993,7 +3041,14 @@ class Agent:
         self.user_msg_timestamps = deque()
         self.user_msg_count = 0
 
-    def run(self, user_message: str, output_fn: Callable = print, system_prompt: str = None, plan_mode: bool = False) -> str:
+    def run(
+        self,
+        user_message: str,
+        output_fn: Callable = print,
+        system_prompt: str = None,
+        plan_mode: bool = False,
+        count_towards_limits: bool = True,
+    ) -> str:
         """Run agent loop until completion or max turns.
 
         Args:
@@ -3007,21 +3062,22 @@ class Agent:
         self._plan_mode = plan_mode  # Store for tool execution check
 
         # Session/user rate limiting
-        now = time.time()
-        while self.user_msg_timestamps and now - self.user_msg_timestamps[0] > 60:
-            self.user_msg_timestamps.popleft()
-        if len(self.user_msg_timestamps) >= CONFIG.max_user_messages_per_minute:
-            msg = f"Rate limit exceeded: max {CONFIG.max_user_messages_per_minute} messages/min"
-            output_fn(msg)
-            AUDIT.log(self.session_id, "rate_limit", result_summary=msg, user_approved=False)
-            return msg
-        if self.user_msg_count >= CONFIG.max_user_messages_per_session:
-            msg = f"Session message limit reached: {CONFIG.max_user_messages_per_session}"
-            output_fn(msg)
-            AUDIT.log(self.session_id, "session_limit", result_summary=msg, user_approved=False)
-            return msg
-        self.user_msg_timestamps.append(now)
-        self.user_msg_count += 1
+        if count_towards_limits:
+            now = time.time()
+            while self.user_msg_timestamps and now - self.user_msg_timestamps[0] > 60:
+                self.user_msg_timestamps.popleft()
+            if len(self.user_msg_timestamps) >= CONFIG.max_user_messages_per_minute:
+                msg = f"Rate limit exceeded: max {CONFIG.max_user_messages_per_minute} messages/min"
+                output_fn(msg)
+                AUDIT.log(self.session_id, "rate_limit", result_summary=msg, user_approved=False)
+                return msg
+            if self.user_msg_count >= CONFIG.max_user_messages_per_session:
+                msg = f"Session message limit reached: {CONFIG.max_user_messages_per_session}"
+                output_fn(msg)
+                AUDIT.log(self.session_id, "session_limit", result_summary=msg, user_approved=False)
+                return msg
+            self.user_msg_timestamps.append(now)
+            self.user_msg_count += 1
 
         # Ensure proper role alternation - if last message was user, add placeholder assistant
         if self.messages and self.messages[-1].get("role") == "user":
@@ -3929,7 +3985,13 @@ def create_chat_ui(mock_mode: bool = None):
                     # Auto-continue after compact (OpenCode-style)
                     if not ui_state["stop_requested"]:
                         add_message('system', '▶️ Auto-continuing...')
-                        ui_state["agent"].run("Continue from where we left off.", output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
+                        ui_state["agent"].run(
+                            "Continue from where we left off.",
+                            output_fn,
+                            system_prompt=system_prompt,
+                            plan_mode=plan_mode_toggle.value,
+                            count_towards_limits=False,
+                        )
                         usage = CONTEXT.get_usage(ui_state["agent"].messages)
                         pct = usage["percent"] * 100
 
@@ -3975,7 +4037,7 @@ def create_chat_ui(mock_mode: bool = None):
                         created_at=ui_state["session"].created_at if ui_state["session"] else datetime.now().isoformat(),
                         updated_at=datetime.now().isoformat(),
                         title=session_name,
-                        messages=ui_state["agent"].messages.copy(),
+                        messages=copy.deepcopy(ui_state["agent"].messages),
                         metadata={"model": model_dropdown.value},
                         todos=_TODOS.copy() if _TODOS else []
                     )

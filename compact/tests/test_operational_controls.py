@@ -39,6 +39,32 @@ class OperationalControlsTests(unittest.TestCase):
             self.assertFalse(os.path.exists(old_path))
             self.assertTrue(os.path.exists(recent_path))
 
+    def test_compact_preserves_role_alternation_after_summary(self):
+        messages = [
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "u1"},
+            {"role": "assistant", "content": "a2"},
+        ]
+        compacted = sa.COMPACTOR.compact(messages, "sum")
+        self.assertEqual(compacted[0]["role"], "assistant")
+        self.assertGreaterEqual(len(compacted), 2)
+        self.assertEqual(compacted[1]["role"], "user")
+
+    def test_internal_run_does_not_count_against_user_limits(self):
+        old_limit = sa.CONFIG.max_user_messages_per_minute
+        try:
+            sa.CONFIG.max_user_messages_per_minute = 1
+            client = sa.BedrockClient(sa.CONFIG.model_id, sa.CONFIG.region, mock_mode=True)
+            agent = sa.Agent(client, session_id="internal_limit_test")
+            first = agent.run("hello")
+            second = agent.run("internal continue", count_towards_limits=False)
+            self.assertIsInstance(first, str)
+            self.assertIsInstance(second, str)
+            self.assertNotIn("Rate limit exceeded", second)
+            self.assertEqual(agent.user_msg_count, 1)
+        finally:
+            sa.CONFIG.max_user_messages_per_minute = old_limit
+
 
 if __name__ == "__main__":
     unittest.main()

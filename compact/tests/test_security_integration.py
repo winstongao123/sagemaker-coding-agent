@@ -22,6 +22,11 @@ class SecurityIntegrationTests(unittest.TestCase):
         out = sa.tool_bash({"command": "git status; powershell -Command whoami"})
         self.assertIn("Blocked:", out)
 
+    def test_tool_bash_blocks_redirection_outside_workspace(self):
+        out = sa.tool_bash({"command": "echo hello > ../outside_workspace.txt"})
+        self.assertIn("Blocked:", out)
+        self.assertIn("redirection target", out)
+
     def test_tool_python_exec_blocks_from_import_system(self):
         code = "from os import system\nsystem('echo should_not_run')"
         out = sa.tool_python_exec({"code": code, "timeout": 10})
