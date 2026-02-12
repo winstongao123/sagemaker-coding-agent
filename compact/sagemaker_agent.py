@@ -85,6 +85,7 @@ from collections import deque
 import copy
 import glob as glob_module
 import random
+import threading
 
 # ============================================================
 # RETRY LOGIC (OpenCode-style)
@@ -671,7 +672,7 @@ class SecurityManager:
         # === CODE INJECTION ===
         (r"\bos\.system\s*\(", "os.system() - use subprocess instead"),
         (r"\bos\.popen\s*\(", "os.popen() - dangerous"),
-        (r"\bsubprocess\..*shell\s*=\s*True", "subprocess with shell=True"),
+        (r"\bsubprocess\..*shell\s*=\s*True", "subprocess with shell=True (also caught by broader subprocess block)"),
         (r"\beval\s*\(", "eval() - code injection risk"),
         (r"\bexec\s*\(", "exec() - code injection risk"),
         (r"\bcompile\s*\(.*exec", "compile() for exec"),
@@ -707,6 +708,9 @@ class SecurityManager:
         (r"\bos\.getenv\s*\(\s*['\"]AWS_", "Get AWS credentials from env"),
         (r"\bos\.environ\.get\s*\(\s*['\"]AWS_", "Get AWS credentials from env"),
 
+        # === SUBPROCESS (blocks all subprocess execution, not just shell=True) ===
+        (r"\bsubprocess\.(run|Popen|call|check_output|check_call)\s*\(", "subprocess execution - blocked"),
+
         # === NETWORK ===
         (r"\bctypes\.", "ctypes - low-level access"),
         (r"\bsocket\..*bind\s*\(", "Network server binding"),
@@ -715,6 +719,10 @@ class SecurityManager:
         (r"\brequests\.(get|post|put|delete|patch|head)\s*\(", "HTTP request - blocked for security"),
         (r"\burllib\.request\.(urlopen|urlretrieve)\s*\(", "HTTP request - blocked for security"),
         (r"\bhttp\.client\.HTTP", "HTTP client - blocked for security"),
+        (r"\bhttpx\.", "httpx HTTP client - blocked for security"),
+        (r"\baiohttp\.", "aiohttp HTTP client - blocked for security"),
+        (r"\burllib3\.", "urllib3 HTTP client - blocked for security"),
+        (r"169\.254\.169\.254", "EC2 metadata endpoint - blocked for security"),
         (r"\brequests\.(get|post).*verify\s*=\s*False", "Disable SSL verification"),
         (r"\burllib.*verify\s*=\s*False", "Disable SSL verification"),
 
@@ -1476,8 +1484,23 @@ def tool_list_dir(args: Dict) -> str:
 
 # ============== BASH ==============
 
+# Active subprocess tracking - allows stop handler to kill running processes
+_active_process = None  # type: subprocess.Popen | None
+_active_process_lock = threading.Lock()
+
+def _kill_active_process():
+    """Kill the active subprocess if one is running. Called by stop handler."""
+    global _active_process
+    with _active_process_lock:
+        if _active_process and _active_process.poll() is None:
+            try:
+                _active_process.kill()
+            except OSError:
+                pass
+
 def tool_bash(args: Dict) -> str:
     """Execute shell command with smart truncation for large outputs."""
+    global _active_process
     command = args["command"]
     timeout = min(args.get("timeout", 120), 600)
 
@@ -1486,18 +1509,26 @@ def tool_bash(args: Dict) -> str:
         return f"Blocked: {msg}"
 
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             command,
             shell=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             cwd=CONFIG.workspace,
             env={k: v for k, v in os.environ.items()
                  if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
                  and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
                  } | {"TERM": "dumb"}
         )
+        with _active_process_lock:
+            _active_process = proc
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        finally:
+            with _active_process_lock:
+                _active_process = None
+        result = subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
         output = result.stdout
         if result.stderr:
             output += f"\n[stderr]\n{result.stderr}"
@@ -1520,6 +1551,7 @@ def tool_bash(args: Dict) -> str:
 
 def tool_python_exec(args: Dict) -> str:
     """Execute Python code in subprocess."""
+    global _active_process
     code = args["code"]
     timeout = min(args.get("timeout", 60), 300)
 
@@ -1538,21 +1570,29 @@ def tool_python_exec(args: Dict) -> str:
                     if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
                     and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")}
         safe_env["PYTHONIOENCODING"] = "utf-8"
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [sys.executable, temp_path],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             cwd=CONFIG.workspace,
             env=safe_env
         )
-        output = result.stdout
-        if result.stderr:
-            output += f"\n[stderr]\n{result.stderr}"
-        if result.returncode != 0:
-            output += f"\n[exit code: {result.returncode}]"
+        with _active_process_lock:
+            _active_process = proc
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        finally:
+            with _active_process_lock:
+                _active_process = None
+        output = stdout
+        if stderr:
+            output += f"\n[stderr]\n{stderr}"
+        if proc.returncode != 0:
+            output += f"\n[exit code: {proc.returncode}]"
         return SECURITY.truncate_output(output) if output else "(no output)"
     except subprocess.TimeoutExpired:
+        proc.kill()
         return f"Error: Code timed out after {timeout} seconds"
     except Exception as e:
         return f"Error: {e}"
@@ -2549,7 +2589,7 @@ Code runs in the workspace directory with access to installed packages.
 - Workspace boundary enforced - cannot access files outside project directory.
 - Dangerous commands blocked (rm -rf, sudo, curl|bash, direct AWS CLI).
 - Write operations require user approval before execution.
-- All actions logged to immutable audit trail.
+- All actions logged to append-only audit trail (local file).
 - To access AWS resources: provide boto3 code for the user to run, don't execute directly.
 
 # Code References
@@ -2562,6 +2602,7 @@ PLAN_MODE_PROMPT = """You are in PLAN MODE. Your task is to EXPLORE and CREATE A
 # Plan Mode Rules
 1. **READ-ONLY**: You can ONLY use these tools:
    - read_file, glob, grep, list_dir (explore codebase)
+   - semantic_search, view_image (search and inspect)
    - todo_write, todo_read (track what you're planning)
 
 2. **NO WRITES**: Do NOT use:
@@ -3308,10 +3349,11 @@ def create_chat_ui(mock_mode: bool = None):
     deny_btn.on_click(on_deny)
 
     def on_stop(b):
-        """Handle stop button click."""
+        """Handle stop button click - also kills active subprocesses."""
         ui_state["stop_requested"] = True
+        _kill_active_process()  # Kill any running bash/python_exec subprocess
         status_html.value = '<span style="color:#ff9800"><b>⏹ Stop requested...</b></span>'
-        add_message('system', '⏹ Stop requested - will stop after current operation completes')
+        add_message('system', '⏹ Stop requested - killing active processes')
 
     stop_btn.on_click(on_stop)
 

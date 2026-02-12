@@ -1,6 +1,40 @@
-# Changelog - SageMaker Coding Agent v2.6.0
+# Changelog - SageMaker Coding Agent v2.7.0
 
-## What Changed and Why
+## v2.7.0 - Final Security Hardening
+
+### python_exec Subprocess Bypass (High)
+
+| What | Details |
+|------|---------|
+| **Problem** | Only `subprocess.*shell=True` was blocked. `subprocess.run()`, `Popen()`, `call()`, `check_output()`, `check_call()` without `shell=True` were unblocked. Also missing: `httpx`, `aiohttp`, `urllib3`, and EC2 metadata endpoint `169.254.169.254`. |
+| **Impact** | Agent-generated Python code could spawn arbitrary processes and make outbound HTTP requests, bypassing all command filtering and network restrictions. |
+| **Fix** | Added 5 new `DANGEROUS_PYTHON` patterns: `subprocess.(run|Popen|call|check_output|check_call)`, `httpx.*`, `aiohttp.*`, `urllib3.*`, `169.254.169.254`. |
+
+### Stop Button Now Kills Subprocesses (Medium)
+
+| What | Details |
+|------|---------|
+| **Problem** | Stop only set a flag checked between agent turns. Running `bash` or `python_exec` subprocesses continued until their own timeout. |
+| **Impact** | Long-running commands (e.g., `pip install`, infinite loops) could not be cancelled. |
+| **Fix** | `tool_bash` and `tool_python_exec` now use `Popen` with a module-level `_active_process` reference protected by `_active_process_lock`. Stop handler calls `_kill_active_process()` to terminate the running subprocess immediately. |
+
+### Security Overclaims in Prompt (Medium)
+
+| What | Details |
+|------|---------|
+| **Problem** | SYSTEM_PROMPT claimed "immutable audit trail" but audit is just a local append-only JSON file with no integrity protection. |
+| **Fix** | Changed to "append-only audit trail (local file)" - accurate description. |
+
+### Plan Mode Tool List Mismatch (Low)
+
+| What | Details |
+|------|---------|
+| **Problem** | PLAN_MODE_PROMPT listed only `read_file, glob, grep, list_dir, todo_write, todo_read` as allowed, but `PLAN_MODE_ALLOWED_TOOLS` also included `semantic_search` and `view_image`. |
+| **Fix** | Updated prompt to list all allowed tools: added `semantic_search, view_image`. |
+
+---
+
+## v2.6.0 - Comprehensive Audit & Refinement
 
 ### Critical Bug Fixes
 
