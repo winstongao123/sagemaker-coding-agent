@@ -59,7 +59,7 @@ execution_mode = "local"
 
 This keeps policy controls but removes container isolation.
 
-In many SageMaker Studio environments, Docker daemon access is not available to notebook users, so local mode is the practical path.
+In many SageMaker Studio environments, Docker daemon access is not enabled by default, so local mode is the practical path unless your admin enables Docker access for the domain/app.
 
 ### Operational controls
 - auth gate (`/auth <token>`)

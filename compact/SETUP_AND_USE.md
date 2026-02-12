@@ -33,7 +33,7 @@ docker ps
 docker pull python:3.11-slim
 ```
 
-In many SageMaker Studio environments, Docker daemon is not exposed to notebook users.
+In many SageMaker Studio environments, Docker daemon is not exposed to notebook users by default.
 
 If you see `Cannot connect to the Docker daemon...`, this is expected for that environment.
 
@@ -46,6 +46,26 @@ execution_mode = "local"
 Then restart kernel and run UI again.
 
 This app still works in local mode (no container isolation).
+
+### If you want Docker isolation in SageMaker Studio
+
+This is possible, but requires admin/domain setup:
+
+1. Enable Studio Docker access at the Domain level (`EnableDockerAccess=ENABLED`).
+2. Create a new Studio app (or restart/recreate app as required by your setup) after domain change.
+3. Ensure Docker CLI is available in that app image.
+4. Re-run the checks:
+
+```bash
+docker --version
+docker info
+```
+
+If `docker info` works, switch back to docker mode:
+
+```python
+execution_mode = "docker"
+```
 
 ## 4) Set auth token
 
@@ -99,6 +119,8 @@ python -m unittest discover -s tests -v
 
 ## FAQ: Is SageMaker not supporting Docker?
 
-Not exactly. Your current SageMaker Studio runtime does not provide Docker daemon access to your user session.
+Not exactly. SageMaker Studio can support Docker/local mode, but many domains have it disabled by default.
+
+If your domain is not configured for Docker access, you will see daemon errors and must use local mode.
 
 You can still run the app in local mode. For stronger isolation, use another runtime that supports daemon/container execution.
