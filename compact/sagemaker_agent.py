@@ -3253,6 +3253,10 @@ class Agent:
                 key = (tc.name, target)
 
                 # Check for doom loop (same tool+target 3+ times)
+                # todo_write is expected to repeat during normal planning and progress updates.
+                if tc.name == "todo_write":
+                    self.tool_history.append(key)
+                    continue
                 repeat_count = sum(1 for h in self.tool_history if h == key)
                 if repeat_count >= 3:
                     output_fn(f"[Warning: Repetitive {tc.name} calls detected (3+ identical), stopping]")
