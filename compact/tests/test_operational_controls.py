@@ -65,6 +65,25 @@ class OperationalControlsTests(unittest.TestCase):
         finally:
             sa.CONFIG.max_user_messages_per_minute = old_limit
 
+    def test_safe_exec_env_strips_common_secret_names(self):
+        old_api = os.environ.get("MY_API_KEY")
+        old_auth = os.environ.get("SERVICE_AUTH")
+        try:
+            os.environ["MY_API_KEY"] = "abc"
+            os.environ["SERVICE_AUTH"] = "def"
+            env = sa._safe_exec_env()
+            self.assertNotIn("MY_API_KEY", env)
+            self.assertNotIn("SERVICE_AUTH", env)
+        finally:
+            if old_api is None:
+                os.environ.pop("MY_API_KEY", None)
+            else:
+                os.environ["MY_API_KEY"] = old_api
+            if old_auth is None:
+                os.environ.pop("SERVICE_AUTH", None)
+            else:
+                os.environ["SERVICE_AUTH"] = old_auth
+
 
 if __name__ == "__main__":
     unittest.main()

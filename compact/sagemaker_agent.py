@@ -1751,8 +1751,12 @@ def _kill_active_process():
 
 def _safe_exec_env() -> Dict[str, str]:
     """Build a minimally-sensitive environment for local execution."""
+    blocked_markers = (
+        "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL",
+        "API_KEY", "PRIVATE_KEY", "AUTH",
+    )
     env = {k: v for k, v in os.environ.items()
-           if not any(s in k.upper() for s in ("SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"))
+           if not any(s in k.upper() for s in blocked_markers)
            and k.upper() not in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")}
     env["TERM"] = "dumb"
     env["PYTHONIOENCODING"] = "utf-8"
@@ -1818,7 +1822,7 @@ def _ensure_docker_image_ready() -> None:
 def _validate_shell_redirections(command: str) -> Tuple[bool, str]:
     """Validate shell redirection targets stay inside workspace."""
     try:
-        tokens = shlex.split(command, posix=True)
+        tokens = shlex.split(command, posix=(os.name != "nt"))
     except ValueError:
         # If parsing fails, block rather than guessing redirection targets.
         return False, "invalid shell syntax for redirection validation"
@@ -4134,7 +4138,12 @@ def create_chat_ui(mock_mode: bool = None):
                         updated_at=datetime.now().isoformat(),
                         title=session_name,
                         messages=copy.deepcopy(ui_state["agent"].messages),
-                        metadata={"model": model_dropdown.value},
+                        metadata={
+                            "model": model_dropdown.value,
+                            "user_msg_count": ui_state["agent"].user_msg_count,
+                            "exec_calls": ui_state["agent"].exec_calls,
+                            "exec_seconds": ui_state["agent"].exec_seconds,
+                        },
                         todos=_TODOS.copy() if _TODOS else []
                     )
                     SESSIONS.save(ui_state["session"])
@@ -4161,7 +4170,13 @@ def create_chat_ui(mock_mode: bool = None):
     def on_save(b):
         """Save current session with todos."""
         if ui_state["session"] and ui_state["agent"]:
-            ui_state["session"].messages = ui_state["agent"].messages
+            ui_state["session"].messages = copy.deepcopy(ui_state["agent"].messages)
+            metadata = ui_state["session"].metadata or {}
+            metadata["model"] = model_dropdown.value
+            metadata["user_msg_count"] = ui_state["agent"].user_msg_count
+            metadata["exec_calls"] = ui_state["agent"].exec_calls
+            metadata["exec_seconds"] = ui_state["agent"].exec_seconds
+            ui_state["session"].metadata = metadata
             # Save todos with session (store as metadata)
             ui_state["session"].todos = ui_state["todos"].copy() if ui_state["todos"] else []
             SESSIONS.save(ui_state["session"])
@@ -4224,7 +4239,11 @@ def create_chat_ui(mock_mode: bool = None):
             on_thinking=lambda t: add_message('thinking', t) if t else None,
             on_stop_check=lambda: ui_state.get("stop_requested", False)
         )
-        ui_state["agent"].messages = session.messages
+        ui_state["agent"].messages = copy.deepcopy(session.messages)
+        if isinstance(session.metadata, dict):
+            ui_state["agent"].user_msg_count = int(session.metadata.get("user_msg_count", 0) or 0)
+            ui_state["agent"].exec_calls = int(session.metadata.get("exec_calls", 0) or 0)
+            ui_state["agent"].exec_seconds = float(session.metadata.get("exec_seconds", 0.0) or 0.0)
 
         # Display loaded messages
         ui_state["messages"] = []
