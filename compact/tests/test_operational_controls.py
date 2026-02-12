@@ -84,6 +84,34 @@ class OperationalControlsTests(unittest.TestCase):
             else:
                 os.environ["SERVICE_AUTH"] = old_auth
 
+    def test_get_tool_definitions_respects_allowlist(self):
+        defs = sa.get_tool_definitions({"read_file", "todo_read"})
+        names = {d["name"] for d in defs}
+        self.assertEqual(names, {"read_file", "todo_read"})
+
+    def test_skill_manager_lists_and_reads_skill(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skills_dir = os.path.join(tmp, "skills")
+            os.makedirs(skills_dir, exist_ok=True)
+            skill_path = os.path.join(skills_dir, "code_review.md")
+            with open(skill_path, "w", encoding="utf-8") as f:
+                f.write("# Code Review\nUse strict checks.")
+
+            sm = sa.SkillManager(tmp, "./skills")
+            listed = sm.list_skills()
+            self.assertTrue(any(s["name"] == "code_review" for s in listed))
+
+            ok, txt = sm.read_skill("code_review")
+            self.assertTrue(ok)
+            self.assertIn("Code Review", txt)
+
+    def test_subagent_tool_runs_in_plan_mode(self):
+        client = sa.BedrockClient(sa.CONFIG.model_id, sa.CONFIG.region, mock_mode=True)
+        agent = sa.Agent(client, session_id="subagent_test")
+        out = agent._run_subagent_tool({"task": "List files", "mode": "plan", "max_turns": 2}, output_fn=lambda _: None)
+        self.assertIsInstance(out, str)
+        self.assertIn("Sub-agent mode=plan", out)
+
 
 if __name__ == "__main__":
     unittest.main()

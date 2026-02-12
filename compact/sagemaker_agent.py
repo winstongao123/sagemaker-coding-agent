@@ -88,6 +88,8 @@ import random
 import shlex
 import threading
 import shutil
+import urllib.request
+import urllib.error
 
 # ============================================================
 # RETRY LOGIC (OpenCode-style)
@@ -556,6 +558,17 @@ class Config:
     max_exec_calls_per_session: int = 40
     max_exec_seconds_per_session: int = 900
     audit_retention_days: int = 30
+
+    # V4 capabilities
+    enable_skills: bool = True
+    skills_dir: str = "./skills"
+    enable_mcp: bool = False
+    mcp_endpoint: str = ""
+    mcp_timeout_seconds: int = 20
+    mcp_allowed_methods: List[str] = field(default_factory=lambda: [
+        "resources/list", "resources/read", "tools/list", "tools/call"
+    ])
+    subagent_max_depth: int = 1
 
 # Initialize config
 CONFIG = Config()
@@ -1348,6 +1361,47 @@ class SessionManager:
 
 # Initialize session manager
 SESSIONS = SessionManager(CONFIG.sessions_dir)
+
+
+# ============================================================
+# SKILLS (V4)
+# ============================================================
+
+class SkillManager:
+    """Simple local skill loader (.md files) from a workspace-relative directory."""
+
+    def __init__(self, workspace: str, skills_dir: str):
+        self.workspace = Path(workspace).resolve()
+        self.skills_dir = (self.workspace / skills_dir).resolve() if not os.path.isabs(skills_dir) else Path(skills_dir).resolve()
+        os.makedirs(self.skills_dir, exist_ok=True)
+
+    def list_skills(self) -> List[Dict]:
+        skills = []
+        for fp in sorted(self.skills_dir.glob("*.md")):
+            try:
+                text = fp.read_text(encoding="utf-8", errors="ignore")
+                first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+                rel = str(fp.relative_to(self.workspace)) if self.workspace in fp.parents or fp == self.workspace else str(fp)
+                skills.append({"name": fp.stem, "path": rel, "summary": first[:120]})
+            except Exception:
+                continue
+        return skills
+
+    def read_skill(self, name: str, max_chars: int = 12000) -> Tuple[bool, str]:
+        safe = re.sub(r"[^a-zA-Z0-9_.-]", "", str(name or ""))
+        if not safe:
+            return False, "Invalid skill name"
+        fp = self.skills_dir / f"{safe}.md"
+        if not fp.exists():
+            return False, f"Skill not found: {safe}"
+        try:
+            text = fp.read_text(encoding="utf-8", errors="ignore")
+            return True, text[:max_chars]
+        except Exception as e:
+            return False, f"Failed reading skill: {e}"
+
+# Initialize skills manager
+SKILLS = SkillManager(CONFIG.workspace, CONFIG.skills_dir)
 
 
 # ============================================================
@@ -2852,6 +2906,69 @@ def tool_semantic_search(args: Dict) -> str:
     return f"Unknown action: {action}. Use 'index', 'search', or 'status'."
 
 
+# ============== V4: SKILLS / MCP / SUB-AGENT ==============
+
+def tool_skill_list(args: Dict) -> str:
+    """List available local skills."""
+    if not CONFIG.enable_skills:
+        return "Skills are disabled by config"
+    skills = SKILLS.list_skills()
+    if not skills:
+        return f"No skills found in {SKILLS.skills_dir}"
+    lines = [f"- {s['name']}: {s['summary']}" for s in skills]
+    return "Available skills:\n" + "\n".join(lines)
+
+
+def tool_skill_read(args: Dict) -> str:
+    """Read one local skill file."""
+    if not CONFIG.enable_skills:
+        return "Skills are disabled by config"
+    name = args.get("name", "")
+    ok, content = SKILLS.read_skill(name)
+    if not ok:
+        return f"Error: {content}"
+    return f"[Skill: {name}]\n{content}"
+
+
+def tool_mcp_call(args: Dict) -> str:
+    """MCP JSON-RPC bridge. Disabled by default."""
+    if not CONFIG.enable_mcp:
+        return "MCP is disabled by config"
+    if not CONFIG.mcp_endpoint:
+        return "MCP endpoint is not configured"
+
+    method = str(args.get("method", "")).strip()
+    params = args.get("params", {})
+    if method not in set(CONFIG.mcp_allowed_methods):
+        return f"Blocked: MCP method not allowed: {method}"
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": int(time.time() * 1000) % 1000000,
+        "method": method,
+        "params": params if isinstance(params, dict) else {},
+    }
+    req = urllib.request.Request(
+        CONFIG.mcp_endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=CONFIG.mcp_timeout_seconds) as resp:
+            body = resp.read().decode("utf-8", errors="ignore")
+            return SECURITY.truncate_output(body)
+    except urllib.error.HTTPError as e:
+        return f"MCP HTTP error: {e.code} {e.reason}"
+    except Exception as e:
+        return f"MCP call failed: {e}"
+
+
+def tool_subagent_run(args: Dict) -> str:
+    """Sub-agent execution is handled by Agent runtime."""
+    return "Error: subagent_run must be executed by Agent runtime"
+
+
 # ============== TODOS ==============
 
 # Global callback for UI sync (set by create_chat_ui)
@@ -2961,12 +3078,30 @@ TOOLS = {
 
     "semantic_search": (tool_semantic_search, False, "Semantic code search using AI embeddings. Use action='index' to index codebase, action='search' to find code.",
         {"type": "object", "properties": {"action": {"type": "string", "enum": ["index", "search", "status"], "description": "Action: index, search, or status"}, "query": {"type": "string", "description": "Natural language search query (for search)"}, "path": {"type": "string", "description": "Directory to index (for index)"}, "top_k": {"type": "integer", "description": "Number of results (default 5)"}}, "required": ["action"]}),
+
+    "skill_list": (tool_skill_list, False, "List available local skills from skills directory.",
+        {"type": "object", "properties": {}, "required": []}),
+
+    "skill_read": (tool_skill_read, False, "Read one local skill by name.",
+        {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}),
+
+    "mcp_call": (tool_mcp_call, True, "Call MCP endpoint via JSON-RPC (disabled unless configured).",
+        {"type": "object", "properties": {"method": {"type": "string"}, "params": {"type": "object"}}, "required": ["method"]}),
+
+    "subagent_run": (tool_subagent_run, True, "Run a bounded sub-agent for delegated tasks.",
+        {"type": "object", "properties": {
+            "task": {"type": "string"},
+            "mode": {"type": "string", "enum": ["plan", "execute"], "description": "Sub-agent mode (default: plan)"},
+            "allowed_tools": {"type": "array", "items": {"type": "string"}},
+            "max_turns": {"type": "integer"}
+        }, "required": ["task"]}),
 }
 
 
-def get_tool_definitions() -> List[Dict]:
+def get_tool_definitions(allowed_tools: Optional[Set[str]] = None) -> List[Dict]:
     """Get tool definitions for Bedrock API."""
-    return [{"name": k, "description": v[2], "input_schema": v[3]} for k, v in TOOLS.items()]
+    names = list(TOOLS.keys()) if allowed_tools is None else [k for k in TOOLS.keys() if k in allowed_tools]
+    return [{"name": k, "description": TOOLS[k][2], "input_schema": TOOLS[k][3]} for k in names]
 
 
 # ============================================================
@@ -3072,13 +3207,13 @@ Remember: EXPLORE and PLAN only. No modifications!
 PLAN_MODE_BLOCKED_TOOLS = {
     "write_file", "edit_file", "bash", "python_exec",
     "create_word", "create_excel", "create_markdown",
-    "create_chart", "create_pdf"
+    "create_chart", "create_pdf", "mcp_call", "subagent_run"
 }
 
 # Plan Mode - Tools that are ALLOWED (read-only operations)
 PLAN_MODE_ALLOWED_TOOLS = {
     "read_file", "glob", "grep", "list_dir", "semantic_search",
-    "todo_write", "todo_read", "view_image"
+    "todo_write", "todo_read", "view_image", "skill_list", "skill_read"
 }
 
 
@@ -3097,6 +3232,8 @@ class Agent:
         on_tokens: Callable = None,
         on_thinking: Callable = None,
         on_stop_check: Callable = None,
+        tool_allowlist: Optional[Set[str]] = None,
+        subagent_depth: int = 0,
     ):
         self.client = client
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -3105,11 +3242,70 @@ class Agent:
         self.on_tokens = on_tokens  # Callback for token updates
         self.on_thinking = on_thinking  # Callback for thinking output
         self.on_stop_check = on_stop_check  # Callback to check if stop was requested
+        self.tool_allowlist = set(tool_allowlist) if tool_allowlist else None
+        self.subagent_depth = subagent_depth
         self.tool_history = deque(maxlen=10)
         self.exec_calls = 0
         self.exec_seconds = 0.0
         self.user_msg_timestamps = deque()
         self.user_msg_count = 0
+
+    def _run_subagent_tool(self, args: Dict, output_fn: Callable) -> str:
+        """Run bounded delegated task with restricted tools."""
+        if self.subagent_depth >= CONFIG.subagent_max_depth:
+            return f"Blocked: sub-agent depth limit reached ({CONFIG.subagent_max_depth})"
+
+        task = str(args.get("task", "")).strip()
+        if not task:
+            return "Error: task is required"
+        mode = str(args.get("mode", "plan")).strip().lower()
+        max_turns = args.get("max_turns", 8)
+        try:
+            max_turns = max(1, min(int(max_turns), 20))
+        except Exception:
+            max_turns = 8
+
+        default_tools = {
+            "read_file", "glob", "grep", "list_dir",
+            "semantic_search", "todo_read", "todo_write", "view_image", "skill_list", "skill_read"
+        }
+        blocked_tools = {"subagent_run"}
+        requested = args.get("allowed_tools")
+        if isinstance(requested, list) and requested:
+            allow = set(str(t) for t in requested) & set(TOOLS.keys())
+        else:
+            allow = set(default_tools)
+        allow = allow - blocked_tools
+
+        sub_prompt = SYSTEM_PROMPT + "\n\nYou are a delegated sub-agent. Return concise findings and next actions."
+        if mode == "plan":
+            sub_prompt = sub_prompt + "\n\n" + PLAN_MODE_PROMPT
+
+        sub = Agent(
+            self.client,
+            session_id=f"{self.session_id}_sub_{int(time.time())}",
+            on_approval=self.on_approval,
+            on_tokens=None,
+            on_thinking=None,
+            on_stop_check=self.on_stop_check,
+            tool_allowlist=allow,
+            subagent_depth=self.subagent_depth + 1,
+        )
+        sub_output = []
+        old_turns = CONFIG.max_turns
+        try:
+            CONFIG.max_turns = max_turns
+            result = sub.run(
+                task,
+                output_fn=lambda t: sub_output.append(str(t)),
+                system_prompt=sub_prompt,
+                plan_mode=(mode == "plan"),
+                count_towards_limits=False,
+            )
+        finally:
+            CONFIG.max_turns = old_turns
+        tail = "\n".join(sub_output[-6:])
+        return SECURITY.truncate_output(f"[Sub-agent mode={mode}, tools={sorted(allow)}]\n{result}\n\n[Trace]\n{tail}")
 
     def run(
         self,
@@ -3199,7 +3395,7 @@ class Agent:
                 return self.client.chat(
                     self.messages,
                     self._system_prompt,  # Use custom or default system prompt
-                    get_tool_definitions(),
+                    get_tool_definitions(self.tool_allowlist),
                     CONFIG.max_tokens,
                     CONFIG.temperature,
                     CONFIG.thinking_enabled,
@@ -3314,6 +3510,12 @@ class Agent:
 
                 func, needs_approval, description, schema = tool_info
 
+                # Additional allowlist constraint (used by delegated sub-agents).
+                if self.tool_allowlist is not None and tool_name not in self.tool_allowlist:
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                        "content": f"Tool blocked by policy in this run: {tool_name}"})
+                    continue
+
                 # === PLAN MODE ENFORCEMENT ===
                 # Block write tools when in Plan Mode
                 if getattr(self, '_plan_mode', False) and tool_name in PLAN_MODE_BLOCKED_TOOLS:
@@ -3377,25 +3579,28 @@ class Agent:
                 # === LAYER 5: Execute with Error Recovery ===
                 output_fn(f"[Calling {tool_name}...]")
                 try:
-                    if tool_name in {"bash", "python_exec"}:
-                        if self.exec_calls >= CONFIG.max_exec_calls_per_session:
-                            result = f"Blocked: execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
-                            tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
-                            AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
-                            continue
-                        if self.exec_seconds >= CONFIG.max_exec_seconds_per_session:
-                            result = f"Blocked: execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
-                            tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
-                            AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
-                            continue
-                        if CONFIG.execution_mode == "docker":
-                            _ensure_docker_image_ready()
-                    start_ts = time.time()
-                    result = func(args)
-                    elapsed = time.time() - start_ts
-                    if tool_name in {"bash", "python_exec"}:
-                        self.exec_calls += 1
-                        self.exec_seconds += elapsed
+                    if tool_name == "subagent_run":
+                        result = self._run_subagent_tool(args, output_fn)
+                    else:
+                        if tool_name in {"bash", "python_exec"}:
+                            if self.exec_calls >= CONFIG.max_exec_calls_per_session:
+                                result = f"Blocked: execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
+                                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                                AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                                continue
+                            if self.exec_seconds >= CONFIG.max_exec_seconds_per_session:
+                                result = f"Blocked: execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
+                                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                                AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                                continue
+                            if CONFIG.execution_mode == "docker":
+                                _ensure_docker_image_ready()
+                        start_ts = time.time()
+                        result = func(args)
+                        elapsed = time.time() - start_ts
+                        if tool_name in {"bash", "python_exec"}:
+                            self.exec_calls += 1
+                            self.exec_seconds += elapsed
                 except TypeError as e:
                     result = f"TypeError: {e}. Check argument types. Expected schema: {schema}"
                 except KeyError as e:
@@ -3458,6 +3663,8 @@ TOOL_ICONS = {
     'create_word': '📄', 'create_excel': '📊', 'create_markdown': '📋',
     'view_image': '🖼️', 'semantic_search': '🧠',
     'todo_write': '✅', 'todo_read': '📋',
+    'skill_list': '🧩', 'skill_read': '📘',
+    'mcp_call': '🔌', 'subagent_run': '🧠',
 }
 
 
@@ -3487,6 +3694,7 @@ def create_chat_ui(mock_mode: bool = None):
         "authenticated": not CONFIG.require_auth,
         "model_connection_ok": None,  # True/False/None(unknown)
         "model_connection_msg": "Not validated yet",
+        "active_skills": [],
     }
     ui_state["model_change_lock"] = False
 
@@ -3899,6 +4107,7 @@ def create_chat_ui(mock_mode: bool = None):
         thinking = "ON" if CONFIG.thinking_enabled else "OFF"
         auth = "ON" if CONFIG.require_auth else "OFF"
         approval = "ON" if CONFIG.require_tool_approval else "OFF"
+        skills_count = len(ui_state.get("active_skills", []))
         dark = ui_state.get("dark_mode", True)
         text_color = "#aab4be" if dark else "#666"
         if ui_state.get("model_connection_ok") is True:
@@ -3920,6 +4129,7 @@ def create_chat_ui(mock_mode: bool = None):
             f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
             f'Auth: <b>{auth}</b> | '
             f'Approval: <b>{approval}</b> | '
+            f'Skills: <b>{skills_count}</b> | '
             f'Exec: <b>{escape_html(CONFIG.execution_mode)}</b>'
             f'</div>'
         )
@@ -3994,7 +4204,7 @@ def create_chat_ui(mock_mode: bool = None):
         render_chat()
 
     # Tools where "Always" approve is too dangerous (each invocation has different risk)
-    HIGH_RISK_TOOLS = {"bash", "python_exec"}
+    HIGH_RISK_TOOLS = {"bash", "python_exec", "mcp_call", "subagent_run"}
 
     def request_approval(tool_name: str, tool_input: Dict) -> bool:
         import threading
@@ -4168,6 +4378,36 @@ def create_chat_ui(mock_mode: bool = None):
             input_box.value = ""
             return
 
+        # Local skill commands (v4)
+        if msg == "/skills":
+            skills = SKILLS.list_skills()
+            if not skills:
+                add_message('system', f'No skills found in {SKILLS.skills_dir}')
+            else:
+                add_message('system', "Available skills:\n" + "\n".join([f"- {s['name']}: {s['summary']}" for s in skills]))
+            input_box.value = ""
+            return
+        if msg.startswith("/skill use "):
+            name = msg[len("/skill use "):].strip()
+            ok, _content = SKILLS.read_skill(name)
+            if not ok:
+                add_message('system', f'Skill not found: {name}')
+            else:
+                active = ui_state.get("active_skills", [])
+                if name not in active:
+                    active.append(name)
+                    ui_state["active_skills"] = active
+                add_message('system', f'Enabled skill: {name}')
+                update_mode_display()
+            input_box.value = ""
+            return
+        if msg == "/skill clear":
+            ui_state["active_skills"] = []
+            add_message('system', 'Cleared active skills')
+            update_mode_display()
+            input_box.value = ""
+            return
+
         ui_state["lock"] = True
         ui_state["stop_requested"] = False  # Reset stop flag
         send_btn.disabled = True
@@ -4244,6 +4484,18 @@ def create_chat_ui(mock_mode: bool = None):
                 system_prompt = SYSTEM_PROMPT + "\n\n" + PLAN_MODE_PROMPT
             else:
                 system_prompt = None  # Use default
+
+            # Append active skills as extra runtime guidance.
+            active_skills = ui_state.get("active_skills", [])
+            if active_skills:
+                blocks = []
+                for skill_name in active_skills:
+                    ok, txt = SKILLS.read_skill(skill_name, max_chars=4000)
+                    if ok and txt.strip():
+                        blocks.append(f"[SKILL: {skill_name}]\n{txt}")
+                if blocks:
+                    base_prompt = system_prompt if system_prompt is not None else SYSTEM_PROMPT
+                    system_prompt = base_prompt + "\n\n# Active Skills\n" + "\n\n".join(blocks)
 
             ui_state["agent"].run(msg, output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
 
@@ -4333,6 +4585,7 @@ def create_chat_ui(mock_mode: bool = None):
                             "user_msg_count": ui_state["agent"].user_msg_count,
                             "exec_calls": ui_state["agent"].exec_calls,
                             "exec_seconds": ui_state["agent"].exec_seconds,
+                            "active_skills": list(ui_state.get("active_skills", [])),
                         },
                         todos=_TODOS.copy() if _TODOS else []
                     )
@@ -4352,6 +4605,7 @@ def create_chat_ui(mock_mode: bool = None):
         TOKENS.reset()
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
+        ui_state["active_skills"] = []
         render_chat()
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
@@ -4366,6 +4620,7 @@ def create_chat_ui(mock_mode: bool = None):
             metadata["user_msg_count"] = ui_state["agent"].user_msg_count
             metadata["exec_calls"] = ui_state["agent"].exec_calls
             metadata["exec_seconds"] = ui_state["agent"].exec_seconds
+            metadata["active_skills"] = list(ui_state.get("active_skills", []))
             ui_state["session"].metadata = metadata
             # Save todos with session (store as metadata)
             ui_state["session"].todos = ui_state["todos"].copy() if ui_state["todos"] else []
@@ -4434,6 +4689,9 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["agent"].user_msg_count = int(session.metadata.get("user_msg_count", 0) or 0)
             ui_state["agent"].exec_calls = int(session.metadata.get("exec_calls", 0) or 0)
             ui_state["agent"].exec_seconds = float(session.metadata.get("exec_seconds", 0.0) or 0.0)
+            loaded_skills = session.metadata.get("active_skills", [])
+            if isinstance(loaded_skills, list):
+                ui_state["active_skills"] = [str(s) for s in loaded_skills if isinstance(s, str)]
 
         # Display loaded messages
         ui_state["messages"] = []
