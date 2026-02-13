@@ -5529,6 +5529,10 @@ def create_chat_ui(mock_mode: bool = None):
             cmd_agent = ui_state.pop("_cmd_agent_type", None)
             cmd_label = ui_state.pop("_cmd_name", "command")
             if cmd_agent and cmd_agent in AGENT_TYPES:
+                # Plan Mode safety: force plan agent when Plan Mode is ON
+                if plan_mode_toggle.value and cmd_agent != "plan":
+                    add_message('system', f'📋 PLAN MODE: /{cmd_label} forced to plan agent (was: {cmd_agent})')
+                    cmd_agent = "plan"
                 # Route the expanded command through the task sub-agent system
                 task_result = ui_state["agent"]._run_task_tool(
                     {"prompt": msg, "subagent_type": cmd_agent, "description": f"/{cmd_label} command"},

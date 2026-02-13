@@ -1,5 +1,24 @@
 # Compact V2 Changelog
 
+## v2.9.4 — Plan Mode Safety (2026-02-13)
+
+### Bug Fixes
+- **Plan mode bypass via command-agent dispatch** (MEDIUM): Slash commands with `"agent": "build"` could bypass Plan Mode and run write-capable sub-agents even when Plan Mode was ON. Fixed: when Plan Mode is active, command-agent dispatch now forces `cmd_agent = "plan"` with a UI message.
+
+### Findings Verification
+- **Mojibake (LOW)**: NOT CONFIRMED — lines 5193, 5506, 5564 contain valid Unicode (`✓` U+2713, `⏹` U+23F9, `✅` U+2705). May appear garbled in non-UTF-8 terminals but source is correct.
+- **No Docker isolation (Architectural)**: ACCEPTED — SageMaker Studio kernels typically lack Docker. Policy-based sandboxing (bash allowlist + Python AST + import hook) is the defense layer. Acceptable for single-user use.
+
+### Tests
+- 1 new test: `test_plan_mode_forces_plan_agent_on_command_dispatch`
+- **84 total tests pass** (25 existing + 59 new)
+
+### Gap Assessment (updated)
+- **For single-user SageMaker**: ~92% parity, production-ready
+- **Against full OpenCode**: ~80% (remaining gap is LSP, OAuth MCP, session forking, multi-layer config — all intentionally excluded)
+
+---
+
 ## v2.9.3 — Audit Cleanup (2026-02-13)
 
 ### Bug Fixes

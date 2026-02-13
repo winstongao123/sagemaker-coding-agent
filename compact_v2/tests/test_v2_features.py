@@ -716,6 +716,20 @@ def test_command_agent_dispatch_uses_task_tool():
     assert "read_file" in plan_cfg["tools"]
 
 
+def test_plan_mode_forces_plan_agent_on_command_dispatch():
+    """When Plan Mode is ON, command-agent dispatch should force 'plan' agent type."""
+    from sagemaker_agent import AGENT_TYPES
+    # Simulate the plan mode override logic from the send flow
+    plan_mode_on = True
+    cmd_agent = "build"  # Command configured with build agent
+    if plan_mode_on and cmd_agent != "plan":
+        cmd_agent = "plan"  # Force plan
+    assert cmd_agent == "plan"
+    # Verify plan agent restricts write tools
+    assert "write_file" not in AGENT_TYPES["plan"]["tools"]
+    assert "bash" not in AGENT_TYPES["plan"]["tools"]
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])

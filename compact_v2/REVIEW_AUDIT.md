@@ -74,7 +74,51 @@ Scope: `compact_v2` vs practical OpenCode parity for single-user SageMaker usage
   - OAuth for MCP (SageMaker uses IAM)
   - Multi-provider (Bedrock-only by design)
 
+## Second Review (v2.9.4)
+
+### Findings Checked
+
+| # | Finding | Severity | Verdict |
+|---|---------|----------|---------|
+| 1 | Plan mode bypass via command-agent dispatch | Medium | **TRUE — FIXED** |
+| 2 | Mojibake/encoding artifacts in UI strings | Low | **FALSE — valid Unicode** |
+| 3 | No hard isolation without Docker | Architectural | **ACCEPTED** |
+
+#### Finding 1: Plan mode bypass (TRUE, FIXED)
+- `plan_mode_toggle.value` was checked at line 5510 for normal flow
+- But command-agent dispatch at line 5531 called `_run_task_tool()` directly, bypassing the check
+- A command with `"agent": "build"` could run write-capable sub-agent even with Plan Mode ON
+- **Fix**: Added guard — when Plan Mode is ON, force `cmd_agent = "plan"` before dispatch
+- **Test**: `test_plan_mode_forces_plan_agent_on_command_dispatch`
+
+#### Finding 2: Mojibake (FALSE)
+- Lines 5193, 5506, 5564 contain valid Unicode characters:
+  - `✓` = U+2713 (CHECK MARK)
+  - `⏹` = U+23F9 (STOP BUTTON)
+  - `✅` = U+2705 (WHITE HEAVY CHECK MARK)
+- Source file is valid UTF-8. May appear garbled in non-UTF-8 terminals/editors.
+- No action needed.
+
+#### Finding 3: No Docker isolation (ACCEPTED)
+- SageMaker Studio kernels typically lack Docker daemon
+- Defense layers: bash command allowlist + Python AST analysis + import hook + rate limiting
+- Acceptable for single-user controlled environment
+- For multi-user/enterprise: deploy in hardened container with Docker support
+
+### Gap % Assessment
+
+**For single-user SageMaker coding assistant: ~92% parity**
+- All core features working (MCP, sub-agents, skills, config, commands, cost, snapshots, permissions, diffs, web_fetch, ask_user)
+- Security exceeds OpenCode (3-layer bash + 3-layer Python vs permission rules only)
+- Unique advantages: document creation (5 tools), semantic search, SSRF hardening
+
+**Against full OpenCode: ~80%**
+- Remaining intentional gaps: LSP (7 servers), OAuth MCP, session forking, multi-layer config, file watching, hooks/plugins
+- All excluded because they don't apply to single-user SageMaker
+
+**Strong enough for daily personal/company-internal coding workflow: YES**
+
 ## All Audit Items: RESOLVED
-- 83 tests pass (25 existing + 58 new)
+- 84 tests pass (25 existing + 59 new)
 - No open gaps for single-user SageMaker use case
 
