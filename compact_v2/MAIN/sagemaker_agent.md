@@ -1,9 +1,9 @@
-# sagemaker_agent.py (Markdown Copy)
+# sagemaker_agent.py
 
-This file is an auto-generated markdown copy of `sagemaker_agent.py`.
-
-- **Version: 2.5.0 (January 2025)**
-- **5996 lines** | **27 classes** | **40 functions** | **21 tool functions**
+> Auto-generated markdown copy of `sagemaker_agent.py`.
+> Source of truth is always the `.py` file.
+>
+> Stats: 5996 lines, 27 classes, 40 functions, 21 tool functions
 
 ```python
 """
@@ -6001,4 +6001,5 @@ if __name__ == "__main__":
     print("\nTo use in Jupyter:")
     print("  from sagemaker_agent import create_chat_ui")
     print("  create_chat_ui()")
+
 ```
