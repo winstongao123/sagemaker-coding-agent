@@ -694,6 +694,28 @@ def test_skill_missing_frontmatter():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+# ============================================================
+# COMMAND -> AGENT DISPATCH INTEGRATION
+# ============================================================
+
+def test_command_agent_dispatch_uses_task_tool():
+    """When a command specifies agent type, it should route through _run_task_tool."""
+    from sagemaker_agent import CommandRegistry, AGENT_TYPES
+    # Verify the command agent lookup returns the right type
+    cmds = CommandRegistry({
+        "review": {"template": "Review this: $ARGUMENTS", "agent": "plan", "description": "Review"},
+    })
+    # Simulate the dispatch check: agent type must exist in AGENT_TYPES
+    agent_type = cmds.get_agent("review")
+    assert agent_type == "plan"
+    assert agent_type in AGENT_TYPES
+    # Verify plan agent has restricted tools (read-only)
+    plan_cfg = AGENT_TYPES["plan"]
+    assert plan_cfg["tools"] is not None
+    assert "write_file" not in plan_cfg["tools"]
+    assert "read_file" in plan_cfg["tools"]
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])

@@ -1,5 +1,22 @@
 # Compact V2 Changelog
 
+## v2.9.3 — Audit Cleanup (2026-02-13)
+
+### Bug Fixes
+- **Command agent dispatch**: Commands with `"agent": "plan"` (or other types) in `opencode.json` now actually route through the sub-agent system via `_run_task_tool()`, enforcing agent-specific tool restrictions. Previously the hint was stored but never consumed.
+
+### Tests
+- 1 new test: `test_command_agent_dispatch_uses_task_tool` — verifies command agent lookup resolves correctly and plan agent has read-only tools
+- **83 total tests pass** (25 existing + 58 new)
+
+### Audit
+- All items from `REVIEW_AUDIT.md` resolved:
+  - A1 (command agent dispatch): Fixed
+  - C1 (mojibake): Not confirmed — all characters are valid Unicode
+  - B1/B2 (SageMaker auto-approve, no Docker): Accepted for single-user use
+
+---
+
 ## v2.9.2 — Final Polish (2026-02-13)
 
 ### Bug Fixes

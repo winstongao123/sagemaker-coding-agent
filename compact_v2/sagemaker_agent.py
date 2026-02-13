@@ -5431,8 +5431,9 @@ def create_chat_ui(mock_mode: bool = None):
                 else:
                     add_message('system', f'Expanding /{cmd_name}...')
                 msg = expanded  # Replace msg with expanded template
-                # Store agent type hint for the send flow
+                # Store agent type and command name for the send flow
                 ui_state["_cmd_agent_type"] = cmd_agent
+                ui_state["_cmd_name"] = cmd_name
                 # Fall through to normal send flow
 
         ui_state["lock"] = True
@@ -5524,7 +5525,18 @@ def create_chat_ui(mock_mode: bool = None):
                     base_prompt = system_prompt if system_prompt is not None else SYSTEM_PROMPT
                     system_prompt = base_prompt + "\n\n# Active Skills\n" + "\n\n".join(blocks)
 
-            ui_state["agent"].run(msg, output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
+            # If a command specified an agent type, dispatch through sub-agent
+            cmd_agent = ui_state.pop("_cmd_agent_type", None)
+            cmd_label = ui_state.pop("_cmd_name", "command")
+            if cmd_agent and cmd_agent in AGENT_TYPES:
+                # Route the expanded command through the task sub-agent system
+                task_result = ui_state["agent"]._run_task_tool(
+                    {"prompt": msg, "subagent_type": cmd_agent, "description": f"/{cmd_label} command"},
+                    output_fn
+                )
+                add_message('assistant', task_result)
+            else:
+                ui_state["agent"].run(msg, output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
 
             # Update status when done
             usage = CONTEXT.get_usage(ui_state["agent"].messages)
