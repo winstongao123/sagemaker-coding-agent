@@ -4943,7 +4943,7 @@ def create_chat_ui(mock_mode: bool = None):
         # CSS-only auto-scroll: use flex-direction: column-reverse
         # Messages are wrapped in inner div, outer div is reversed flex container
         # This makes new content appear at bottom and stay visible
-        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;max-width:calc(100% - 6px);">
+        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;max-width:calc(100% - 6px);margin-left:0;margin-right:auto;">
             <div style="padding:10px;font-family:system-ui,-apple-system,sans-serif;">
                 {content}
             </div>
