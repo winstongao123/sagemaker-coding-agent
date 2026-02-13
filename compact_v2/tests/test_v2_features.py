@@ -6,7 +6,7 @@ import tempfile
 import shutil
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "MAIN"))
 
 
 # ============================================================
