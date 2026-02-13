@@ -15,6 +15,7 @@ Secure AI coding assistant powered by AWS Bedrock Claude.
 - Session management & audit logging
 - Context monitoring, compaction, and model connectivity status
 
+
 ## Cell 2 (code)
 
 ```python
@@ -208,4 +209,5 @@ Try these prompts to test the agent:
 - Dangerous command blocking and restricted execution mode
 - Tool approval is configurable via UI `Require Approval` (default OFF in SageMaker)
 - Audit logging and session persistence
+
 

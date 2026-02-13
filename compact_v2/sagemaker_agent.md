@@ -2,6 +2,9 @@
 
 This file is an auto-generated markdown copy of `sagemaker_agent.py`.
 
+- **Version: 2.5.0 (January 2025)**
+- **5964 lines** | **27 classes** | **40 functions** | **21 tool functions**
+
 ```python
 """
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
@@ -89,10 +92,14 @@ from pathlib import Path
 from collections import deque
 import copy
 import glob as glob_module
+import logging
 import random
 import shlex
 import threading
 import shutil
+import urllib.request
+import urllib.error
+import urllib.parse
 
 # ============================================================
 # RETRY LOGIC (OpenCode-style)
@@ -562,8 +569,138 @@ class Config:
     max_exec_seconds_per_session: int = 900
     audit_retention_days: int = 30
 
+    # V4 capabilities
+    enable_skills: bool = True
+    skills_dir: str = "./skills"
+    enable_mcp: bool = False
+    mcp_servers: Dict = field(default_factory=dict)  # {"name": {"type": "local"|"remote", ...}}
+    mcp_timeout_seconds: int = 30
+    subagent_max_depth: int = 2
+
+    # Custom commands
+    custom_commands: Dict = field(default_factory=dict)  # {"review": {"template": "...", "agent": "plan"}}
+
+    # Permission overrides (from config file)
+    permission_rules: Dict = field(default_factory=dict)  # {"bash": "ask", "read_file": "allow"}
+
+    # Agent type overrides (from config file)
+    agent_overrides: Dict = field(default_factory=dict)  # {"plan": {"prompt": "...", "model": "..."}}
+
+
+def _strip_jsonc_comments(text: str) -> str:
+    """Strip // comments from JSONC, preserving // inside quoted strings."""
+    result = []
+    i = 0
+    in_string = False
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            result.append(ch)
+            if ch == '\\' and i + 1 < len(text):
+                result.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+        else:
+            if ch == '"':
+                in_string = True
+                result.append(ch)
+                i += 1
+            elif ch == '/' and i + 1 < len(text) and text[i + 1] == '/':
+                # Skip to end of line
+                while i < len(text) and text[i] != '\n':
+                    i += 1
+            elif ch == '/' and i + 1 < len(text) and text[i + 1] == '*':
+                # Block comment /* ... */
+                i += 2
+                while i + 1 < len(text) and not (text[i] == '*' and text[i + 1] == '/'):
+                    i += 1
+                if i + 1 < len(text):
+                    i += 2  # skip */
+            else:
+                result.append(ch)
+                i += 1
+    return "".join(result)
+
+
+def _load_config_file(workspace: str) -> Dict:
+    """Load optional opencode.json / opencode.jsonc config from workspace."""
+    for name in ("opencode.json", "opencode.jsonc", ".opencode/config.json"):
+        path = os.path.join(workspace, name)
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                text = _strip_jsonc_comments(text)
+                return json.loads(text)
+            except Exception:
+                pass
+    return {}
+
+
+def _apply_config_file(config: 'Config') -> None:
+    """Merge external config file into Config dataclass with type validation."""
+    ext = _load_config_file(config.workspace)
+    if not ext:
+        return
+
+    # Scalar fields with expected types for validation
+    _SCALAR_FIELDS: Dict[str, type] = {
+        "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
+        "max_history": int, "temperature": float, "thinking_enabled": bool,
+        "thinking_budget": int, "mock_mode": bool,
+        "bash_allow_interpreters": bool, "bash_allow_docker": bool,
+        "execution_mode": str, "exec_docker_image": str,
+        "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
+        "require_auth": bool, "require_tool_approval": bool,
+        "enable_skills": bool, "skills_dir": str,
+        "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
+        "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
+        "audit_retention_days": int,
+    }
+    for key, expected_type in _SCALAR_FIELDS.items():
+        if key not in ext:
+            continue
+        val = ext[key]
+        # Allow int where float expected
+        if expected_type is float and isinstance(val, int):
+            val = float(val)
+        if not isinstance(val, expected_type):
+            logging.warning(f"Config: '{key}' expected {expected_type.__name__}, got {type(val).__name__} — skipped")
+            continue
+        # Range validation for numeric fields
+        if key == "temperature" and not (0.0 <= val <= 1.0):
+            logging.warning(f"Config: temperature={val} out of range [0.0, 1.0] — skipped")
+            continue
+        if key == "thinking_budget" and not (1024 <= val <= 64000):
+            logging.warning(f"Config: thinking_budget={val} out of range [1024, 64000] — skipped")
+            continue
+        if key in ("max_turns", "max_tokens", "max_history", "subagent_max_depth") and val < 1:
+            logging.warning(f"Config: {key}={val} must be positive — skipped")
+            continue
+        setattr(config, key, val)
+
+    # Structured fields
+    if "mcp" in ext and isinstance(ext["mcp"], dict):
+        config.mcp_servers = ext["mcp"]
+        if config.mcp_servers:
+            config.enable_mcp = True
+
+    if "commands" in ext and isinstance(ext["commands"], dict):
+        config.custom_commands = ext["commands"]
+
+    if "permissions" in ext and isinstance(ext["permissions"], dict):
+        config.permission_rules = ext["permissions"]
+
+    if "agents" in ext and isinstance(ext["agents"], dict):
+        config.agent_overrides = ext["agents"]
+
+
 # Initialize config
 CONFIG = Config()
+_apply_config_file(CONFIG)
 
 # Create directories
 os.makedirs(CONFIG.sessions_dir, exist_ok=True)
@@ -1339,7 +1476,8 @@ class SessionManager:
                     with open(os.path.join(self.sessions_dir, filename), "r", encoding="utf-8") as f:
                         data = json.load(f)
                     sessions.append({"id": data["id"], "title": data["title"], "updated_at": data["updated_at"]})
-                except:
+                except (json.JSONDecodeError, KeyError, OSError) as e:
+                    logging.debug(f"Skipping corrupt session file {filename}: {e}")
                     continue
         return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
 
@@ -1353,6 +1491,523 @@ class SessionManager:
 
 # Initialize session manager
 SESSIONS = SessionManager(CONFIG.sessions_dir)
+
+
+# ============================================================
+# SKILLS (V4)
+# ============================================================
+
+@dataclass
+class SkillInfo:
+    """Parsed skill metadata."""
+    name: str
+    description: str
+    location: str  # full path to SKILL.md
+    base_dir: str  # directory containing the skill
+
+
+class SkillManager:
+    """OpenCode-compatible skill loader. Discovers **/SKILL.md with YAML frontmatter."""
+
+    def __init__(self, workspace: str, skills_dir: str):
+        self.workspace = Path(workspace).resolve()
+        self.skills_dir = (self.workspace / skills_dir).resolve() if not os.path.isabs(skills_dir) else Path(skills_dir).resolve()
+        os.makedirs(self.skills_dir, exist_ok=True)
+        self._cache: Dict[str, SkillInfo] = {}
+        self.active_skill: Optional[str] = None  # Currently active skill name
+
+    def _parse_frontmatter(self, text: str) -> Tuple[Dict, str]:
+        """Parse YAML frontmatter from markdown. Returns (metadata, content)."""
+        if text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                meta = {}
+                for line in parts[1].strip().splitlines():
+                    if ":" in line:
+                        key, _, val = line.partition(":")
+                        meta[key.strip()] = val.strip()
+                return meta, parts[2].strip()
+        # Fallback: first non-empty line as description
+        lines = text.strip().splitlines()
+        first = next((ln.strip().lstrip("# ") for ln in lines if ln.strip()), "")
+        return {"description": first[:120]}, text
+
+    def discover(self) -> Dict[str, SkillInfo]:
+        """Scan for **/SKILL.md files and legacy *.md files."""
+        self._cache.clear()
+        search_dirs = [self.skills_dir]
+        # Also check .opencode/skill/ and .claude/skills/ relative to workspace
+        for sub in (".opencode/skill", ".opencode/skills", ".claude/skills"):
+            d = self.workspace / sub
+            if d.is_dir():
+                search_dirs.append(d)
+
+        for search_dir in search_dirs:
+            # Glob for **/SKILL.md (OpenCode pattern)
+            for fp in sorted(search_dir.rglob("SKILL.md")):
+                try:
+                    text = fp.read_text(encoding="utf-8", errors="ignore")
+                    meta, content = self._parse_frontmatter(text)
+                    name = meta.get("name", fp.parent.name)
+                    desc = meta.get("description", "")
+                    self._cache[name] = SkillInfo(
+                        name=name, description=desc,
+                        location=str(fp), base_dir=str(fp.parent),
+                    )
+                except Exception:
+                    continue
+            # Also support legacy flat *.md files in skills_dir
+            if search_dir == self.skills_dir:
+                for fp in sorted(search_dir.glob("*.md")):
+                    if fp.name == "SKILL.md":
+                        continue  # Already handled
+                    try:
+                        text = fp.read_text(encoding="utf-8", errors="ignore")
+                        meta, content = self._parse_frontmatter(text)
+                        name = meta.get("name", fp.stem)
+                        desc = meta.get("description", "")
+                        if name not in self._cache:
+                            self._cache[name] = SkillInfo(
+                                name=name, description=desc,
+                                location=str(fp), base_dir=str(fp.parent),
+                            )
+                    except Exception:
+                        continue
+        return self._cache
+
+    def list_skills(self) -> List[Dict]:
+        """List all discovered skills."""
+        if not self._cache:
+            self.discover()
+        return [{"name": s.name, "description": s.description, "path": s.location} for s in self._cache.values()]
+
+    def read_skill(self, name: str, max_chars: int = 12000) -> Tuple[bool, str]:
+        """Load a skill's full content."""
+        if not self._cache:
+            self.discover()
+        skill = self._cache.get(name)
+        if not skill:
+            available = ", ".join(self._cache.keys()) if self._cache else "none"
+            return False, f"Skill '{name}' not found. Available: {available}"
+        try:
+            text = Path(skill.location).read_text(encoding="utf-8", errors="ignore")
+            _, content = self._parse_frontmatter(text)
+            return True, content[:max_chars]
+        except Exception as e:
+            return False, f"Failed reading skill: {e}"
+
+    def get_active_skill_prompt(self) -> str:
+        """Get active skill content for system prompt injection."""
+        if not self.active_skill:
+            return ""
+        ok, content = self.read_skill(self.active_skill)
+        if not ok:
+            return ""
+        skill = self._cache.get(self.active_skill)
+        return f"\n\n## Active Skill: {self.active_skill}\nBase directory: {skill.base_dir if skill else 'unknown'}\n\n{content}"
+
+    def list_for_prompt(self) -> str:
+        """XML-formatted skill list for LLM tool description."""
+        if not self._cache:
+            self.discover()
+        if not self._cache:
+            return "No skills available."
+        lines = ["<available_skills>"]
+        for s in self._cache.values():
+            lines.append(f'  <skill><name>{s.name}</name><description>{s.description}</description></skill>')
+        lines.append("</available_skills>")
+        return "\n".join(lines)
+
+
+# Initialize skills manager
+SKILLS = SkillManager(CONFIG.workspace, CONFIG.skills_dir)
+SKILLS.discover()
+
+
+# ============================================================
+# COMMAND REGISTRY (Custom slash commands from config)
+# ============================================================
+
+class CommandRegistry:
+    """User-defined slash commands with template expansion."""
+
+    def __init__(self, commands: Dict):
+        self.commands: Dict[str, Dict] = {}
+        for name, spec in commands.items():
+            if isinstance(spec, dict) and "template" in spec:
+                self.commands[name] = {
+                    "template": spec["template"],
+                    "agent": spec.get("agent"),
+                    "description": spec.get("description", f"Custom command: {name}"),
+                    "subtask": spec.get("subtask", False),
+                }
+
+    def expand(self, name: str, arguments: str) -> Optional[str]:
+        """Expand command template. Returns None if command not found."""
+        cmd = self.commands.get(name)
+        if not cmd:
+            return None
+        text = cmd["template"]
+        text = text.replace("$ARGUMENTS", arguments)
+        # Positional: $1, $2, $3
+        parts = arguments.split() if arguments else []
+        for i, part in enumerate(parts[:9], 1):
+            text = text.replace(f"${i}", part)
+        return text
+
+    def get_agent(self, name: str) -> Optional[str]:
+        """Get agent type override for command, if any."""
+        cmd = self.commands.get(name)
+        return cmd.get("agent") if cmd else None
+
+    def list_commands(self) -> List[Dict]:
+        """List available commands."""
+        return [{"name": n, "description": c["description"]} for n, c in self.commands.items()]
+
+
+COMMANDS = CommandRegistry(CONFIG.custom_commands)
+
+
+# ============================================================
+# MCP CLIENT (Model Context Protocol - stdio + HTTP transports)
+# ============================================================
+
+class McpStdioClient:
+    """MCP client using stdio transport (JSON-RPC over stdin/stdout of a child process)."""
+
+    def __init__(self, name: str, command: List[str], env: Dict = None, timeout: int = 30):
+        self.name = name
+        self.process: Optional[subprocess.Popen] = None
+        self._request_id = 0
+        self.timeout = timeout
+        self._command = command
+        self._env = env or {}
+        self.server_info: Dict = {}
+
+    def connect(self) -> bool:
+        """Spawn the MCP server process and perform initialize handshake."""
+        env = {**os.environ, **self._env}
+        try:
+            self.process = subprocess.Popen(
+                self._command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env=env,
+                cwd=CONFIG.workspace,
+            )
+        except Exception:
+            return False
+        ok = self._initialize()
+        if not ok:
+            self.close()  # Clean up on failed init
+        return ok
+
+    def _readline_with_timeout(self) -> bytes:
+        """Read a line from stdout with timeout to prevent indefinite blocking."""
+        import selectors as _sel
+        sel = _sel.DefaultSelector()
+        try:
+            sel.register(self.process.stdout, _sel.EVENT_READ)
+            events = sel.select(timeout=self.timeout)
+            if not events:
+                raise TimeoutError(f"MCP server {self.name} did not respond within {self.timeout}s")
+            return self.process.stdout.readline()
+        finally:
+            sel.close()
+
+    def _send_request(self, method: str, params: Dict = None) -> Dict:
+        """Send JSON-RPC request and read response."""
+        if not self.process or self.process.poll() is not None:
+            raise RuntimeError(f"MCP server {self.name} is not running")
+        self._request_id += 1
+        msg: Dict = {"jsonrpc": "2.0", "id": self._request_id, "method": method}
+        if params is not None:
+            msg["params"] = params
+        line = json.dumps(msg) + "\n"
+        try:
+            self.process.stdin.write(line.encode("utf-8"))
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError) as e:
+            raise RuntimeError(f"MCP server {self.name} pipe broken: {e}")
+
+        # Read response (skip notifications), with timeout
+        for _ in range(20):  # Max 20 notification lines before giving up
+            resp_line = self._readline_with_timeout()
+            if not resp_line:
+                raise RuntimeError(f"MCP server {self.name} closed stdout")
+            try:
+                resp = json.loads(resp_line.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                raise RuntimeError(f"MCP server {self.name} sent invalid JSON: {e}")
+            if "id" in resp:  # Response (not notification)
+                return resp
+            # Notifications are silently consumed
+        raise RuntimeError(f"MCP server {self.name} sent too many notifications without response")
+
+    def _send_notification(self, method: str, params: Dict = None) -> None:
+        """Send a JSON-RPC notification (no id, no response expected)."""
+        if not self.process or self.process.poll() is not None:
+            return
+        msg: Dict = {"jsonrpc": "2.0", "method": method}
+        if params is not None:
+            msg["params"] = params
+        line = json.dumps(msg) + "\n"
+        try:
+            self.process.stdin.write(line.encode("utf-8"))
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass  # Server already dead, notification is best-effort
+
+    def _initialize(self) -> bool:
+        """MCP initialize handshake."""
+        try:
+            resp = self._send_request("initialize", {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "sagemaker-agent", "version": "2.0"},
+            })
+            if "result" in resp:
+                self.server_info = resp["result"].get("serverInfo", {})
+                self._send_notification("notifications/initialized")
+                return True
+        except Exception:
+            pass
+        return False
+
+    def list_tools(self) -> List[Dict]:
+        """Discover tools from server."""
+        try:
+            resp = self._send_request("tools/list")
+            return resp.get("result", {}).get("tools", [])
+        except Exception:
+            return []
+
+    def call_tool(self, name: str, arguments: Dict) -> str:
+        """Execute a tool on the server."""
+        try:
+            resp = self._send_request("tools/call", {"name": name, "arguments": arguments})
+        except Exception as e:
+            return f"MCP error: {e}"
+        if "error" in resp:
+            err = resp["error"]
+            return f"MCP error: {err.get('message', str(err))}"
+        result = resp.get("result", {})
+        content = result.get("content", [])
+        parts = []
+        for c in content:
+            if isinstance(c, dict):
+                if c.get("type") == "text":
+                    parts.append(c.get("text", ""))
+                elif c.get("type") == "image":
+                    parts.append(f"[Image: {c.get('mimeType', 'image')}]")
+                else:
+                    parts.append(str(c))
+        return "\n".join(parts) if parts else str(result)
+
+    def close(self):
+        """Shutdown the MCP server process, closing all pipes."""
+        if self.process:
+            # Close pipes first to prevent fd leaks
+            for pipe in (self.process.stdin, self.process.stdout):
+                if pipe:
+                    try:
+                        pipe.close()
+                    except Exception:
+                        pass
+            if self.process.poll() is None:
+                try:
+                    self.process.terminate()
+                    self.process.wait(timeout=5)
+                except Exception:
+                    try:
+                        self.process.kill()
+                        self.process.wait(timeout=2)
+                    except Exception:
+                        pass
+            self.process = None
+
+
+class McpHttpClient:
+    """MCP client over HTTP (JSON-RPC bridge)."""
+
+    def __init__(self, name: str, url: str, headers: Dict = None, timeout: int = 30):
+        self.name = name
+        self.url = url
+        self.headers = headers or {}
+        self.timeout = timeout
+        self._request_id = 0
+        self.server_info: Dict = {}
+
+    def connect(self) -> bool:
+        """Perform initialize handshake over HTTP."""
+        try:
+            resp = self._post("initialize", {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "sagemaker-agent", "version": "2.0"},
+            })
+            if "result" in resp:
+                self.server_info = resp["result"].get("serverInfo", {})
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _post(self, method: str, params: Dict = None) -> Dict:
+        self._request_id += 1
+        payload = {"jsonrpc": "2.0", "id": self._request_id, "method": method}
+        if params is not None:
+            payload["params"] = params
+        headers = {"Content-Type": "application/json", **self.headers}
+        req = urllib.request.Request(
+            self.url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                raw = resp.read(2 * 1024 * 1024)  # 2MB max
+                return json.loads(raw.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise RuntimeError(f"MCP HTTP server {self.name} returned invalid response: {e}")
+        except (urllib.error.URLError, OSError) as e:
+            raise RuntimeError(f"MCP HTTP server {self.name} unreachable: {e}")
+
+    def list_tools(self) -> List[Dict]:
+        try:
+            resp = self._post("tools/list")
+            return resp.get("result", {}).get("tools", [])
+        except Exception:
+            return []
+
+    def call_tool(self, name: str, arguments: Dict) -> str:
+        try:
+            resp = self._post("tools/call", {"name": name, "arguments": arguments})
+        except Exception as e:
+            return f"MCP error: {e}"
+        if "error" in resp:
+            return f"MCP error: {resp['error'].get('message', str(resp['error']))}"
+        result = resp.get("result", {})
+        content = result.get("content", [])
+        parts = [c.get("text", str(c)) for c in content if isinstance(c, dict)]
+        return "\n".join(parts) if parts else str(result)
+
+    def close(self):
+        pass  # HTTP clients are stateless
+
+
+class McpManager:
+    """Manages all MCP server connections and dynamically registers their tools."""
+
+    def __init__(self, servers_config: Dict):
+        self.config = servers_config
+        self.clients: Dict[str, object] = {}  # name -> McpStdioClient | McpHttpClient
+        self.status: Dict[str, str] = {}  # name -> "connected" | "failed" | "disabled"
+
+    def connect_all(self) -> None:
+        """Connect to all configured MCP servers."""
+        for name, cfg in self.config.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("enabled") is False:
+                self.status[name] = "disabled"
+                continue
+            server_type = cfg.get("type", "")
+            try:
+                if server_type == "local":
+                    command = cfg.get("command", [])
+                    if not command:
+                        self.status[name] = "failed"
+                        continue
+                    client = McpStdioClient(
+                        name, command,
+                        env=cfg.get("env", cfg.get("environment")),
+                        timeout=cfg.get("timeout", CONFIG.mcp_timeout_seconds),
+                    )
+                elif server_type == "remote":
+                    url = cfg.get("url", "")
+                    if not url:
+                        self.status[name] = "failed"
+                        continue
+                    client = McpHttpClient(
+                        name, url,
+                        headers=cfg.get("headers"),
+                        timeout=cfg.get("timeout", CONFIG.mcp_timeout_seconds),
+                    )
+                else:
+                    self.status[name] = "failed"
+                    continue
+
+                if client.connect():
+                    self.clients[name] = client
+                    self.status[name] = "connected"
+                else:
+                    self.status[name] = "failed"
+            except Exception:
+                self.status[name] = "failed"
+
+    def discover_tools(self) -> Dict[str, Tuple]:
+        """Convert MCP tools to TOOLS registry format. Detects name collisions."""
+        mcp_tools: Dict[str, Tuple] = {}
+        _seen_keys: Dict[str, str] = {}  # key -> server_name (for collision detection)
+        for server_name, client in self.clients.items():
+            try:
+                tools = client.list_tools()
+            except Exception as e:
+                logging.warning(f"MCP tool discovery failed for {server_name}: {e}")
+                continue
+            for tool_def in tools:
+                tool_name = tool_def.get("name", "unknown")
+                # Sanitize: mcp_servername_toolname
+                safe_server = re.sub(r"[^a-zA-Z0-9_]", "_", server_name)
+                safe_tool = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
+                key = f"mcp_{safe_server}_{safe_tool}"
+
+                if key in _seen_keys:
+                    logging.warning(f"MCP tool name collision: '{key}' from {server_name} overwrites {_seen_keys[key]}")
+                _seen_keys[key] = server_name
+
+                # Create closure for tool handler
+                def _make_handler(c, tn):
+                    def handler(args: Dict) -> str:
+                        return c.call_tool(tn, args)
+                    return handler
+
+                schema = tool_def.get("inputSchema", {"type": "object", "properties": {}})
+                if "type" not in schema:
+                    schema["type"] = "object"
+
+                mcp_tools[key] = (
+                    _make_handler(client, tool_name),
+                    True,  # MCP tools require approval
+                    tool_def.get("description", f"MCP tool: {tool_name}"),
+                    schema,
+                )
+        return mcp_tools
+
+    def status_summary(self) -> str:
+        """One-line status for UI display."""
+        if not self.config:
+            return ""
+        connected = sum(1 for s in self.status.values() if s == "connected")
+        total = len(self.config)
+        return f"MCP: {connected}/{total}"
+
+    def close_all(self) -> None:
+        for client in self.clients.values():
+            try:
+                client.close()
+            except Exception:
+                pass
+        self.clients.clear()
+
+
+# Initialize MCP if configured
+MCP_MANAGER = McpManager(CONFIG.mcp_servers)
+if CONFIG.enable_mcp and CONFIG.mcp_servers:
+    MCP_MANAGER.connect_all()
 
 
 # ============================================================
@@ -1424,8 +2079,21 @@ CONTEXT = ContextManager(CONFIG.context_max_tokens)
 # TOKEN TRACKER
 # ============================================================
 
+# Bedrock pricing per 1K tokens (USD, ap-southeast-2 as of 2025)
+_MODEL_PRICING = {
+    "anthropic.claude-3-haiku-20240307-v1:0":     {"input": 0.00025, "output": 0.00125},
+    "anthropic.claude-3-5-haiku-20241022-v1:0":    {"input": 0.001,   "output": 0.005},
+    "anthropic.claude-3-sonnet-20240229-v1:0":     {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-5-sonnet-20240620-v1:0":   {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-5-sonnet-20241022-v2:0":   {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-opus-20240229-v1:0":       {"input": 0.015,   "output": 0.075},
+    "us.anthropic.claude-sonnet-4-20250514-v1:0":  {"input": 0.003,   "output": 0.015},
+    "us.anthropic.claude-opus-4-20250514-v1:0":    {"input": 0.015,   "output": 0.075},
+}
+
+
 class TokenTracker:
-    """Tracks API token usage per message and session."""
+    """Tracks API token usage, cost, and cache hits per session."""
 
     def __init__(self):
         self.reset()
@@ -1435,21 +2103,36 @@ class TokenTracker:
         self.session_input = 0
         self.session_output = 0
         self.session_total = 0
+        self.session_cache_read = 0
+        self.session_cache_write = 0
         self.last_input = 0
         self.last_output = 0
         self.api_calls = 0
+        self.session_cost = 0.0
+        self._model_id = CONFIG.model_id
 
-    def add(self, usage: dict):
+    def add(self, usage: dict, model_id: str = None):
         """Add usage from API response."""
         input_tokens = usage.get("input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
+        cache_read = usage.get("cache_read_input_tokens", 0)
+        cache_write = usage.get("cache_creation_input_tokens", 0)
 
         self.last_input = input_tokens
         self.last_output = output_tokens
         self.session_input += input_tokens
         self.session_output += output_tokens
         self.session_total = self.session_input + self.session_output
+        self.session_cache_read += cache_read
+        self.session_cache_write += cache_write
         self.api_calls += 1
+
+        # Calculate cost
+        mid = model_id or self._model_id
+        pricing = _MODEL_PRICING.get(mid)
+        if pricing:
+            cost = (input_tokens / 1000) * pricing["input"] + (output_tokens / 1000) * pricing["output"]
+            self.session_cost += cost
 
     def get_last(self) -> str:
         """Get last call usage as string."""
@@ -1459,15 +2142,24 @@ class TokenTracker:
         """Get session total as string."""
         return f"In:{self.session_input:,} Out:{self.session_output:,} Total:{self.session_total:,}"
 
+    def get_cost(self) -> str:
+        """Get session cost as string."""
+        if self.session_cost < 0.01:
+            return f"${self.session_cost:.4f}"
+        return f"${self.session_cost:.2f}"
+
     def get_stats(self) -> dict:
         """Get full stats."""
         return {
             "session_input": self.session_input,
             "session_output": self.session_output,
             "session_total": self.session_total,
+            "session_cache_read": self.session_cache_read,
+            "session_cache_write": self.session_cache_write,
             "last_input": self.last_input,
             "last_output": self.last_output,
             "api_calls": self.api_calls,
+            "session_cost_usd": round(self.session_cost, 6),
         }
 
 # Initialize token tracker
@@ -1550,6 +2242,96 @@ def tool_read_file(args: Dict) -> str:
         return f"Error reading file: {e}"
 
 
+import difflib as _difflib
+
+# Track recent diffs for session metadata
+_RECENT_DIFFS: List[Dict] = []
+
+
+class SnapshotManager:
+    """Saves file backups before edits so users can revert agent changes."""
+
+    def __init__(self, workspace: str):
+        self._workspace = workspace
+        self._dir = os.path.join(workspace, ".snapshots")
+        self._log: List[Dict] = []  # [{file, snapshot_path, timestamp}]
+
+    def save(self, filepath: str) -> Optional[str]:
+        """Snapshot a file before modification. Returns snapshot path or None."""
+        if not os.path.isfile(filepath):
+            return None
+        try:
+            os.makedirs(self._dir, exist_ok=True)
+            rel = os.path.relpath(filepath, self._workspace)
+            ts = int(time.time() * 1000)
+            safe_name = re.sub(r"[^\w.]", "_", rel)
+            snap_path = os.path.join(self._dir, f"{ts}_{safe_name}")
+            shutil.copy2(filepath, snap_path)
+            entry = {"file": filepath, "rel": rel, "snapshot": snap_path, "time": time.time()}
+            self._log.append(entry)
+            # Keep max 100 snapshots
+            if len(self._log) > 100:
+                old = self._log.pop(0)
+                try:
+                    os.remove(old["snapshot"])
+                except OSError:
+                    pass
+            return snap_path
+        except Exception:
+            return None
+
+    def list_snapshots(self, filepath: str = None) -> List[Dict]:
+        """List snapshots, optionally filtered to a specific file."""
+        if filepath:
+            return [e for e in self._log if e["file"] == filepath]
+        return list(self._log)
+
+    def revert(self, filepath: str) -> Tuple[bool, str]:
+        """Revert a file to its most recent snapshot."""
+        matching = [e for e in self._log if e["file"] == filepath]
+        if not matching:
+            return False, f"No snapshots for {filepath}"
+        latest = matching[-1]
+        if not os.path.isfile(latest["snapshot"]):
+            return False, "Snapshot file missing"
+        try:
+            shutil.copy2(latest["snapshot"], filepath)
+            return True, f"Reverted {filepath} to snapshot from {time.strftime('%H:%M:%S', time.localtime(latest['time']))}"
+        except Exception as e:
+            return False, f"Revert failed: {e}"
+
+    def revert_all(self) -> str:
+        """Revert all files to their earliest snapshots."""
+        reverted = []
+        # Group by file, revert each to its earliest snapshot
+        files_seen = {}
+        for entry in self._log:
+            if entry["file"] not in files_seen:
+                files_seen[entry["file"]] = entry
+        for filepath, entry in files_seen.items():
+            if os.path.isfile(entry["snapshot"]):
+                try:
+                    shutil.copy2(entry["snapshot"], filepath)
+                    reverted.append(entry["rel"])
+                except Exception:
+                    pass
+        if reverted:
+            return f"Reverted {len(reverted)} files: {', '.join(reverted)}"
+        return "No files to revert"
+
+
+SNAPSHOTS = SnapshotManager(CONFIG.workspace)
+
+
+def _generate_unified_diff(filepath: str, old_content: str, new_content: str, context_lines: int = 3) -> str:
+    """Generate unified diff between old and new content."""
+    rel_path = os.path.relpath(filepath, CONFIG.workspace) if filepath.startswith(CONFIG.workspace) else filepath
+    old_lines = old_content.splitlines(keepends=True)
+    new_lines = new_content.splitlines(keepends=True)
+    diff = _difflib.unified_diff(old_lines, new_lines, fromfile=f"a/{rel_path}", tofile=f"b/{rel_path}", n=context_lines)
+    return "".join(diff)
+
+
 def tool_write_file(args: Dict) -> str:
     """Write content to file."""
     path = args["file_path"]
@@ -1574,13 +2356,42 @@ def tool_write_file(args: Dict) -> str:
         return f"Warning: Content contains potential secrets ({types}). Review before saving."
 
     try:
+        # Snapshot before modification (for revert)
+        if os.path.exists(path):
+            SNAPSHOTS.save(path)
+        # Capture old content for diff
+        old_content = ""
+        is_new = not os.path.exists(path)
+        if not is_new:
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    old_content = f.read()
+            except Exception:
+                pass
+
         dir_path = os.path.dirname(path)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         _FILES_READ.add(os.path.abspath(path))
-        return f"Written {len(content):,} chars to {path}"
+
+        # Generate and store diff
+        if is_new:
+            diff_text = f"--- /dev/null\n+++ b/{os.path.basename(path)}\n@@ -0,0 +1,{content.count(chr(10))+1} @@\n" + "".join(f"+{ln}\n" for ln in content.splitlines())
+        else:
+            diff_text = _generate_unified_diff(path, old_content, content)
+        if diff_text:
+            _RECENT_DIFFS.append({"file": path, "diff": diff_text, "time": time.time()})
+            if len(_RECENT_DIFFS) > 50:
+                _RECENT_DIFFS.pop(0)
+
+        result = f"Written {len(content):,} chars to {path}"
+        if diff_text and not is_new:
+            added = diff_text.count("\n+") - 1  # Exclude +++ header
+            removed = diff_text.count("\n-") - 1
+            result += f" (+{added}/-{removed} lines)"
+        return result
     except Exception as e:
         return f"Error writing file: {e}"
 
@@ -1607,6 +2418,8 @@ def tool_edit_file(args: Dict) -> str:
         return "Error: Must read file before editing. Use read_file first."
 
     try:
+        # Snapshot before modification (for revert)
+        SNAPSHOTS.save(path)
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -1628,17 +2441,21 @@ def tool_edit_file(args: Dict) -> str:
         FILE_CACHE.put(abs_path, new_content)
         FILE_CACHE._in_context.discard(abs_path)
 
-        # DIFF-ONLY OUTPUT: Show only the change context, not whole file
-        # Find the line number where change occurred
-        lines_before = content[:content.find(old_string)].count('\n') + 1
+        # Generate and store unified diff
+        diff_text = _generate_unified_diff(path, content, new_content)
+        if diff_text:
+            _RECENT_DIFFS.append({"file": path, "diff": diff_text, "time": time.time()})
+            if len(_RECENT_DIFFS) > 50:
+                _RECENT_DIFFS.pop(0)
 
-        # Show compact diff summary
+        # DIFF-ONLY OUTPUT: Show only the change context, not whole file
+        lines_before = content[:content.find(old_string)].count('\n') + 1
         old_preview = old_string[:100] + "..." if len(old_string) > 100 else old_string
         new_preview = new_string[:100] + "..." if len(new_string) > 100 else new_string
         old_lines = old_string.count('\n') + 1
         new_lines = new_string.count('\n') + 1
 
-        result = f"✓ Edited {os.path.basename(path)} (line {lines_before})\n"
+        result = f"Edited {os.path.basename(path)} (line {lines_before})\n"
         result += f"  -{old_lines} lines / +{new_lines} lines"
         if count > 1 and replace_all:
             result += f" ({count} replacements)"
@@ -1993,7 +2810,7 @@ def _safe_import(name, *args, **kwargs):
         return _original_import(name, *args, **kwargs)
     raise ImportError(f"Security: import '{name}' is not in the allowed modules list")
 _builtins.__import__ = _safe_import
-del _builtins, _original_import, _ALLOWED, _safe_import
+del _builtins  # Only delete the alias; _ALLOWED, _original_import, _safe_import must survive for the hook
 '''
 
 def tool_python_exec(args: Dict) -> str:
@@ -2857,6 +3674,136 @@ def tool_semantic_search(args: Dict) -> str:
     return f"Unknown action: {action}. Use 'index', 'search', or 'status'."
 
 
+# ============== V4: SKILLS / MCP / SUB-AGENT ==============
+
+def tool_skill(args: Dict) -> str:
+    """Load a skill to get detailed instructions for a specific task."""
+    if not CONFIG.enable_skills:
+        return "Skills are disabled by config"
+    name = args.get("name", "")
+    if not name:
+        # List mode
+        skills = SKILLS.list_skills()
+        if not skills:
+            return f"No skills found. Add SKILL.md files to {SKILLS.skills_dir}"
+        lines = [f"- **{s['name']}**: {s['description']}" for s in skills]
+        return "Available skills:\n" + "\n".join(lines)
+    # Load mode
+    ok, content = SKILLS.read_skill(name)
+    if not ok:
+        return f"Error: {content}"
+    skill = SKILLS._cache.get(name)
+    base_dir = skill.base_dir if skill else "unknown"
+    return f"## Skill: {name}\n\n**Base directory**: {base_dir}\n\n{content}"
+
+
+def tool_task(args: Dict) -> str:
+    """Spawn a sub-agent for delegated tasks. Handled by Agent runtime."""
+    return "Error: task must be executed by Agent runtime"
+
+
+def tool_ask_user(args: Dict) -> str:
+    """Ask the user a question and wait for their response. Handled by Agent runtime."""
+    return "Error: ask_user must be executed by Agent runtime"
+
+
+def _is_private_ip(hostname: str) -> bool:
+    """Check if hostname resolves to a private/internal IP (SSRF protection)."""
+    import socket as _socket
+    _PRIVATE_PREFIXES = (
+        "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
+        "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.",
+        "172.28.", "172.29.", "172.30.", "172.31.", "192.168.", "127.", "0.",
+        "169.254.",  # AWS metadata endpoint
+        "fc", "fd", "fe80:", "fec0:",  # IPv6 ULA (fc00::/7) + site-local
+    )
+    _BLOCKED_HOSTS = {
+        "localhost", "metadata.google.internal", "metadata",
+        "kubernetes.default", "kubernetes.default.svc",
+    }
+    if hostname.lower() in _BLOCKED_HOSTS:
+        return True
+    try:
+        for family, _, _, _, sockaddr in _socket.getaddrinfo(hostname, None):
+            ip = sockaddr[0]
+            if any(ip.startswith(p) for p in _PRIVATE_PREFIXES) or ip == "::1":
+                return True
+    except _socket.gaierror:
+        pass  # DNS resolution failed — will fail on fetch anyway
+    return False
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Block HTTP redirects to prevent SSRF via redirect."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, f"Redirect blocked (to {newurl})", headers, fp)
+
+
+_WEB_FETCH_MAX_BYTES = 2 * 1024 * 1024  # 2 MB max response
+
+
+def tool_web_fetch(args: Dict) -> str:
+    """Fetch URL content and convert to readable text."""
+    url = str(args.get("url", "")).strip()
+    if not url:
+        return "Error: url is required"
+    if not url.startswith(("http://", "https://")):
+        return "Error: url must start with http:// or https://"
+
+    # Block in Docker mode with network disabled
+    if CONFIG.execution_mode == "docker" and CONFIG.exec_docker_network_disabled:
+        return "Blocked: network access disabled in Docker execution mode"
+
+    # SSRF protection: block private/internal IPs
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or ""
+        if _is_private_ip(hostname):
+            return f"Blocked: cannot fetch private/internal address ({hostname})"
+    except Exception:
+        return "Error: invalid URL"
+
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "SageMaker-Agent/2.0",
+            "Accept": "text/html,application/xhtml+xml,text/plain,*/*",
+        })
+        # Use opener that blocks redirects to prevent SSRF via redirect
+        opener = urllib.request.build_opener(_NoRedirectHandler)
+        with opener.open(req, timeout=20) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            # Read with size limit to prevent memory exhaustion
+            body_bytes = resp.read(_WEB_FETCH_MAX_BYTES + 1)
+            if len(body_bytes) > _WEB_FETCH_MAX_BYTES:
+                body_bytes = body_bytes[:_WEB_FETCH_MAX_BYTES]
+            # Try charset from Content-Type, fall back to utf-8
+            charset = "utf-8"
+            if "charset=" in content_type:
+                charset = content_type.split("charset=")[-1].split(";")[0].strip()
+            body = body_bytes.decode(charset, errors="replace")
+
+        # Simple HTML to text conversion
+        if "html" in content_type.lower():
+            # Remove script/style blocks
+            body = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", body, flags=re.DOTALL | re.IGNORECASE)
+            # Convert common tags
+            body = re.sub(r"<br\s*/?>", "\n", body, flags=re.IGNORECASE)
+            body = re.sub(r"<p[^>]*>", "\n\n", body, flags=re.IGNORECASE)
+            body = re.sub(r"<h([1-6])[^>]*>(.*?)</h\1>", lambda m: f"\n{'#' * int(m.group(1))} {m.group(2)}\n", body, flags=re.IGNORECASE)
+            body = re.sub(r"<li[^>]*>", "\n- ", body, flags=re.IGNORECASE)
+            body = re.sub(r"<a[^>]*href=[\"']([^\"']*)[\"'][^>]*>(.*?)</a>", r"[\2](\1)", body, flags=re.IGNORECASE)
+            # Strip remaining tags
+            body = re.sub(r"<[^>]+>", "", body)
+            # Clean up whitespace
+            body = re.sub(r"\n{3,}", "\n\n", body).strip()
+
+        return SECURITY.truncate_output(body[:30000])
+    except urllib.error.HTTPError as e:
+        return f"HTTP error: {e.code} {e.reason}"
+    except Exception as e:
+        return f"Fetch failed: {e}"
+
+
 # ============== TODOS ==============
 
 # Global callback for UI sync (set by create_chat_ui)
@@ -2890,6 +3837,96 @@ def tool_todo_read(args: Dict) -> str:
         icon = {"pending": "⬜", "in_progress": "🔄", "completed": "✅"}.get(t.get("status"), "❓")
         lines.append(f"  {icon} {t.get('content', 'Unknown')}")
     return "\n".join(lines)
+
+
+# Plan Mode System Prompt (OpenCode-style)
+PLAN_MODE_PROMPT = """You are in PLAN MODE. Your task is to EXPLORE and CREATE A PLAN, NOT execute.
+
+# Plan Mode Rules
+1. **READ-ONLY**: You can ONLY use these tools:
+   - read_file, glob, grep, list_dir (explore codebase)
+   - semantic_search, view_image (search and inspect)
+   - todo_write, todo_read (plan steps)
+   - skill (reference skill instructions)
+   - web_fetch (fetch reference material)
+2. **CREATE A PLAN**: Write your implementation plan as a structured document.
+3. **NO MODIFICATIONS**: Do not use write_file, edit_file, bash, python_exec or task.
+4. **ASK QUESTIONS**: If requirements are unclear, ask before planning.
+
+# Plan Format
+Structure your plan with:
+- **Summary**: What will be done (1-2 sentences)
+- **Steps**: Numbered implementation steps with specific file paths
+- **Files**: List of files to create/modify
+- **Dependencies**: External packages or services needed
+- **Risks**: Potential issues and mitigations
+
+Remember: EXPLORE and PLAN only. No modifications!
+"""
+
+# Plan Mode - Tools that are BLOCKED (write operations)
+PLAN_MODE_BLOCKED_TOOLS = {
+    "write_file", "edit_file", "bash", "python_exec",
+    "create_word", "create_excel", "create_markdown",
+    "create_chart", "create_pdf", "task"
+}
+
+# Plan Mode - Tools that are ALLOWED (read-only operations)
+PLAN_MODE_ALLOWED_TOOLS = {
+    "read_file", "glob", "grep", "list_dir", "semantic_search",
+    "todo_write", "todo_read", "view_image", "skill", "web_fetch", "ask_user"
+}
+
+# ============================================================
+# AGENT TYPES (OpenCode-compatible sub-agent definitions)
+# ============================================================
+
+AGENT_TYPES = {
+    "build": {
+        "description": "Full-access development agent with all tools",
+        "tools": None,  # None = all tools
+        "prompt_suffix": "",
+        "max_turns": 25,
+    },
+    "plan": {
+        "description": "Read-only analysis and planning agent",
+        "tools": {"read_file", "glob", "grep", "list_dir", "semantic_search",
+                  "view_image", "todo_write", "todo_read", "skill"},
+        "prompt_suffix": PLAN_MODE_PROMPT,
+        "max_turns": 15,
+    },
+    "explore": {
+        "description": "Fast codebase exploration agent",
+        "tools": {"read_file", "glob", "grep", "list_dir", "semantic_search"},
+        "prompt_suffix": "You are an explore sub-agent. Search the codebase efficiently. Return concise findings with file paths and line numbers. Do NOT modify files.",
+        "max_turns": 10,
+    },
+    "general": {
+        "description": "General-purpose sub-agent for complex multi-step tasks",
+        "tools": {"read_file", "glob", "grep", "list_dir", "bash", "python_exec",
+                  "semantic_search", "view_image", "skill", "write_file", "edit_file"},
+        "prompt_suffix": "You are a general sub-agent. Complete the delegated task autonomously and return a concise summary of what you did and found.",
+        "max_turns": 15,
+    },
+}
+
+# Merge user-defined agent overrides from config
+for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
+    if _agent_name in AGENT_TYPES:
+        if "prompt" in _agent_cfg:
+            AGENT_TYPES[_agent_name]["prompt_suffix"] = _agent_cfg["prompt"]
+        if "tools" in _agent_cfg:
+            AGENT_TYPES[_agent_name]["tools"] = set(_agent_cfg["tools"])
+        if "max_turns" in _agent_cfg:
+            AGENT_TYPES[_agent_name]["max_turns"] = _agent_cfg["max_turns"]
+    else:
+        # New custom agent type
+        AGENT_TYPES[_agent_name] = {
+            "description": _agent_cfg.get("description", f"Custom agent: {_agent_name}"),
+            "tools": set(_agent_cfg["tools"]) if "tools" in _agent_cfg else None,
+            "prompt_suffix": _agent_cfg.get("prompt", ""),
+            "max_turns": _agent_cfg.get("max_turns", 15),
+        }
 
 
 # ============== TOOL REGISTRY ==============
@@ -2966,12 +4003,44 @@ TOOLS = {
 
     "semantic_search": (tool_semantic_search, False, "Semantic code search using AI embeddings. Use action='index' to index codebase, action='search' to find code.",
         {"type": "object", "properties": {"action": {"type": "string", "enum": ["index", "search", "status"], "description": "Action: index, search, or status"}, "query": {"type": "string", "description": "Natural language search query (for search)"}, "path": {"type": "string", "description": "Directory to index (for index)"}, "top_k": {"type": "integer", "description": "Number of results (default 5)"}}, "required": ["action"]}),
+
+    "skill": (tool_skill, False,
+        "Load a skill for specialized task instructions. " + SKILLS.list_for_prompt(),
+        {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Skill name to load. Omit to list all available skills."}
+        }, "required": []}),
+
+    "task": (tool_task, True,
+        "Spawn a sub-agent to handle a complex task autonomously. Available agent types: " + ", ".join(f"{k} ({v['description']})" for k, v in AGENT_TYPES.items()),
+        {"type": "object", "properties": {
+            "description": {"type": "string", "description": "Short description (3-5 words) of the task"},
+            "prompt": {"type": "string", "description": "Detailed task instructions for the sub-agent"},
+            "subagent_type": {"type": "string", "enum": list(AGENT_TYPES.keys()), "description": "Agent type (default: general)"},
+        }, "required": ["description", "prompt"]}),
+
+    "web_fetch": (tool_web_fetch, True, "Fetch content from a URL and convert HTML to readable text.",
+        {"type": "object", "properties": {
+            "url": {"type": "string", "description": "The URL to fetch"},
+        }, "required": ["url"]}),
+
+    "ask_user": (tool_ask_user, False, "Ask the user a question when you need clarification, a decision, or preferences. The user will see the question and provide a response.",
+        {"type": "object", "properties": {
+            "question": {"type": "string", "description": "The question to ask the user"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "Optional list of choices for the user to pick from"},
+        }, "required": ["question"]}),
 }
 
 
-def get_tool_definitions() -> List[Dict]:
+# Register MCP-discovered tools dynamically
+if CONFIG.enable_mcp and MCP_MANAGER.clients:
+    _mcp_tools = MCP_MANAGER.discover_tools()
+    TOOLS.update(_mcp_tools)
+
+
+def get_tool_definitions(allowed_tools: Optional[Set[str]] = None) -> List[Dict]:
     """Get tool definitions for Bedrock API."""
-    return [{"name": k, "description": v[2], "input_schema": v[3]} for k, v in TOOLS.items()]
+    names = list(TOOLS.keys()) if allowed_tools is None else [k for k in TOOLS.keys() if k in allowed_tools]
+    return [{"name": k, "description": TOOLS[k][2], "input_schema": TOOLS[k][3]} for k in names]
 
 
 # ============================================================
@@ -3037,56 +4106,6 @@ Code runs in the workspace directory with access to installed packages.
 When referencing code, use the pattern `file_path:line_number` for easy navigation.
 """
 
-# Plan Mode System Prompt (OpenCode-style)
-PLAN_MODE_PROMPT = """You are in PLAN MODE. Your task is to EXPLORE and CREATE A PLAN, NOT execute.
-
-# Plan Mode Rules
-1. **READ-ONLY**: You can ONLY use these tools:
-   - read_file, glob, grep, list_dir (explore codebase)
-   - semantic_search, view_image (search and inspect)
-   - todo_write, todo_read (track what you're planning)
-
-2. **NO WRITES**: Do NOT use:
-   - write_file, edit_file, bash, python_exec, create_word, create_excel
-
-3. **OUTPUT**: Create a detailed plan in your response:
-   - What needs to be done (steps)
-   - Which files need to be modified
-   - What changes will be made
-   - Any risks or considerations
-
-4. **FORMAT**: End your response with a plan summary like:
-   ```
-   ## Implementation Plan
-   1. [Step 1]
-   2. [Step 2]
-   ...
-
-   ## Files to Modify
-   - file1.py: [changes]
-   - file2.py: [changes]
-
-   ## Ready to Execute?
-   Turn off Plan Mode and send "execute plan" to proceed.
-   ```
-
-Remember: EXPLORE and PLAN only. No modifications!
-"""
-
-# Plan Mode - Tools that are BLOCKED (write operations)
-PLAN_MODE_BLOCKED_TOOLS = {
-    "write_file", "edit_file", "bash", "python_exec",
-    "create_word", "create_excel", "create_markdown",
-    "create_chart", "create_pdf"
-}
-
-# Plan Mode - Tools that are ALLOWED (read-only operations)
-PLAN_MODE_ALLOWED_TOOLS = {
-    "read_file", "glob", "grep", "list_dir", "semantic_search",
-    "todo_write", "todo_read", "view_image"
-}
-
-
 # ============================================================
 # AGENT LOOP
 # ============================================================
@@ -3102,6 +4121,8 @@ class Agent:
         on_tokens: Callable = None,
         on_thinking: Callable = None,
         on_stop_check: Callable = None,
+        tool_allowlist: Optional[Set[str]] = None,
+        subagent_depth: int = 0,
     ):
         self.client = client
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -3110,11 +4131,105 @@ class Agent:
         self.on_tokens = on_tokens  # Callback for token updates
         self.on_thinking = on_thinking  # Callback for thinking output
         self.on_stop_check = on_stop_check  # Callback to check if stop was requested
+        self.tool_allowlist = set(tool_allowlist) if tool_allowlist else None
+        self.subagent_depth = subagent_depth
         self.tool_history = deque(maxlen=10)
         self.exec_calls = 0
         self.exec_seconds = 0.0
         self.user_msg_timestamps = deque()
         self.user_msg_count = 0
+
+    def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
+        """Ask the user a question and wait for response via approval callback."""
+        question = str(args.get("question", "")).strip()
+        options = args.get("options", [])
+        if not question:
+            return "Error: question is required"
+
+        # Format the question for display
+        display = f"Agent asks: {question}"
+        if options and isinstance(options, list):
+            display += "\n" + "\n".join(f"  {i+1}. {opt}" for i, opt in enumerate(options))
+
+        output_fn(display)
+
+        # Use the approval callback to get user input
+        # The user types their answer in the chat input
+        if self.on_approval:
+            # Signal that we're waiting for user input
+            output_fn("[Waiting for your response... type your answer in the chat]")
+            # In the Jupyter UI, this will be handled by the approval flow
+            # For non-interactive (sub-agent), just return the question
+            return f"[Question displayed to user: {question}]"
+        return f"[Question displayed: {question}] (No interactive UI available — sub-agent context)"
+
+    def _run_task_tool(self, args: Dict, output_fn: Callable) -> str:
+        """Run a sub-agent with typed agent configuration (OpenCode-compatible)."""
+        if self.subagent_depth >= CONFIG.subagent_max_depth:
+            return f"Blocked: sub-agent depth limit reached ({CONFIG.subagent_max_depth})"
+
+        description = str(args.get("description", "")).strip()
+        prompt = str(args.get("prompt", "")).strip()
+        if not prompt:
+            return "Error: prompt is required"
+        agent_type = str(args.get("subagent_type", "general")).strip()
+
+        # Look up agent type configuration
+        agent_cfg = AGENT_TYPES.get(agent_type)
+        if not agent_cfg:
+            available = ", ".join(AGENT_TYPES.keys())
+            return f"Error: Unknown agent type '{agent_type}'. Available: {available}"
+
+        # Determine tool allowlist
+        agent_tools = agent_cfg["tools"]
+        if agent_tools is not None:
+            allow = set(agent_tools) & set(TOOLS.keys())
+        else:
+            allow = set(TOOLS.keys())
+        # Always block nested task spawning unless depth allows
+        if self.subagent_depth + 1 >= CONFIG.subagent_max_depth:
+            allow.discard("task")
+
+        max_turns = agent_cfg.get("max_turns", 15)
+        prompt_suffix = agent_cfg.get("prompt_suffix", "")
+        sub_prompt = SYSTEM_PROMPT
+        if prompt_suffix:
+            sub_prompt = sub_prompt + "\n\n" + prompt_suffix
+
+        # Check for model override from agent config
+        sub_client = self.client
+        model_override = CONFIG.agent_overrides.get(agent_type, {}).get("model")
+        if model_override:
+            try:
+                sub_client = BedrockClient(model_override, CONFIG.region, CONFIG.mock_mode)
+            except Exception:
+                pass  # Fall back to parent's client
+
+        sub = Agent(
+            sub_client,
+            session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
+            on_approval=self.on_approval,
+            on_tokens=None,
+            on_thinking=None,
+            on_stop_check=self.on_stop_check,
+            tool_allowlist=allow,
+            subagent_depth=self.subagent_depth + 1,
+        )
+        sub_output = []
+        is_plan_mode = agent_type == "plan"
+
+        result = sub.run(
+            prompt,
+            output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
+            system_prompt=sub_prompt,
+            plan_mode=is_plan_mode,
+            count_towards_limits=False,
+            max_turns_override=max_turns,
+        )
+
+        tail = "\n".join(sub_output[-8:])
+        header = f"[Sub-agent: {agent_type} | {description}]"
+        return SECURITY.truncate_output(f"{header}\n{result}\n\n[Trace]\n{tail}")
 
     def run(
         self,
@@ -3123,6 +4238,7 @@ class Agent:
         system_prompt: str = None,
         plan_mode: bool = False,
         count_towards_limits: bool = True,
+        max_turns_override: int = None,
     ) -> str:
         """Run agent loop until completion or max turns.
 
@@ -3134,6 +4250,10 @@ class Agent:
         """
         # Use provided system prompt or default
         self._system_prompt = system_prompt or SYSTEM_PROMPT
+        # Inject active skill content into system prompt
+        skill_prompt = SKILLS.get_active_skill_prompt()
+        if skill_prompt:
+            self._system_prompt = self._system_prompt + skill_prompt
         self._plan_mode = plan_mode  # Store for tool execution check
 
         # Session/user rate limiting
@@ -3161,8 +4281,9 @@ class Agent:
         self.messages.append({"role": "user", "content": user_message})
         AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
 
+        _effective_max_turns = max_turns_override if max_turns_override is not None else CONFIG.max_turns
         response = None
-        for turn in range(CONFIG.max_turns):
+        for turn in range(_effective_max_turns):
             # Check if stop was requested
             if self.on_stop_check and self.on_stop_check():
                 output_fn("[Stopped by user]")
@@ -3204,7 +4325,7 @@ class Agent:
                 return self.client.chat(
                     self.messages,
                     self._system_prompt,  # Use custom or default system prompt
-                    get_tool_definitions(),
+                    get_tool_definitions(self.tool_allowlist),
                     CONFIG.max_tokens,
                     CONFIG.temperature,
                     CONFIG.thinking_enabled,
@@ -3319,6 +4440,12 @@ class Agent:
 
                 func, needs_approval, description, schema = tool_info
 
+                # Additional allowlist constraint (used by delegated sub-agents).
+                if self.tool_allowlist is not None and tool_name not in self.tool_allowlist:
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
+                        "content": f"Tool blocked by policy in this run: {tool_name}"})
+                    continue
+
                 # === PLAN MODE ENFORCEMENT ===
                 # Block write tools when in Plan Mode
                 if getattr(self, '_plan_mode', False) and tool_name in PLAN_MODE_BLOCKED_TOOLS:
@@ -3382,25 +4509,30 @@ class Agent:
                 # === LAYER 5: Execute with Error Recovery ===
                 output_fn(f"[Calling {tool_name}...]")
                 try:
-                    if tool_name in {"bash", "python_exec"}:
-                        if self.exec_calls >= CONFIG.max_exec_calls_per_session:
-                            result = f"Blocked: execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
-                            tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
-                            AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
-                            continue
-                        if self.exec_seconds >= CONFIG.max_exec_seconds_per_session:
-                            result = f"Blocked: execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
-                            tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
-                            AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
-                            continue
-                        if CONFIG.execution_mode == "docker":
-                            _ensure_docker_image_ready()
-                    start_ts = time.time()
-                    result = func(args)
-                    elapsed = time.time() - start_ts
-                    if tool_name in {"bash", "python_exec"}:
-                        self.exec_calls += 1
-                        self.exec_seconds += elapsed
+                    if tool_name == "task":
+                        result = self._run_task_tool(args, output_fn)
+                    elif tool_name == "ask_user":
+                        result = self._run_ask_user_tool(args, output_fn)
+                    else:
+                        if tool_name in {"bash", "python_exec"}:
+                            if self.exec_calls >= CONFIG.max_exec_calls_per_session:
+                                result = f"Blocked: execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
+                                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                                AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                                continue
+                            if self.exec_seconds >= CONFIG.max_exec_seconds_per_session:
+                                result = f"Blocked: execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
+                                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                                AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                                continue
+                            if CONFIG.execution_mode == "docker":
+                                _ensure_docker_image_ready()
+                        start_ts = time.time()
+                        result = func(args)
+                        elapsed = time.time() - start_ts
+                        if tool_name in {"bash", "python_exec"}:
+                            self.exec_calls += 1
+                            self.exec_seconds += elapsed
                 except TypeError as e:
                     result = f"TypeError: {e}. Check argument types. Expected schema: {schema}"
                 except KeyError as e:
@@ -3419,7 +4551,7 @@ class Agent:
 
             self.messages.append({"role": "user", "content": tool_results})
 
-        output_fn(f"[Reached max turns ({CONFIG.max_turns})]")
+        output_fn(f"[Reached max turns ({_effective_max_turns})]")
         return response.text if response else ""
 
     def reset(self):
@@ -3463,6 +4595,8 @@ TOOL_ICONS = {
     'create_word': '📄', 'create_excel': '📊', 'create_markdown': '📋',
     'view_image': '🖼️', 'semantic_search': '🧠',
     'todo_write': '✅', 'todo_read': '📋',
+    'skill': '🧩', 'task': '🧠',
+    'web_fetch': '🌐',
 }
 
 
@@ -3492,6 +4626,7 @@ def create_chat_ui(mock_mode: bool = None):
         "authenticated": not CONFIG.require_auth,
         "model_connection_ok": None,  # True/False/None(unknown)
         "model_connection_msg": "Not validated yet",
+        "active_skills": [],
     }
     ui_state["model_change_lock"] = False
 
@@ -3904,6 +5039,7 @@ def create_chat_ui(mock_mode: bool = None):
         thinking = "ON" if CONFIG.thinking_enabled else "OFF"
         auth = "ON" if CONFIG.require_auth else "OFF"
         approval = "ON" if CONFIG.require_tool_approval else "OFF"
+        skills_count = len(ui_state.get("active_skills", []))
         dark = ui_state.get("dark_mode", True)
         text_color = "#aab4be" if dark else "#666"
         if ui_state.get("model_connection_ok") is True:
@@ -3916,6 +5052,19 @@ def create_chat_ui(mock_mode: bool = None):
             model_state = "Unknown"
             model_color = "#ff9800"
         model_msg = escape_html(ui_state.get("model_connection_msg", "Not validated yet"))
+        # MCP status
+        mcp_status = MCP_MANAGER.status_summary()
+        mcp_part = f' | {mcp_status}' if mcp_status else ''
+        # Active skill
+        active_skill_names = ", ".join(ui_state.get("active_skills", []))
+        skill_part = f' | Skill: <b>{escape_html(active_skill_names)}</b>' if active_skill_names else f' | Skills: <b>{skills_count}</b>'
+        # Custom commands count
+        cmd_count = len(COMMANDS.commands)
+        cmd_part = f' | Cmds: <b>{cmd_count}</b>' if cmd_count else ''
+        # Cost tracking
+        cost_str = TOKENS.get_cost()
+        cost_part = f' | Cost: <b>{cost_str}</b>' if TOKENS.session_cost > 0 else ''
+
         mode_html.value = (
             f'<div style="font-size:12px;color:{text_color};margin:4px 0;">'
             f'Model: <b>{escape_html(CONFIG.model_id)}</b> | '
@@ -3924,7 +5073,7 @@ def create_chat_ui(mock_mode: bool = None):
             f'Plan: <b>{plan}</b> | '
             f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
             f'Auth: <b>{auth}</b> | '
-            f'Approval: <b>{approval}</b> | '
+            f'Approval: <b>{approval}</b>{skill_part}{mcp_part}{cmd_part}{cost_part} | '
             f'Exec: <b>{escape_html(CONFIG.execution_mode)}</b>'
             f'</div>'
         )
@@ -3999,20 +5148,53 @@ def create_chat_ui(mock_mode: bool = None):
         render_chat()
 
     # Tools where "Always" approve is too dangerous (each invocation has different risk)
-    HIGH_RISK_TOOLS = {"bash", "python_exec"}
+    HIGH_RISK_TOOLS = {"bash", "python_exec", "task", "web_fetch"}
 
     def request_approval(tool_name: str, tool_input: Dict) -> bool:
         import threading
         if not CONFIG.require_tool_approval:
             return True
+
+        # Check config-based permission rules
+        if CONFIG.permission_rules:
+            import fnmatch as _fnmatch
+            # Direct tool-name rules
+            rule = CONFIG.permission_rules.get(tool_name)
+            if rule == "allow":
+                return True
+            if rule == "deny":
+                add_message('system', f'Denied by permission rule: {tool_name}')
+                return False
+            # Check pattern-based rules: "tool:pattern" (e.g. "bash:docker*")
+            # and file-pattern rules (e.g. "*.env", "**/*.key")
+            target = tool_input.get("file_path") or tool_input.get("filepath") or tool_input.get("path")
+            command = tool_input.get("command", "")
+            for pattern, action in CONFIG.permission_rules.items():
+                # tool:command_pattern rules (e.g., "bash:rm*", "bash:docker*")
+                if ":" in pattern and not pattern.startswith("*"):
+                    rule_tool, rule_pattern = pattern.split(":", 1)
+                    if rule_tool == tool_name and command and _fnmatch.fnmatch(str(command), rule_pattern):
+                        if action == "deny":
+                            add_message('system', f'Denied by pattern rule: {pattern}')
+                            return False
+                        if action == "allow":
+                            return True
+                # File-pattern rules (e.g., "*.env", "**/secrets/*")
+                elif pattern.startswith("*") or "/" in pattern:
+                    if target and _fnmatch.fnmatch(str(target), pattern):
+                        if action == "deny":
+                            add_message('system', f'Denied by pattern rule: {pattern}')
+                            return False
+                        if action == "allow":
+                            return True
         is_sagemaker = bool(
             os.getenv("SAGEMAKER_DOMAIN_ID")
             or os.getenv("SAGEMAKER_INTERNAL_IMAGE_URI")
             or "SAGEMAKER" in os.getenv("AWS_EXECUTION_ENV", "").upper()
         )
         if is_sagemaker:
-            add_message('system', 'Approval UI can block in this SageMaker kernel. Turn OFF "Require Approval" to continue.')
-            return False
+            add_message('system', 'SageMaker detected: auto-approving. Toggle "Require Approval" OFF to suppress this message, or use permission_rules in opencode.json for fine-grained control.')
+            return True  # Auto-approve in SageMaker to prevent stuck UI
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
@@ -4173,6 +5355,95 @@ def create_chat_ui(mock_mode: bool = None):
             input_box.value = ""
             return
 
+        # Local skill commands (v4)
+        if msg == "/skills":
+            skills = SKILLS.list_skills()
+            if not skills:
+                add_message('system', f'No skills found in {SKILLS.skills_dir}')
+            else:
+                add_message('system', "Available skills:\n" + "\n".join([f"- **{s['name']}**: {s['description']}" for s in skills]))
+            input_box.value = ""
+            return
+        if msg.startswith("/skill use "):
+            name = msg[len("/skill use "):].strip()
+            ok, _content = SKILLS.read_skill(name)
+            if not ok:
+                add_message('system', f'Skill not found: {name}')
+            else:
+                active = ui_state.get("active_skills", [])
+                if name not in active:
+                    active.append(name)
+                    ui_state["active_skills"] = active
+                SKILLS.active_skill = name
+                add_message('system', f'Enabled skill: {name}')
+                update_mode_display()
+            input_box.value = ""
+            return
+        if msg == "/skill clear":
+            ui_state["active_skills"] = []
+            SKILLS.active_skill = None
+            add_message('system', 'Cleared active skills')
+            update_mode_display()
+            input_box.value = ""
+            return
+        if msg == "/revert" or msg.startswith("/revert "):
+            target = msg[len("/revert"):].strip()
+            if target == "all":
+                result = SNAPSHOTS.revert_all()
+            elif target:
+                ok, result = SNAPSHOTS.revert(os.path.join(CONFIG.workspace, target))
+            else:
+                snaps = SNAPSHOTS.list_snapshots()
+                if not snaps:
+                    result = "No snapshots available. Files are snapshotted before each edit."
+                else:
+                    files = set(e["rel"] for e in snaps)
+                    result = f"Files with snapshots ({len(files)}):\n" + "\n".join(f"- {f}" for f in sorted(files))
+                    result += "\n\nUse `/revert <file>` or `/revert all`"
+            add_message('system', result)
+            input_box.value = ""
+            return
+        if msg == "/cost":
+            stats = TOKENS.get_stats()
+            add_message('system',
+                f"Session Cost: **{TOKENS.get_cost()}**\n"
+                f"- Input: {stats['session_input']:,} tokens\n"
+                f"- Output: {stats['session_output']:,} tokens\n"
+                f"- Cache read: {stats['session_cache_read']:,} tokens\n"
+                f"- API calls: {stats['api_calls']}\n"
+                f"- Model: {CONFIG.model_id}")
+            input_box.value = ""
+            return
+
+        # Custom commands from opencode.json
+        if msg.startswith("/") and not msg.startswith("/auth"):
+            cmd_parts = msg[1:].split(None, 1)
+            cmd_name = cmd_parts[0] if cmd_parts else ""
+            cmd_args = cmd_parts[1] if len(cmd_parts) > 1 else ""
+
+            if cmd_name == "commands":
+                cmds = COMMANDS.list_commands()
+                if cmds:
+                    lines = [f"- **/{c['name']}**: {c['description']}" for c in cmds]
+                    add_message('system', "Available commands:\n" + "\n".join(lines))
+                else:
+                    add_message('system', "No custom commands configured. Add commands in opencode.json.")
+                input_box.value = ""
+                return
+
+            expanded = COMMANDS.expand(cmd_name, cmd_args)
+            if expanded is not None:
+                cmd_agent = COMMANDS.get_agent(cmd_name)
+                if cmd_agent:
+                    add_message('system', f'Expanding /{cmd_name} (agent: {cmd_agent})...')
+                else:
+                    add_message('system', f'Expanding /{cmd_name}...')
+                msg = expanded  # Replace msg with expanded template
+                # Store agent type and command name for the send flow
+                ui_state["_cmd_agent_type"] = cmd_agent
+                ui_state["_cmd_name"] = cmd_name
+                # Fall through to normal send flow
+
         ui_state["lock"] = True
         ui_state["stop_requested"] = False  # Reset stop flag
         send_btn.disabled = True
@@ -4250,7 +5521,34 @@ def create_chat_ui(mock_mode: bool = None):
             else:
                 system_prompt = None  # Use default
 
-            ui_state["agent"].run(msg, output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
+            # Append active skills as extra runtime guidance.
+            active_skills = ui_state.get("active_skills", [])
+            if active_skills:
+                blocks = []
+                for skill_name in active_skills:
+                    ok, txt = SKILLS.read_skill(skill_name, max_chars=4000)
+                    if ok and txt.strip():
+                        blocks.append(f"[SKILL: {skill_name}]\n{txt}")
+                if blocks:
+                    base_prompt = system_prompt if system_prompt is not None else SYSTEM_PROMPT
+                    system_prompt = base_prompt + "\n\n# Active Skills\n" + "\n\n".join(blocks)
+
+            # If a command specified an agent type, dispatch through sub-agent
+            cmd_agent = ui_state.pop("_cmd_agent_type", None)
+            cmd_label = ui_state.pop("_cmd_name", "command")
+            if cmd_agent and cmd_agent in AGENT_TYPES:
+                # Plan Mode safety: force plan agent when Plan Mode is ON
+                if plan_mode_toggle.value and cmd_agent != "plan":
+                    add_message('system', f'📋 PLAN MODE: /{cmd_label} forced to plan agent (was: {cmd_agent})')
+                    cmd_agent = "plan"
+                # Route the expanded command through the task sub-agent system
+                task_result = ui_state["agent"]._run_task_tool(
+                    {"prompt": msg, "subagent_type": cmd_agent, "description": f"/{cmd_label} command"},
+                    output_fn
+                )
+                add_message('assistant', task_result)
+            else:
+                ui_state["agent"].run(msg, output_fn, system_prompt=system_prompt, plan_mode=plan_mode_toggle.value)
 
             # Update status when done
             usage = CONTEXT.get_usage(ui_state["agent"].messages)
@@ -4338,6 +5636,7 @@ def create_chat_ui(mock_mode: bool = None):
                             "user_msg_count": ui_state["agent"].user_msg_count,
                             "exec_calls": ui_state["agent"].exec_calls,
                             "exec_seconds": ui_state["agent"].exec_seconds,
+                            "active_skills": list(ui_state.get("active_skills", [])),
                         },
                         todos=_TODOS.copy() if _TODOS else []
                     )
@@ -4357,6 +5656,7 @@ def create_chat_ui(mock_mode: bool = None):
         TOKENS.reset()
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
+        ui_state["active_skills"] = []
         render_chat()
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
@@ -4371,6 +5671,7 @@ def create_chat_ui(mock_mode: bool = None):
             metadata["user_msg_count"] = ui_state["agent"].user_msg_count
             metadata["exec_calls"] = ui_state["agent"].exec_calls
             metadata["exec_seconds"] = ui_state["agent"].exec_seconds
+            metadata["active_skills"] = list(ui_state.get("active_skills", []))
             ui_state["session"].metadata = metadata
             # Save todos with session (store as metadata)
             ui_state["session"].todos = ui_state["todos"].copy() if ui_state["todos"] else []
@@ -4439,6 +5740,9 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["agent"].user_msg_count = int(session.metadata.get("user_msg_count", 0) or 0)
             ui_state["agent"].exec_calls = int(session.metadata.get("exec_calls", 0) or 0)
             ui_state["agent"].exec_seconds = float(session.metadata.get("exec_seconds", 0.0) or 0.0)
+            loaded_skills = session.metadata.get("active_skills", [])
+            if isinstance(loaded_skills, list):
+                ui_state["active_skills"] = [str(s) for s in loaded_skills if isinstance(s, str)]
 
         # Display loaded messages
         ui_state["messages"] = []
@@ -4665,5 +5969,4 @@ if __name__ == "__main__":
     print("\nTo use in Jupyter:")
     print("  from sagemaker_agent import create_chat_ui")
     print("  create_chat_ui()")
-
 ```
