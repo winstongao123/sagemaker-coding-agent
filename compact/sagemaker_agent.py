@@ -3229,8 +3229,10 @@ Only ONE todo should be in_progress at a time.
 - create_word: Formal documents, reports (.docx). Supports headings, paragraphs, tables, images.
 - create_excel: Tabular data, spreadsheets (.xlsx). Data format: list of dicts. Supports charts.
 - create_markdown: Documentation, notes (.md).
-- create_chart: Visualizations (.png) - bar, line, pie, scatter charts.
+- create_notebook: Jupyter Notebooks (.ipynb) with code and markdown cells.
+- create_chart: Data visualizations (.png) - bar, line, pie, scatter charts. Displayed inline.
 - create_pdf: Reports (.pdf) - text, tables, images combined.
+- For structural diagrams (architecture, flowcharts, function call graphs, class hierarchies, directory trees), output ASCII/markdown art directly in your response text using box-drawing characters (─│┌┐└┘├┤┬┴┼), arrows (→←↓↑), and tree branches (├──, └──). Do NOT use create_chart for these.
 
 # Python Execution
 Use python_exec for data processing, calculations, custom file generation, and scripting.
