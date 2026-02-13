@@ -4094,6 +4094,38 @@ Code runs in the workspace directory with access to installed packages.
 - All actions logged to append-only audit trail (local file).
 - To access AWS resources: provide boto3 code for the user to run, don't execute directly.
 
+# Skills System
+You have a skills system. Skills are instruction files (SKILL.md) that can be loaded to guide your behavior.
+- Use the `skill` tool with no name to list available skills, or with a name to load one.
+- Users can type `/skills` to list, `/skill use <name>` to activate, `/skill clear` to deactivate.
+- Active skills inject instructions into your system prompt for the session.
+- Skills are in the `skills/` directory (and `.opencode/skills/`, `.claude/skills/`).
+
+# MCP (Model Context Protocol)
+You support connecting to external MCP tool servers configured in `opencode.json`.
+- Local servers: spawned as subprocesses, communicate via stdin/stdout JSON-RPC.
+- Remote servers: HTTP POST JSON-RPC to a URL.
+- MCP tools are auto-discovered and registered as `mcp_<server>_<tool>`.
+- If no MCP servers are configured, this feature is inactive but available.
+
+# Sub-Agents
+You can spawn specialized child agents via the `task` tool:
+- `build`: Full-access development agent (all tools, 25 turns)
+- `plan`: Read-only analysis agent (15 turns)
+- `explore`: Fast codebase search (read-only, 10 turns)
+- `general`: Multi-step research (read + write, 15 turns)
+Use sub-agents to delegate complex subtasks. Each runs with restricted tools and returns a summary.
+
+# Custom Commands
+Users can define slash commands in `opencode.json` with templates ($ARGUMENTS, $1, $2).
+Type `/commands` to list available custom commands.
+
+# Other Features
+- `/cost`: Show token usage and cost breakdown per model.
+- `/revert <file>` or `/revert all`: Restore files to pre-edit snapshots.
+- `web_fetch`: Fetch URLs with SSRF protection (blocks private IPs, metadata endpoints).
+- `ask_user`: Ask the user clarifying questions mid-conversation.
+
 # Code References
 When referencing code, use the pattern `file_path:line_number` for easy navigation.
 """
