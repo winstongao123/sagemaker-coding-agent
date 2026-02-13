@@ -4344,7 +4344,7 @@ class Agent:
                     trimmed = [{"role": "user", "content": "[Earlier messages trimmed]"}] + trimmed
                 self.messages = trimmed
 
-            # Call LLM with retry logic
+            # Call LLM with retry logic (runs in background thread so stop button works)
             def make_request():
                 return self.client.chat(
                     self.messages,
@@ -4360,12 +4360,37 @@ class Agent:
                 output_fn(f"[Retry {attempt}/{max_retries} in {delay:.1f}s: {error[:50]}...]")
 
             try:
-                response = RETRY.execute(make_request, on_retry)
+                # Run LLM call in daemon thread so stop button can interrupt
+                _llm_result = [None, None]  # [response, error]
+                def _call_llm():
+                    try:
+                        _llm_result[0] = RETRY.execute(make_request, on_retry)
+                    except Exception as e:
+                        _llm_result[1] = e
+
+                llm_thread = threading.Thread(target=_call_llm, daemon=True)
+                llm_thread.start()
+
+                # Poll for completion, checking stop flag every 0.5s
+                while llm_thread.is_alive():
+                    if self.on_stop_check and self.on_stop_check():
+                        output_fn("[Stopped by user]")
+                        return response.text if response else ""
+                    llm_thread.join(timeout=0.5)
+
+                if _llm_result[1]:
+                    raise _llm_result[1]
+                response = _llm_result[0]
             except Exception as e:
                 error_msg = f"Error calling Bedrock: {e}"
                 output_fn(error_msg)
                 AUDIT.log(self.session_id, "error", result_summary=str(e))
                 return error_msg
+
+            # Check stop again after LLM returns (user may have clicked during the call)
+            if self.on_stop_check and self.on_stop_check():
+                output_fn("[Stopped by user]")
+                return response.text if response else ""
 
             # Track token usage
             if response.usage:
