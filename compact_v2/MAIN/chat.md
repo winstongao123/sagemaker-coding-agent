@@ -6,7 +6,7 @@
 
 Secure AI coding assistant powered by AWS Bedrock Claude.
 
-**21 Tools:** File ops, bash/python exec, docs/charts/pdf, vision, semantic search, todos, web fetch, skills, sub-agents, ask user
+**22 Tools:** File ops, bash/python exec, docs/charts/pdf/notebooks, vision, semantic search, todos, web fetch, skills, sub-agents, ask user
 
 **New in V2:**
 - External config (`opencode.json`) with JSONC support
@@ -215,12 +215,12 @@ create_chat_ui()
 
 ---
 
-## Tools (21)
+## Tools (22)
 
 - **File:** `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `list_dir`
 - **Exec:** `bash`, `python_exec`
-- **Docs:** `create_word`, `create_excel`, `create_markdown`, `create_pdf`
-- **Charts:** `create_chart` (bar, line, pie, scatter)
+- **Docs:** `create_word`, `create_excel`, `create_markdown`, `create_notebook`, `create_pdf`
+- **Charts:** `create_chart` (bar, line, pie, scatter — displayed inline)
 - **Vision:** `view_image`
 - **Search:** `semantic_search` (Bedrock Titan embeddings)
 - **Planning:** `todo_write`, `todo_read`

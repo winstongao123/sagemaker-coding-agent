@@ -10,7 +10,7 @@ A single-file AI coding assistant that runs inside a Jupyter notebook on AWS Sag
 2. [Prerequisites](#prerequisites)
 3. [Quick Start (Step by Step)](#quick-start-step-by-step)
 4. [How the Chat Works](#how-the-chat-works)
-5. [All 21 Tools Explained](#all-21-tools-explained)
+5. [All 22 Tools Explained](#all-22-tools-explained)
 6. [Slash Commands](#slash-commands)
 7. [Skills System](#skills-system)
 8. [MCP (Model Context Protocol)](#mcp-model-context-protocol)
@@ -215,7 +215,7 @@ Every tool is just a Python function that does something locally (read a file, r
 
 ### How the AI picks tools
 
-You never tell the AI "use the read_file tool". You say "read main.py" in plain English. The AI (Claude) has been given a description of all 21 tools in the system prompt. Based on your request, it decides which tool to call and with what arguments. This is called **tool use** (or "function calling") — it's a built-in capability of Claude models.
+You never tell the AI "use the read_file tool". You say "read main.py" in plain English. The AI (Claude) has been given a description of all 22 tools in the system prompt. Based on your request, it decides which tool to call and with what arguments. This is called **tool use** (or "function calling") — it's a built-in capability of Claude models.
 
 ### Summary diagram
 
@@ -240,7 +240,7 @@ You never tell the AI "use the read_file tool". You say "read main.py" in plain 
 │  │       │                              │    │
 │  │       ▼ tool calls                   │    │
 │  │  ┌──────────────────────────────┐   │    │
-│  │  │ Tool Functions (21 tools)    │   │    │
+│  │  │ Tool Functions (22 tools)    │   │    │
 │  │  │ read_file, bash, grep, ...   │   │    │
 │  │  │ All run locally as Python    │   │    │
 │  │  └──────────────────────────────┘   │    │
@@ -256,7 +256,7 @@ You never tell the AI "use the read_file tool". You say "read main.py" in plain 
 
 ---
 
-## All 21 Tools Explained
+## All 22 Tools Explained
 
 Each tool is something the agent can do. You don't call tools directly — you describe what you want in plain English, and the agent picks the right tool.
 
@@ -280,13 +280,14 @@ Each tool is something the agent can do. You don't call tools directly — you d
 
 **Note:** Both tools have security restrictions — dangerous commands are blocked (see Security section).
 
-### Document Creation (4 tools)
+### Document Creation (5 tools)
 
 | Tool | What it does | Example prompt |
 |------|-------------|----------------|
 | `create_word` | Create a `.docx` Word document | "Create a Word doc summarizing the meeting notes" |
 | `create_excel` | Create a `.xlsx` Excel spreadsheet | "Create an Excel file with employee salaries" |
 | `create_markdown` | Create a `.md` Markdown file | "Write a README.md for this project" |
+| `create_notebook` | Create a `.ipynb` Jupyter Notebook with code/markdown cells | "Create a notebook that loads and plots data" |
 | `create_pdf` | Create a `.pdf` document | "Create a PDF report with a title page and table" |
 
 ### Charts (1 tool)
@@ -595,7 +596,7 @@ Sub-agents are **child AI sessions** that the main agent can spawn to handle spe
 
 | Type | What it can do | Tools | Max Turns | When it's used |
 |------|---------------|-------|-----------|---------------|
-| **build** | Full development — read, write, execute | All 21 tools | 25 | "Build a REST API", "Implement feature X" |
+| **build** | Full development — read, write, execute | All 22 tools | 25 | "Build a REST API", "Implement feature X" |
 | **plan** | Analysis only — can read but not modify | read_file, glob, grep, list_dir, semantic_search, view_image, todo_write, todo_read | 15 | "Analyze the architecture", "Review this code" |
 | **explore** | Fast search — minimal tools for speed | read_file, glob, grep, list_dir, semantic_search | 10 | "Find all API endpoints", "Search for auth code" |
 | **general** | Research + some execution | read_file, glob, grep, list_dir, bash, python_exec, semantic_search, view_image | 15 | "Research how this module works and write a summary" |

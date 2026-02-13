@@ -38,12 +38,14 @@ Features Implemented:
 - Session: Auto-save after each message (no manual save needed)
 - Session: Save/Load with absolute paths (./sessions/)
 - Session: Todo list persisted with session
-- Tools: 17 tools including:
+- Tools: 22 tools including:
   - File: read_file, write_file, edit_file, glob, grep, list_dir
   - Exec: bash, python_exec
-  - Docs: create_word (with images), create_excel (with charts), create_markdown
-  - Charts/PDF: create_chart (bar/line/pie/scatter), create_pdf (text/tables/images)
-  - Other: view_image, todo_write, todo_read, semantic_search
+  - Docs: create_word (with images), create_excel (with charts), create_markdown, create_notebook
+  - Charts/PDF: create_chart (bar/line/pie/scatter/inline), create_pdf (text/tables/images)
+  - Search: semantic_search
+  - Skills/MCP: skill_list, skill_read, mcp_call, subagent_run
+  - Other: view_image, todo_write, todo_read
 
 Security (70+ bash patterns, 40+ Python patterns):
 - AWS CLI blocked: aws s3, aws dynamodb, aws iam, etc. (agent writes code for you)

@@ -9,7 +9,7 @@ This file is an auto-generated markdown copy of `chat.ipynb` cells in order.
 Secure AI coding assistant powered by AWS Bedrock Claude.
 
 **Features:**
-- 17 tools (file ops, bash/python exec, docs/charts/pdf, vision, semantic search, todos)
+- 22 tools (file ops, bash/python exec, docs/charts/pdf/notebooks, vision, semantic search, todos, skills, MCP, sub-agents)
 - Security controls (workspace boundary, secret detection, command filtering)
 - Tool approval toggle (Require Approval) with SageMaker-safe default OFF
 - Session management & audit logging
@@ -192,14 +192,15 @@ Try these prompts to test the agent:
 
 ## Capabilities
 
-**17 Tools:**
+**22 Tools:**
 - File: `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `list_dir`
 - Shell: `bash`
 - Python: `python_exec`
-- Documents: `create_word`, `create_excel`, `create_markdown`, `create_pdf`
-- Charts: `create_chart`
+- Documents: `create_word`, `create_excel`, `create_markdown`, `create_notebook`, `create_pdf`
+- Charts: `create_chart` (inline display)
 - Vision: `view_image`
 - Search: `semantic_search` (AI-powered code search)
+- Skills/MCP: `skill_list`, `skill_read`, `mcp_call`, `subagent_run`
 - Planning: `todo_write`, `todo_read`
 
 **Security:**

@@ -33,12 +33,14 @@ Features Implemented:
 - Session: Auto-save after each message (no manual save needed)
 - Session: Save/Load with absolute paths (./sessions/)
 - Session: Todo list persisted with session
-- Tools: 17 tools including:
+- Tools: 22 tools including:
   - File: read_file, write_file, edit_file, glob, grep, list_dir
   - Exec: bash, python_exec
-  - Docs: create_word (with images), create_excel (with charts), create_markdown
-  - Charts/PDF: create_chart (bar/line/pie/scatter), create_pdf (text/tables/images)
-  - Other: view_image, todo_write, todo_read, semantic_search
+  - Docs: create_word (with images), create_excel (with charts), create_markdown, create_notebook
+  - Charts/PDF: create_chart (bar/line/pie/scatter/inline), create_pdf (text/tables/images)
+  - Search: semantic_search, web_fetch
+  - Agents: skill, task (sub-agents), ask_user
+  - Other: view_image, todo_write, todo_read
 
 Security (70+ bash patterns, 40+ Python patterns):
 - AWS CLI blocked: aws s3, aws dynamodb, aws iam, etc. (agent writes code for you)
@@ -3223,6 +3225,69 @@ def tool_create_markdown(args: Dict) -> str:
         return f"Error: {e}"
 
 
+def tool_create_notebook(args: Dict) -> str:
+    """Create a Jupyter Notebook (.ipynb) file with code and/or markdown cells."""
+    filepath = args["filepath"]
+    cells = args["cells"]  # List of {"type": "code"|"markdown", "source": "..."}
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.endswith(".ipynb"):
+        filepath += ".ipynb"
+
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
+
+    try:
+        nb_cells = []
+        for cell in cells:
+            cell_type = cell.get("type", "code")
+            source = cell.get("source", "")
+            if isinstance(source, list):
+                source_lines = source
+            else:
+                source_lines = source.split("\n") if source else [""]
+                # Add newlines back (ipynb format expects lines ending with \n except last)
+                source_lines = [line + "\n" for line in source_lines[:-1]] + [source_lines[-1]]
+
+            nb_cell = {
+                "cell_type": cell_type,
+                "metadata": {},
+                "source": source_lines,
+            }
+            if cell_type == "code":
+                nb_cell["execution_count"] = None
+                nb_cell["outputs"] = []
+            nb_cells.append(nb_cell)
+
+        notebook = {
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {
+                "kernelspec": {
+                    "display_name": "Python 3",
+                    "language": "python",
+                    "name": "python3"
+                },
+                "language_info": {
+                    "name": "python",
+                    "version": "3.10.0"
+                }
+            },
+            "cells": nb_cells,
+        }
+
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(notebook, f, indent=1, ensure_ascii=False)
+        return f"Created Jupyter Notebook: {filepath} ({len(nb_cells)} cells)"
+    except Exception as e:
+        return f"Error: {e}"
+
+
 # ============== CHARTS & PDF ==============
 
 def tool_create_chart(args: Dict) -> str:
@@ -3302,7 +3367,13 @@ def tool_create_chart(args: Dict) -> str:
         plt.savefig(filepath, dpi=150, bbox_inches='tight')
         plt.close()
 
-        return f"Created chart: {filepath}"
+        # Embed chart as base64 for inline display in chat widget
+        try:
+            with open(filepath, "rb") as img_f:
+                img_b64 = base64.b64encode(img_f.read()).decode()
+            return f"Created chart: {filepath}\n[INLINE_IMAGE:{img_b64}]"
+        except Exception:
+            return f"Created chart: {filepath}"
     except Exception as e:
         plt.close()
         return f"Error creating chart: {e}"
@@ -3965,6 +4036,16 @@ TOOLS = {
     "create_markdown": (tool_create_markdown, True, "Create Markdown file (.md)",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string"}}, "required": ["filepath", "content"]}),
 
+    "create_notebook": (tool_create_notebook, True, "Create Jupyter Notebook (.ipynb) with code and markdown cells",
+        {"type": "object", "properties": {
+            "filepath": {"type": "string", "description": "Output path (e.g. analysis.ipynb)"},
+            "cells": {"type": "array", "description": "List of cells. Each: {type: 'code'|'markdown', source: 'cell content'}",
+                "items": {"type": "object", "properties": {
+                    "type": {"type": "string", "enum": ["code", "markdown"], "description": "Cell type"},
+                    "source": {"type": "string", "description": "Cell content (code or markdown text)"}
+                }, "required": ["type", "source"]}}
+        }, "required": ["filepath", "cells"]}),
+
     "create_chart": (tool_create_chart, True, "Create chart image (bar, line, pie, scatter). Returns image path.",
         {"type": "object", "properties": {
             "chart_type": {"type": "string", "enum": ["bar", "line", "pie", "scatter", "horizontal_bar"], "description": "Chart type"},
@@ -4592,11 +4673,18 @@ class Agent:
                 # Truncate result
                 result = SECURITY.truncate_output(result)
 
-                # Show tool result to user
-                output_fn(f"[{tool_name} result]:\n{result[:1000]}{'...(truncated)' if len(result) > 1000 else ''}")
+                # Show tool result to user (pass full result for inline images)
+                if '[INLINE_IMAGE:' in result:
+                    output_fn(f"[{tool_name} result]:\n{result}")  # Full result with base64 for image display
+                else:
+                    output_fn(f"[{tool_name} result]:\n{result[:1000]}{'...(truncated)' if len(result) > 1000 else ''}")
 
-                AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, result[:200])
-                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                # Strip inline image data before sending to LLM (saves tokens)
+                import re as _re_strip
+                llm_result = _re_strip.sub(r'\[INLINE_IMAGE:[A-Za-z0-9+/=]+\]', '[chart image saved]', result)
+
+                AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, llm_result[:200])
+                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": llm_result})
 
             self.messages.append({"role": "user", "content": tool_results})
 
@@ -4831,7 +4919,16 @@ def create_chat_ui(mock_mode: bool = None):
             elif role == 'tool':
                 icon = TOOL_ICONS.get(tool_name, '🔧') if tool_name else '🔧'
                 tool_label = escape_html(tool_name or "Tool")
-                msgs_html.append(f'<details style="margin:5px 0;border-left:3px solid #ffa726;padding-left:10px;"><summary style="color:#ffa726;cursor:pointer;">{icon} {tool_label}</summary><pre style="color:{fg};white-space:pre-wrap;max-height:150px;overflow:auto;font-size:11px;margin:4px 0;">{c}</pre></details>')
+                # Check for inline images (base64-encoded charts/images)
+                import re as _re
+                inline_match = _re.search(r'\[INLINE_IMAGE:([A-Za-z0-9+/=]+)\]', raw)
+                if inline_match:
+                    img_b64 = inline_match.group(1)
+                    text_part = escape_html(raw[:inline_match.start()].strip()).replace('\n', '<br>')
+                    img_html = f'<div style="margin:4px 0;">{text_part}</div><img src="data:image/png;base64,{img_b64}" style="max-width:100%;border-radius:4px;margin:4px 0;" />'
+                    msgs_html.append(f'<details open style="margin:5px 0;border-left:3px solid #ffa726;padding-left:10px;"><summary style="color:#ffa726;cursor:pointer;">{icon} {tool_label}</summary>{img_html}</details>')
+                else:
+                    msgs_html.append(f'<details style="margin:5px 0;border-left:3px solid #ffa726;padding-left:10px;"><summary style="color:#ffa726;cursor:pointer;">{icon} {tool_label}</summary><pre style="color:{fg};white-space:pre-wrap;max-height:150px;overflow:auto;font-size:11px;margin:4px 0;">{c}</pre></details>')
             elif role == 'thinking':
                 msgs_html.append(f'<div style="margin:5px 0;color:#ab47bc;font-size:12px;border-left:3px solid #ab47bc;padding-left:10px;">💭 {c[:300]}...</div>')
             elif role == 'system':
@@ -4844,7 +4941,7 @@ def create_chat_ui(mock_mode: bool = None):
         # CSS-only auto-scroll: use flex-direction: column-reverse
         # Messages are wrapped in inner div, outer div is reversed flex container
         # This makes new content appear at bottom and stay visible
-        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;">
+        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;max-width:calc(100% - 6px);">
             <div style="padding:10px;font-family:system-ui,-apple-system,sans-serif;">
                 {content}
             </div>
