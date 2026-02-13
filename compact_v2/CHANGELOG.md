@@ -1,5 +1,82 @@
 # Compact V2 Changelog
 
+## v2.9.2 — Final Polish (2026-02-13)
+
+### Bug Fixes
+- **JSONC block comment EOF**: Fixed `_strip_jsonc_comments` — unterminated `/* ... */` at EOF could skip last characters; added bounds check before `i += 2`
+- **IPv6 ULA coverage**: Added `"fc"` and `"fec0:"` prefixes to `_is_private_ip` — previously only `"fd"` was checked, missing half the `fc00::/7` ULA range
+
+### Tests
+- 15 new tests in `test_v2_features.py`:
+  - JSONC edge cases (2): unterminated block comment, block comment at EOF
+  - SSRF protection (3): IPv6 ULA prefix matching, localhost blocking, metadata endpoint blocking
+  - Snapshot edge cases (2): `revert_all()`, revert on nonexistent file
+  - Config validation (3): negative max_turns rejected, temperature out of range, malformed JSON returns empty
+  - Permission wildcards (1): `tool:command_pattern` matching
+  - Diff edge cases (2): no-newline-at-EOF, identical content produces empty diff
+  - Cost tracking (1): unknown model ID returns zero cost
+  - Skills (1): SKILL.md without frontmatter still discovered
+- **82 total tests pass** (25 existing + 57 new)
+
+---
+
+## v2.9.1 — Hardening & Gap Features (2026-02-13)
+
+### Bug Fixes (12 fixes)
+
+#### CRITICAL
+1. **python_exec import hook**: `del _builtins, _original_import, _ALLOWED, _safe_import` deleted closure variables needed by the import hook — changed to `del _builtins` only
+2. **JSONC comment stripping**: Regex `re.sub(r"//.*$")` corrupted URLs inside quoted strings (e.g., `"http://..."`) — rewrote as proper character-by-character parser handling quotes, escapes, `//` and `/* */` comments
+
+#### HIGH
+3. **McpStdioClient deadlock**: `readline()` could hang indefinitely — added `selectors`-based `_readline_with_timeout()`, BrokenPipeError handling, JSON parse error catching, notification loop limit (20)
+4. **McpHttpClient errors**: Missing error handling for network/JSON/decode failures — added try/except, 2MB response size limit
+5. **MCP tool name collisions**: Two servers exposing same tool name silently overwrote — added collision detection with `logging.warning`
+6. **CONFIG.max_turns global mutation**: Sub-agents mutated global `CONFIG.max_turns` — added `max_turns_override` parameter to `Agent.run()`, uses local `_effective_max_turns`
+
+#### MEDIUM
+7. **Config type validation**: External config values not validated — added typed `_SCALAR_FIELDS` dict with type checking, range validation (temperature 0-1, thinking_budget 1024-64000, positive ints)
+8. **web_fetch SSRF**: No protection against internal IP/metadata access — added `_is_private_ip()` (private ranges + cloud metadata), `_NoRedirectHandler`, 2MB response limit, charset detection
+9. **CommandRegistry agent routing**: Command's `agent` field ignored at runtime — wired `get_agent()` into UI send flow via `ui_state["_cmd_agent_type"]`
+10. **SageMaker approval UX**: `request_approval()` returned False in SageMaker (no stdin), blocking all high-risk tools — changed to auto-approve with informative message
+
+#### LOW
+11. **Broad except in list_sessions**: Bare `except:` swallowed all errors — changed to `except (json.JSONDecodeError, KeyError, OSError)`
+12. **Missing imports**: Added `import logging` and `import urllib.parse`
+
+### New Features
+
+#### 1. Cost Tracking
+- Per-model token pricing for 8 Bedrock models (Haiku, Sonnet, Opus variants)
+- `TokenTracker` enhanced: `session_cost`, `session_cache_read`, `session_cache_write`, `get_cost()` method
+- Cost displayed in status bar
+- `/cost` slash command shows detailed breakdown
+
+#### 2. Snapshot & Revert System
+- `SnapshotManager`: automatic file backup before every write/edit
+- `save()`: copies file to `.snapshots/` with timestamp
+- `revert(filepath)`: restores most recent snapshot
+- `revert_all()`: restores all modified files
+- Max 100 snapshots with automatic pruning
+- `/revert`, `/revert <file>`, `/revert all` UI commands
+
+#### 3. Interactive Questions (ask_user tool)
+- New `tool_ask_user`: LLM can ask user for clarification mid-conversation
+- Supports free-text question + optional multiple-choice options
+- Added to `PLAN_MODE_ALLOWED_TOOLS` (works in plan mode)
+- Runtime handling via `Agent._run_ask_user_tool()`
+
+#### 4. Enhanced Permission Wildcards
+- `tool:command_pattern` syntax in permission rules (e.g., `"bash:rm*": "deny"`, `"bash:docker*": "ask"`)
+- Pattern matched via `fnmatch` against the command string
+- Combined with existing file-pattern rules
+
+### Tests
+- 20 new tests covering all fixes and features
+- **67 total tests pass** (25 existing + 42 new)
+
+---
+
 ## v2.9.0 — OpenCode Feature Parity (2026-02-13)
 
 Created `compact_v2/` as an enhanced version of `compact/` that closes the extensibility gap with OpenCode while preserving the single-file SageMaker-native architecture.
@@ -112,3 +189,37 @@ Created `compact_v2/` as an enhanced version of `compact/` that closes the exten
 | Diffs | Unified patches | Same |
 | LSP | 7 language servers | Not included (impractical in Jupyter kernel) |
 | File Watching | Native watcher | Not included (Jupyter handles changes) |
+| Cost Tracking | Basic estimation | Per-model pricing for 8 Bedrock models |
+| Snapshot/Revert | None | Auto-backup before edits, /revert command |
+| Interactive Q&A | ask_user tool | Same (ask_user tool) |
+
+---
+
+## Remaining Gaps (Intentionally Not Implemented)
+
+These are features present in OpenCode that are intentionally excluded because they don't apply to our use case (single-person, company SageMaker environment):
+
+| Feature | OpenCode Has | Why Not Needed |
+|---------|-------------|----------------|
+| **LSP (7 language servers)** | go-to-definition, find-references, hover, diagnostics | Impractical inside Jupyter kernel; SageMaker has its own code editor |
+| **File Watching** | Native inotify/fsevents watcher | Jupyter handles file changes; not useful in notebook context |
+| **OAuth for MCP** | OAuth 2.0 token flow for remote MCP servers | SageMaker uses IAM roles; no OAuth needed for internal servers |
+| **Multi-Provider** | 20+ LLM providers (Anthropic, OpenAI, Google, Azure, etc.) | Bedrock-only by design — company uses AWS Bedrock exclusively |
+| **Hooks/Plugins** | Plugin system, npm packages | Single-user tool — config + skills covers customization needs |
+| **Git PR Integration** | PR checkout, fork handling, GitHub API, session links | Use `bash` tool with `git` CLI; no need for built-in PR management |
+| **WebSearch** | Exa MCP integration | Likely blocked by SageMaker network policies; use `web_fetch` instead |
+| **Session Forking** | Branch conversation into parallel explorations | Single-user — sequential sessions sufficient |
+| **Apply Patch tool** | Unified patch format for multi-file changes | `edit_file` + `write_file` + diffs cover this; patch format adds complexity |
+| **Compaction Agent** | Dedicated sub-agent type for context compaction | Built-in `Compactor` class handles this directly |
+
+### What Compact V2 Does BETTER Than OpenCode
+
+1. **Security**: 3-layer bash validation + 3-layer Python AST analysis + Docker sandboxing + rate limiting (vs. permission rules only)
+2. **Error Recovery**: 5 layers — arg auto-fix, type conversion, fuzzy tool suggest, malformed JSON recovery, missing field injection (vs. 4 layers)
+3. **Document Creation**: 5 tools — Word, Excel, PDF, Chart, Markdown (OpenCode has none)
+4. **Semantic Search**: Bedrock Titan embeddings + cosine similarity (OpenCode has none)
+5. **SageMaker Native**: Jupyter widgets, Bedrock integration, IAM-based auth (OpenCode has no SageMaker support)
+6. **Single File**: 1 Python file + config vs. 100+ files across packages
+7. **Cost Tracking**: Per-model pricing for all Bedrock models with cache breakdown
+8. **Snapshot/Revert**: Auto-backup before edits with one-command revert (OpenCode has none)
+9. **SSRF Protection**: Private IP blocking, redirect blocking, response size limits on web_fetch and MCP clients

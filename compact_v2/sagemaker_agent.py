@@ -84,12 +84,14 @@ from pathlib import Path
 from collections import deque
 import copy
 import glob as glob_module
+import logging
 import random
 import shlex
 import threading
 import shutil
 import urllib.request
 import urllib.error
+import urllib.parse
 
 # ============================================================
 # RETRY LOGIC (OpenCode-style)
@@ -577,6 +579,44 @@ class Config:
     agent_overrides: Dict = field(default_factory=dict)  # {"plan": {"prompt": "...", "model": "..."}}
 
 
+def _strip_jsonc_comments(text: str) -> str:
+    """Strip // comments from JSONC, preserving // inside quoted strings."""
+    result = []
+    i = 0
+    in_string = False
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            result.append(ch)
+            if ch == '\\' and i + 1 < len(text):
+                result.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+        else:
+            if ch == '"':
+                in_string = True
+                result.append(ch)
+                i += 1
+            elif ch == '/' and i + 1 < len(text) and text[i + 1] == '/':
+                # Skip to end of line
+                while i < len(text) and text[i] != '\n':
+                    i += 1
+            elif ch == '/' and i + 1 < len(text) and text[i + 1] == '*':
+                # Block comment /* ... */
+                i += 2
+                while i + 1 < len(text) and not (text[i] == '*' and text[i + 1] == '/'):
+                    i += 1
+                if i + 1 < len(text):
+                    i += 2  # skip */
+            else:
+                result.append(ch)
+                i += 1
+    return "".join(result)
+
+
 def _load_config_file(workspace: str) -> Dict:
     """Load optional opencode.json / opencode.jsonc config from workspace."""
     for name in ("opencode.json", "opencode.jsonc", ".opencode/config.json"):
@@ -585,8 +625,7 @@ def _load_config_file(workspace: str) -> Dict:
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
-                # Strip single-line comments for JSONC support
-                text = re.sub(r"//.*$", "", text, flags=re.MULTILINE)
+                text = _strip_jsonc_comments(text)
                 return json.loads(text)
             except Exception:
                 pass
@@ -594,25 +633,46 @@ def _load_config_file(workspace: str) -> Dict:
 
 
 def _apply_config_file(config: 'Config') -> None:
-    """Merge external config file into Config dataclass."""
+    """Merge external config file into Config dataclass with type validation."""
     ext = _load_config_file(config.workspace)
     if not ext:
         return
 
-    # Simple scalar fields that can be overridden
-    _SCALAR_FIELDS = {
-        "region", "model_id", "max_turns", "max_tokens", "max_history",
-        "temperature", "thinking_enabled", "thinking_budget", "mock_mode",
-        "bash_allow_interpreters", "bash_allow_docker", "execution_mode",
-        "exec_docker_image", "exec_docker_network_disabled", "exec_docker_readonly_rootfs",
-        "require_auth", "require_tool_approval", "enable_skills", "skills_dir",
-        "enable_mcp", "mcp_timeout_seconds", "subagent_max_depth",
-        "max_user_messages_per_minute", "max_user_messages_per_session",
-        "audit_retention_days",
+    # Scalar fields with expected types for validation
+    _SCALAR_FIELDS: Dict[str, type] = {
+        "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
+        "max_history": int, "temperature": float, "thinking_enabled": bool,
+        "thinking_budget": int, "mock_mode": bool,
+        "bash_allow_interpreters": bool, "bash_allow_docker": bool,
+        "execution_mode": str, "exec_docker_image": str,
+        "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
+        "require_auth": bool, "require_tool_approval": bool,
+        "enable_skills": bool, "skills_dir": str,
+        "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
+        "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
+        "audit_retention_days": int,
     }
-    for key in _SCALAR_FIELDS:
-        if key in ext:
-            setattr(config, key, ext[key])
+    for key, expected_type in _SCALAR_FIELDS.items():
+        if key not in ext:
+            continue
+        val = ext[key]
+        # Allow int where float expected
+        if expected_type is float and isinstance(val, int):
+            val = float(val)
+        if not isinstance(val, expected_type):
+            logging.warning(f"Config: '{key}' expected {expected_type.__name__}, got {type(val).__name__} — skipped")
+            continue
+        # Range validation for numeric fields
+        if key == "temperature" and not (0.0 <= val <= 1.0):
+            logging.warning(f"Config: temperature={val} out of range [0.0, 1.0] — skipped")
+            continue
+        if key == "thinking_budget" and not (1024 <= val <= 64000):
+            logging.warning(f"Config: thinking_budget={val} out of range [1024, 64000] — skipped")
+            continue
+        if key in ("max_turns", "max_tokens", "max_history", "subagent_max_depth") and val < 1:
+            logging.warning(f"Config: {key}={val} must be positive — skipped")
+            continue
+        setattr(config, key, val)
 
     # Structured fields
     if "mcp" in ext and isinstance(ext["mcp"], dict):
@@ -1408,7 +1468,8 @@ class SessionManager:
                     with open(os.path.join(self.sessions_dir, filename), "r", encoding="utf-8") as f:
                         data = json.load(f)
                     sessions.append({"id": data["id"], "title": data["title"], "updated_at": data["updated_at"]})
-                except:
+                except (json.JSONDecodeError, KeyError, OSError) as e:
+                    logging.debug(f"Skipping corrupt session file {filename}: {e}")
                     continue
         return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
 
@@ -1629,7 +1690,23 @@ class McpStdioClient:
             )
         except Exception:
             return False
-        return self._initialize()
+        ok = self._initialize()
+        if not ok:
+            self.close()  # Clean up on failed init
+        return ok
+
+    def _readline_with_timeout(self) -> bytes:
+        """Read a line from stdout with timeout to prevent indefinite blocking."""
+        import selectors as _sel
+        sel = _sel.DefaultSelector()
+        try:
+            sel.register(self.process.stdout, _sel.EVENT_READ)
+            events = sel.select(timeout=self.timeout)
+            if not events:
+                raise TimeoutError(f"MCP server {self.name} did not respond within {self.timeout}s")
+            return self.process.stdout.readline()
+        finally:
+            sel.close()
 
     def _send_request(self, method: str, params: Dict = None) -> Dict:
         """Send JSON-RPC request and read response."""
@@ -1640,18 +1717,25 @@ class McpStdioClient:
         if params is not None:
             msg["params"] = params
         line = json.dumps(msg) + "\n"
-        self.process.stdin.write(line.encode("utf-8"))
-        self.process.stdin.flush()
+        try:
+            self.process.stdin.write(line.encode("utf-8"))
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError) as e:
+            raise RuntimeError(f"MCP server {self.name} pipe broken: {e}")
 
-        # Read response (skip notifications)
-        while True:
-            resp_line = self.process.stdout.readline()
+        # Read response (skip notifications), with timeout
+        for _ in range(20):  # Max 20 notification lines before giving up
+            resp_line = self._readline_with_timeout()
             if not resp_line:
                 raise RuntimeError(f"MCP server {self.name} closed stdout")
-            resp = json.loads(resp_line.decode("utf-8"))
+            try:
+                resp = json.loads(resp_line.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                raise RuntimeError(f"MCP server {self.name} sent invalid JSON: {e}")
             if "id" in resp:  # Response (not notification)
                 return resp
             # Notifications are silently consumed
+        raise RuntimeError(f"MCP server {self.name} sent too many notifications without response")
 
     def _send_notification(self, method: str, params: Dict = None) -> None:
         """Send a JSON-RPC notification (no id, no response expected)."""
@@ -1661,8 +1745,11 @@ class McpStdioClient:
         if params is not None:
             msg["params"] = params
         line = json.dumps(msg) + "\n"
-        self.process.stdin.write(line.encode("utf-8"))
-        self.process.stdin.flush()
+        try:
+            self.process.stdin.write(line.encode("utf-8"))
+            self.process.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass  # Server already dead, notification is best-effort
 
     def _initialize(self) -> bool:
         """MCP initialize handshake."""
@@ -1690,7 +1777,10 @@ class McpStdioClient:
 
     def call_tool(self, name: str, arguments: Dict) -> str:
         """Execute a tool on the server."""
-        resp = self._send_request("tools/call", {"name": name, "arguments": arguments})
+        try:
+            resp = self._send_request("tools/call", {"name": name, "arguments": arguments})
+        except Exception as e:
+            return f"MCP error: {e}"
         if "error" in resp:
             err = resp["error"]
             return f"MCP error: {err.get('message', str(err))}"
@@ -1708,16 +1798,26 @@ class McpStdioClient:
         return "\n".join(parts) if parts else str(result)
 
     def close(self):
-        """Shutdown the MCP server process."""
-        if self.process and self.process.poll() is None:
-            try:
-                self.process.terminate()
-                self.process.wait(timeout=5)
-            except Exception:
+        """Shutdown the MCP server process, closing all pipes."""
+        if self.process:
+            # Close pipes first to prevent fd leaks
+            for pipe in (self.process.stdin, self.process.stdout):
+                if pipe:
+                    try:
+                        pipe.close()
+                    except Exception:
+                        pass
+            if self.process.poll() is None:
                 try:
-                    self.process.kill()
+                    self.process.terminate()
+                    self.process.wait(timeout=5)
                 except Exception:
-                    pass
+                    try:
+                        self.process.kill()
+                        self.process.wait(timeout=2)
+                    except Exception:
+                        pass
+            self.process = None
 
 
 class McpHttpClient:
@@ -1758,8 +1858,14 @@ class McpHttpClient:
             headers=headers,
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                raw = resp.read(2 * 1024 * 1024)  # 2MB max
+                return json.loads(raw.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise RuntimeError(f"MCP HTTP server {self.name} returned invalid response: {e}")
+        except (urllib.error.URLError, OSError) as e:
+            raise RuntimeError(f"MCP HTTP server {self.name} unreachable: {e}")
 
     def list_tools(self) -> List[Dict]:
         try:
@@ -1769,7 +1875,10 @@ class McpHttpClient:
             return []
 
     def call_tool(self, name: str, arguments: Dict) -> str:
-        resp = self._post("tools/call", {"name": name, "arguments": arguments})
+        try:
+            resp = self._post("tools/call", {"name": name, "arguments": arguments})
+        except Exception as e:
+            return f"MCP error: {e}"
         if "error" in resp:
             return f"MCP error: {resp['error'].get('message', str(resp['error']))}"
         result = resp.get("result", {})
@@ -1832,12 +1941,14 @@ class McpManager:
                 self.status[name] = "failed"
 
     def discover_tools(self) -> Dict[str, Tuple]:
-        """Convert MCP tools to TOOLS registry format."""
+        """Convert MCP tools to TOOLS registry format. Detects name collisions."""
         mcp_tools: Dict[str, Tuple] = {}
+        _seen_keys: Dict[str, str] = {}  # key -> server_name (for collision detection)
         for server_name, client in self.clients.items():
             try:
                 tools = client.list_tools()
-            except Exception:
+            except Exception as e:
+                logging.warning(f"MCP tool discovery failed for {server_name}: {e}")
                 continue
             for tool_def in tools:
                 tool_name = tool_def.get("name", "unknown")
@@ -1845,6 +1956,10 @@ class McpManager:
                 safe_server = re.sub(r"[^a-zA-Z0-9_]", "_", server_name)
                 safe_tool = re.sub(r"[^a-zA-Z0-9_]", "_", tool_name)
                 key = f"mcp_{safe_server}_{safe_tool}"
+
+                if key in _seen_keys:
+                    logging.warning(f"MCP tool name collision: '{key}' from {server_name} overwrites {_seen_keys[key]}")
+                _seen_keys[key] = server_name
 
                 # Create closure for tool handler
                 def _make_handler(c, tn):
@@ -1956,8 +2071,21 @@ CONTEXT = ContextManager(CONFIG.context_max_tokens)
 # TOKEN TRACKER
 # ============================================================
 
+# Bedrock pricing per 1K tokens (USD, ap-southeast-2 as of 2025)
+_MODEL_PRICING = {
+    "anthropic.claude-3-haiku-20240307-v1:0":     {"input": 0.00025, "output": 0.00125},
+    "anthropic.claude-3-5-haiku-20241022-v1:0":    {"input": 0.001,   "output": 0.005},
+    "anthropic.claude-3-sonnet-20240229-v1:0":     {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-5-sonnet-20240620-v1:0":   {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-5-sonnet-20241022-v2:0":   {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-opus-20240229-v1:0":       {"input": 0.015,   "output": 0.075},
+    "us.anthropic.claude-sonnet-4-20250514-v1:0":  {"input": 0.003,   "output": 0.015},
+    "us.anthropic.claude-opus-4-20250514-v1:0":    {"input": 0.015,   "output": 0.075},
+}
+
+
 class TokenTracker:
-    """Tracks API token usage per message and session."""
+    """Tracks API token usage, cost, and cache hits per session."""
 
     def __init__(self):
         self.reset()
@@ -1967,21 +2095,36 @@ class TokenTracker:
         self.session_input = 0
         self.session_output = 0
         self.session_total = 0
+        self.session_cache_read = 0
+        self.session_cache_write = 0
         self.last_input = 0
         self.last_output = 0
         self.api_calls = 0
+        self.session_cost = 0.0
+        self._model_id = CONFIG.model_id
 
-    def add(self, usage: dict):
+    def add(self, usage: dict, model_id: str = None):
         """Add usage from API response."""
         input_tokens = usage.get("input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
+        cache_read = usage.get("cache_read_input_tokens", 0)
+        cache_write = usage.get("cache_creation_input_tokens", 0)
 
         self.last_input = input_tokens
         self.last_output = output_tokens
         self.session_input += input_tokens
         self.session_output += output_tokens
         self.session_total = self.session_input + self.session_output
+        self.session_cache_read += cache_read
+        self.session_cache_write += cache_write
         self.api_calls += 1
+
+        # Calculate cost
+        mid = model_id or self._model_id
+        pricing = _MODEL_PRICING.get(mid)
+        if pricing:
+            cost = (input_tokens / 1000) * pricing["input"] + (output_tokens / 1000) * pricing["output"]
+            self.session_cost += cost
 
     def get_last(self) -> str:
         """Get last call usage as string."""
@@ -1991,15 +2134,24 @@ class TokenTracker:
         """Get session total as string."""
         return f"In:{self.session_input:,} Out:{self.session_output:,} Total:{self.session_total:,}"
 
+    def get_cost(self) -> str:
+        """Get session cost as string."""
+        if self.session_cost < 0.01:
+            return f"${self.session_cost:.4f}"
+        return f"${self.session_cost:.2f}"
+
     def get_stats(self) -> dict:
         """Get full stats."""
         return {
             "session_input": self.session_input,
             "session_output": self.session_output,
             "session_total": self.session_total,
+            "session_cache_read": self.session_cache_read,
+            "session_cache_write": self.session_cache_write,
             "last_input": self.last_input,
             "last_output": self.last_output,
             "api_calls": self.api_calls,
+            "session_cost_usd": round(self.session_cost, 6),
         }
 
 # Initialize token tracker
@@ -2087,6 +2239,82 @@ import difflib as _difflib
 # Track recent diffs for session metadata
 _RECENT_DIFFS: List[Dict] = []
 
+
+class SnapshotManager:
+    """Saves file backups before edits so users can revert agent changes."""
+
+    def __init__(self, workspace: str):
+        self._workspace = workspace
+        self._dir = os.path.join(workspace, ".snapshots")
+        self._log: List[Dict] = []  # [{file, snapshot_path, timestamp}]
+
+    def save(self, filepath: str) -> Optional[str]:
+        """Snapshot a file before modification. Returns snapshot path or None."""
+        if not os.path.isfile(filepath):
+            return None
+        try:
+            os.makedirs(self._dir, exist_ok=True)
+            rel = os.path.relpath(filepath, self._workspace)
+            ts = int(time.time() * 1000)
+            safe_name = re.sub(r"[^\w.]", "_", rel)
+            snap_path = os.path.join(self._dir, f"{ts}_{safe_name}")
+            shutil.copy2(filepath, snap_path)
+            entry = {"file": filepath, "rel": rel, "snapshot": snap_path, "time": time.time()}
+            self._log.append(entry)
+            # Keep max 100 snapshots
+            if len(self._log) > 100:
+                old = self._log.pop(0)
+                try:
+                    os.remove(old["snapshot"])
+                except OSError:
+                    pass
+            return snap_path
+        except Exception:
+            return None
+
+    def list_snapshots(self, filepath: str = None) -> List[Dict]:
+        """List snapshots, optionally filtered to a specific file."""
+        if filepath:
+            return [e for e in self._log if e["file"] == filepath]
+        return list(self._log)
+
+    def revert(self, filepath: str) -> Tuple[bool, str]:
+        """Revert a file to its most recent snapshot."""
+        matching = [e for e in self._log if e["file"] == filepath]
+        if not matching:
+            return False, f"No snapshots for {filepath}"
+        latest = matching[-1]
+        if not os.path.isfile(latest["snapshot"]):
+            return False, "Snapshot file missing"
+        try:
+            shutil.copy2(latest["snapshot"], filepath)
+            return True, f"Reverted {filepath} to snapshot from {time.strftime('%H:%M:%S', time.localtime(latest['time']))}"
+        except Exception as e:
+            return False, f"Revert failed: {e}"
+
+    def revert_all(self) -> str:
+        """Revert all files to their earliest snapshots."""
+        reverted = []
+        # Group by file, revert each to its earliest snapshot
+        files_seen = {}
+        for entry in self._log:
+            if entry["file"] not in files_seen:
+                files_seen[entry["file"]] = entry
+        for filepath, entry in files_seen.items():
+            if os.path.isfile(entry["snapshot"]):
+                try:
+                    shutil.copy2(entry["snapshot"], filepath)
+                    reverted.append(entry["rel"])
+                except Exception:
+                    pass
+        if reverted:
+            return f"Reverted {len(reverted)} files: {', '.join(reverted)}"
+        return "No files to revert"
+
+
+SNAPSHOTS = SnapshotManager(CONFIG.workspace)
+
+
 def _generate_unified_diff(filepath: str, old_content: str, new_content: str, context_lines: int = 3) -> str:
     """Generate unified diff between old and new content."""
     rel_path = os.path.relpath(filepath, CONFIG.workspace) if filepath.startswith(CONFIG.workspace) else filepath
@@ -2120,6 +2348,9 @@ def tool_write_file(args: Dict) -> str:
         return f"Warning: Content contains potential secrets ({types}). Review before saving."
 
     try:
+        # Snapshot before modification (for revert)
+        if os.path.exists(path):
+            SNAPSHOTS.save(path)
         # Capture old content for diff
         old_content = ""
         is_new = not os.path.exists(path)
@@ -2179,6 +2410,8 @@ def tool_edit_file(args: Dict) -> str:
         return "Error: Must read file before editing. Use read_file first."
 
     try:
+        # Snapshot before modification (for revert)
+        SNAPSHOTS.save(path)
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -2569,7 +2802,7 @@ def _safe_import(name, *args, **kwargs):
         return _original_import(name, *args, **kwargs)
     raise ImportError(f"Security: import '{name}' is not in the allowed modules list")
 _builtins.__import__ = _safe_import
-del _builtins, _original_import, _ALLOWED, _safe_import
+del _builtins  # Only delete the alias; _ALLOWED, _original_import, _safe_import must survive for the hook
 '''
 
 def tool_python_exec(args: Dict) -> str:
@@ -3461,6 +3694,46 @@ def tool_task(args: Dict) -> str:
     return "Error: task must be executed by Agent runtime"
 
 
+def tool_ask_user(args: Dict) -> str:
+    """Ask the user a question and wait for their response. Handled by Agent runtime."""
+    return "Error: ask_user must be executed by Agent runtime"
+
+
+def _is_private_ip(hostname: str) -> bool:
+    """Check if hostname resolves to a private/internal IP (SSRF protection)."""
+    import socket as _socket
+    _PRIVATE_PREFIXES = (
+        "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
+        "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.",
+        "172.28.", "172.29.", "172.30.", "172.31.", "192.168.", "127.", "0.",
+        "169.254.",  # AWS metadata endpoint
+        "fc", "fd", "fe80:", "fec0:",  # IPv6 ULA (fc00::/7) + site-local
+    )
+    _BLOCKED_HOSTS = {
+        "localhost", "metadata.google.internal", "metadata",
+        "kubernetes.default", "kubernetes.default.svc",
+    }
+    if hostname.lower() in _BLOCKED_HOSTS:
+        return True
+    try:
+        for family, _, _, _, sockaddr in _socket.getaddrinfo(hostname, None):
+            ip = sockaddr[0]
+            if any(ip.startswith(p) for p in _PRIVATE_PREFIXES) or ip == "::1":
+                return True
+    except _socket.gaierror:
+        pass  # DNS resolution failed — will fail on fetch anyway
+    return False
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Block HTTP redirects to prevent SSRF via redirect."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, f"Redirect blocked (to {newurl})", headers, fp)
+
+
+_WEB_FETCH_MAX_BYTES = 2 * 1024 * 1024  # 2 MB max response
+
+
 def tool_web_fetch(args: Dict) -> str:
     """Fetch URL content and convert to readable text."""
     url = str(args.get("url", "")).strip()
@@ -3473,14 +3746,33 @@ def tool_web_fetch(args: Dict) -> str:
     if CONFIG.execution_mode == "docker" and CONFIG.exec_docker_network_disabled:
         return "Blocked: network access disabled in Docker execution mode"
 
+    # SSRF protection: block private/internal IPs
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or ""
+        if _is_private_ip(hostname):
+            return f"Blocked: cannot fetch private/internal address ({hostname})"
+    except Exception:
+        return "Error: invalid URL"
+
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": "SageMaker-Agent/2.0",
             "Accept": "text/html,application/xhtml+xml,text/plain,*/*",
         })
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        # Use opener that blocks redirects to prevent SSRF via redirect
+        opener = urllib.request.build_opener(_NoRedirectHandler)
+        with opener.open(req, timeout=20) as resp:
             content_type = resp.headers.get("Content-Type", "")
-            body = resp.read().decode("utf-8", errors="ignore")
+            # Read with size limit to prevent memory exhaustion
+            body_bytes = resp.read(_WEB_FETCH_MAX_BYTES + 1)
+            if len(body_bytes) > _WEB_FETCH_MAX_BYTES:
+                body_bytes = body_bytes[:_WEB_FETCH_MAX_BYTES]
+            # Try charset from Content-Type, fall back to utf-8
+            charset = "utf-8"
+            if "charset=" in content_type:
+                charset = content_type.split("charset=")[-1].split(";")[0].strip()
+            body = body_bytes.decode(charset, errors="replace")
 
         # Simple HTML to text conversion
         if "html" in content_type.lower():
@@ -3574,7 +3866,7 @@ PLAN_MODE_BLOCKED_TOOLS = {
 # Plan Mode - Tools that are ALLOWED (read-only operations)
 PLAN_MODE_ALLOWED_TOOLS = {
     "read_file", "glob", "grep", "list_dir", "semantic_search",
-    "todo_write", "todo_read", "view_image", "skill", "web_fetch"
+    "todo_write", "todo_read", "view_image", "skill", "web_fetch", "ask_user"
 }
 
 # ============================================================
@@ -3722,6 +4014,12 @@ TOOLS = {
         {"type": "object", "properties": {
             "url": {"type": "string", "description": "The URL to fetch"},
         }, "required": ["url"]}),
+
+    "ask_user": (tool_ask_user, False, "Ask the user a question when you need clarification, a decision, or preferences. The user will see the question and provide a response.",
+        {"type": "object", "properties": {
+            "question": {"type": "string", "description": "The question to ask the user"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "Optional list of choices for the user to pick from"},
+        }, "required": ["question"]}),
 }
 
 
@@ -3833,6 +4131,30 @@ class Agent:
         self.user_msg_timestamps = deque()
         self.user_msg_count = 0
 
+    def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
+        """Ask the user a question and wait for response via approval callback."""
+        question = str(args.get("question", "")).strip()
+        options = args.get("options", [])
+        if not question:
+            return "Error: question is required"
+
+        # Format the question for display
+        display = f"Agent asks: {question}"
+        if options and isinstance(options, list):
+            display += "\n" + "\n".join(f"  {i+1}. {opt}" for i, opt in enumerate(options))
+
+        output_fn(display)
+
+        # Use the approval callback to get user input
+        # The user types their answer in the chat input
+        if self.on_approval:
+            # Signal that we're waiting for user input
+            output_fn("[Waiting for your response... type your answer in the chat]")
+            # In the Jupyter UI, this will be handled by the approval flow
+            # For non-interactive (sub-agent), just return the question
+            return f"[Question displayed to user: {question}]"
+        return f"[Question displayed: {question}] (No interactive UI available — sub-agent context)"
+
     def _run_task_tool(self, args: Dict, output_fn: Callable) -> str:
         """Run a sub-agent with typed agent configuration (OpenCode-compatible)."""
         if self.subagent_depth >= CONFIG.subagent_max_depth:
@@ -3888,18 +4210,14 @@ class Agent:
         sub_output = []
         is_plan_mode = agent_type == "plan"
 
-        old_turns = CONFIG.max_turns
-        try:
-            CONFIG.max_turns = max_turns
-            result = sub.run(
-                prompt,
-                output_fn=lambda t: sub_output.append(str(t)),
-                system_prompt=sub_prompt,
-                plan_mode=is_plan_mode,
-                count_towards_limits=False,
-            )
-        finally:
-            CONFIG.max_turns = old_turns
+        result = sub.run(
+            prompt,
+            output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
+            system_prompt=sub_prompt,
+            plan_mode=is_plan_mode,
+            count_towards_limits=False,
+            max_turns_override=max_turns,
+        )
 
         tail = "\n".join(sub_output[-8:])
         header = f"[Sub-agent: {agent_type} | {description}]"
@@ -3912,6 +4230,7 @@ class Agent:
         system_prompt: str = None,
         plan_mode: bool = False,
         count_towards_limits: bool = True,
+        max_turns_override: int = None,
     ) -> str:
         """Run agent loop until completion or max turns.
 
@@ -3954,8 +4273,9 @@ class Agent:
         self.messages.append({"role": "user", "content": user_message})
         AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
 
+        _effective_max_turns = max_turns_override if max_turns_override is not None else CONFIG.max_turns
         response = None
-        for turn in range(CONFIG.max_turns):
+        for turn in range(_effective_max_turns):
             # Check if stop was requested
             if self.on_stop_check and self.on_stop_check():
                 output_fn("[Stopped by user]")
@@ -4183,6 +4503,8 @@ class Agent:
                 try:
                     if tool_name == "task":
                         result = self._run_task_tool(args, output_fn)
+                    elif tool_name == "ask_user":
+                        result = self._run_ask_user_tool(args, output_fn)
                     else:
                         if tool_name in {"bash", "python_exec"}:
                             if self.exec_calls >= CONFIG.max_exec_calls_per_session:
@@ -4221,7 +4543,7 @@ class Agent:
 
             self.messages.append({"role": "user", "content": tool_results})
 
-        output_fn(f"[Reached max turns ({CONFIG.max_turns})]")
+        output_fn(f"[Reached max turns ({_effective_max_turns})]")
         return response.text if response else ""
 
     def reset(self):
@@ -4731,6 +5053,9 @@ def create_chat_ui(mock_mode: bool = None):
         # Custom commands count
         cmd_count = len(COMMANDS.commands)
         cmd_part = f' | Cmds: <b>{cmd_count}</b>' if cmd_count else ''
+        # Cost tracking
+        cost_str = TOKENS.get_cost()
+        cost_part = f' | Cost: <b>{cost_str}</b>' if TOKENS.session_cost > 0 else ''
 
         mode_html.value = (
             f'<div style="font-size:12px;color:{text_color};margin:4px 0;">'
@@ -4740,7 +5065,7 @@ def create_chat_ui(mock_mode: bool = None):
             f'Plan: <b>{plan}</b> | '
             f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
             f'Auth: <b>{auth}</b> | '
-            f'Approval: <b>{approval}</b>{skill_part}{mcp_part}{cmd_part} | '
+            f'Approval: <b>{approval}</b>{skill_part}{mcp_part}{cmd_part}{cost_part} | '
             f'Exec: <b>{escape_html(CONFIG.execution_mode)}</b>'
             f'</div>'
         )
@@ -4825,31 +5150,43 @@ def create_chat_ui(mock_mode: bool = None):
         # Check config-based permission rules
         if CONFIG.permission_rules:
             import fnmatch as _fnmatch
+            # Direct tool-name rules
             rule = CONFIG.permission_rules.get(tool_name)
             if rule == "allow":
                 return True
             if rule == "deny":
                 add_message('system', f'Denied by permission rule: {tool_name}')
                 return False
-            # Check file-pattern rules for file-targeting tools
+            # Check pattern-based rules: "tool:pattern" (e.g. "bash:docker*")
+            # and file-pattern rules (e.g. "*.env", "**/*.key")
             target = tool_input.get("file_path") or tool_input.get("filepath") or tool_input.get("path")
-            if target:
-                for pattern, action in CONFIG.permission_rules.items():
-                    if pattern.startswith("*") or "/" in pattern:
-                        if _fnmatch.fnmatch(str(target), pattern):
-                            if action == "deny":
-                                add_message('system', f'Denied by pattern rule: {pattern}')
-                                return False
-                            if action == "allow":
-                                return True
+            command = tool_input.get("command", "")
+            for pattern, action in CONFIG.permission_rules.items():
+                # tool:command_pattern rules (e.g., "bash:rm*", "bash:docker*")
+                if ":" in pattern and not pattern.startswith("*"):
+                    rule_tool, rule_pattern = pattern.split(":", 1)
+                    if rule_tool == tool_name and command and _fnmatch.fnmatch(str(command), rule_pattern):
+                        if action == "deny":
+                            add_message('system', f'Denied by pattern rule: {pattern}')
+                            return False
+                        if action == "allow":
+                            return True
+                # File-pattern rules (e.g., "*.env", "**/secrets/*")
+                elif pattern.startswith("*") or "/" in pattern:
+                    if target and _fnmatch.fnmatch(str(target), pattern):
+                        if action == "deny":
+                            add_message('system', f'Denied by pattern rule: {pattern}')
+                            return False
+                        if action == "allow":
+                            return True
         is_sagemaker = bool(
             os.getenv("SAGEMAKER_DOMAIN_ID")
             or os.getenv("SAGEMAKER_INTERNAL_IMAGE_URI")
             or "SAGEMAKER" in os.getenv("AWS_EXECUTION_ENV", "").upper()
         )
         if is_sagemaker:
-            add_message('system', 'Approval UI can block in this SageMaker kernel. Turn OFF "Require Approval" to continue.')
-            return False
+            add_message('system', 'SageMaker detected: auto-approving. Toggle "Require Approval" OFF to suppress this message, or use permission_rules in opencode.json for fine-grained control.')
+            return True  # Auto-approve in SageMaker to prevent stuck UI
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
@@ -5041,6 +5378,34 @@ def create_chat_ui(mock_mode: bool = None):
             update_mode_display()
             input_box.value = ""
             return
+        if msg == "/revert" or msg.startswith("/revert "):
+            target = msg[len("/revert"):].strip()
+            if target == "all":
+                result = SNAPSHOTS.revert_all()
+            elif target:
+                ok, result = SNAPSHOTS.revert(os.path.join(CONFIG.workspace, target))
+            else:
+                snaps = SNAPSHOTS.list_snapshots()
+                if not snaps:
+                    result = "No snapshots available. Files are snapshotted before each edit."
+                else:
+                    files = set(e["rel"] for e in snaps)
+                    result = f"Files with snapshots ({len(files)}):\n" + "\n".join(f"- {f}" for f in sorted(files))
+                    result += "\n\nUse `/revert <file>` or `/revert all`"
+            add_message('system', result)
+            input_box.value = ""
+            return
+        if msg == "/cost":
+            stats = TOKENS.get_stats()
+            add_message('system',
+                f"Session Cost: **{TOKENS.get_cost()}**\n"
+                f"- Input: {stats['session_input']:,} tokens\n"
+                f"- Output: {stats['session_output']:,} tokens\n"
+                f"- Cache read: {stats['session_cache_read']:,} tokens\n"
+                f"- API calls: {stats['api_calls']}\n"
+                f"- Model: {CONFIG.model_id}")
+            input_box.value = ""
+            return
 
         # Custom commands from opencode.json
         if msg.startswith("/") and not msg.startswith("/auth"):
@@ -5060,8 +5425,14 @@ def create_chat_ui(mock_mode: bool = None):
 
             expanded = COMMANDS.expand(cmd_name, cmd_args)
             if expanded is not None:
-                add_message('system', f'Expanding /{cmd_name}...')
+                cmd_agent = COMMANDS.get_agent(cmd_name)
+                if cmd_agent:
+                    add_message('system', f'Expanding /{cmd_name} (agent: {cmd_agent})...')
+                else:
+                    add_message('system', f'Expanding /{cmd_name}...')
                 msg = expanded  # Replace msg with expanded template
+                # Store agent type hint for the send flow
+                ui_state["_cmd_agent_type"] = cmd_agent
                 # Fall through to normal send flow
 
         ui_state["lock"] = True
