@@ -168,6 +168,8 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 | Faster stop polling | Round 5 | 0.5s → 0.1s for responsive stop button |
 | ASCII system messages | Round 6 | All emoji replaced with `[STOP]`, `[PLAN]`, `[OK]`, etc. for encoding safety |
 | Chat/input alignment | Round 6 | `width:100%;box-sizing:border-box` matches input box width |
+| Proactive skill matching | Post-review | Agent auto-loads matching skills when user request matches available skill descriptions (follows Claude Code pattern, not OpenCode manual-only approach) |
+| powerbi-dashboard skill | Post-review | Added Power BI dashboard generator skill (138 lines, from AIPower) |
 
 ### Total Bug Fix Summary
 

@@ -370,13 +370,20 @@ Skills are **instruction files** that tell the AI how to behave for a specific t
 
 **Example:** The included `code-review` skill tells the AI to check for security issues, code quality, performance, and testing when reviewing code.
 
-### How to Use the Included Skill
+### Proactive Skill Matching
 
-1. Make sure `skills/review/SKILL.md` exists in your workspace
-2. Type `/skills` in the chat — you should see `code-review` listed
-3. Type `/skill use code-review` — the skill is now active
-4. Ask: "Review my app.py file" — the AI will follow the code review checklist
-5. When done, type `/skill clear` to deactivate
+The agent **automatically detects** when your request matches an available skill and loads it without manual activation. For example:
+- Ask "Review my code" → agent auto-loads the `review` skill
+
+This follows the Claude Code (Anthropic) pattern where the agent proactively matches user requests to available skill descriptions.
+
+### Manual Activation (still supported)
+
+You can also manually activate skills:
+
+1. Type `/skills` in the chat — lists all discovered skills
+2. Type `/skill use <name>` — activate a specific skill
+3. Type `/skill clear` — deactivate all skills
 
 ### How to Create Your Own Skill
 
