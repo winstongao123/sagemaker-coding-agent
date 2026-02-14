@@ -1355,6 +1355,14 @@ AUDIT = AuditLogger(CONFIG.audit_dir)
 # ============================================================
 
 import boto3
+from botocore.config import Config as _BotoConfig
+
+# Bedrock client config: 600s read timeout for large outputs (e.g., 2000+ line file generation)
+_BEDROCK_CLIENT_CONFIG = _BotoConfig(
+    read_timeout=600,
+    connect_timeout=10,
+    retries={"max_attempts": 2}
+)
 
 @dataclass
 class ToolCall:
@@ -1379,7 +1387,7 @@ class BedrockClient:
         self.region = region
         self.mock_mode = mock_mode
         if not mock_mode:
-            self.client = boto3.client("bedrock-runtime", region_name=region)
+            self.client = boto3.client("bedrock-runtime", region_name=region, config=_BEDROCK_CLIENT_CONFIG)
         else:
             self.client = None
             print("[MOCK MODE] No API calls will be made")
@@ -3649,7 +3657,7 @@ class SemanticSearch:
 
     def _ensure_client(self):
         if self.client is None:
-            self.client = boto3.client("bedrock-runtime", region_name=self.region)
+            self.client = boto3.client("bedrock-runtime", region_name=self.region, config=_BEDROCK_CLIENT_CONFIG)
 
     def _get_embedding(self, text: str) -> List[float]:
         """Get embedding vector for text."""
