@@ -32,3 +32,4 @@ _temp_context.md
 truncated_outputs/
 .pytest_cache/
 test_*.py
+nul
