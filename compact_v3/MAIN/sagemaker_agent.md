@@ -796,7 +796,7 @@ class SecurityManager:
         (r"\beval\s+\$", "Eval with variable"),
         (r"\beval\s+['\"]", "Eval string execution"),
         (r"\beval\s+.*\$\(", "Eval with command substitution"),
-        (r"\bpython[23]?\s+-c.*exec\(", "Python exec injection"),
+        (r"\bpython[23]?\s+-c\b", "Python -c bypasses python_exec security; use python_exec tool instead"),
         (r"\bperl\s+-e", "Perl one-liner"),
 
         # === PRIVILEGE ESCALATION ===
@@ -2185,7 +2185,7 @@ def tool_read_file(args: Dict) -> str:
     """Read a file with line numbers. Uses cache and smart truncation for token efficiency."""
     path = args["file_path"]
     offset = args.get("offset", 0)
-    limit = args.get("limit", 500)
+    limit = args.get("limit", 2000)
 
     ok, msg = SECURITY.validate_path(path)
     if not ok:
@@ -4348,7 +4348,7 @@ class Agent:
         self.on_stop_check = on_stop_check  # Callback to check if stop was requested
         self.tool_allowlist = set(tool_allowlist) if tool_allowlist else None
         self.subagent_depth = subagent_depth
-        self.tool_history = deque(maxlen=10)
+        self.tool_history = deque(maxlen=30)
         self.exec_calls = 0
         self.exec_seconds = 0.0
         self.user_msg_timestamps = deque()
@@ -4601,42 +4601,50 @@ class Agent:
                 AUDIT.log(self.session_id, "response", result_summary=response.text[:200] if response.text else "")
                 return response.text or ""
 
-            # Improved doom loop detection (based on file path, not full content)
+            # Doom loop detection: generate a unique key per tool call that distinguishes
+            # genuinely different calls from truly repetitive ones.
+            _skipped_ids = set()
             for tc in response.tool_calls:
-                # For code/content-heavy tools, use hash to avoid false positives
-                if tc.name == "python_exec":
-                    code = tc.input.get("code", "")
-                    target = hashlib.md5(code.encode()).hexdigest()[:16]
-                elif tc.name == "create_pdf":
-                    content = str(tc.input.get("content", ""))
-                    target = hashlib.md5(content.encode()).hexdigest()[:16]
-                elif tc.name == "create_chart":
-                    data = str(tc.input.get("data", ""))
-                    target = hashlib.md5(data.encode()).hexdigest()[:16]
+                _inp = tc.input
+                if tc.name == "todo_write":
+                    continue  # Expected to repeat during planning
+                elif tc.name in ("python_exec",):
+                    target = hashlib.md5(_inp.get("code", "").encode()).hexdigest()[:16]
+                elif tc.name in ("create_pdf", "create_chart", "create_excel"):
+                    target = hashlib.md5(str(_inp).encode()).hexdigest()[:16]
                 elif tc.name == "read_file":
-                    # Include offset in key so paginated reads of the same file aren't flagged as repetitive
-                    fp = tc.input.get("file_path") or tc.input.get("path") or tc.input.get("filepath") or ""
-                    offset = tc.input.get("offset") or tc.input.get("line_start") or tc.input.get("start_line") or 0
+                    fp = _inp.get("file_path") or _inp.get("path") or _inp.get("filepath") or ""
+                    offset = _inp.get("offset") or _inp.get("line_start") or _inp.get("start_line") or 0
                     target = f"{fp}@{offset}"
+                elif tc.name == "edit_file":
+                    fp = _inp.get("file_path") or _inp.get("path") or _inp.get("filepath") or ""
+                    old_str = _inp.get("old_string") or _inp.get("old_str") or ""
+                    target = fp + "#" + hashlib.md5(old_str.encode()).hexdigest()[:12]
+                elif tc.name == "grep":
+                    pattern = _inp.get("pattern") or _inp.get("regex") or ""
+                    path = _inp.get("path") or _inp.get("directory") or ""
+                    target = f"{path}:{pattern}"
+                elif tc.name == "bash":
+                    cmd = _inp.get("command") or ""
+                    target = hashlib.md5(cmd.encode()).hexdigest()[:16]
                 else:
-                    target = tc.input.get("file_path") or tc.input.get("path") or tc.input.get("filepath") or tc.input.get("command", "")[:50] or str(tc.input)[:50]
+                    target = hashlib.md5(str(_inp).encode()).hexdigest()[:16]
                 key = (tc.name, target)
 
-                # Check for doom loop (same tool+target 3+ times)
-                # todo_write is expected to repeat during normal planning and progress updates.
-                if tc.name == "todo_write":
-                    self.tool_history.append(key)
-                    continue
                 repeat_count = sum(1 for h in self.tool_history if h == key)
                 if repeat_count >= 3:
                     output_fn(f"[Warning: Repetitive {tc.name} calls detected (3+ identical), stopping]")
+                    # Append assistant text before returning so context isn't lost
+                    if response.text:
+                        self.messages.append({"role": "assistant", "content": [{"type": "text", "text": response.text}]})
                     return response.text or ""
 
-                # Check for consecutive file rewrites (same file written twice in a row)
-                if tc.name in ("write_file", "edit_file") and self.tool_history:
+                # Consecutive duplicate write/edit to same file+content = skip
+                if tc.name in ("write_file",) and self.tool_history:
                     last_key = self.tool_history[-1] if self.tool_history else None
                     if last_key and last_key[0] == tc.name and last_key[1] == target:
                         output_fn(f"[Skipping duplicate {tc.name} to '{target[:30]}']")
+                        _skipped_ids.add(tc.id)
                         continue
 
                 self.tool_history.append(key)
@@ -4652,6 +4660,10 @@ class Agent:
             # Execute tools with 5-layer error recovery
             tool_results = []
             for tc in response.tool_calls:
+                # Skip tools flagged as duplicates by doom loop detector
+                if tc.id in _skipped_ids:
+                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": "Skipped: duplicate call"})
+                    continue
                 # Check stop before each tool
                 if self.on_stop_check and self.on_stop_check():
                     tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": "Stopped by user"})
@@ -6344,7 +6356,7 @@ def create_chat_ui(mock_mode: bool = None):
     send_btn.on_click(_on_send_threaded)
     clear_btn.on_click(on_clear)
     save_btn.on_click(on_save)
-    compact_btn.on_click(on_compact)
+    compact_btn.on_click(lambda b: threading.Thread(target=on_compact, args=(b,), daemon=True).start())
     load_btn.on_click(on_load)
     new_btn.on_click(on_new)
 

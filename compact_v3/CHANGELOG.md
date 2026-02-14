@@ -337,13 +337,81 @@ User testing on SageMaker with Sonnet 4.5 — agent hit max_turns=30 twice while
 
 2. **Skill instructions must specify the HOW, not just the WHAT**: "Customize: data generation, semantic model, report pages" is vague. The agent interpreted this as "edit each section individually." Explicit instruction ("write the COMPLETE file in ONE write_file call") eliminates the ambiguity.
 
+---
+
+## Round 12 Fixes (Doom Loop Overhaul + Security + OpenCode Review)
+
+### Source
+
+Full code review (18 issues found) + OpenCode architecture analysis. OpenCode uses per-tool key hashing, 30-entry history, `JSON.stringify` equality for doom loop detection, and blocks `python -c` entirely.
+
+### Bug Fixes
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 45 | **CRITICAL** | `edit_file` doom loop key uses only `file_path` — 3 edits to the same file with different `old_string` values triggers false doom loop stop | Key now includes hash of `old_string`: `file_path#md5(old_string)[:12]` |
+| 46 | **CRITICAL** | "Skipping duplicate" `continue` in doom loop check doesn't skip execution — tool still executes at line 4654+ | Added `_skipped_ids` set; execution loop checks `if tc.id in _skipped_ids` and returns "Skipped" result |
+| 47 | HIGH | `grep` doom loop key uses only `path` — 3 greps with different patterns on same directory triggers false stop | Key now includes pattern: `path:pattern` |
+| 48 | HIGH | `bash` doom loop key truncates command to 50 chars — commands with same prefix but different suffix collide | Key now uses full command hash: `md5(command)[:16]` |
+| 49 | HIGH | `python -c` via bash bypasses all `python_exec` security (AST validation, import allowlist, runtime import hook) | Broadened denylist from `python -c.*exec\(` to `python -c\b` — blocks ALL inline Python via bash, forces use of `python_exec` tool |
+| 50 | HIGH | Doom loop early return loses assistant message from context — LLM's response text is not appended to messages | Added `self.messages.append(...)` before returning on doom loop detection |
+| 51 | MEDIUM | `on_compact` blocks Jupyter kernel thread — same deadlock pattern as bug #36 | Wrapped in `threading.Thread` like `_on_send_threaded` |
+| 52 | MEDIUM | `read_file` default limit of 500 lines — agent sees only 25% of a 2000-line file unless it explicitly requests more | Increased default from 500 to 2000 (matching MAX_LINES) |
+| 53 | MEDIUM | `tool_history` maxlen=10 too short — repetitive patterns with 3+ interleaved calls escape detection | Increased to maxlen=30 |
+| 54 | MEDIUM | Fallback doom loop key (`else` branch) uses `file_path or command[:50]` — non-deterministic for tools without those fields | Changed fallback to `md5(str(input))[:16]` — deterministic hash of full input |
+
+### OpenCode Patterns Evaluated
+
+| Pattern | Score | Decision | Reason |
+|---------|-------|----------|--------|
+| Per-tool doom loop keys with input hashing | 95 | **ADOPTED** | Our old keying was too coarse, causing false positives on edit_file, grep, bash |
+| `python -c` blocked entirely | 90 | **ADOPTED** | Forces inline code through python_exec with 3-layer security |
+| 30-entry tool_history (vs our 10) | 88 | **ADOPTED** | Better doom loop detection for interleaved patterns |
+| read_file default 2000 lines | 85 | **ADOPTED** | Matches MAX_LINES, reduces unnecessary pagination |
+| Fuzzy edit matching (9 strategies) | 82 | SKIP | Over-engineered for our use case; exact match + good error messages sufficient |
+| MultiEdit tool (batch edits) | 80 | SKIP | Our edit_file handles one-at-a-time; skill instructions now say "write complete file" |
+| Batch tool (parallel calls) | 78 | SKIP | Bedrock API doesn't support parallel tool execution |
+| Soft max_turns with forced summary | 75 | SKIP | Our max_turns=60 is sufficient; adding summary injection adds complexity |
+
+### Changes Made (Round 12)
+
+| Change | V3 | V2 | Files |
+|--------|----|----|-------|
+| Doom loop key overhaul (per-tool hashing) | Yes | Yes | sagemaker_agent.py |
+| `_skipped_ids` for actual skip execution | Yes | Yes | sagemaker_agent.py |
+| Doom loop early return saves assistant message | Yes | Yes | sagemaker_agent.py |
+| `python -c` blocked in bash denylist | Yes | Yes | sagemaker_agent.py |
+| `tool_history` maxlen 10 → 30 | Yes | Yes | sagemaker_agent.py |
+| `read_file` default limit 500 → 2000 | Yes | Yes | sagemaker_agent.py |
+| `on_compact` threading fix | Yes | Yes | sagemaker_agent.py |
+| Companion docs updated | Yes | Yes | sagemaker_agent.md |
+
+### Lessons Learned (Round 12)
+
+1. **Doom loop keys must be tool-specific**: A single fallback keying strategy (`file_path or command[:50]`) creates collisions for tools with different semantics. Each tool type needs a key that captures what makes two calls "the same" — for edit_file it's old_string, for grep it's pattern, for bash it's the full command.
+
+2. **"Skip" must actually skip**: The doom loop detection ran in a pre-check loop that only tracked history. The execution loop ran separately over the same `response.tool_calls` without consulting the skip decisions. Using `_skipped_ids` bridges the two loops.
+
+3. **`python -c` is a security hole when interpreters are allowed**: With `bash_allow_interpreters=True`, the agent can run `python -c "import boto3; ..."` which bypasses all of python_exec's 3-layer validation. Blocking `python -c` entirely forces inline code through the secure path while still allowing `python script.py` for skill generators.
+
+4. **OpenCode's architecture is more defensive**: 30-entry history, per-input hashing, and no write size limits. Our agent was designed conservatively (10-entry history, 500-line reads) which paradoxically made it less capable for legitimate workflows.
+
+### Known Issues Not Fixed (deferred)
+
+| # | Severity | Issue | Reason for Deferral |
+|---|----------|-------|---------------------|
+| D1 | HIGH | Auto-compact produces near-useless summaries (first 50 chars of 3 messages) | Requires LLM-based summary call, adds latency and cost — needs design |
+| D2 | MEDIUM | Skill content may be injected twice into system prompt | Need to verify it actually happens before fixing |
+| D3 | MEDIUM | IPv6 SSRF check incomplete (`::ffff:127.0.0.1` bypass) | Edge case, low practical risk on SageMaker |
+| D4 | LOW | `_pending_activations` list has no thread safety | Race condition window is very small in practice |
+
 ### Total Bug Fix Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| CRITICAL | 2 | All fixed (round 8) |
-| HIGH | 10 | All fixed (rounds 1-4, 7-11) |
-| MEDIUM | 15 | All fixed (rounds 1-5, 7-8, 11) |
+| CRITICAL | 4 | All fixed (rounds 8, 12) |
+| HIGH | 14 | All fixed (rounds 1-4, 7-12) |
+| MEDIUM | 19 | All fixed (rounds 1-5, 7-8, 11-12) |
 | LOW | 15 | All fixed (rounds 1-8) |
 | LOW UX | 2 | All fixed (round 6) |
-| **Total** | **44** | **All fixed** |
+| **Total** | **54** | **All fixed** |
