@@ -4613,6 +4613,11 @@ class Agent:
                 elif tc.name == "create_chart":
                     data = str(tc.input.get("data", ""))
                     target = hashlib.md5(data.encode()).hexdigest()[:16]
+                elif tc.name == "read_file":
+                    # Include offset in key so paginated reads of the same file aren't flagged as repetitive
+                    fp = tc.input.get("file_path") or tc.input.get("path") or tc.input.get("filepath") or ""
+                    offset = tc.input.get("offset") or tc.input.get("line_start") or tc.input.get("start_line") or 0
+                    target = f"{fp}@{offset}"
                 else:
                     target = tc.input.get("file_path") or tc.input.get("path") or tc.input.get("filepath") or tc.input.get("command", "")[:50] or str(tc.input)[:50]
                 key = (tc.name, target)

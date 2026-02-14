@@ -287,13 +287,34 @@ User testing on SageMaker with Sonnet 4.5 — agent correctly explored Power BI 
 
 2. **`exec()` should stay blocked in python_exec**: While `exec(f.read())` is a valid workaround for running files, it bypasses the 3-layer Python security validation (regex, AST imports, AST calls). The proper path is `python script.py` via bash, where the script runs in its own process.
 
+---
+
+## Round 10 Fix (Doom Loop False Positive on Paginated Reads)
+
+### Source
+
+User testing on SageMaker with Sonnet 4.5 — agent tried to read `generate_template.py` (2187 lines, over 2000 MAX_LINES limit). After truncated first read, agent paginated with offset — but doom loop detector used only `(tool_name, file_path)` as key, ignoring offset. Third paginated read triggered false "Repetitive read_file calls detected" stop.
+
+### Bug Fix
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 42 | HIGH | Doom loop detector key for `read_file` is `(read_file, file_path)` — ignores offset parameter. Paginated reads of the same large file (different offsets) are falsely flagged as repetitive after 3 calls. | Added `read_file` special case: key includes offset → `(read_file, "path@offset")`. Different offsets produce different keys, so pagination works. True repetition (same file, same offset 3+ times) is still caught. |
+
+### Changes Made (Round 10)
+
+| Change | V3 | V2 | Files |
+|--------|----|----|-------|
+| `read_file` doom loop key includes offset | Yes | Yes | sagemaker_agent.py |
+| Companion doc updated | Yes | Yes | sagemaker_agent.md |
+
 ### Total Bug Fix Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 2 | All fixed (round 8) |
-| HIGH | 8 | All fixed (rounds 1-4, 7-9) |
+| HIGH | 9 | All fixed (rounds 1-4, 7-10) |
 | MEDIUM | 14 | All fixed (rounds 1-5, 7-8) |
 | LOW | 15 | All fixed (rounds 1-8) |
 | LOW UX | 2 | All fixed (round 6) |
-| **Total** | **41** | **All fixed** |
+| **Total** | **42** | **All fixed** |
