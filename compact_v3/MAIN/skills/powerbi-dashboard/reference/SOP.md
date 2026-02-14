@@ -56,15 +56,20 @@ Create the following directory structure:
 ## Step 2: Key File Templates
 
 ### `.pbip` (entry point)
+**IMPORTANT**: Only `report` goes in artifacts. The semantic model folder is discovered by convention — do NOT add `semanticModel` or `dataset` properties.
 ```json
 {
   "version": "1.0",
   "artifacts": [
     {
-      "report": { "path": "{ProjectName}.Report" },
-      "semanticModel": { "path": "{ProjectName}.SemanticModel" }
+      "report": {
+        "path": "{ProjectName}.Report"
+      }
     }
-  ]
+  ],
+  "settings": {
+    "enableAutoRecovery": true
+  }
 }
 ```
 
@@ -470,6 +475,7 @@ Standard professional blue palette:
     - **`lineChart` / `areaChart` / `donutChart`**: `_agg_col_field` with Sum works reliably
     - **`card`**: Always use `_measure_field`
 25. **`Number.Min` / `Number.Max` do NOT exist in Power Query M** - These are not valid M functions. To clamp values, use `if` expressions: `each if _ < 0 then 0 else if _ > 100 then 100 else _`. Using invalid M functions causes entire columns to show "Error" in data, making all charts using those columns blank.
+26. **`.pbip` file must ONLY have `report` in artifacts** - Do NOT add `semanticModel`, `dataset`, or any other property to the artifacts array. Power BI Desktop discovers the semantic model folder by convention from the folder name. Adding `semanticModel` or `dataset` causes: `Property 'semanticModel'/'dataset' has not been defined and the schema does not allow additional properties`. The correct schema is: `{"version":"1.0","artifacts":[{"report":{"path":"{Name}.Report"}}],"settings":{"enableAutoRecovery":true}}`.
 
 ## Step 11: Supported Visual Types Reference
 
