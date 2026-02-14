@@ -128,6 +128,17 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 | 18 | LOW | /verify and /checkpoint not documented in SYSTEM_PROMPT | Added to Other Features section |
 | 19 | LOW | Redundant `global _TODOS` declaration in on_load | Removed duplicate |
 
+## Round 5 Code Review Fixes
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 20 | MEDIUM | `ask_user` tool returned placeholder text — never captured real user input | Added `on_ask_user` callback with text input widget, submit/skip buttons, threading.Event wait pattern |
+| 21 | LOW | Bare `except:` in tool_grep (line 2520) hides real errors | Changed to `except (OSError, UnicodeError):` |
+| 22 | LOW | Bare `except:` in python_exec temp cleanup (line 2850) | Changed to `except OSError:` |
+| 23 | LOW | Bare `except:` in todo UI sync (line 3884) | Changed to `except Exception:` |
+| 24 | LOW | Session ID collision risk — second-level timestamp only | Added `os.urandom(3).hex()` suffix |
+| 25 | LOW | Stop button poll interval 0.5s — sluggish responsiveness | Reduced to 0.1s for faster stop detection |
+
 ---
 
 ## File Changes Summary

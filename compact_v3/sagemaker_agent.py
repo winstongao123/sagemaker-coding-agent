@@ -1434,7 +1434,7 @@ class SessionManager:
 
     def create(self, title: str = "New Session") -> Session:
         """Create new session."""
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + os.urandom(3).hex()
         now = datetime.now().isoformat()
         session = Session(id=session_id, created_at=now, updated_at=now, title=title, messages=[], metadata={})
         self.save(session)
@@ -2517,7 +2517,7 @@ def tool_grep(args: Dict) -> str:
                         results.append(f"{filepath}:{i}: {line.strip()[:100]}")
                         if len(results) >= 50:
                             break
-        except:
+        except (OSError, UnicodeError):
             continue
 
     return "\n".join(results) if results else "No matches found"
@@ -2847,7 +2847,7 @@ def tool_python_exec(args: Dict) -> str:
     finally:
         try:
             os.unlink(temp_path)
-        except:
+        except OSError:
             pass
 
 
@@ -3881,7 +3881,7 @@ def tool_todo_write(args: Dict) -> str:
     if _TODO_UI_SYNC:
         try:
             _TODO_UI_SYNC()
-        except:
+        except Exception:
             pass  # UI might not be ready
 
     lines = ["Todo List Updated:"]
@@ -4294,6 +4294,7 @@ class Agent:
         client: BedrockClient,
         session_id: str = None,
         on_approval: Callable = None,
+        on_ask_user: Callable = None,
         on_tokens: Callable = None,
         on_thinking: Callable = None,
         on_stop_check: Callable = None,
@@ -4304,6 +4305,7 @@ class Agent:
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         self.messages = []
         self.on_approval = on_approval
+        self.on_ask_user = on_ask_user  # Callback for ask_user tool (text input)
         self.on_tokens = on_tokens  # Callback for token updates
         self.on_thinking = on_thinking  # Callback for thinking output
         self.on_stop_check = on_stop_check  # Callback to check if stop was requested
@@ -4316,28 +4318,24 @@ class Agent:
         self.user_msg_count = 0
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
-        """Ask the user a question and wait for response via approval callback."""
+        """Ask the user a question and wait for response via text input widget."""
         question = str(args.get("question", "")).strip()
         options = args.get("options", [])
         if not question:
             return "Error: question is required"
 
-        # Format the question for display
-        display = f"Agent asks: {question}"
+        # Format the question for display in chat
+        display_text = f"Agent asks: {question}"
         if options and isinstance(options, list):
-            display += "\n" + "\n".join(f"  {i+1}. {opt}" for i, opt in enumerate(options))
+            display_text += "\n" + "\n".join(f"  {i+1}. {opt}" for i, opt in enumerate(options))
+        output_fn(display_text)
 
-        output_fn(display)
-
-        # Use the approval callback to get user input
-        # The user types their answer in the chat input
-        if self.on_approval:
-            # Signal that we're waiting for user input
-            output_fn("[Waiting for your response... type your answer in the chat]")
-            # In the Jupyter UI, this will be handled by the approval flow
-            # For non-interactive (sub-agent), just return the question
-            return f"[Question displayed to user: {question}]"
-        return f"[Question displayed: {question}] (No interactive UI available — sub-agent context)"
+        # Use the on_ask_user callback to show text input widget and wait for response
+        if self.on_ask_user:
+            response = self.on_ask_user(question, options if isinstance(options, list) else [])
+            return f"User response: {response}"
+        # Sub-agent or non-interactive context — return placeholder
+        return f"[Question displayed: {question}] (No interactive UI — sub-agent context)"
 
     def _run_task_tool(self, args: Dict, output_fn: Callable) -> str:
         """Run a sub-agent with typed agent configuration (OpenCode-compatible)."""
@@ -4385,6 +4383,7 @@ class Agent:
             sub_client,
             session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
             on_approval=self.on_approval,
+            on_ask_user=self.on_ask_user,
             on_tokens=None,
             on_thinking=None,
             on_stop_check=self.on_stop_check,
@@ -4525,12 +4524,12 @@ class Agent:
                 llm_thread = threading.Thread(target=_call_llm, daemon=True)
                 llm_thread.start()
 
-                # Poll for completion, checking stop flag every 0.5s
+                # Poll for completion, checking stop flag every 0.1s for responsive stop
                 while llm_thread.is_alive():
                     if self.on_stop_check and self.on_stop_check():
                         output_fn("[Stopped by user]")
                         return response.text if response else ""
-                    llm_thread.join(timeout=0.5)
+                    llm_thread.join(timeout=0.1)
 
                 if _llm_result[1]:
                     raise _llm_result[1]
@@ -5100,6 +5099,15 @@ def create_chat_ui(mock_mode: bool = None):
     approval_box = widgets.VBox([approval_output, widgets.HBox([approve_btn, approve_always_btn, deny_btn])])
     approval_box.layout.display = 'none'
 
+    # Ask-user dialog (text input for agent questions)
+    ask_user_output = widgets.Output()
+    ask_user_input = widgets.Text(placeholder='Type your answer...', layout=widgets.Layout(width='80%'))
+    ask_user_submit = widgets.Button(description='Submit', button_style='success', icon='check')
+    ask_user_skip = widgets.Button(description='Skip', button_style='warning', icon='forward')
+    ask_user_box = widgets.VBox([ask_user_output, widgets.HBox([ask_user_input, ask_user_submit, ask_user_skip])])
+    ask_user_box.layout.display = 'none'
+    pending_user_input = {"result": None, "event": None}
+
     # Model selector - default to Haiku (first option) with fallback
     model_values = [m[1] for m in BEDROCK_MODELS]
     default_model = CONFIG.model_id if CONFIG.model_id in model_values else BEDROCK_MODELS[0][1]
@@ -5502,6 +5510,68 @@ def create_chat_ui(mock_mode: bool = None):
     approve_always_btn.on_click(on_approve_always)
     deny_btn.on_click(on_deny)
 
+    # --- ask_user handlers ---
+    def on_ask_user_submit(b):
+        pending_user_input["result"] = ask_user_input.value.strip() or "(no response)"
+        if pending_user_input.get("event"):
+            pending_user_input["event"].set()
+
+    def on_ask_user_skip(b):
+        pending_user_input["result"] = "(user skipped)"
+        if pending_user_input.get("event"):
+            pending_user_input["event"].set()
+
+    ask_user_submit.on_click(on_ask_user_submit)
+    ask_user_skip.on_click(on_ask_user_skip)
+
+    def request_user_input(question: str, options: list = None) -> str:
+        """Show a text input dialog and wait for the user's response."""
+        pending_user_input["result"] = None
+        user_input_event = threading.Event()
+        pending_user_input["event"] = user_input_event
+        ask_user_input.value = ""
+
+        dark = ui_state.get("dark_mode", True)
+        card_bg = "#2b2b3f" if dark else "#f0f4ff"
+        card_fg = "#f0f0f0" if dark else "#111"
+        card_border = "#5577aa" if dark else "#aac4e6"
+
+        with ask_user_output:
+            clear_output()
+            q_html = escape_html(question)
+            opts_html = ""
+            if options and isinstance(options, list):
+                opts_html = "<ul>" + "".join(f"<li>{escape_html(str(o))}</li>" for o in options) + "</ul>"
+            display(HTML(
+                f'<div style="padding:10px;background:{card_bg};border:1px solid {card_border};border-radius:5px;color:{card_fg};">'
+                f'<h4 style="margin:0 0 8px 0;color:{card_fg};">Agent Question</h4>'
+                f'<p style="margin:0 0 8px 0;color:{card_fg};">{q_html}</p>'
+                f'{opts_html}</div>'
+            ))
+        ask_user_box.layout.display = 'block'
+        send_btn.disabled = True
+
+        # Wait with timeout (5 min max)
+        max_wait = 300
+        waited = 0
+        while pending_user_input["result"] is None and waited < max_wait:
+            if ui_state.get("stop_requested"):
+                pending_user_input["result"] = "(stopped)"
+                break
+            user_input_event.wait(timeout=0.1)
+            waited += 0.1
+
+        ask_user_box.layout.display = 'none'
+        send_btn.disabled = False
+        with ask_user_output:
+            clear_output()
+
+        result = pending_user_input["result"]
+        if result is None:
+            result = "(timed out — no response)"
+        add_message('system', f'User answered: {result}')
+        return result
+
     def on_stop(b):
         """Handle stop button click - also kills active subprocesses."""
         ui_state["stop_requested"] = True
@@ -5509,8 +5579,14 @@ def create_chat_ui(mock_mode: bool = None):
         if pending_approval.get("event"):
             pending_approval["result"] = False
             pending_approval["event"].set()
+        if pending_user_input.get("event"):
+            pending_user_input["result"] = "(stopped)"
+            pending_user_input["event"].set()
         approval_box.layout.display = 'none'
+        ask_user_box.layout.display = 'none'
         with approval_output:
+            clear_output()
+        with ask_user_output:
             clear_output()
         send_btn.disabled = False
         status_html.value = '<span style="color:#ff9800"><b>⏹ Stop requested...</b></span>'
@@ -5739,6 +5815,7 @@ def create_chat_ui(mock_mode: bool = None):
                 ui_state["client"],
                 session.id,
                 on_approval=request_approval,
+                on_ask_user=request_user_input,
                 on_tokens=lambda stats: update_tokens_display(),
                 on_thinking=lambda t: add_message('thinking', t) if t else None,
                 on_stop_check=lambda: ui_state.get("stop_requested", False)
@@ -6012,6 +6089,7 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["client"],
             session.id,
             on_approval=request_approval,
+            on_ask_user=request_user_input,
             on_tokens=lambda stats: update_tokens_display(),
             on_thinking=lambda t: add_message('thinking', t) if t else None,
             on_stop_check=lambda: ui_state.get("stop_requested", False)
@@ -6222,6 +6300,7 @@ def create_chat_ui(mock_mode: bool = None):
         todo_display,  # Collapsible todo list (OpenCode-style)
         chat_display,  # HTML widget with internal scroll
         approval_box,
+        ask_user_box,
         input_box,
         row3,
         tokens_html
