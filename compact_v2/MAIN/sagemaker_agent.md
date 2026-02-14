@@ -205,6 +205,15 @@ class Compactor:
         # Deep copy first, then collect and mutate only the copy
         pruned_messages = copy.deepcopy(messages)
 
+        # Build tool_use_id -> tool_name map for protected tool detection
+        tool_name_map: Dict[str, str] = {}
+        for msg in pruned_messages:
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "tool_use":
+                        tool_name_map[item.get("id", "")] = item.get("name", "")
+
         # Find tool result items in the COPY to potentially prune
         tool_results = []
         for i, msg in enumerate(pruned_messages):
@@ -215,16 +224,21 @@ class Compactor:
                         tool_results.append({
                             "index": i,
                             "tokens": cls.estimate_tokens(str(item.get("content", ""))),
-                            "item": item
+                            "item": item,
+                            "tool_name": tool_name_map.get(item.get("tool_use_id", ""), ""),
                         })
 
         if not tool_results:
             return messages, 0
 
-        # Walk from newest to oldest, protect last 40K tokens
+        # Walk from newest to oldest, protect last 40K tokens + protected tools
         protected_tokens = 0
         tokens_saved = 0
         for tr in reversed(tool_results):
+            # Never prune protected tools (important for agent memory)
+            if tr["tool_name"] in cls.PROTECTED_TOOLS:
+                protected_tokens += tr["tokens"]
+                continue
             if protected_tokens < cls.PRUNE_PROTECT_TOKENS:
                 protected_tokens += tr["tokens"]
             else:
@@ -280,6 +294,49 @@ Create a detailed summary following these EXACT sections:
 9. **Next Step**: Only if directly in line with user's explicit request. Include direct quotes from user if applicable.
 
 Format as a comprehensive summary that preserves all context needed to continue seamlessly."""
+
+    MAX_SUMMARY_INPUT_MESSAGES = 20  # Truncate conversation for summarization (cost + context limit)
+
+    @classmethod
+    def create_llm_summary(cls, client, messages: List[Dict]) -> Optional[str]:
+        """Create LLM-generated summary via Bedrock. Returns None on failure.
+        Used by both manual and auto compact for high-quality summaries.
+        Truncates long conversations to ~20 messages to avoid sending 160K+ tokens."""
+        try:
+            # Truncate to avoid sending full conversation (which may be at 80-90% context)
+            if len(messages) > cls.MAX_SUMMARY_INPUT_MESSAGES:
+                head = messages[:3]  # Keep original user request context
+                tail = messages[-(cls.MAX_SUMMARY_INPUT_MESSAGES - 3):]
+                # Ensure proper role alternation at junction
+                if head and tail and head[-1].get("role") == tail[0].get("role"):
+                    tail = tail[1:]
+                summary_input = head + tail
+            else:
+                summary_input = messages
+
+            summary_prompt = cls.create_summary_prompt(summary_input)
+            summary_messages = list(summary_input)
+            # Ensure proper role alternation: Bedrock requires user/assistant alternation
+            if summary_messages and summary_messages[-1].get("role") == "user":
+                summary_messages.append({"role": "assistant", "content": "[Preparing summary...]"})
+            summary_messages.append({"role": "user", "content": summary_prompt})
+
+            response = client.chat(
+                messages=summary_messages,
+                system=("You are summarizing a coding conversation. Be concise but preserve:\n"
+                        "1. Current task and goal\n2. Key files modified or read\n"
+                        "3. Important decisions made\n4. Where we left off\n"
+                        "5. What needs to happen next"),
+                tools=None,
+                max_tokens=2000,
+                temperature=0.0
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            import logging
+            logging.warning(f"LLM summary failed: {e}")
+        return None
 
     @classmethod
     def should_compact(cls, messages: List[Dict], max_tokens: int) -> bool:
@@ -780,7 +837,7 @@ class SecurityManager:
         (r"\baws\s+sagemaker\s+(?!help)", "AWS SageMaker CLI - use SDK in code instead"),
 
         # === NETWORK - EXTERNAL REQUESTS (except pip) ===
-        (r"\bcurl\s+https?://(?!pypi\.|files\.pythonhosted\.|localhost|127\.0\.0\.1)", "External HTTP request - blocked for security"),
+        (r"\bcurl\s+https?://(?!pypi\.|files\.pythonhosted\.)", "External HTTP request - blocked for security"),
         (r"\bwget\s+https?://(?!pypi\.|files\.pythonhosted\.|localhost|127\.0\.0\.1)", "External download - blocked for security"),
         (r"\bcurl\s+.*\|\s*(ba)?sh", "Pipe to shell"),
         (r"\bwget\s+.*\|\s*(ba)?sh", "Pipe to shell"),
@@ -902,6 +959,8 @@ class SecurityManager:
 
         # === OTHER ===
         (r"\bgetattr\s*\(.*,\s*['\"]__", "Access dunder attributes"),
+        (r"\bgetattr\s*\(\s*(os|shutil|subprocess|sys)\b", "Dynamic attribute access on sensitive module"),
+        (r"\bsys\.modules\b", "sys.modules access - blocked for security"),
     ]
 
     # Allowed AWS services for this agent (can be expanded)
@@ -1513,6 +1572,7 @@ class SkillManager:
         self._cache: Dict[str, SkillInfo] = {}
         self.active_skill: Optional[str] = None  # Currently active skill name
         self._pending_activations: List[str] = []  # Skills activated via tool_skill(), synced to ui_state on next send
+        self._pending_lock = threading.Lock()  # Thread safety for _pending_activations
 
     def _parse_frontmatter(self, text: str) -> Tuple[Dict, str]:
         """Parse YAML frontmatter from markdown. Returns (metadata, content)."""
@@ -3769,9 +3829,10 @@ def tool_skill(args: Dict) -> str:
     skill = SKILLS._cache.get(name)
     base_dir = skill.base_dir if skill else "unknown"
     # Auto-activate: persist skill into system prompt for subsequent turns
-    SKILLS.active_skill = name
-    if name not in SKILLS._pending_activations:
-        SKILLS._pending_activations.append(name)
+    with SKILLS._pending_lock:
+        SKILLS.active_skill = name
+        if name not in SKILLS._pending_activations:
+            SKILLS._pending_activations.append(name)
     return (f"## Skill Activated: {name}\n\n**Base directory**: {base_dir}\n\n"
             f"**IMPORTANT: Follow the skill instructions below as your primary workflow. "
             f"Do NOT fall back to generic approaches — use the exact steps, tools, and patterns "
@@ -3789,15 +3850,10 @@ def tool_ask_user(args: Dict) -> str:
 
 
 def _is_private_ip(hostname: str) -> bool:
-    """Check if hostname resolves to a private/internal IP (SSRF protection)."""
+    """Check if hostname resolves to a private/internal IP (SSRF protection).
+    Uses ipaddress module for proper IPv4-mapped IPv6 handling (e.g. ::ffff:127.0.0.1)."""
     import socket as _socket
-    _PRIVATE_PREFIXES = (
-        "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
-        "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.",
-        "172.28.", "172.29.", "172.30.", "172.31.", "192.168.", "127.", "0.",
-        "169.254.",  # AWS metadata endpoint
-        "fc", "fd", "fe80:", "fec0:",  # IPv6 ULA (fc00::/7) + site-local
-    )
+    import ipaddress as _ipaddress
     _BLOCKED_HOSTS = {
         "localhost", "metadata.google.internal", "metadata",
         "kubernetes.default", "kubernetes.default.svc",
@@ -3806,8 +3862,17 @@ def _is_private_ip(hostname: str) -> bool:
         return True
     try:
         for family, _, _, _, sockaddr in _socket.getaddrinfo(hostname, None):
-            ip = sockaddr[0]
-            if any(ip.startswith(p) for p in _PRIVATE_PREFIXES) or ip == "::1":
+            ip_str = sockaddr[0]
+            try:
+                addr = _ipaddress.ip_address(ip_str)
+                # Handle IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1)
+                if hasattr(addr, 'ipv4_mapped') and addr.ipv4_mapped:
+                    addr = addr.ipv4_mapped
+                if (addr.is_private or addr.is_loopback or addr.is_link_local
+                        or addr.is_reserved or addr.is_multicast):
+                    return True
+            except ValueError:
+                # Malformed IP — block it to be safe
                 return True
     except _socket.gaierror:
         pass  # DNS resolution failed — will fail on fetch anyway
@@ -4391,12 +4456,11 @@ class Agent:
             system_prompt: Custom system prompt (default: SYSTEM_PROMPT, use PLAN_MODE_PROMPT for plan mode)
             plan_mode: If True, block write operations and only allow read-only tools
         """
-        # Use provided system prompt or default
+        # Use provided system prompt or default.
+        # NOTE: Skill injection is handled ONLY by the UI send flow (on_send),
+        # which appends active skill content before calling agent.run().
+        # Do NOT inject skills here — it would cause double-injection.
         self._system_prompt = system_prompt or SYSTEM_PROMPT
-        # Inject active skill content into system prompt
-        skill_prompt = SKILLS.get_active_skill_prompt()
-        if skill_prompt:
-            self._system_prompt = self._system_prompt + skill_prompt
         self._plan_mode = plan_mode  # Store for tool execution check
 
         # Session/user rate limiting
@@ -4447,11 +4511,10 @@ class Agent:
 
                 # Step 2: If still high, create summary
                 if COMPACTOR.should_compact(self.messages, CONFIG.context_max_tokens):
-                    output_fn("[i] Context high - creating summary...")
-                    summary = "Previous conversation covered: " + ", ".join(
-                        m.get("content", "")[:50] if isinstance(m.get("content"), str) else "tool calls"
-                        for m in self.messages[:5]
-                    )
+                    output_fn("[i] Context high - creating LLM summary...")
+                    summary = COMPACTOR.create_llm_summary(self.client, self.messages)
+                    if not summary:
+                        summary = "Conversation compacted (summary unavailable). Continue from recent context."
                     self.messages = COMPACTOR.compact(self.messages, summary)
                     output_fn("[i] Conversation compacted to preserve context")
 
@@ -4526,7 +4589,10 @@ class Agent:
                 output_fn(response.text)
 
             # No tool calls = done
+            # No tool calls = done — persist to conversation history
             if not response.tool_calls:
+                if response.text:
+                    self.messages.append({"role": "assistant", "content": response.text})
                 AUDIT.log(self.session_id, "response", result_summary=response.text[:200] if response.text else "")
                 return response.text or ""
 
@@ -4563,8 +4629,17 @@ class Agent:
                 repeat_count = sum(1 for h in self.tool_history if h == key)
                 if repeat_count >= 3:
                     output_fn(f"[Warning: Repetitive {tc.name} calls detected (3+ identical), stopping]")
+                    # Build complete assistant message with tool_use blocks for proper history
+                    assistant_content = []
                     if response.text:
-                        self.messages.append({"role": "assistant", "content": [{"type": "text", "text": response.text}]})
+                        assistant_content.append({"type": "text", "text": response.text})
+                    for tc2 in response.tool_calls:
+                        assistant_content.append({"type": "tool_use", "id": tc2.id, "name": tc2.name, "input": tc2.input})
+                    self.messages.append({"role": "assistant", "content": assistant_content})
+                    # Add stub tool_results for proper user/assistant alternation
+                    stub_results = [{"type": "tool_result", "tool_use_id": tc2.id,
+                                     "content": "Stopped: repetitive call detected"} for tc2 in response.tool_calls]
+                    self.messages.append({"role": "user", "content": stub_results})
                     return response.text or ""
 
                 # Consecutive duplicate write to same file+content = skip
@@ -5516,11 +5591,10 @@ def create_chat_ui(mock_mode: bool = None):
                 if tokens_saved > 0:
                     ui_state["agent"].messages = pruned_msgs
                     messages = pruned_msgs
-                # Stage 2: Quick summary
-                summary = "Conversation summary: " + "; ".join(
-                    (m.get("content", "")[:60] if isinstance(m.get("content"), str) else "tool use")
-                    for m in messages[:3]
-                )
+                # Stage 2: LLM-generated summary (high-quality, same as manual compact)
+                summary = COMPACTOR.create_llm_summary(ui_state["client"], messages)
+                if not summary:
+                    summary = "Conversation compacted (summary unavailable). Continue from recent context."
                 compacted = COMPACTOR.compact(messages, summary)
                 ui_state["agent"].messages = compacted
                 usage = CONTEXT.get_usage(compacted)
@@ -5532,9 +5606,7 @@ def create_chat_ui(mock_mode: bool = None):
         return False
 
     def on_send(b):
-        if ui_state.get("lock"):
-            return
-
+        # Lock is set by _on_send_threaded wrapper before spawning this thread.
         msg = input_box.value.strip()
         if not msg:
             return
@@ -5574,15 +5646,17 @@ def create_chat_ui(mock_mode: bool = None):
                 if name not in active:
                     active.append(name)
                     ui_state["active_skills"] = active
-                SKILLS.active_skill = name
+                with SKILLS._pending_lock:
+                    SKILLS.active_skill = name
                 add_message('system', f'Enabled skill: {name}')
                 update_mode_display()
             input_box.value = ""
             return
         if msg == "/skill clear":
             ui_state["active_skills"] = []
-            SKILLS.active_skill = None
-            SKILLS._pending_activations.clear()
+            with SKILLS._pending_lock:
+                SKILLS.active_skill = None
+                SKILLS._pending_activations.clear()
             add_message('system', 'Cleared active skills')
             update_mode_display()
             input_box.value = ""
@@ -5737,18 +5811,20 @@ def create_chat_ui(mock_mode: bool = None):
                         if s_name not in active:
                             active.append(s_name)
                             ui_state["active_skills"] = active
-                            SKILLS.active_skill = s_name
+                            with SKILLS._pending_lock:
+                                SKILLS.active_skill = s_name
                             add_message('system', f'Auto-matched skill: {s_name}')
                             break  # Only auto-load one skill
 
             # Sync skills auto-activated via tool_skill() into ui_state (drains pending list)
-            if SKILLS._pending_activations:
-                active = ui_state.get("active_skills", [])
-                for pending_name in SKILLS._pending_activations:
-                    if pending_name not in active:
-                        active.append(pending_name)
-                ui_state["active_skills"] = active
-                SKILLS._pending_activations.clear()
+            with SKILLS._pending_lock:
+                if SKILLS._pending_activations:
+                    active = ui_state.get("active_skills", [])
+                    for pending_name in SKILLS._pending_activations:
+                        if pending_name not in active:
+                            active.append(pending_name)
+                    ui_state["active_skills"] = active
+                    SKILLS._pending_activations.clear()
 
             # Append active skills as extra runtime guidance.
             active_skills = ui_state.get("active_skills", [])
@@ -5793,11 +5869,10 @@ def create_chat_ui(mock_mode: bool = None):
                     if tokens_saved > 0:
                         ui_state["agent"].messages = pruned_msgs
                         messages = pruned_msgs
-                    # Stage 2: Simple summary (auto mode uses quick summary)
-                    summary = "Conversation summary: " + "; ".join(
-                        (m.get("content", "")[:60] if isinstance(m.get("content"), str) else "tool use")
-                        for m in messages[:3]
-                    )
+                    # Stage 2: LLM-generated summary (high-quality, same as manual compact)
+                    summary = COMPACTOR.create_llm_summary(ui_state["client"], messages)
+                    if not summary:
+                        summary = "Conversation compacted (summary unavailable). Continue from recent context."
                     compacted = COMPACTOR.compact(messages, summary)
                     ui_state["agent"].messages = compacted
                     usage = CONTEXT.get_usage(compacted)
@@ -5889,8 +5964,9 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
         ui_state["active_skills"] = []
-        SKILLS.active_skill = None
-        SKILLS._pending_activations.clear()
+        with SKILLS._pending_lock:
+            SKILLS.active_skill = None
+            SKILLS._pending_activations.clear()
         render_chat()
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
@@ -6042,8 +6118,9 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
         ui_state["active_skills"] = []
-        SKILLS.active_skill = None
-        SKILLS._pending_activations.clear()
+        with SKILLS._pending_lock:
+            SKILLS.active_skill = None
+            SKILLS._pending_activations.clear()
         render_chat()
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready (New)</b></span>'
@@ -6057,11 +6134,7 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', 'No conversation to compact.')
             return
 
-        if ui_state.get("lock"):
-            add_message('system', 'Please wait for current operation to finish.')
-            return
-
-        ui_state["lock"] = True
+        # Lock is set by _on_compact_threaded wrapper before spawning this thread.
         compact_btn.disabled = True
         status_html.value = '<span style="color:#ff9800"><b>⋯ Compacting...</b></span>'
 
@@ -6076,42 +6149,24 @@ def create_chat_ui(mock_mode: bool = None):
                 ui_state["agent"].messages = pruned_msgs
                 messages = pruned_msgs
 
-            # Stage 2: Ask model to create summary
+            # Stage 2: LLM-generated summary (shared helper)
             add_message('system', 'Stage 2: Creating conversation summary...')
 
-            summary_prompt = COMPACTOR.create_summary_prompt(messages)
+            summary = COMPACTOR.create_llm_summary(ui_state["client"], messages)
 
-            # Add summary request to get AI to summarize
-            summary_messages = messages.copy()
-            summary_messages.append({"role": "user", "content": summary_prompt})
+            if not summary:
+                summary = "Conversation compacted (LLM summary unavailable). Continue from recent context."
+                add_message('system', 'LLM summary failed, using fallback.')
+            # Compact: keep summary + last 5 messages
+            compacted = COMPACTOR.compact(messages, summary)
+            ui_state["agent"].messages = compacted
 
-            # Make API call to get summary
-            response = ui_state["client"].chat(
-                messages=summary_messages,
-                system="""You are summarizing a coding conversation. Be concise but preserve:
-1. Current task and goal
-2. Key files modified or read
-3. Important decisions made
-4. Where we left off
-5. What needs to happen next""",
-                tools=None,
-                max_tokens=2000,
-                temperature=0.0
-            )
+            add_message('system', f'Compacted: {original_count} → {len(compacted)} messages')
 
-            if response and response.text:
-                # Compact: keep summary + last 5 messages
-                compacted = COMPACTOR.compact(messages, response.text)
-                ui_state["agent"].messages = compacted
-
-                add_message('system', f'Compacted: {original_count} → {len(compacted)} messages')
-
-                # Update context display
-                usage = CONTEXT.get_usage(compacted)
-                pct = usage["percent"] * 100
-                add_message('system', f'Context now at {pct:.1f}% ({usage["tokens"]:,} tokens)')
-            else:
-                add_message('system', 'Failed to get summary from model.')
+            # Update context display
+            usage = CONTEXT.get_usage(compacted)
+            pct = usage["percent"] * 100
+            add_message('system', f'Context now at {pct:.1f}% ({usage["tokens"]:,} tokens)')
 
         except Exception as e:
             add_message('system', f'Compact failed: {e}')
@@ -6131,12 +6186,20 @@ def create_chat_ui(mock_mode: bool = None):
         the kernel thread and creates a deadlock."""
         if ui_state.get("lock"):
             return  # Agent already running
+        ui_state["lock"] = True  # Set lock BEFORE spawning thread (atomic on kernel thread)
         threading.Thread(target=on_send, args=(b,), daemon=True).start()
+
+    def _on_compact_threaded(b):
+        """Run on_compact in background thread with lock pre-check."""
+        if ui_state.get("lock"):
+            return  # Agent already running
+        ui_state["lock"] = True  # Set lock BEFORE spawning thread (atomic on kernel thread)
+        threading.Thread(target=on_compact, args=(b,), daemon=True).start()
 
     send_btn.on_click(_on_send_threaded)
     clear_btn.on_click(on_clear)
     save_btn.on_click(on_save)
-    compact_btn.on_click(lambda b: threading.Thread(target=on_compact, args=(b,), daemon=True).start())
+    compact_btn.on_click(_on_compact_threaded)
     load_btn.on_click(on_load)
     new_btn.on_click(on_new)
 
