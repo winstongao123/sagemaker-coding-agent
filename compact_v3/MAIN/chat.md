@@ -1,9 +1,8 @@
 # chat.ipynb
-
 > Auto-generated markdown copy of `chat.ipynb`.
 > Source of truth is always the `.ipynb` file.
 >
-> Stats: 5 cells (2 markdown, 2 code, 1 markdown reference)
+> Stats: 5 cells (2 markdown, 3 code)
 
 ## Cell 0 (markdown)
 
@@ -13,20 +12,52 @@ Secure AI coding assistant powered by AWS Bedrock Claude.
 
 **22 Tools:** File ops, bash/python exec, docs/charts/pdf/notebooks, vision, semantic search, todos, web fetch, skills, sub-agents, ask user
 
-**New in V3 (over V2):**
-- Review agent type (security, quality, performance, architecture, testing)
-- Enhanced planner prompt (restate requirements, assess risks, phased plan)
-- Plan agent has web_fetch + ask_user tools
-- `/verify` command (6-phase: build, type, lint, test, security, diff)
-- `/checkpoint` command (named checkpoints with create/list)
-- Git workflow rules (conventional commits, atomic changes)
-- Testing discipline rules (TDD, 80% coverage target, AAA pattern)
-- Verification-loop skill, coding-standards skill, enhanced review skill
-- Interactive ask_user with text input widget + submit/skip buttons
-- Session checkpoint persistence (save/load/restore)
-- ASCII system messages (no emoji encoding issues)
-
 **Security:** 3-layer bash + 3-layer Python + workspace boundary + SSRF protection
+
+---
+
+## Version History
+
+### V1 (compact/) -- 5,042 lines
+The original single-file agent, ported from OpenCode patterns to Python/SageMaker.
+- 22 tools (file ops, bash/python exec, docs, charts, vision, semantic search)
+- Security controls (workspace boundary, secret detection, command filtering)
+- Tool approval toggle (default OFF for SageMaker)
+- Session management and audit logging
+- Context monitoring and compaction
+- Sub-agents (build, plan, explore, general)
+- Skills system and MCP client
+
+### V2 (compact_v2/) -- 6,119 lines (+1,077 over V1)
+Major feature release adding external config, cost tracking, and error recovery.
+- External config (`opencode.json`) with JSONC support
+- Skills system with YAML frontmatter (`/skills`, `/skill use <name>`, `/skill clear`)
+- Custom slash commands with templates (`/review`, `/test`, etc.)
+- Cost tracking (`/cost`) with per-model Bedrock pricing
+- Snapshot and revert (`/revert <file>`, `/revert all`)
+- Interactive questions (`ask_user` tool)
+- Diff tracking on every edit
+- Permission rules (per-tool, file-pattern, command-pattern)
+- SSRF-hardened web fetch
+- Error recovery (tool name repair, arg auto-fix, type conversion, fuzzy suggest)
+- Auto-save sessions every message
+
+### V3 (compact_v3/) -- 6,341 lines (+222 over V2, 27 bugs fixed)
+Best practices integration from [everything-claude-code](https://github.com/winstonpgao/everything-claude-code). 6 rounds of code review.
+- **Review agent** type (security, quality, performance, architecture, testing)
+- **Enhanced planner** prompt (restate requirements, assess risks, phased plan)
+- Plan agent has `web_fetch` + `ask_user` tools
+- **`/verify` command** (6-phase: build, type, lint, test, security, diff)
+- **`/checkpoint` command** (named checkpoints with create/list, capped at 50)
+- **Git workflow rules** (conventional commits, atomic changes, branch naming)
+- **Testing discipline rules** (TDD, 80% coverage target, AAA pattern)
+- **4 skills**: verification-loop (148 lines), coding-standards (154 lines), review (84 lines), powerbi-dashboard (138 lines, from [AIPower](https://github.com/winstonpgao/AIPower))
+- Interactive `ask_user` with text input widget + submit/skip buttons
+- Session checkpoint persistence (save/load/restore with deepcopy)
+- ASCII system messages (no emoji encoding issues)
+- `_FILES_READ` reset on session load (no stale write-guard)
+- Single skill injection path (no double-injection)
+- Session ID collision prevention (`os.urandom(3).hex()` suffix)
 
 See `USER_GUIDE.md` for full documentation.
 
@@ -186,7 +217,7 @@ create_chat_ui()
 
 ---
 
-### Quick Start Examples
+## Quick Start Examples
 
 | Task | Example Prompt |
 |------|----------------|
@@ -200,63 +231,196 @@ create_chat_ui()
 | **Create Word** | "Write a project summary document" |
 | **Create PDF** | "Create a PDF report with table and chart summary" |
 | **Create Notebook** | "Create a notebook that loads and analyzes data" |
+| **Create Chart** | "Create a bar chart of monthly sales data" |
 | **Web Fetch** | "Fetch https://example.com and summarize it" |
 | **Plan** | "Help me build a REST API with Flask" |
+| **Review** | "Review the code I just wrote for security issues" |
+| **Power BI** | "Create a 4-page sales dashboard with KPIs and charts" |
 
 ---
 
-### Slash Commands
+## Tools (22)
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| **File** | `read_file` | Read file contents (offset/limit for large files, max 500 lines default) |
+| | `write_file` | Write file (must read first if file exists) |
+| | `edit_file` | Find-and-replace edit (exact match required, `replace_all` toggle) |
+| | `glob` | Find files by pattern (e.g., `**/*.py`) |
+| | `grep` | Search file contents by regex |
+| | `list_dir` | List directory contents |
+| **Exec** | `bash` | Run shell commands (timeout max 600s, 3-layer security validation) |
+| | `python_exec` | Execute Python code (timeout max 300s, AST + import validation) |
+| **Docs** | `create_word` | Generate Word documents (.docx) |
+| | `create_excel` | Generate Excel spreadsheets (.xlsx) |
+| | `create_markdown` | Generate Markdown files |
+| | `create_notebook` | Generate Jupyter notebooks (.ipynb) |
+| | `create_pdf` | Generate PDF reports (markdown or table format) |
+| **Charts** | `create_chart` | Generate charts displayed inline (bar, line, pie, scatter, horizontal_bar) |
+| **Vision** | `view_image` | View and analyze images |
+| **Search** | `semantic_search` | Bedrock Titan embeddings (3 actions: index, search, status) |
+| **Planning** | `todo_write` | Create/update task list |
+| | `todo_read` | Read current task list |
+| **Web** | `web_fetch` | Fetch URL content (SSRF-hardened, 2MB limit, redirect blocking) |
+| **Skills** | `skill` | List/load skill files from `skills/` directory |
+| **Sub-agents** | `task` | Spawn sub-agent (build, plan, explore, general, review) |
+| **Interactive** | `ask_user` | Ask user mid-conversation (text input + submit/skip buttons, 5-min timeout) |
+
+---
+
+## Sub-Agents
+
+| Agent | Tools Available | Max Turns | Use Case |
+|-------|----------------|-----------|----------|
+| **build** | All tools (file, exec, docs) | 25 | Build, compile, fix errors, run tests |
+| **plan** | read-only + `web_fetch` + `ask_user` | 15 | Architecture planning with web research and clarification |
+| **explore** | read-only + `semantic_search` + `view_image` | 10 | Codebase exploration and analysis |
+| **general** | All except docs/charts/pdf | 15 | General-purpose coding tasks |
+| **review** | read-only + `semantic_search` + `view_image` | 10 | Code review: security, quality, performance, architecture, testing |
+
+**Plan agent** (V3 enhanced): Restates requirements, assesses risks, creates phased plan, waits for user confirmation before coding.
+
+---
+
+## Slash Commands
 
 | Command | What it does |
 |---------|-------------|
-| `/skills` | List discovered skills |
-| `/skill use <name>` | Activate a skill |
-| `/skill clear` | Deactivate all skills |
-| `/commands` | List custom commands from opencode.json |
-| `/cost` | Token usage and cost breakdown |
+| `/skills` | List all discovered skills from `skills/` directory |
+| `/skill use <name>` | Activate a skill (injected into system prompt) |
+| `/skill clear` | Deactivate all active skills |
+| `/commands` | List custom slash commands from `opencode.json` |
+| `/cost` | Token usage and cost breakdown by model |
 | `/revert <file>` | Revert file to pre-edit snapshot |
-| `/revert all` | Revert all modified files |
-| `/compact` | Compress conversation context |
-| `/save` | Save session |
-| `/verify` | Run 6-phase verification (V3) |
-| `/checkpoint <name>` | Create named checkpoint (V3) |
-| `/checkpoint list` | List all checkpoints (V3) |
+| `/revert all` | Revert all modified files to pre-edit snapshots |
+| `/compact` | Compress conversation context (summarize history to reduce tokens) |
+| `/save` | Save current session (messages, todos, metadata, checkpoints) to JSON |
+| `/verify` | Run 6-phase verification: build, type-check, lint, test, security scan, diff review |
+| `/verify quick` | Quick verification (build + lint only) |
+| `/checkpoint <name>` | Create named checkpoint (saves todos, files modified, token stats; capped at 50) |
+| `/checkpoint list` | List all checkpoints with timestamps and todo counts |
 
 ---
 
-### Tools (22)
+## Skills (4)
 
-- **File:** `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `list_dir`
-- **Exec:** `bash`, `python_exec`
-- **Docs:** `create_word`, `create_excel`, `create_markdown`, `create_notebook`, `create_pdf`
-- **Charts:** `create_chart` (bar, line, pie, scatter -- displayed inline)
-- **Vision:** `view_image`
-- **Search:** `semantic_search` (Bedrock Titan embeddings)
-- **Planning:** `todo_write`, `todo_read`
-- **Web:** `web_fetch` (URL fetch with SSRF protection)
-- **Skills:** `skill` (list/load skills)
-- **Sub-agents:** `task` (build, plan, explore, general, review)
-- **Interactive:** `ask_user` (mid-conversation questions with text input)
+Skills are markdown files with YAML frontmatter in the `skills/` directory. When activated via `/skill use <name>`, their content is injected into the system prompt.
 
----
+| Skill | Lines | What it does |
+|-------|-------|-------------|
+| **review** | 84 | Code review checklist: security (CRITICAL), quality (HIGH), performance (MEDIUM), architecture, testing. Structured output with severity ratings. |
+| **verify** | 148 | 6-phase verification loop: (1) build check, (2) type check (pyright/mypy/tsc), (3) lint (ruff/eslint), (4) test suite with coverage, (5) security scan (secrets, .env), (6) diff review. Outputs VERIFICATION REPORT with PASS/FAIL per phase. |
+| **coding-standards** | 154 | Language-agnostic coding standards: KISS, DRY, YAGNI, naming conventions, error handling, function design (<50 lines), testing (AAA pattern, 80% coverage), code smells. |
+| **powerbi-dashboard** | 138 | Power BI dashboard generator: 4-phase workflow (requirements, data analysis, design, build). 13 chart types, star schema, DAX measures, PBIR/TMDL output. Source: [AIPower](https://github.com/winstonpgao/AIPower). |
 
-### Sub-Agents (V3)
-
-| Agent | Tools | Use Case |
-|-------|-------|----------|
-| **build** | bash, python_exec, read_file, edit_file, write_file, glob, grep, list_dir | Build, compile, fix errors |
-| **plan** | read_file, glob, grep, list_dir, semantic_search, web_fetch, ask_user | Architecture planning with web research |
-| **explore** | read_file, glob, grep, list_dir, semantic_search, view_image | Codebase exploration |
-| **general** | All tools | General-purpose tasks |
-| **review** | read_file, glob, grep, list_dir, semantic_search, view_image | Code review (security, quality, performance) |
+**Skill format**: `skills/<name>/SKILL.md` with optional YAML frontmatter (`name`, `description`, `version`).
 
 ---
 
-### Security
+## Configuration
 
-- 3-layer bash validation (allowlist + 70 patterns + restricted mode)
-- 3-layer Python validation (AST + import hook + secret detection)
-- SSRF protection (private IP blocking, redirect blocking, 2MB limit)
-- Workspace boundary enforcement
-- Configurable permission rules via `opencode.json`
-- Audit logging and session persistence
+### Widget Configuration (Cell 2)
+
+| Setting | Options | Default |
+|---------|---------|---------|
+| **Model** | Claude 3 Haiku, Claude 3 Sonnet, Claude 3.5 Sonnet (v1/v2), Claude 4.5 Sonnet/Haiku/Opus, Claude 4.6 Opus | Claude 3 Haiku |
+| **Temperature** | 0.0 (deterministic) to 1.0 (max creativity) | 0.0 |
+| **Extended Thinking** | On/Off (uses more tokens, slower, better reasoning) | Off |
+| **Thinking Budget** | 1024 / 2048 / 4096 / 8192 / 16000 tokens | 4096 |
+| **Max Turns** | 5-100 (agent loop iterations per message) | 30 |
+| **Workspace** | Directory path for file operations | `.` (current) |
+| **Mock Mode** | Test UI without API calls | Off |
+
+### External Configuration (`opencode.json`)
+
+Optional JSON/JSONC config file for:
+- **Permission rules**: Per-tool, file-pattern, and command-pattern allow/deny rules
+- **Custom commands**: Slash command templates (e.g., `/review`, `/test`)
+- **Skills directory**: Custom skills path
+- **Agent overrides**: Custom agent configurations
+- **MCP servers**: External tool integrations
+
+---
+
+## Session Management
+
+| Feature | How it works |
+|---------|-------------|
+| **Auto-save** | Every message auto-saves session (messages, todos, metadata, checkpoints) |
+| **Manual save** | `/save` or Save button |
+| **Load session** | Session dropdown + Load button (restores messages, todos, skills, checkpoints, model) |
+| **Checkpoints** | `/checkpoint <name>` saves a snapshot (todos, files modified, exec calls, token stats). Capped at 50 per session. |
+| **New session** | New button clears all state (messages, todos, checkpoints, active skills) |
+| **Session ID** | Timestamp + random suffix (`os.urandom(3).hex()`) prevents collision |
+
+---
+
+## Security
+
+| Layer | Protection |
+|-------|-----------|
+| **Bash (3-layer)** | Allowlist of safe commands + 70 dangerous patterns blocked + restricted mode |
+| **Python (3-layer)** | AST validation + import hook (blocks os/subprocess/shutil) + secret detection |
+| **SSRF** | Private IP blocking, redirect blocking, 2MB response limit |
+| **Workspace** | All file operations restricted to configured workspace directory |
+| **Write guard** | Must `read_file` before `write_file` on existing files |
+| **Permissions** | Configurable per-tool rules via `opencode.json` |
+| **Audit** | Immutable audit trail with integrity verification |
+| **Approval** | Optional tool approval toggle for restricted operations |
+
+### System Prompt Rules (V3)
+
+| Rule | Description |
+|------|-------------|
+| **Git workflow** | Conventional commits (`feat:`, `fix:`, `refactor:`), atomic changes, meaningful branch names, verify no secrets before commit |
+| **Testing discipline** | TDD when appropriate (RED-GREEN-IMPROVE), 80% coverage target, AAA pattern (Arrange-Act-Assert), test edge cases, don't modify tests to pass |
+
+---
+
+## Error Recovery
+
+| Feature | What it does |
+|---------|-------------|
+| **Tool name repair** | Fuzzy-matches misspelled tool names (e.g., `readfile` -> `read_file`) |
+| **Arg auto-fix** | Corrects common argument errors automatically |
+| **Type conversion** | Converts wrong types (string to int, etc.) |
+| **Fuzzy suggest** | Suggests similar tool names when no match found |
+| **Malformed recovery** | Recovers from malformed JSON in tool calls |
+
+---
+
+## Cost Tracking
+
+Use `/cost` to see token usage and estimated cost. Pricing is per-model based on Bedrock rates.
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) |
+|-------|----------------------|----------------------|
+| Claude 3 Haiku | $0.25 | $1.25 |
+| Claude 3 Sonnet | $3.00 | $15.00 |
+| Claude 3.5 Sonnet | $3.00 | $15.00 |
+
+---
+
+## Architecture
+
+```
+compact_v3/MAIN/
+  sagemaker_agent.py    <- Agent engine (6,341 lines)
+  chat.ipynb            <- This notebook (UI launcher)
+  opencode.json         <- External config (permissions, commands)
+  USER_GUIDE.md         <- Full documentation
+  skills/
+    review/SKILL.md           <- Code review skill (84 lines)
+    verify/SKILL.md           <- Verification loop skill (148 lines)
+    coding-standards/SKILL.md <- Coding standards skill (154 lines)
+    powerbi-dashboard/        <- Power BI dashboard generator
+      SKILL.md                  <- Skill prompt (138 lines)
+      GUIDE.md                  <- Beginner guide
+      generate_template.py      <- Working template (95 KB)
+      reference/
+        SOP.md                  <- 25 lessons learned
+        STYLING.md              <- Visual styling reference
+        theme.json              <- Color palette
+      tested/
+        generate_project.py     <- University dashboard example
+```

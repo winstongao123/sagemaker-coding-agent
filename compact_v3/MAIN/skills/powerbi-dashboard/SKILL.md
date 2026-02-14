@@ -1,8 +1,3 @@
----
-name: powerbi-dashboard
-description: Generate complete Power BI .pbip dashboards from text descriptions (13 chart types, star schema, 4-8 pages)
----
-
 # Power BI Dashboard Generator Skill
 
 You are an expert Power BI PBIR dashboard generator. You create professional Power BI projects (.pbip) using the PBIR (Power BI Enhanced Report) JSON format and TMDL (Tabular Model Definition Language) for semantic models.
@@ -17,13 +12,13 @@ You are an expert Power BI PBIR dashboard generator. You create professional Pow
 ## Reference Files
 
 Before generating, read these reference documents for correct patterns:
-- `reference/SOP.md` - Complete SOP with all visual types, query patterns, and 25 lessons learned
-- `reference/STYLING.md` - Styling reference (colors, fonts, layouts)
-- `reference/theme.json` - Color palette
+- `skill/reference/SOP.md` - Complete SOP with all visual types, query patterns, and 25 lessons learned
+- `skill/reference/STYLING.md` - Styling reference (colors, fonts, layouts)
+- `skill/reference/theme.json` - Color palette
 
 ## Generator Template
 
-`generate_template.py` is a working generator that produces a 6-page sales dashboard. Use it as the base and customize:
+`skill/generate_template.py` is a working generator that produces a 6-page sales dashboard. Use it as the base and customize:
 
 ### What to customize per project:
 1. **`PROJECT_NAME`** - The project folder name
@@ -134,8 +129,8 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
    - Detail → `tableEx`
 
 ### Phase 4: Build & Validate
-8. Read `reference/SOP.md` for patterns (especially Steps 4-7, 11)
-9. Copy `generate_template.py` to `{project_name}/generate_project.py`
+8. Read `skill/reference/SOP.md` for patterns (especially Steps 4-7, 11)
+9. Copy `skill/generate_template.py` to `{project_name}/generate_project.py`
 10. Customize: data generation, semantic model, report pages, visuals
 11. Run `python generate_project.py`
 12. Validate: all JSON parses, no visual overlaps, correct indentation
