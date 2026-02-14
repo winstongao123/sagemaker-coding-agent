@@ -2,7 +2,7 @@
 > Auto-generated markdown copy of `sagemaker_agent.py`.
 > Source of truth is always the `.py` file.
 >
-> Stats: 6,350 lines | 27 classes | 41 functions | 22 tool functions
+> Stats: 6,381 lines | 27 classes | 41 functions | 22 tool functions
 
 ```python
 """
@@ -61,9 +61,12 @@ Dependencies:
     pip install boto3 ipywidgets python-docx pandas openpyxl
     pip install matplotlib reportlab  # For charts and PDFs
 
-Not Implemented (vs OpenCode):
-- Sub-agents
-- MCP server integration
+Implemented (from OpenCode patterns):
+- Sub-agents (5 types: build, plan, explore, general, review)
+- MCP server integration (stdio + HTTP transports)
+- Skills system with proactive auto-invocation
+
+Not Yet Implemented:
 - Sliding window context
 
 Usage:
@@ -1516,6 +1519,7 @@ class SkillManager:
         os.makedirs(self.skills_dir, exist_ok=True)
         self._cache: Dict[str, SkillInfo] = {}
         self.active_skill: Optional[str] = None  # Currently active skill name
+        self._pending_activations: List[str] = []  # Skills activated via tool_skill(), synced to ui_state on next send
 
     def _parse_frontmatter(self, text: str) -> Tuple[Dict, str]:
         """Parse YAML frontmatter from markdown. Returns (metadata, content)."""
@@ -3771,7 +3775,14 @@ def tool_skill(args: Dict) -> str:
         return f"Error: {content}"
     skill = SKILLS._cache.get(name)
     base_dir = skill.base_dir if skill else "unknown"
-    return f"## Skill: {name}\n\n**Base directory**: {base_dir}\n\n{content}"
+    # Auto-activate: persist skill into system prompt for subsequent turns
+    SKILLS.active_skill = name
+    if name not in SKILLS._pending_activations:
+        SKILLS._pending_activations.append(name)
+    return (f"## Skill Activated: {name}\n\n**Base directory**: {base_dir}\n\n"
+            f"**IMPORTANT: Follow the skill instructions below as your primary workflow. "
+            f"Do NOT fall back to generic approaches — use the exact steps, tools, and patterns "
+            f"described in this skill.**\n\n{content}")
 
 
 def tool_task(args: Dict) -> str:
@@ -4271,6 +4282,7 @@ You support connecting to external MCP tool servers configured in `opencode.json
 - Remote servers: HTTP POST JSON-RPC to a URL.
 - MCP tools are auto-discovered and registered as `mcp_<server>_<tool>`.
 - If no MCP servers are configured, this feature is inactive but available.
+- IMPORTANT: When MCP tools are available, prefer them over generic alternatives for their domain. For example, prefer an MCP database tool over raw bash SQL commands, or an MCP API tool over curl.
 
 # Sub-Agents
 You can spawn specialized child agents via the `task` tool:
@@ -4280,6 +4292,13 @@ You can spawn specialized child agents via the `task` tool:
 - `general`: Multi-step research (read + write, 15 turns)
 - `review`: Code review agent - checks security, quality, performance, testing (read-only, 10 turns)
 Use sub-agents to delegate complex subtasks. Each runs with restricted tools and returns a summary.
+- IMPORTANT: Proactively delegate to sub-agents when appropriate:
+  - Use `explore` when you need to search across many files or understand codebase structure
+  - Use `review` when the user asks for code review, quality checks, or security audits
+  - Use `plan` when a task needs architecture analysis before implementation
+  - Use `build` for large multi-file implementations that benefit from focused execution
+  - Use `general` for complex research or multi-step tasks that need read + write access
+  Do NOT attempt complex multi-step tasks in a single loop when delegation would be more effective.
 
 # Custom Commands
 Users can define slash commands in `opencode.json` with templates ($ARGUMENTS, $1, $2).
@@ -5692,6 +5711,7 @@ def create_chat_ui(mock_mode: bool = None):
         if msg == "/skill clear":
             ui_state["active_skills"] = []
             SKILLS.active_skill = None
+            SKILLS._pending_activations.clear()
             add_message('system', 'Cleared active skills')
             update_mode_display()
             input_box.value = ""
@@ -5887,6 +5907,15 @@ def create_chat_ui(mock_mode: bool = None):
             else:
                 system_prompt = None  # Use default
 
+            # Sync skills auto-activated via tool_skill() into ui_state (drains pending list)
+            if SKILLS._pending_activations:
+                active = ui_state.get("active_skills", [])
+                for pending_name in SKILLS._pending_activations:
+                    if pending_name not in active:
+                        active.append(pending_name)
+                ui_state["active_skills"] = active
+                SKILLS._pending_activations.clear()
+
             # Append active skills as extra runtime guidance.
             active_skills = ui_state.get("active_skills", [])
             if active_skills:
@@ -6026,6 +6055,7 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["active_skills"] = []
         ui_state["checkpoints"] = []
         SKILLS.active_skill = None
+        SKILLS._pending_activations.clear()
         render_chat()
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
@@ -6182,6 +6212,7 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["checkpoints"] = []
         ui_state["active_skills"] = []
         SKILLS.active_skill = None
+        SKILLS._pending_activations.clear()
         render_chat()
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready (New)</b></span>'

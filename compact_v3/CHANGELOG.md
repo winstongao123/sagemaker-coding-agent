@@ -152,7 +152,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 | File | Action | Final Lines | Notes |
 |------|--------|-------------|-------|
-| `sagemaker_agent.py` | Enhanced | 6,341 (was 6,119 in V2) | +222 net new lines across 6 review rounds |
+| `sagemaker_agent.py` | Enhanced | 6,380 (was 6,119 in V2) | +261 net new lines across 7 review rounds |
 | `skills/review/SKILL.md` | Rewritten | 84 (was 38) | 5-category checklist with severity levels |
 | `skills/verify/SKILL.md` | NEW | 148 | 6-phase verification: build, type, lint, test, security, diff |
 | `skills/coding-standards/SKILL.md` | NEW | 154 | Language-agnostic: KISS, DRY, YAGNI, naming, testing |
@@ -171,12 +171,46 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 | Proactive skill matching | Post-review | Agent auto-loads matching skills when user request matches available skill descriptions (follows Claude Code pattern, not OpenCode manual-only approach) |
 | powerbi-dashboard skill | Post-review | Added Power BI dashboard generator skill (138 lines, from AIPower) |
 
+## Round 7 Fixes (Skill/Sub-Agent/MCP Auto-Invocation)
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 28 | HIGH | `tool_skill()` did not auto-activate skills — returned content as one-time tool result only, agent forgot skill on next turn | Added `SKILLS.active_skill = name` + `_pending_activations` list + UI sync drain on next send |
+| 29 | HIGH | No proactive sub-agent delegation instructions — agent never auto-spawned sub-agents | Added IMPORTANT instruction with per-type guidance (explore, review, plan, build, general) |
+| 30 | MEDIUM | Multiple skills in one turn lost — `active_skill` scalar overwrote first skill | Changed to `_pending_activations: List[str]` with append + drain pattern |
+| 31 | MEDIUM | No MCP tool preference instructions — agent used bash instead of registered MCP tools | Added IMPORTANT instruction to prefer MCP tools for their domain |
+| 32 | MEDIUM | Stale docstring claimed sub-agents and MCP were "Not Implemented" | Updated to "Implemented (from OpenCode patterns)" |
+| 33 | MEDIUM (V2) | V2 `on_new()` did not clear skill state — stale skills carried over to new sessions | Added `active_skills = []`, `active_skill = None`, `_pending_activations.clear()` |
+| 34 | LOW | powerbi-dashboard SKILL.md had no YAML frontmatter — `description=""` in XML | Added proper YAML frontmatter with name and description |
+| 35 | LOW | Skill description fallback missing — skills without YAML got empty description | Added fallback: extract first `#` heading as description in `discover()` |
+
+### Key New Features Added in Round 7
+
+| Feature | Description |
+|---------|-------------|
+| Skill auto-activation via tool | `tool_skill()` now sets `SKILLS.active_skill` + `_pending_activations`, UI sync drains into `ui_state["active_skills"]` on next send — skills persist across turns |
+| Proactive sub-agent delegation | System prompt IMPORTANT instruction tells agent when to use each sub-agent type (explore, review, plan, build, general) |
+| Proactive MCP preference | System prompt IMPORTANT instruction tells agent to prefer MCP tools over generic alternatives |
+| Multi-skill support for tool | `_pending_activations` list allows loading multiple skills in one turn without overwrite |
+
+### Lessons Learned (Round 7)
+
+1. **One-time tool results vs persistent activation**: Tool results are just chat context — they get pushed out as conversation grows. Skills need to be injected into the system prompt (via `active_skills`) to persist across turns. The tool result gives the agent the content for the current turn; the system prompt injection ensures it stays for all subsequent turns.
+
+2. **Scalar vs list for activation state**: `active_skill: Optional[str]` can only hold one value. If the agent calls `tool_skill()` twice in one turn, the first activation is lost. Use a list (`_pending_activations`) with append + drain pattern instead.
+
+3. **Proactive instructions must be explicit**: Simply listing available tools/agents in the system prompt is not enough — the LLM needs IMPORTANT-prefixed instructions saying WHEN to proactively use them. The skills section had this right ("proactively load... BEFORE proceeding"); sub-agents and MCP were missing it.
+
+4. **YAML frontmatter is required for skill discovery**: Without frontmatter, `description=""` — the LLM sees an empty description in the tool XML and can't match. Always add frontmatter to SKILL.md files. As defense-in-depth, also add a fallback that extracts the first `#` heading.
+
+5. **Every reset path needs testing**: `on_clear()`, `on_new()`, `/skill clear`, and session load all need to reset skill state consistently. V2's `on_new()` was missed because it was a different function from `on_clear()`.
+
 ### Total Bug Fix Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| HIGH | 4 | All fixed (rounds 1-4) |
-| MEDIUM | 9 | All fixed (rounds 1-5) |
-| LOW | 12 | All fixed (rounds 1-6) |
+| HIGH | 6 | All fixed (rounds 1-4, 7) |
+| MEDIUM | 13 | All fixed (rounds 1-5, 7) |
+| LOW | 14 | All fixed (rounds 1-7) |
 | LOW UX | 2 | All fixed (round 6) |
-| **Total** | **27** | **All fixed** |
+| **Total** | **35** | **All fixed** |
