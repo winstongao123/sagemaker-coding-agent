@@ -1,6 +1,6 @@
 ---
 name: powerbi-dashboard
-description: Generate complete Power BI dashboards (.pbip) from a text description. Creates star schema data models, DAX measures, 13 chart types, and professional styling.
+description: Generate complete Power BI dashboards (.pbip) from a text description. Creates star schema data models, DAX measures, 14 chart types, and professional styling.
 ---
 
 # Power BI Dashboard Generator Skill
@@ -25,12 +25,32 @@ Before generating, read these reference documents for correct patterns:
 
 `generate_template.py` is a working generator that produces a 6-page sales dashboard. Use it as the base and customize:
 
-### What to customize per project:
-1. **`PROJECT_NAME`** - The project folder name
-2. **`generate_data()`** - Replace with user's data schema or keep sample data
-3. **Semantic model** - Tables, columns, relationships, measures in `gen_semantic_model()`
-4. **Report pages** - Page definitions, visuals, layouts in `gen_report()`
-5. **Header bar text** - Brand name in `write_header_bar()` (nested inside `gen_report()`)
+### Customization Levels (choose ONE):
+
+#### Level 1 — Quick Path (1-2 pages, ≤15 turns) ← USE THIS BY DEFAULT
+Only change these. Do NOT touch `generate_data()` or `gen_semantic_model()`:
+1. **`PROJECT_NAME`** — change to user's project name
+2. **`gen_report()` page definitions** — remove unwanted pages, keep only the pages you need
+3. **`gen_report()` visuals** — adjust/replace visuals on remaining pages to show user's requested charts
+4. **`write_header_bar()` brand name** — change header text (nested inside `gen_report()`)
+
+The template's existing data includes:
+- **Fact columns**: Revenue, RevenueTarget, Orders, OrdersTarget, PipelineAmount, ForecastPct, COGS, GrossProfit, AvgOrderValue, DiscountPct, SatisfactionScore, TurnaroundDays, OnlinePercent, SalesStage, WinLossStatus
+- **Dimensions**: DimDate (Year/Quarter/Month), DimCity (City/State/Region), DimChannel (Channel), DimSegment (Segment), DimProduct (ProductKey/ProductCategory), Territory
+- **DAX measures (20)**: Total Revenue, Revenue Won, Qualified Pipeline, Total Revenue Target, Revenue Variance, Revenue Attainment %, Total Orders, Total Orders Target, Total Gross Profit, Gross Margin %, Avg Order Value, Avg Turnaround Days, Turnaround Target Days, Turnaround Gap, Avg Discount %, Forecast %, Avg Satisfaction, Avg Online %, Online Revenue, Online Revenue %
+
+This is rich enough for most sales/business dashboards. The agent MUST reuse these existing measures and columns — do NOT invent new ones that don't exist in the data.
+
+#### Level 2 — Full Customization (completely different data, 25+ turns)
+⚠️ **WARNING: Data, semantic model, and visuals are TIGHTLY COUPLED.** If you change field names in `generate_data()`, you MUST also update ALL of these consistently:
+- SalesData fact table M expression `#table()` column schema AND row builder format strings (~line 276-340)
+- All measure DAX formulas that reference column names (~line 350-430)
+- All dimension table extractions that read dict keys from data_rows (~line 650-690)
+- All dimension table M expression `#table()` type definitions and literals (~line 693-885)
+- All relationship definitions in `gen_semantic_model()` (~line 886-910)
+- All visual field references in `gen_report()` (~line 1470+)
+
+Only use Level 2 if the user explicitly provides a completely different data schema (e.g., healthcare, HR, manufacturing). For sales/revenue dashboards, Level 1 is almost always sufficient.
 
 ### What NOT to change:
 - Helper functions (`_lit_bool`, `_lit_num`, `_solid_color`, `_projection`, etc.)
@@ -63,7 +83,7 @@ _projection(field, query_ref, native_query_ref=None, active=False)
 ```python
 _visual_json(name, visual_type, x, y, w, h, query_state, tab_order=0, title=None)
 # name: unique UUID (use make_uuid("prefix"))
-# visual_type: one of the 13 supported types
+# visual_type: one of the 14 supported types
 # query_state: dict of query roles → projections (see table below)
 # title: display title string
 ```
@@ -93,7 +113,7 @@ write_json(f"{page_path}/visuals/KPIRevenue/visual.json", _visual_json(
 ))
 ```
 
-## Supported Visual Types (13 total)
+## Supported Visual Types (14 total)
 
 | visualType | Query Roles | Use For |
 |---|---|---|
@@ -105,7 +125,8 @@ write_json(f"{page_path}/visuals/KPIRevenue/visual.json", _visual_json(
 | `lineChart` | Category + Y | Trends |
 | `areaChart` | Category + Y | Trends with volume |
 | `donutChart` | Category + Y | Proportions |
-| `lineClusteredColumnComboChart` | Category + Y + Y2 | Dual-metric |
+| `lineClusteredColumnComboChart` | Category + Y + Y2 | Dual-metric (clustered bars + line) |
+| `lineStackedColumnComboChart` | Category + Y + Y2 | Dual-metric (stacked bars + line) |
 | `treemap` | Group + Values | Hierarchy |
 | `waterfallChart` | Category + Y | Variance |
 | `funnel` | Category + Y | Pipeline |
@@ -114,7 +135,7 @@ write_json(f"{page_path}/visuals/KPIRevenue/visual.json", _visual_json(
 ## Critical Rules
 
 0. **NEVER use `create_excel` or any Excel-based tool as a fallback.** This skill produces Power BI `.pbip` projects only. If you cannot create a Power BI dashboard for any reason, explain the issue to the user — do NOT silently fall back to Excel. Even if `ask_user` times out or the user skips the question, proceed with reasonable defaults and create the `.pbip` project.
-1. **NEVER write a generator from scratch.** The template is 95KB / 2188 lines — you CANNOT reproduce it from memory. You MUST use `cp` (bash copy) to copy `generate_template.py` first, then use `edit_file` for targeted changes. If you use `write_file` to create the generator, you are violating this rule. The template's helper functions, `gen_pbip()` schema, styling, and PBIR JSON patterns are validated against Power BI Desktop — inventing your own will produce broken dashboards.
+1. **NEVER write a generator from scratch.** The template is 95KB / 2187 lines — you CANNOT reproduce it from memory. You MUST use `cp` (bash copy) to copy `generate_template.py` first, then use `edit_file` for targeted changes. If you use `write_file` to create the generator, you are violating this rule. The template's helper functions, `gen_pbip()` schema, styling, and PBIR JSON patterns are validated against Power BI Desktop — inventing your own will produce broken dashboards.
 2. **INVALID visual types**: `stackedColumnChart`, `stackedBarChart` - use `clusteredColumnChart`/`clusteredBarChart` with a `Series` field instead
 3. **Combo chart query roles**: `Y` = bars, `Y2` = line. NEVER use `"Column y"`/`"Line y"`
 4. **Field reference by visual type**: Tables use `_measure_field()`. Bar/column charts use `_measure_field()` for averages, `_agg_col_field(Sum)` for sums. Combo charts use `_agg_col_field(Sum)` ONLY - Average in combo Y/Y2 renders blank. For average metrics, use a bar chart instead of combo.
@@ -198,13 +219,22 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
    cp skills/powerbi-dashboard/generate_template.py {project_name}/generate_project.py
    ```
    This preserves all 2187 lines (95KB) of helper functions, styling, PBIR patterns, and validated schemas. The template is TOO LARGE to reproduce from memory — you MUST copy the file literally.
-10. **Edit ONLY these sections** in the copied file using `edit_file` (surgical edits):
-    - `PROJECT_NAME = "AIPower"` → change to user's project name
-    - `generate_data()` → replace with user's data schema (function at ~line 120)
-    - `gen_semantic_model()` → adjust tables, columns, relationships, measures (~line 262)
-    - `gen_report()` → adjust page definitions and visuals (~line 1267)
-    - `write_header_bar()` → change brand name (nested inside `gen_report()`, ~line 1426)
-    Do NOT touch helper functions, `gen_pbip()`, `gen_gitignore()`, `_visual_json()`, or any `_lit_*`/`_solid_color`/`_projection` functions. If your edits would require rewriting more than 30% of the file, you are doing it wrong — simplify your approach.
+10. **Edit the copied file using `edit_file` (surgical edits). Choose your customization level:**
+
+    **Level 1 — Quick Path (DEFAULT):** Only edit these:
+    - `PROJECT_NAME = "AIPower"` → change to user's project name (~line 24)
+    - `write_header_bar()` → change brand name (~line 1398, nested inside `gen_report()`)
+    - `gen_report()` → remove unwanted page blocks, adjust visuals on remaining pages (~line 1267)
+    - DO NOT change `generate_data()` or `gen_semantic_model()` — reuse the existing data schema
+
+    **Level 2 — Full Customization (only if user has completely different data):**
+    - `PROJECT_NAME` → change (~line 24)
+    - `generate_data()` → replace data schema (~line 120)
+    - `gen_semantic_model()` → update ALL tables, columns, relationships, measures (~line 262)
+    - `gen_report()` → update ALL visual field references to match new schema (~line 1267)
+    - ⚠️ These 3 functions are tightly coupled — you MUST update them ALL consistently or you'll get KeyError/field-not-found cascading errors
+
+    Do NOT touch helper functions, `gen_pbip()`, `gen_gitignore()`, `_visual_json()`, or any `_lit_*`/`_solid_color`/`_projection` functions.
 11. Run `python {project_name}/generate_project.py`
 12. If errors occur, read the error, fix the specific issue with `edit_file`, and re-run. Do NOT rewrite the entire file for small fixes.
 13. Validate: all JSON parses, no visual overlaps, correct indentation

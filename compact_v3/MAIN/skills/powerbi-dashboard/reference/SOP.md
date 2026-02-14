@@ -127,14 +127,10 @@ Create the following directory structure:
 ### model.tmdl
 ```
 model Model
-  culture: en-US
+  culture: en-AU
   defaultPowerBIDataSourceVersion: powerBI_V3
-  sourceQueryCulture: en-AU
-  dataAccessOptions
-    fastCombine
-    legacyRedirects
-    returnErrorValuesAsNull
 ```
+Note: `sourceQueryCulture` and `dataAccessOptions` are optional. The template omits them — Power BI Desktop adds them automatically if needed when the project is first loaded.
 
 ### Table TMDL pattern
 ```

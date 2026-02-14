@@ -2876,8 +2876,17 @@ _ALLOWED = {
     "posixpath", "ntpath", "genericpath", "stat",
     "sys", "types", "zipimport", "_frozen_importlib",
     "_frozen_importlib_external", "_bootlocale",
+    # C-extension accelerators (imported absolutely by their parent stdlib packages)
+    "_json", "_csv", "_datetime", "_struct", "_decimal", "_random",
+    "_hashlib", "_bisect", "_heapq", "_statistics",
+    "_sre", "sre_compile", "sre_parse", "sre_constants", "_string",
 }
 def _safe_import(name, *args, **kwargs):
+    # Allow relative imports (level > 0) — they resolve within already-allowed packages
+    # e.g. json/__init__.py does "from .decoder import ..." which calls __import__("decoder", ..., level=1)
+    level = args[3] if len(args) > 3 else kwargs.get("level", 0)
+    if level > 0:
+        return _original_import(name, *args, **kwargs)
     top = name.split(".")[0]
     if top in _ALLOWED:
         return _original_import(name, *args, **kwargs)
