@@ -139,6 +139,13 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 | 24 | LOW | Session ID collision risk — second-level timestamp only | Added `os.urandom(3).hex()` suffix |
 | 25 | LOW | Stop button poll interval 0.5s — sluggish responsiveness | Reduced to 0.1s for faster stop detection |
 
+## Round 6 Fixes
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 26 | LOW UX | Emoji in system messages (`⏹📋🔄✅▶️⏱️✓✗`) — potential encoding artifacts in non-Unicode terminals | Replaced all system/status message emoji with ASCII tags: `[STOP]`, `[PLAN]`, `[OK]`, `[X]`, `[TIMEOUT]`, `[>]`, `[...]` |
+| 27 | LOW UX | Chat display box misaligned with input box — `max-width:calc(100% - 6px)` caused 3px offset | Changed to `width:100%;box-sizing:border-box;` to match input box width |
+
 ---
 
 ## File Changes Summary

@@ -5013,7 +5013,7 @@ def create_chat_ui(mock_mode: bool = None):
         # CSS-only auto-scroll: use flex-direction: column-reverse
         # Messages are wrapped in inner div, outer div is reversed flex container
         # This makes new content appear at bottom and stay visible
-        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;max-width:calc(100% - 6px);margin-left:0;margin-right:auto;">
+        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;">
             <div style="padding:10px;font-family:system-ui,-apple-system,sans-serif;">
                 {content}
             </div>
@@ -5425,7 +5425,7 @@ def create_chat_ui(mock_mode: bool = None):
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
-            add_message('system', f'✓ Auto-approved: {tool_name}')
+            add_message('system', f'[OK] Auto-approved: {tool_name}')
             return True
         pending_approval["result"] = None
         pending_approval["tool_name"] = tool_name
@@ -5481,9 +5481,9 @@ def create_chat_ui(mock_mode: bool = None):
         result = pending_approval["result"]
         if result is None:
             result = False  # Timeout = deny
-            add_message('system', f'⏱️ Timeout - auto-denied: {tool_name}')
+            add_message('system', f'[TIMEOUT] Auto-denied: {tool_name}')
         else:
-            add_message('system', f'{"✓ Approved" if result else "✗ Denied"}: {tool_name}')
+            add_message('system', f'{"[OK] Approved" if result else "[X] Denied"}: {tool_name}')
         return result
 
     def on_approve(b):
@@ -5589,8 +5589,8 @@ def create_chat_ui(mock_mode: bool = None):
         with ask_user_output:
             clear_output()
         send_btn.disabled = False
-        status_html.value = '<span style="color:#ff9800"><b>⏹ Stop requested...</b></span>'
-        add_message('system', '⏹ Stop requested - killing active processes')
+        status_html.value = '<span style="color:#ff9800"><b>[STOP] Stop requested...</b></span>'
+        add_message('system', '[STOP] Stop requested - killing active processes')
 
     stop_btn.on_click(on_stop)
 
@@ -5603,7 +5603,7 @@ def create_chat_ui(mock_mode: bool = None):
         pct = usage["percent"] * 100
 
         if pct >= 80 and auto_compact_checkbox.value:
-            add_message('system', f'🔄 Pre-send compact (context at {pct:.0f}%)...')
+            add_message('system', f'[...] Pre-send compact (context at {pct:.0f}%)...')
             try:
                 messages = ui_state["agent"].messages
                 # Stage 1: Prune
@@ -5620,7 +5620,7 @@ def create_chat_ui(mock_mode: bool = None):
                 ui_state["agent"].messages = compacted
                 usage = CONTEXT.get_usage(compacted)
                 new_pct = usage["percent"] * 100
-                add_message('system', f'✅ Pre-compacted. Context: {pct:.0f}% → {new_pct:.0f}%')
+                add_message('system', f'[OK] Pre-compacted. Context: {pct:.0f}% -> {new_pct:.0f}%')
                 return True
             except Exception as e:
                 add_message('system', f'Pre-compact failed: {e}')
@@ -5862,12 +5862,12 @@ def create_chat_ui(mock_mode: bool = None):
 
             # Check if stop was requested during pre-compact
             if ui_state["stop_requested"]:
-                add_message('system', '⏹ Stopped before sending')
+                add_message('system', '[STOP] Stopped before sending')
                 return
 
             # Determine system prompt based on plan mode
             if plan_mode_toggle.value:
-                add_message('system', '📋 PLAN MODE: Agent will explore and create a plan (no modifications)')
+                add_message('system', '[PLAN] PLAN MODE: Agent will explore and create a plan (no modifications)')
                 system_prompt = SYSTEM_PROMPT + "\n\n" + PLAN_MODE_PROMPT
             else:
                 system_prompt = None  # Use default
@@ -5890,7 +5890,7 @@ def create_chat_ui(mock_mode: bool = None):
             if cmd_agent and cmd_agent in AGENT_TYPES:
                 # Plan Mode safety: force plan agent when Plan Mode is ON
                 if plan_mode_toggle.value and cmd_agent != "plan":
-                    add_message('system', f'📋 PLAN MODE: /{cmd_label} forced to plan agent (was: {cmd_agent})')
+                    add_message('system', f'[PLAN] PLAN MODE: /{cmd_label} forced to plan agent (was: {cmd_agent})')
                     cmd_agent = "plan"
                 # Route the expanded command through the task sub-agent system
                 task_result = ui_state["agent"]._run_task_tool(
@@ -5907,7 +5907,7 @@ def create_chat_ui(mock_mode: bool = None):
 
             # Auto-compact if enabled and context is high (with auto-continue)
             if auto_compact_checkbox.value and pct >= 90 and not ui_state["stop_requested"]:
-                add_message('system', '🔄 Auto-compact triggered (context at {:.0f}%)...'.format(pct))
+                add_message('system', '[...] Auto-compact triggered (context at {:.0f}%)...'.format(pct))
                 try:
                     messages = ui_state["agent"].messages
                     # Stage 1: Prune
@@ -5924,11 +5924,11 @@ def create_chat_ui(mock_mode: bool = None):
                     ui_state["agent"].messages = compacted
                     usage = CONTEXT.get_usage(compacted)
                     pct = usage["percent"] * 100
-                    add_message('system', f'✅ Auto-compacted. Context now at {pct:.0f}%')
+                    add_message('system', f'[OK] Auto-compacted. Context now at {pct:.0f}%')
 
                     # Auto-continue after compact (OpenCode-style)
                     if not ui_state["stop_requested"]:
-                        add_message('system', '▶️ Auto-continuing...')
+                        add_message('system', '[>] Auto-continuing...')
                         ui_state["agent"].run(
                             "Continue from where we left off.",
                             output_fn,
@@ -5954,7 +5954,7 @@ def create_chat_ui(mock_mode: bool = None):
 
             # Add plan mode indicator to status
             if plan_mode_toggle.value:
-                status_html.value = status_html.value.replace('Ready', '📋 Plan Mode')
+                status_html.value = status_html.value.replace('Ready', '[PLAN] Plan Mode')
 
             update_tokens_display()
 
