@@ -3,7 +3,7 @@
 > Auto-generated markdown copy of `sagemaker_agent.py`.
 > Source of truth is always the `.py` file.
 >
-> Stats: 6119 lines, 27 classes, 181 functions, 22 tool functions
+> Stats: 6119 lines, 27 classes, 189 functions, 22 tool functions
 
 ```python
 """
@@ -6125,4 +6125,5 @@ if __name__ == "__main__":
     print("\nTo use in Jupyter:")
     print("  from sagemaker_agent import create_chat_ui")
     print("  create_chat_ui()")
+
 ```

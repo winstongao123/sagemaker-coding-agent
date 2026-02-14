@@ -15,15 +15,16 @@ A single-file AI coding assistant that runs inside a Jupyter notebook on AWS Sag
 7. [Skills System](#skills-system)
 8. [MCP (Model Context Protocol)](#mcp-model-context-protocol)
 9. [Sub-Agents](#sub-agents)
-10. [Custom Slash Commands](#custom-slash-commands)
-11. [Configuration File (opencode.json)](#configuration-file-opencodejson)
-12. [Permission Rules](#permission-rules)
-13. [Security](#security)
-14. [Cost Tracking](#cost-tracking)
-15. [Snapshots & Revert](#snapshots--revert)
-16. [UI Features](#ui-features)
-17. [File Structure](#file-structure)
-18. [Troubleshooting](#troubleshooting)
+10. [Architecture Concepts](#architecture-concepts)
+11. [Custom Slash Commands](#custom-slash-commands)
+12. [Configuration File (opencode.json)](#configuration-file-opencodejson)
+13. [Permission Rules](#permission-rules)
+14. [Security](#security)
+15. [Cost Tracking](#cost-tracking)
+16. [Snapshots & Revert](#snapshots--revert)
+17. [UI Features](#ui-features)
+18. [File Structure](#file-structure)
+19. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -636,6 +637,60 @@ In `opencode.json`:
 ### Depth Limit
 
 Sub-agents can spawn their own sub-agents, but only up to 2 levels deep (configurable via `subagent_max_depth` in config). This prevents runaway chains.
+
+---
+
+## Architecture Concepts
+
+If you've seen tools like Claude Code, OpenCode, or Cursor, you may have encountered terms like "skills", "MCP", "hooks", "agents", and "plugins". Here's how they all relate and what our agent supports.
+
+### The 8 Concepts Explained
+
+| Concept | What It Is | Analogy |
+|---------|-----------|---------|
+| **Skill** | A markdown file with instructions loaded into the AI's prompt | A **recipe card** the AI follows |
+| **Command** | A slash shortcut that triggers an action | A **keyboard shortcut** |
+| **Rule** | Always-on instructions baked into the system prompt | A **company policy** |
+| **Context** | A switchable behavior mode (dev vs review vs research) | A **hat you wear** |
+| **MCP Server** | An external program that gives the AI new tools | A **USB device** you plug in |
+| **Hook** | A trigger that runs a script before/after tool execution | A **doorbell** (automatic) |
+| **Agent** | An isolated child AI session spawned for a specific task | A **contractor** you hire |
+| **Plugin** | A bundle that installs skills+commands+hooks together | An **app from the app store** |
+
+### The Key Distinction
+
+```
+Skills / Rules / Contexts  = change what the AI KNOWS    (system prompt text)
+MCP Servers                = change what the AI CAN DO   (new tools)
+Hooks                      = automation AROUND the AI    (before/after triggers)
+Agents                     = separate AI INSTANCES       (child sessions)
+Plugins                    = PACKAGING of the above      (bundle for distribution)
+```
+
+### How This Maps to Our Agent
+
+| Concept | Our Equivalent | Status |
+|---------|---------------|--------|
+| **Skill** | `skills/name/SKILL.md` + SkillManager | Have it |
+| **Command** | `/skills`, `/cost`, `/revert`, `/compact`, `/save`, custom via `opencode.json` | Have it |
+| **Rule** | System prompt hardcoded rules (security, tool usage, coding practices) | Have it |
+| **Context** | Plan Mode toggle (restricts to read-only tools) | Have it (simpler) |
+| **MCP Server** | McpManager (stdio + HTTP transports, auto tool discovery) | Have it |
+| **Hook** | Not implemented | Don't need (Jupyter handles file events) |
+| **Agent** | `task` tool with 4 types: build, plan, explore, general | Have it |
+| **Plugin** | Not applicable | N/A (single-file architecture) |
+
+### Agent vs Plan Mode
+
+These are **not** the same thing:
+
+| | Plan Mode | Plan Agent |
+|---|---|---|
+| **What** | A toggle that restricts the **main** AI to read-only tools | A **child** AI session spawned via the `task` tool |
+| **Context** | Shares your conversation history | Starts fresh (only gets the task description) |
+| **Interaction** | You keep chatting with it directly | It works alone and returns a summary |
+| **Context window** | Uses your main context window | Has its own separate context window |
+| **When to use** | You want to explore/discuss together step by step | You want to offload research/planning while freeing your context |
 
 ---
 
