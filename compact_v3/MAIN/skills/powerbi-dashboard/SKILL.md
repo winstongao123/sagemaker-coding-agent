@@ -38,6 +38,61 @@ Before generating, read these reference documents for correct patterns:
 - Visual type styling helpers (`_card_visual_objects`, `_chart_visual_objects`, etc.)
 - PBIR schema references and JSON structure
 
+## Helper Function Reference (DO NOT MODIFY — use as-is)
+
+These functions are in `generate_template.py`. Call them when building visual `query_state` dicts:
+
+### Field References
+```python
+_col_field(table, column)           # Column reference → use for Category, Group, Series, slicer Values
+_measure_field(table, measure)      # Measure reference → use for card Values, table Values
+_agg_col_field(table, column, func) # Aggregated column → use for chart Y, Y2
+#   func: 0=Sum, 1=Average, 2=Min, 3=Max, 5=Count
+```
+
+### Projection Builder
+```python
+_projection(field, query_ref, native_query_ref=None, active=False)
+# field: result of _col_field/_measure_field/_agg_col_field
+# query_ref: "TableName.Column" or "Sum(Table.Col)"
+# native_query_ref: display name (defaults to query_ref)
+# active: True for slicer/category fields
+```
+
+### Visual Builder
+```python
+_visual_json(name, visual_type, x, y, w, h, query_state, tab_order=0, title=None)
+# name: unique UUID (use make_uuid("prefix"))
+# visual_type: one of the 13 supported types
+# query_state: dict of query roles → projections (see table below)
+# title: display title string
+```
+
+### Example: Building a clusteredColumnChart
+```python
+write_json(f"{page_path}/visuals/MyChart/visual.json", _visual_json(
+    name=make_uuid("revenue.region"),
+    visual_type="clusteredColumnChart",
+    x=10, y=146, w=625, h=195, tab_order=2, title="Revenue by Region",
+    query_state={
+        "Category": {"projections": [_projection(_col_field("DimCity", "Region"), "DimCity.Region", "Region", True)]},
+        "Y": {"projections": [_projection(_agg_col_field("SalesData", "Revenue", 0), "Sum(SalesData.Revenue)", "Revenue")]},
+    },
+))
+```
+
+### Example: Building a card
+```python
+write_json(f"{page_path}/visuals/KPIRevenue/visual.json", _visual_json(
+    name=make_uuid("kpi.revenue"),
+    visual_type="card",
+    x=10, y=72, w=200, h=68, tab_order=0, title="Total Revenue",
+    query_state={
+        "Values": {"projections": [_projection(_measure_field("SalesData", "Total Revenue"), "SalesData.Total Revenue")]},
+    },
+))
+```
+
 ## Supported Visual Types (13 total)
 
 | visualType | Query Roles | Use For |
