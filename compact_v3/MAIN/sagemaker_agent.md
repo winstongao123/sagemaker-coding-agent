@@ -526,7 +526,7 @@ class Config:
     audit_dir: str = os.path.join(os.getcwd(), "audit_logs")
 
     # Limits
-    max_turns: int = 30
+    max_turns: int = 60
     max_tokens: int = 16384  # Must be > thinking_budget when thinking enabled
     max_history: int = 20
     max_output_chars: int = 50000  # Allow more output for large files

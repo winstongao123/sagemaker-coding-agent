@@ -137,7 +137,8 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
 ### Phase 4: Build & Validate
 8. Read `skill/reference/SOP.md` for patterns (especially Steps 4-7, 11)
 9. Copy `skill/generate_template.py` to `{project_name}/generate_project.py`
-10. Customize: data generation, semantic model, report pages, visuals
+10. **IMPORTANT: Write the COMPLETE customized file in ONE `write_file` call.** Do NOT edit the template piece by piece — the file is 2000+ lines and surgical edits waste turns and introduce bugs. Instead: read the template fully, understand the helper function signatures, then write the entire customized file at once.
 11. Run `python generate_project.py`
-12. Validate: all JSON parses, no visual overlaps, correct indentation
-13. Tell user to open `{project_name}/{project_name}.pbip` in Power BI Desktop
+12. If errors occur, read the error, fix the specific issue, and re-run. Do NOT rewrite the entire file for small fixes.
+13. Validate: all JSON parses, no visual overlaps, correct indentation
+14. Tell user to open `{project_name}/{project_name}.pbip` in Power BI Desktop

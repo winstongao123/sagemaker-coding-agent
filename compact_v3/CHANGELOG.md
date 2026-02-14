@@ -308,13 +308,42 @@ User testing on SageMaker with Sonnet 4.5 — agent tried to read `generate_temp
 | `read_file` doom loop key includes offset | Yes | Yes | sagemaker_agent.py |
 | Companion doc updated | Yes | Yes | sagemaker_agent.md |
 
+---
+
+## Round 11 Fixes (Max Turns + Skill Workflow Efficiency)
+
+### Source
+
+User testing on SageMaker with Sonnet 4.5 — agent hit max_turns=30 twice while trying to customize generate_template.py (2187 lines). Agent wasted turns doing surgical edits, grep searches for function boundaries, and debugging wrong helper function signatures.
+
+### Bug Fixes
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 43 | HIGH | `max_turns` default of 30 too low for complex skill workflows. Power BI dashboard generation requires 40+ turns (read refs, copy template, customize, run, debug). Agent hits limit before completing. | Increased default from 30 to 60. Still configurable via `agent_config.json`. |
+| 44 | MEDIUM | SKILL.md says "Customize" but doesn't say HOW. Agent tries surgical edits on 2187-line file, burning 20+ turns on grep/read/edit cycles, making API mistakes (wrong function signatures). | Added IMPORTANT instruction: "Write the COMPLETE customized file in ONE write_file call. Do NOT edit the template piece by piece." |
+
+### Changes Made (Round 11)
+
+| Change | V3 | V2 | AIPower | Files |
+|--------|----|----|---------|-------|
+| `max_turns` 30 → 60 | Yes | Yes | N/A | sagemaker_agent.py |
+| Companion doc updated | Yes | Yes | N/A | sagemaker_agent.md |
+| SKILL.md "write complete file" instruction | Yes | N/A | Yes | SKILL.md / powerbi-dashboard.md |
+
+### Lessons Learned (Round 11)
+
+1. **Surgical edits on large generated files waste turns**: When a file is 2000+ lines, editing individual functions requires multiple grep/read cycles to find boundaries, understand signatures, and fix cascading errors. Writing the complete file in one call is faster and less error-prone.
+
+2. **Skill instructions must specify the HOW, not just the WHAT**: "Customize: data generation, semantic model, report pages" is vague. The agent interpreted this as "edit each section individually." Explicit instruction ("write the COMPLETE file in ONE write_file call") eliminates the ambiguity.
+
 ### Total Bug Fix Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 2 | All fixed (round 8) |
-| HIGH | 9 | All fixed (rounds 1-4, 7-10) |
-| MEDIUM | 14 | All fixed (rounds 1-5, 7-8) |
+| HIGH | 10 | All fixed (rounds 1-4, 7-11) |
+| MEDIUM | 15 | All fixed (rounds 1-5, 7-8, 11) |
 | LOW | 15 | All fixed (rounds 1-8) |
 | LOW UX | 2 | All fixed (round 6) |
-| **Total** | **42** | **All fixed** |
+| **Total** | **44** | **All fixed** |
