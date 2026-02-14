@@ -88,7 +88,7 @@ def _solid_color(hex_color: str) -> dict:
 
 `_slicer_container_objects()` overrides with:
 - Light blue background (#EEF3FA)
-- Smaller title (11pt)
+- Smaller title (10pt)
 
 ### Visual Objects (visual.objects)
 
@@ -109,10 +109,10 @@ labels: (optional) dark blue (#1E3A8A), 10pt - enabled for bar/column, off for l
 
 #### `_table_visual_objects()` - Tables
 ```
-columnHeaders: white text (#FFFFFF) on dark blue (#1E3A8A), 11pt Semibold
-values: dark slate text (#1E293B) on white, 10pt
-total: dark blue text on light blue (#EEF3FA), 10pt Semibold
-grid: vertical + horizontal gridlines, 3pt row padding
+columnHeaders: white text (#FFFFFF) on dark blue (#1E3A8A), 10pt Semibold
+values: dark slate text (#1E293B) on white, 9pt
+total: dark blue text on light blue (#EEF3FA), 9pt Semibold
+grid: vertical + horizontal gridlines, 2pt row padding
 ```
 
 ## Page Background
@@ -152,7 +152,7 @@ A single `pageNavigator` visual on each page provides real, clickable page navig
 - visualType: `"pageNavigator"` (built-in Power BI visual)
 - Auto-syncs with report page names and ordering
 - Styling: `objects.fill` (tab background), `objects.text` (font), `objects.outline` (border)
-- Background: white (#FFFFFF), text: gray (#475569), outline: light border (#D0DAE8)
+- Background: light blue (#EEF3FA), text: gray (#475569) 10pt Segoe UI, outline: light border (#D0DAE8) 1pt
 
 **IMPORTANT**: Do NOT use card visuals for navigation - they are decorative only.
 Do NOT use actionButton unless individual button behavior with custom actions is needed.

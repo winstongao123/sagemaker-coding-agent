@@ -27,10 +27,10 @@ Before generating, read these reference documents for correct patterns:
 
 ### What to customize per project:
 1. **`PROJECT_NAME`** - The project folder name
-2. **`generate_sample_data()`** - Replace with user's data schema or keep sample data
-3. **Semantic model** - Tables, columns, relationships, measures in `write_semantic_model()`
-4. **Report pages** - Page definitions, visuals, layouts in `write_report()`
-5. **Header bar text** - Brand name in `write_header_bar()`
+2. **`generate_data()`** - Replace with user's data schema or keep sample data
+3. **Semantic model** - Tables, columns, relationships, measures in `gen_semantic_model()`
+4. **Report pages** - Page definitions, visuals, layouts in `gen_report()`
+5. **Header bar text** - Brand name in `write_header_bar()` (nested inside `gen_report()`)
 
 ### What NOT to change:
 - Helper functions (`_lit_bool`, `_lit_num`, `_solid_color`, `_projection`, etc.)
@@ -59,12 +59,12 @@ Before generating, read these reference documents for correct patterns:
 ## Critical Rules
 
 0. **NEVER use `create_excel` or any Excel-based tool as a fallback.** This skill produces Power BI `.pbip` projects only. If you cannot create a Power BI dashboard for any reason, explain the issue to the user — do NOT silently fall back to Excel. Even if `ask_user` times out or the user skips the question, proceed with reasonable defaults and create the `.pbip` project.
-1. **NEVER write a generator from scratch.** Always base your file on `generate_template.py`. Copy ALL helper functions (`_lit_bool`, `_lit_num`, `_solid_color`, `_projection`, `_visual_json`, `gen_pbip`, `gen_gitignore`, etc.) EXACTLY as-is. Only customize the sections listed under "What to customize." The template's `gen_pbip()` schema, `gen_semantic_model()` structure, and PBIR JSON patterns are validated against Power BI Desktop — inventing your own will fail.
+1. **NEVER write a generator from scratch.** The template is 95KB / 2188 lines — you CANNOT reproduce it from memory. You MUST use `cp` (bash copy) to copy `generate_template.py` first, then use `edit_file` for targeted changes. If you use `write_file` to create the generator, you are violating this rule. The template's helper functions, `gen_pbip()` schema, styling, and PBIR JSON patterns are validated against Power BI Desktop — inventing your own will produce broken dashboards.
 2. **INVALID visual types**: `stackedColumnChart`, `stackedBarChart` - use `clusteredColumnChart`/`clusteredBarChart` with a `Series` field instead
 3. **Combo chart query roles**: `Y` = bars, `Y2` = line. NEVER use `"Column y"`/`"Line y"`
 4. **Field reference by visual type**: Tables use `_measure_field()`. Bar/column charts use `_measure_field()` for averages, `_agg_col_field(Sum)` for sums. Combo charts use `_agg_col_field(Sum)` ONLY - Average in combo Y/Y2 renders blank. For average metrics, use a bar chart instead of combo.
 5. **Navigation**: Use `pageNavigator` visual type - NOT card visuals (decorative only)
-6. **TMDL encoding**: UTF-8 with BOM (`utf-8-sig`) for `.tmdl` files
+6. **File encoding**: UTF-8 **without** BOM (`encoding="utf-8"`) for ALL files including `.tmdl`. Do NOT use `utf-8-sig`.
 7. **Literal strings**: Must be single-quoted: `"'text'"`, numbers suffixed with D: `"13D"`
 8. **Max visuals per page**: 6-7 content visuals. Executive page: no slicers.
 9. **Layout**: 1280x720 canvas. Header h=40, PageNav h=32, content starts at y=72.
@@ -136,10 +136,21 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
    - Detail → `tableEx`
 
 ### Phase 4: Build & Validate
-8. Read `reference/SOP.md` for patterns (especially Steps 4-7, 11)
-9. Copy `generate_template.py` to `{project_name}/generate_project.py`
-10. **IMPORTANT: Write the COMPLETE customized file in ONE `write_file` call.** Do NOT edit the template piece by piece — the file is 2000+ lines and surgical edits waste turns and introduce bugs. Instead: read the template fully, understand the helper function signatures, then write the entire customized file at once. You MUST preserve all helper functions, `gen_pbip()`, `gen_gitignore()`, and structural code from the template — only change `PROJECT_NAME`, `generate_sample_data()`, semantic model tables/measures, and report pages/visuals. NEVER invent your own PBIR JSON or `.pbip` schema — use exactly what the template produces.
-11. Run `python generate_project.py`
-12. If errors occur, read the error, fix the specific issue, and re-run. Do NOT rewrite the entire file for small fixes.
+8. Read `reference/SOP.md` **completely** (use offset to read ALL pages — lessons learned start at line 460+)
+9. **CRITICAL — Use bash `cp` to copy the template file. Do NOT use write_file.** Run:
+   ```
+   mkdir -p {project_name}
+   cp skills/powerbi-dashboard/generate_template.py {project_name}/generate_project.py
+   ```
+   This preserves all 2187 lines (95KB) of helper functions, styling, PBIR patterns, and validated schemas. The template is TOO LARGE to reproduce from memory — you MUST copy the file literally.
+10. **Edit ONLY these sections** in the copied file using `edit_file` (surgical edits):
+    - `PROJECT_NAME = "AIPower"` → change to user's project name
+    - `generate_data()` → replace with user's data schema (function at ~line 120)
+    - `gen_semantic_model()` → adjust tables, columns, relationships, measures (~line 262)
+    - `gen_report()` → adjust page definitions and visuals (~line 1267)
+    - `write_header_bar()` → change brand name (nested inside `gen_report()`, ~line 1426)
+    Do NOT touch helper functions, `gen_pbip()`, `gen_gitignore()`, `_visual_json()`, or any `_lit_*`/`_solid_color`/`_projection` functions. If your edits would require rewriting more than 30% of the file, you are doing it wrong — simplify your approach.
+11. Run `python {project_name}/generate_project.py`
+12. If errors occur, read the error, fix the specific issue with `edit_file`, and re-run. Do NOT rewrite the entire file for small fixes.
 13. Validate: all JSON parses, no visual overlaps, correct indentation
 14. Tell user to open `{project_name}/{project_name}.pbip` in Power BI Desktop

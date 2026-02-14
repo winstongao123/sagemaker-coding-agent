@@ -76,33 +76,47 @@ Create the following directory structure:
 ### `definition.pbism` (semantic model entry)
 ```json
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/definition/semanticModel/1.0.0/schema.json",
-  "compatibilityLevel": 1604
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/semanticModel/definitionProperties/1.0.0/schema.json",
+  "version": "4.0"
 }
 ```
 
 ### `definition.pbir` (report entry)
+**IMPORTANT**: Do NOT include `$schema` — Power BI rejects wrong schema URLs with "Expected '$schema' property to follow patterns". The working template omits `$schema` entirely.
 ```json
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/definition/2.0.0/schema.json",
+  "version": "4.0",
   "datasetReference": {
-    "byPath": { "path": "../{ProjectName}.SemanticModel" },
-    "byConnection": null
+    "byPath": {
+      "path": "../{ProjectName}.SemanticModel"
+    }
   }
 }
 ```
 
 ### `version.json`
 ```json
-{ "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/semanticModelDefinitionVersion/1.0.0/schema.json", "version": "4.0" }
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/versionMetadata/1.0.0/schema.json",
+  "version": "2.0.0"
+}
 ```
 
 ### `report.json`
 ```json
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/1.5.0/schema.json",
-  "themeCollection": { "baseTheme": { "name": "CY25SU12", "reportVersionAtImport": "5.62", "type": "SharedResources" } },
-  "id": "{uuid}"
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.1.0/schema.json",
+  "themeCollection": {
+    "baseTheme": {
+      "name": "CY25SU12",
+      "reportVersionAtImport": {
+        "visual": "2.5.0",
+        "report": "3.1.0",
+        "page": "2.3.0"
+      },
+      "type": "SharedResources"
+    }
+  }
 }
 ```
 
@@ -161,8 +175,9 @@ relationship {uuid}
 ### pages.json
 ```json
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pages/1.0.0/schema.json",
-  "pageOrder": ["{page1_id}", "{page2_id}", ...]
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.0.0/schema.json",
+  "pageOrder": ["{page1_id}", "{page2_id}", ...],
+  "activePageName": "{page1_id}"
 }
 ```
 
@@ -436,7 +451,7 @@ Standard professional blue palette:
 
 1. Run `python generate_project.py` - no errors
 2. All `.json` files parse with `json.load()`
-3. All TMDL files are UTF-8 with BOM (`\ufeff` prefix)
+3. All files are UTF-8 without BOM (`encoding="utf-8"`) — do NOT use `utf-8-sig`
 4. No visual overlaps (verify y + h < next_y for each row)
 5. All `nativeQueryRef` values are sanitized (no special chars for simple names)
 6. Page background color is set on all pages
@@ -446,7 +461,7 @@ Standard professional blue palette:
 ## Key Lessons Learned
 
 1. **Never use `themeCollection.customTheme`** without `reportVersionAtImport` - blocks loading
-2. **TMDL requires UTF-8 BOM** - use `encoding='utf-8-sig'` when writing
+2. **All files use UTF-8 without BOM** - use `encoding='utf-8'` (NOT `utf-8-sig`). The template's `write_file()` uses `encoding="utf-8"` for all output.
 3. **M expressions in TMDL** must be indented correctly within `source =` blocks
 4. **Slicer visual type** is `"slicer"`, table is `"tableEx"` (not "table")
 5. **`nativeQueryRef`** should NOT have special chars unless the column name requires them
@@ -476,6 +491,7 @@ Standard professional blue palette:
     - **`card`**: Always use `_measure_field`
 25. **`Number.Min` / `Number.Max` do NOT exist in Power Query M** - These are not valid M functions. To clamp values, use `if` expressions: `each if _ < 0 then 0 else if _ > 100 then 100 else _`. Using invalid M functions causes entire columns to show "Error" in data, making all charts using those columns blank.
 26. **`.pbip` file must ONLY have `report` in artifacts** - Do NOT add `semanticModel`, `dataset`, or any other property to the artifacts array. Power BI Desktop discovers the semantic model folder by convention from the folder name. Adding `semanticModel` or `dataset` causes: `Property 'semanticModel'/'dataset' has not been defined and the schema does not allow additional properties`. The correct schema is: `{"version":"1.0","artifacts":[{"report":{"path":"{Name}.Report"}}],"settings":{"enableAutoRecovery":true}}`.
+27. **`definition.pbir` must NOT have `$schema`** - Power BI Desktop validates the `$schema` URL strictly against `definitionProperties/1.x.x` or `2.x.x` patterns. If you include a wrong `$schema` URL (e.g., `.../definition/definition/2.0.0/...`), it rejects with "Expected '$schema' property to follow patterns". The working template omits `$schema` entirely — just use `{"version":"4.0","datasetReference":{"byPath":{"path":"../{Name}.SemanticModel"}}}`. Similarly, `version.json` must use `$schema: .../versionMetadata/1.0.0/...` (NOT `semanticModelDefinitionVersion`), and `report.json` must use `$schema: .../report/3.1.0/...` (NOT `1.5.0`).
 
 ## Step 11: Supported Visual Types Reference
 
