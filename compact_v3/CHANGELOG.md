@@ -150,10 +150,31 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ## File Changes Summary
 
-| File | Action | Lines Changed |
-|------|--------|--------------|
-| `sagemaker_agent.py` | Enhanced | +120 net new (6119 → 6245 lines) |
-| `skills/review/SKILL.md` | Rewritten | 38 → 84 lines |
-| `skills/verify/SKILL.md` | NEW | 100 lines |
-| `skills/coding-standards/SKILL.md` | NEW | 150 lines |
-| `CHANGELOG.md` | NEW | This file |
+| File | Action | Final Lines | Notes |
+|------|--------|-------------|-------|
+| `sagemaker_agent.py` | Enhanced | 6,341 (was 6,119 in V2) | +222 net new lines across 6 review rounds |
+| `skills/review/SKILL.md` | Rewritten | 84 (was 38) | 5-category checklist with severity levels |
+| `skills/verify/SKILL.md` | NEW | 148 | 6-phase verification: build, type, lint, test, security, diff |
+| `skills/coding-standards/SKILL.md` | NEW | 154 | Language-agnostic: KISS, DRY, YAGNI, naming, testing |
+| `CHANGELOG.md` | NEW | This file | 27 bugs found and fixed across 6 review rounds |
+
+### Key New Features Added During Review Rounds
+
+| Feature | Round | Description |
+|---------|-------|-------------|
+| `on_ask_user` callback | Round 5 | Interactive text input widget for `ask_user` tool (was returning placeholder) |
+| Ask-user UI (submit/skip) | Round 5 | Text input + submit + skip buttons with threading.Event wait, 5-min timeout |
+| Session ID random suffix | Round 5 | `os.urandom(3).hex()` prevents same-second collision |
+| Faster stop polling | Round 5 | 0.5s → 0.1s for responsive stop button |
+| ASCII system messages | Round 6 | All emoji replaced with `[STOP]`, `[PLAN]`, `[OK]`, etc. for encoding safety |
+| Chat/input alignment | Round 6 | `width:100%;box-sizing:border-box` matches input box width |
+
+### Total Bug Fix Summary
+
+| Severity | Count | Status |
+|----------|-------|--------|
+| HIGH | 4 | All fixed (rounds 1-4) |
+| MEDIUM | 9 | All fixed (rounds 1-5) |
+| LOW | 12 | All fixed (rounds 1-6) |
+| LOW UX | 2 | All fixed (round 6) |
+| **Total** | **27** | **All fixed** |
