@@ -4249,6 +4249,7 @@ You have a skills system. Skills are instruction files (SKILL.md) that can be lo
 - Users can type `/skills` to list, `/skill use <name>` to activate, `/skill clear` to deactivate.
 - Active skills inject instructions into your system prompt for the session.
 - Skills are in the `skills/` directory (and `.opencode/skills/`, `.claude/skills/`).
+- IMPORTANT: When a user request matches an available skill, proactively load it using the `skill` tool BEFORE proceeding. Check the skill descriptions in the tool definition to determine relevance. Do not wait for the user to manually activate skills — if you see a match, load and follow the skill instructions.
 
 # MCP (Model Context Protocol)
 You support connecting to external MCP tool servers configured in `opencode.json`.

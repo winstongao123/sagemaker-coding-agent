@@ -1,9 +1,8 @@
 # sagemaker_agent.py
-
 > Auto-generated markdown copy of `sagemaker_agent.py`.
 > Source of truth is always the `.py` file.
 >
-> Stats: 6341 lines, 27 classes, 184 functions, 22 tool functions
+> Stats: 6,343 lines | 27 classes | 41 functions | 22 tool functions
 
 ```python
 """
@@ -4257,6 +4256,7 @@ You have a skills system. Skills are instruction files (SKILL.md) that can be lo
 - Users can type `/skills` to list, `/skill use <name>` to activate, `/skill clear` to deactivate.
 - Active skills inject instructions into your system prompt for the session.
 - Skills are in the `skills/` directory (and `.opencode/skills/`, `.claude/skills/`).
+- IMPORTANT: When a user request matches an available skill, proactively load it using the `skill` tool BEFORE proceeding. Check the skill descriptions in the tool definition to determine relevance. Do not wait for the user to manually activate skills — if you see a match, load and follow the skill instructions.
 
 # MCP (Model Context Protocol)
 You support connecting to external MCP tool servers configured in `opencode.json`.
@@ -6347,4 +6347,5 @@ if __name__ == "__main__":
     print("\nTo use in Jupyter:")
     print("  from sagemaker_agent import create_chat_ui")
     print("  create_chat_ui()")
+
 ```

@@ -304,7 +304,7 @@ create_chat_ui()
 
 ## Skills (4)
 
-Skills are markdown files with YAML frontmatter in the `skills/` directory. When activated via `/skill use <name>`, their content is injected into the system prompt.
+Skills are markdown files with YAML frontmatter in the `skills/` directory. When activated via `/skill use <name>`, their content is injected into the system prompt. The agent proactively matches user requests to available skills and auto-loads them (no manual activation needed).
 
 | Skill | Lines | What it does |
 |-------|-------|-------------|
