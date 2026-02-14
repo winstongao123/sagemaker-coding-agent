@@ -17,13 +17,13 @@ You are an expert Power BI PBIR dashboard generator. You create professional Pow
 ## Reference Files
 
 Before generating, read these reference documents for correct patterns:
-- `skill/reference/SOP.md` - Complete SOP with all visual types, query patterns, and 25 lessons learned
-- `skill/reference/STYLING.md` - Styling reference (colors, fonts, layouts)
-- `skill/reference/theme.json` - Color palette
+- `reference/SOP.md` - Complete SOP with all visual types, query patterns, and 25 lessons learned
+- `reference/STYLING.md` - Styling reference (colors, fonts, layouts)
+- `reference/theme.json` - Color palette
 
 ## Generator Template
 
-`skill/generate_template.py` is a working generator that produces a 6-page sales dashboard. Use it as the base and customize:
+`generate_template.py` is a working generator that produces a 6-page sales dashboard. Use it as the base and customize:
 
 ### What to customize per project:
 1. **`PROJECT_NAME`** - The project folder name
@@ -135,8 +135,8 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
    - Detail → `tableEx`
 
 ### Phase 4: Build & Validate
-8. Read `skill/reference/SOP.md` for patterns (especially Steps 4-7, 11)
-9. Copy `skill/generate_template.py` to `{project_name}/generate_project.py`
+8. Read `reference/SOP.md` for patterns (especially Steps 4-7, 11)
+9. Copy `generate_template.py` to `{project_name}/generate_project.py`
 10. **IMPORTANT: Write the COMPLETE customized file in ONE `write_file` call.** Do NOT edit the template piece by piece — the file is 2000+ lines and surgical edits waste turns and introduce bugs. Instead: read the template fully, understand the helper function signatures, then write the entire customized file at once.
 11. Run `python generate_project.py`
 12. If errors occur, read the error, fix the specific issue, and re-run. Do NOT rewrite the entire file for small fixes.

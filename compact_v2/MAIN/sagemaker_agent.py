@@ -5831,7 +5831,7 @@ def create_chat_ui(mock_mode: bool = None):
             if active_skills:
                 blocks = []
                 for skill_name in active_skills:
-                    ok, txt = SKILLS.read_skill(skill_name, max_chars=4000)
+                    ok, txt = SKILLS.read_skill(skill_name, max_chars=8000)
                     if ok and txt.strip():
                         blocks.append(f"[SKILL: {skill_name}]\n{txt}")
                 if blocks:
