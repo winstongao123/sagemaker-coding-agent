@@ -544,7 +544,7 @@ class Config:
     mock_mode: bool = False  # Set True to test without Bedrock API
 
     # Security policy
-    bash_allow_interpreters: bool = False  # If True, allow python/node/etc via bash tool
+    bash_allow_interpreters: bool = True   # Allow python/node/etc via bash tool (needed for skill generators)
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
     # Runtime isolation / execution limits

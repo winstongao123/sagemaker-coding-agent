@@ -260,13 +260,40 @@ We analyzed 17 patterns from OpenClaw, scored each for practical value in a Sage
 
 4. **Skill anti-fallback rules must be explicit**: Even with a skill loaded and active in the system prompt, the LLM may fall back to tools it knows (like `create_excel`) when the skill's workflow is interrupted (e.g., `ask_user` timeout). Adding a rule 0 "NEVER use X" is necessary to prevent this.
 
+---
+
+## Round 9 Fix (Bash Interpreter Allowlist)
+
+### Source
+
+User testing on SageMaker with Sonnet 4.5 — agent correctly explored Power BI skill files and customized the generator, but could not run `python generate_project.py` because `python`/`python3` were blocked by SecurityManager.
+
+### Bug Fix
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 41 | HIGH | `python`/`python3` not in bash `BASE_ALLOWED_COMMANDS` — only added when `bash_allow_interpreters=True` (default: `False`). Agent can't run `python generate_project.py` for Power BI skill workflow. Agent tried `python_exec` with `exec(f.read())` as workaround but that's also blocked by `DANGEROUS_PYTHON` regex. | Changed `bash_allow_interpreters` default from `False` to `True`. The agent already has `python_exec` tool with full code execution, so blocking `python` in bash is inconsistent. Denylist patterns still catch dangerous usage. |
+
+### Changes Made (Round 9)
+
+| Change | V3 | V2 | Files |
+|--------|----|----|-------|
+| `bash_allow_interpreters` default `False` → `True` | Yes | Yes | sagemaker_agent.py |
+| Companion doc updated | Yes | Yes | sagemaker_agent.md |
+
+### Lessons Learned (Round 9)
+
+1. **Security defaults must match tool capabilities**: If the agent already has a `python_exec` tool that runs arbitrary Python with security checks, blocking `python` in bash creates an inconsistent security boundary. The agent can already execute Python code — preventing it from running Python scripts via bash just breaks workflows (like skill generators) without meaningful security gain.
+
+2. **`exec()` should stay blocked in python_exec**: While `exec(f.read())` is a valid workaround for running files, it bypasses the 3-layer Python security validation (regex, AST imports, AST calls). The proper path is `python script.py` via bash, where the script runs in its own process.
+
 ### Total Bug Fix Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 2 | All fixed (round 8) |
-| HIGH | 7 | All fixed (rounds 1-4, 7-8) |
+| HIGH | 8 | All fixed (rounds 1-4, 7-9) |
 | MEDIUM | 14 | All fixed (rounds 1-5, 7-8) |
 | LOW | 15 | All fixed (rounds 1-8) |
 | LOW UX | 2 | All fixed (round 6) |
-| **Total** | **40** | **All fixed** |
+| **Total** | **41** | **All fixed** |
