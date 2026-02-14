@@ -205,12 +205,68 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 5. **Every reset path needs testing**: `on_clear()`, `on_new()`, `/skill clear`, and session load all need to reset skill state consistently. V2's `on_new()` was missed because it was a different function from `on_clear()`.
 
+## Round 8 Fixes (UI Threading Deadlock + OpenClaw Integration)
+
+### Source
+
+Bugs reported by user testing + analysis of [OpenClaw](https://github.com/openclaw/openclaw) — a multi-channel personal AI assistant with 50+ built-in skills, progressive skill loading, and context management.
+
+### Bug Fixes
+
+| # | Severity | Bug | Fix |
+|---|----------|-----|-----|
+| 36 | **CRITICAL** | `on_send()` runs on Jupyter kernel thread → `request_user_input()` wait loop blocks kernel → Submit/Skip/Stop button click callbacks can't fire → **deadlock** (no button works, no timeout, no stop) | Wrapped `on_send` in `_on_send_threaded()` that starts a background `threading.Thread`, freeing kernel thread for widget events |
+| 37 | **CRITICAL** | `request_approval()` has same deadlock pattern — Approve/Deny/Always buttons unresponsive during agent execution | Same threading fix resolves both ask_user and approval deadlocks |
+| 38 | HIGH | Agent falls back to `create_excel` when powerbi-dashboard skill is active but `ask_user` times out | Added Rule 0 to Power BI skill: "NEVER use create_excel or any Excel-based tool as a fallback" |
+| 39 | MEDIUM | Clear/Save/Load/New buttons have no lock guard — clicking during agent execution crashes the background thread | Added `if ui_state.get("lock"): return` to all 4 button handlers |
+| 40 | LOW | Tool result pruning too aggressive — head(100)+tail(100) chars loses useful context | Improved to head(500)+tail(500) with 1000-char minimum threshold |
+
+### OpenClaw Analysis — Features Evaluated
+
+We analyzed 17 patterns from OpenClaw, scored each for practical value in a SageMaker coding agent, and adopted 3 Tier 1 items (score 85+):
+
+| # | Feature | Score | Decision | Reason |
+|---|---------|-------|----------|--------|
+| 1 | Progressive Disclosure Skill Architecture | 88 | SKIP (already have) | Our Power BI skill already uses this pattern (SKILL.md + reference/ subdirectory) |
+| 2 | Tool Call Narration Policy | 87 | **ADOPTED** | "Don't narrate routine tool calls" reduces token waste |
+| 3 | Alignment Safety Clause | 86 | **ADOPTED** | Anti-power-seeking directive for agents with AWS credentials |
+| 4 | Context Pruning (stale tool results) | 85 | **ADOPTED** | Enhanced existing prune_tool_outputs with better head/tail preservation |
+| 5 | Structured PR Review Pipeline | 82 | SKIP | Over-engineered for single-session use case |
+| 6 | Skill Triggering via Description | 83 | SKIP | Our programmatic skill activation is more capable |
+| 7 | Staged Compaction | 82 | SKIP | Existing compaction works; marginal quality gain |
+| 8 | Context Window Guard | 78 | SKIP | Auto-compaction handles reactively |
+| 9-17 | Various (persona, multi-agent safety, tool profiles, etc.) | 55-75 | SKIP | Not relevant to coding agent or already covered |
+
+### Changes Made (Round 8)
+
+| Change | V3 | V2 | Files |
+|--------|----|----|-------|
+| `_on_send_threaded` wrapper | Yes | Yes | sagemaker_agent.py |
+| Lock guards on 4 buttons | Yes | Yes | sagemaker_agent.py |
+| Tool Call Narration Policy in SYSTEM_PROMPT | Yes | Yes | sagemaker_agent.py |
+| Safety Boundaries clause in SYSTEM_PROMPT | Yes | Yes | sagemaker_agent.py |
+| Improved tool result pruning (500/500) | Yes | Yes | sagemaker_agent.py |
+| Power BI skill Rule 0 (no Excel fallback) | Yes | N/A | skills/powerbi-dashboard/SKILL.md |
+| .gitignore updated (nested audit_logs/sessions) | Yes | Yes | .gitignore |
+| Removed 43 tracked temp files | Yes | Yes | test_*.py, audit_logs/, sessions/ |
+
+### Lessons Learned (Round 8)
+
+1. **Jupyter widget callback deadlock**: In ipywidgets, button `.on_click` callbacks run on the kernel's main event loop thread. If any code called from a button handler blocks that thread (e.g., `threading.Event.wait()`, `time.sleep()`, or any blocking loop), ALL other button callbacks become unresponsive. The fix is to run blocking work in a daemon thread so the kernel thread stays free.
+
+2. **The approval dialog was also deadlocked**: The same deadlock affected `request_approval()` (Approve/Deny buttons), not just `ask_user`. Users may not have noticed because approvals have auto-deny timeouts and the agent continues — but the buttons were non-functional.
+
+3. **Lock guards prevent thread-safety crashes**: When `on_send` runs in a background thread, destructive operations (Clear, Load, New) that set `ui_state["agent"] = None` would crash the running thread. Lock guards are essential for any button that modifies shared state.
+
+4. **Skill anti-fallback rules must be explicit**: Even with a skill loaded and active in the system prompt, the LLM may fall back to tools it knows (like `create_excel`) when the skill's workflow is interrupted (e.g., `ask_user` timeout). Adding a rule 0 "NEVER use X" is necessary to prevent this.
+
 ### Total Bug Fix Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| HIGH | 6 | All fixed (rounds 1-4, 7) |
-| MEDIUM | 13 | All fixed (rounds 1-5, 7) |
-| LOW | 14 | All fixed (rounds 1-7) |
+| CRITICAL | 2 | All fixed (round 8) |
+| HIGH | 7 | All fixed (rounds 1-4, 7-8) |
+| MEDIUM | 14 | All fixed (rounds 1-5, 7-8) |
+| LOW | 15 | All fixed (rounds 1-8) |
 | LOW UX | 2 | All fixed (round 6) |
-| **Total** | **35** | **All fixed** |
+| **Total** | **40** | **All fixed** |

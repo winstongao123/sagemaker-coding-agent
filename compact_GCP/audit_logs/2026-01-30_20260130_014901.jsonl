@@ -1,2 +1,0 @@
-{"timestamp": "2026-01-30T01:49:01.282667", "session_id": "20260130_014901", "action": "user_message", "tool_name": null, "parameters": {"message": "e"}, "result_summary": "", "user_approved": true, "hash": "465ffb359770896b995bd9edee484e3e"}
-{"timestamp": "2026-01-30T01:49:01.286630", "session_id": "20260130_014901", "action": "response", "tool_name": null, "parameters": {}, "result_summary": "[MOCK] I received your message: 'e'. This is a mock response - enable the API to get real responses.", "user_approved": true, "hash": "1187a89a8ff86751d2c53ba367acd664"}

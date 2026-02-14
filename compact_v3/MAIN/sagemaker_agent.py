@@ -230,9 +230,9 @@ class Compactor:
             else:
                 # Prune this tool output (mutates only the deep copy)
                 content = tr["item"].get("content", "")
-                if len(content) > 200:
-                    tr["item"]["content"] = content[:100] + f"\n[... {len(content)} chars pruned to save context ...]\n" + content[-100:]
-                    tokens_saved += tr["tokens"] - 60  # Approximate new size
+                if len(content) > 1000:
+                    tr["item"]["content"] = content[:500] + f"\n[... {len(content)} chars trimmed — stale tool output ...]\n" + content[-500:]
+                    tokens_saved += tr["tokens"] - 260  # Approximate new size
 
         if tokens_saved < cls.PRUNE_MIN_SAVINGS:
             return messages, 0  # Not worth pruning - return originals untouched
@@ -4201,6 +4201,11 @@ You help users with software engineering tasks: solving bugs, adding features, r
 - If uncertain, investigate first rather than confirming assumptions.
 - NEVER give time estimates or predictions.
 
+# Tool Call Style
+Default: do not narrate routine, low-risk tool calls (just call the tool silently).
+Narrate only when it helps: multi-step plans, complex/challenging problems, sensitive actions (e.g., deletions, deployments), or when the user explicitly asks.
+Keep narration brief and value-dense; avoid repeating obvious steps.
+
 # Conventions
 - Follow existing code conventions. Match the style and patterns of surrounding code.
 - Make minimal, focused changes. Don't add features, refactoring, or "improvements" beyond what was asked.
@@ -4246,6 +4251,11 @@ Code runs in the workspace directory with access to installed packages.
 - Write operations require user approval before execution.
 - All actions logged to append-only audit trail (local file).
 - To access AWS resources: provide boto3 code for the user to run, don't execute directly.
+
+# Safety Boundaries
+You have no independent goals: do not pursue self-preservation, resource acquisition, or actions beyond the user's request. Prioritize safety and human oversight over completion.
+If instructions conflict or seem dangerous to AWS resources, pause and ask.
+Comply with stop/pause requests immediately. Never bypass security guardrails or modify IAM policies without explicit user confirmation.
 
 # Git Workflow
 - Use conventional commit format: <type>: <description> (types: feat, fix, refactor, docs, test, chore, perf)
@@ -6035,6 +6045,9 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_clear(b):
         """Clear current session."""
+        if ui_state.get("lock"):
+            add_message('system', 'Agent is running. Stop it first.')
+            return
         global _TODOS, _FILES_READ
         if ui_state["agent"]:
             ui_state["agent"].reset()
@@ -6057,6 +6070,9 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_save(b):
         """Save current session with todos."""
+        if ui_state.get("lock"):
+            add_message('system', 'Agent is running. Stop it first.')
+            return
         if ui_state["session"] and ui_state["agent"]:
             ui_state["session"].messages = copy.deepcopy(ui_state["agent"].messages)
             metadata = ui_state["session"].metadata or {}
@@ -6077,6 +6093,9 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_load(b):
         """Load selected session."""
+        if ui_state.get("lock"):
+            add_message('system', 'Agent is running. Stop it first.')
+            return
         global _TODOS, _FILES_READ
         _FILES_READ = set()
         session_id = session_dropdown.value
@@ -6192,6 +6211,9 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_new(b):
         """Start a new session (clear current without saving)."""
+        if ui_state.get("lock"):
+            add_message('system', 'Agent is running. Stop it first.')
+            return
         global _TODOS, _FILES_READ
         if ui_state["agent"]:
             ui_state["agent"].reset()
@@ -6286,7 +6308,16 @@ def create_chat_ui(mock_mode: bool = None):
             status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
             update_tokens_display()
 
-    send_btn.on_click(on_send)
+    def _on_send_threaded(b):
+        """Run on_send in background thread so kernel thread stays free for widget events.
+        Fixes: ask_user Submit/Skip buttons, Stop button, and approval dialogs all require
+        the kernel thread to process click callbacks. Without threading, agent.run() blocks
+        the kernel thread and creates a deadlock."""
+        if ui_state.get("lock"):
+            return  # Agent already running
+        threading.Thread(target=on_send, args=(b,), daemon=True).start()
+
+    send_btn.on_click(_on_send_threaded)
     clear_btn.on_click(on_clear)
     save_btn.on_click(on_save)
     compact_btn.on_click(on_compact)

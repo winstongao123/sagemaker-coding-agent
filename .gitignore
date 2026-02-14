@@ -22,8 +22,13 @@ venv/
 .ipynb_checkpoints/
 
 # Project specific
-sessions/*.json
-audit_logs/*.jsonl
+sessions/
+audit_logs/
+**/sessions/
+**/audit_logs/
 .code_index/
 agent_config.json
 _temp_context.md
+truncated_outputs/
+.pytest_cache/
+test_*.py

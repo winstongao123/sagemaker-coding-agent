@@ -58,6 +58,7 @@ Before generating, read these reference documents for correct patterns:
 
 ## Critical Rules
 
+0. **NEVER use `create_excel` or any Excel-based tool as a fallback.** This skill produces Power BI `.pbip` projects only. If you cannot create a Power BI dashboard for any reason, explain the issue to the user — do NOT silently fall back to Excel. Even if `ask_user` times out or the user skips the question, proceed with reasonable defaults and create the `.pbip` project.
 1. **INVALID visual types**: `stackedColumnChart`, `stackedBarChart` - use `clusteredColumnChart`/`clusteredBarChart` with a `Series` field instead
 2. **Combo chart query roles**: `Y` = bars, `Y2` = line. NEVER use `"Column y"`/`"Line y"`
 3. **Field reference by visual type**: Tables use `_measure_field()`. Bar/column charts use `_measure_field()` for averages, `_agg_col_field(Sum)` for sums. Combo charts use `_agg_col_field(Sum)` ONLY - Average in combo Y/Y2 renders blank. For average metrics, use a bar chart instead of combo.
