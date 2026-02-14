@@ -1544,6 +1544,13 @@ class SkillManager:
                     meta, content = self._parse_frontmatter(text)
                     name = meta.get("name", fp.parent.name)
                     desc = meta.get("description", "")
+                    # Fallback: extract description from first heading if missing
+                    if not desc and content:
+                        for line in content.split("\n"):
+                            line = line.strip()
+                            if line.startswith("#"):
+                                desc = line.lstrip("#").strip()
+                                break
                     self._cache[name] = SkillInfo(
                         name=name, description=desc,
                         location=str(fp), base_dir=str(fp.parent),

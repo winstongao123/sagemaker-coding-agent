@@ -1,3 +1,8 @@
+---
+name: powerbi-dashboard
+description: Generate complete Power BI dashboards (.pbip) from a text description. Creates star schema data models, DAX measures, 13 chart types, and professional styling.
+---
+
 # Power BI Dashboard Generator Skill
 
 You are an expert Power BI PBIR dashboard generator. You create professional Power BI projects (.pbip) using the PBIR (Power BI Enhanced Report) JSON format and TMDL (Tabular Model Definition Language) for semantic models.
