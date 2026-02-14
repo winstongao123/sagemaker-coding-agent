@@ -1,25 +1,30 @@
 # chat.ipynb
 
+> Auto-generated markdown copy of `chat.ipynb`.
+> Source of truth is always the `.ipynb` file.
+>
+> Stats: 5 cells (2 markdown, 2 code, 1 markdown reference)
+
 ## Cell 0 (markdown)
 
-# SageMaker Coding Agent V2
+# SageMaker Coding Agent V3
 
 Secure AI coding assistant powered by AWS Bedrock Claude.
 
 **22 Tools:** File ops, bash/python exec, docs/charts/pdf/notebooks, vision, semantic search, todos, web fetch, skills, sub-agents, ask user
 
-**New in V2:**
-- External config (`opencode.json`) with JSONC support
-- Skills system (`/skills`, `/skill use <name>`, `/skill clear`)
-- Custom slash commands with templates (`/review`, `/test`, etc.)
-- Sub-agents (build, plan, explore, general) via `task` tool
-- MCP client (local stdio + remote HTTP servers)
-- Cost tracking (`/cost`) with per-model Bedrock pricing
-- Snapshot & revert (`/revert <file>`, `/revert all`)
-- Interactive questions (`ask_user` tool)
-- Diff tracking on every edit
-- Permission rules (per-tool, file-pattern, command-pattern)
-- SSRF-hardened web fetch
+**New in V3 (over V2):**
+- Review agent type (security, quality, performance, architecture, testing)
+- Enhanced planner prompt (restate requirements, assess risks, phased plan)
+- Plan agent has web_fetch + ask_user tools
+- `/verify` command (6-phase: build, type, lint, test, security, diff)
+- `/checkpoint` command (named checkpoints with create/list)
+- Git workflow rules (conventional commits, atomic changes)
+- Testing discipline rules (TDD, 80% coverage target, AAA pattern)
+- Verification-loop skill, coding-standards skill, enhanced review skill
+- Interactive ask_user with text input widget + submit/skip buttons
+- Session checkpoint persistence (save/load/restore)
+- ASCII system messages (no emoji encoding issues)
 
 **Security:** 3-layer bash + 3-layer Python + workspace boundary + SSRF protection
 
@@ -181,7 +186,7 @@ create_chat_ui()
 
 ---
 
-## Quick Start Examples
+### Quick Start Examples
 
 | Task | Example Prompt |
 |------|----------------|
@@ -194,12 +199,13 @@ create_chat_ui()
 | **Create Excel** | "Create an Excel file with employee data" |
 | **Create Word** | "Write a project summary document" |
 | **Create PDF** | "Create a PDF report with table and chart summary" |
+| **Create Notebook** | "Create a notebook that loads and analyzes data" |
 | **Web Fetch** | "Fetch https://example.com and summarize it" |
 | **Plan** | "Help me build a REST API with Flask" |
 
 ---
 
-## Slash Commands
+### Slash Commands
 
 | Command | What it does |
 |---------|-------------|
@@ -212,26 +218,41 @@ create_chat_ui()
 | `/revert all` | Revert all modified files |
 | `/compact` | Compress conversation context |
 | `/save` | Save session |
+| `/verify` | Run 6-phase verification (V3) |
+| `/checkpoint <name>` | Create named checkpoint (V3) |
+| `/checkpoint list` | List all checkpoints (V3) |
 
 ---
 
-## Tools (22)
+### Tools (22)
 
 - **File:** `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `list_dir`
 - **Exec:** `bash`, `python_exec`
 - **Docs:** `create_word`, `create_excel`, `create_markdown`, `create_notebook`, `create_pdf`
-- **Charts:** `create_chart` (bar, line, pie, scatter — displayed inline)
+- **Charts:** `create_chart` (bar, line, pie, scatter -- displayed inline)
 - **Vision:** `view_image`
 - **Search:** `semantic_search` (Bedrock Titan embeddings)
 - **Planning:** `todo_write`, `todo_read`
 - **Web:** `web_fetch` (URL fetch with SSRF protection)
 - **Skills:** `skill` (list/load skills)
-- **Sub-agents:** `task` (build, plan, explore, general)
-- **Interactive:** `ask_user` (mid-conversation questions)
+- **Sub-agents:** `task` (build, plan, explore, general, review)
+- **Interactive:** `ask_user` (mid-conversation questions with text input)
 
 ---
 
-## Security
+### Sub-Agents (V3)
+
+| Agent | Tools | Use Case |
+|-------|-------|----------|
+| **build** | bash, python_exec, read_file, edit_file, write_file, glob, grep, list_dir | Build, compile, fix errors |
+| **plan** | read_file, glob, grep, list_dir, semantic_search, web_fetch, ask_user | Architecture planning with web research |
+| **explore** | read_file, glob, grep, list_dir, semantic_search, view_image | Codebase exploration |
+| **general** | All tools | General-purpose tasks |
+| **review** | read_file, glob, grep, list_dir, semantic_search, view_image | Code review (security, quality, performance) |
+
+---
+
+### Security
 
 - 3-layer bash validation (allowlist + 70 patterns + restricted mode)
 - 3-layer Python validation (AST + import hook + secret detection)
@@ -239,4 +260,3 @@ create_chat_ui()
 - Workspace boundary enforcement
 - Configurable permission rules via `opencode.json`
 - Audit logging and session persistence
-
