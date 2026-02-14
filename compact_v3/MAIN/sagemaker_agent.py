@@ -5910,6 +5910,25 @@ def create_chat_ui(mock_mode: bool = None):
             else:
                 system_prompt = None  # Use default
 
+            # Auto-match skills by keyword (model-independent — works even with small models)
+            active = ui_state.get("active_skills", [])
+            if msg and not active:
+                msg_lower = msg.lower()
+                for skill_info in SKILLS.list_skills():
+                    s_name = skill_info["name"]
+                    s_desc = skill_info.get("description", "").lower()
+                    # Match if skill name or key description words appear in user message
+                    name_words = s_name.replace("-", " ").split()
+                    if all(w in msg_lower for w in name_words) or (s_desc and any(
+                        phrase in msg_lower for phrase in [s_name.replace("-", " ")]
+                    )):
+                        if s_name not in active:
+                            active.append(s_name)
+                            ui_state["active_skills"] = active
+                            SKILLS.active_skill = s_name
+                            add_message('system', f'Auto-matched skill: {s_name}')
+                            break  # Only auto-load one skill
+
             # Sync skills auto-activated via tool_skill() into ui_state (drains pending list)
             if SKILLS._pending_activations:
                 active = ui_state.get("active_skills", [])
