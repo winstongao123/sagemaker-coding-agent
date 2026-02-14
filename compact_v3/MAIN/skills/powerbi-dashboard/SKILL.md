@@ -59,16 +59,17 @@ Before generating, read these reference documents for correct patterns:
 ## Critical Rules
 
 0. **NEVER use `create_excel` or any Excel-based tool as a fallback.** This skill produces Power BI `.pbip` projects only. If you cannot create a Power BI dashboard for any reason, explain the issue to the user — do NOT silently fall back to Excel. Even if `ask_user` times out or the user skips the question, proceed with reasonable defaults and create the `.pbip` project.
-1. **INVALID visual types**: `stackedColumnChart`, `stackedBarChart` - use `clusteredColumnChart`/`clusteredBarChart` with a `Series` field instead
-2. **Combo chart query roles**: `Y` = bars, `Y2` = line. NEVER use `"Column y"`/`"Line y"`
-3. **Field reference by visual type**: Tables use `_measure_field()`. Bar/column charts use `_measure_field()` for averages, `_agg_col_field(Sum)` for sums. Combo charts use `_agg_col_field(Sum)` ONLY - Average in combo Y/Y2 renders blank. For average metrics, use a bar chart instead of combo.
-4. **Navigation**: Use `pageNavigator` visual type - NOT card visuals (decorative only)
-5. **TMDL encoding**: UTF-8 with BOM (`utf-8-sig`) for `.tmdl` files
-6. **Literal strings**: Must be single-quoted: `"'text'"`, numbers suffixed with D: `"13D"`
-7. **Max visuals per page**: 6-7 content visuals. Executive page: no slicers.
-8. **Layout**: 1280x720 canvas. Header h=40, PageNav h=32, content starts at y=72.
-9. **Dimension table M partitions**: Use hardcoded `#table()` syntax. NEVER use `DISTINCT()` (DAX, not valid M/Power Query).
-10. **TMDL M expression indentation**: `let`/`in` at 3 tabs, body at 4 tabs. Wrong indentation causes `UnknownKeyword 'in'` error. Follow the template exactly.
+1. **NEVER write a generator from scratch.** Always base your file on `generate_template.py`. Copy ALL helper functions (`_lit_bool`, `_lit_num`, `_solid_color`, `_projection`, `_visual_json`, `gen_pbip`, `gen_gitignore`, etc.) EXACTLY as-is. Only customize the sections listed under "What to customize." The template's `gen_pbip()` schema, `gen_semantic_model()` structure, and PBIR JSON patterns are validated against Power BI Desktop — inventing your own will fail.
+2. **INVALID visual types**: `stackedColumnChart`, `stackedBarChart` - use `clusteredColumnChart`/`clusteredBarChart` with a `Series` field instead
+3. **Combo chart query roles**: `Y` = bars, `Y2` = line. NEVER use `"Column y"`/`"Line y"`
+4. **Field reference by visual type**: Tables use `_measure_field()`. Bar/column charts use `_measure_field()` for averages, `_agg_col_field(Sum)` for sums. Combo charts use `_agg_col_field(Sum)` ONLY - Average in combo Y/Y2 renders blank. For average metrics, use a bar chart instead of combo.
+5. **Navigation**: Use `pageNavigator` visual type - NOT card visuals (decorative only)
+6. **TMDL encoding**: UTF-8 with BOM (`utf-8-sig`) for `.tmdl` files
+7. **Literal strings**: Must be single-quoted: `"'text'"`, numbers suffixed with D: `"13D"`
+8. **Max visuals per page**: 6-7 content visuals. Executive page: no slicers.
+9. **Layout**: 1280x720 canvas. Header h=40, PageNav h=32, content starts at y=72.
+10. **Dimension table M partitions**: Use hardcoded `#table()` syntax. NEVER use `DISTINCT()` (DAX, not valid M/Power Query).
+11. **TMDL M expression indentation**: `let`/`in` at 3 tabs, body at 4 tabs. Wrong indentation causes `UnknownKeyword 'in'` error. Follow the template exactly.
 
 ## Page Layout Template
 
@@ -137,7 +138,7 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
 ### Phase 4: Build & Validate
 8. Read `reference/SOP.md` for patterns (especially Steps 4-7, 11)
 9. Copy `generate_template.py` to `{project_name}/generate_project.py`
-10. **IMPORTANT: Write the COMPLETE customized file in ONE `write_file` call.** Do NOT edit the template piece by piece — the file is 2000+ lines and surgical edits waste turns and introduce bugs. Instead: read the template fully, understand the helper function signatures, then write the entire customized file at once.
+10. **IMPORTANT: Write the COMPLETE customized file in ONE `write_file` call.** Do NOT edit the template piece by piece — the file is 2000+ lines and surgical edits waste turns and introduce bugs. Instead: read the template fully, understand the helper function signatures, then write the entire customized file at once. You MUST preserve all helper functions, `gen_pbip()`, `gen_gitignore()`, and structural code from the template — only change `PROJECT_NAME`, `generate_sample_data()`, semantic model tables/measures, and report pages/visuals. NEVER invent your own PBIR JSON or `.pbip` schema — use exactly what the template produces.
 11. Run `python generate_project.py`
 12. If errors occur, read the error, fix the specific issue, and re-run. Do NOT rewrite the entire file for small fixes.
 13. Validate: all JSON parses, no visual overlaps, correct indentation
