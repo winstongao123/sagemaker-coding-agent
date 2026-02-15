@@ -2177,6 +2177,7 @@ class TokenTracker:
     """Tracks API token usage, cost, and cache hits per session."""
 
     def __init__(self):
+        self._fixed_overhead = None  # Cached: system prompt + tool schemas + Bedrock overhead
         self.reset()
 
     def reset(self):
@@ -2190,6 +2191,7 @@ class TokenTracker:
         self.last_output = 0
         self.api_calls = 0
         self.session_cost = 0.0
+        self.last_cost = 0.0
         self._model_id = CONFIG.model_id
 
     def add(self, usage: dict, model_id: str = None):
@@ -2208,12 +2210,15 @@ class TokenTracker:
         self.session_cache_write += cache_write
         self.api_calls += 1
 
-        # Calculate cost
-        mid = model_id or self._model_id
+        # Calculate cost (use current CONFIG.model_id in case user changed model mid-session)
+        mid = model_id or CONFIG.model_id
         pricing = _MODEL_PRICING.get(mid)
         if pricing:
             cost = (input_tokens / 1000) * pricing["input"] + (output_tokens / 1000) * pricing["output"]
             self.session_cost += cost
+            self.last_cost = cost
+        else:
+            self.last_cost = 0.0
 
     def get_last(self) -> str:
         """Get last call usage as string."""
@@ -2229,6 +2234,17 @@ class TokenTracker:
             return f"${self.session_cost:.4f}"
         return f"${self.session_cost:.2f}"
 
+    def get_fixed_overhead(self) -> int:
+        """Get fixed token overhead per API call (system prompt + tool schemas + Bedrock). Cached."""
+        if self._fixed_overhead is None:
+            try:
+                sys_tokens = len(SYSTEM_PROMPT) // 4
+                tools_tokens = len(str(get_tool_definitions())) // 4
+                self._fixed_overhead = sys_tokens + tools_tokens + 346  # 346 = Bedrock tool use prompt
+            except Exception:
+                self._fixed_overhead = 3350  # Fallback estimate
+        return self._fixed_overhead
+
     def get_stats(self) -> dict:
         """Get full stats."""
         return {
@@ -2241,6 +2257,7 @@ class TokenTracker:
             "last_output": self.last_output,
             "api_calls": self.api_calls,
             "session_cost_usd": round(self.session_cost, 6),
+            "last_cost_usd": round(self.last_cost, 6),
         }
 
 # Initialize token tracker
@@ -4164,11 +4181,11 @@ TOOLS = {
     "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. Must read first.",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences"}}, "required": ["file_path", "old_string", "new_string"]}),
 
-    "glob": (tool_glob, False, "Find files by glob pattern (e.g., '**/*.py')",
+    "glob": (tool_glob, False, "Find files by name pattern (e.g., **/*.py for all Python files recursively, src/*.ts for TypeScript in src/)",
         {"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string", "description": "Directory to search"}}, "required": ["pattern"]}),
 
-    "grep": (tool_grep, False, "Search file contents with regex",
-        {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "Filter files"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
+    "grep": (tool_grep, False, "Search for text or keywords inside files. Supports regular expressions for advanced patterns.",
+        {"type": "object", "properties": {"pattern": {"type": "string", "description": "Text or regex pattern to search for"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "File filter (e.g. *.py)"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
 
     "list_dir": (tool_list_dir, False, "List directory contents",
         {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}),
@@ -4234,7 +4251,7 @@ TOOLS = {
     "todo_read": (tool_todo_read, False, "Read current task list",
         {"type": "object", "properties": {}, "required": []}),
 
-    "semantic_search": (tool_semantic_search, False, "Semantic code search using AI embeddings. Actions: index (index codebase), search (find code), status (check index).",
+    "semantic_search": (tool_semantic_search, False, "Search code by meaning, not just keywords (AI-powered). Must run action='index' on a directory first, then action='search' to find code.",
         {"type": "object", "properties": {"action": {"type": "string", "enum": ["index", "search", "status"]}, "query": {"type": "string", "description": "Search query (for search action)"}, "path": {"type": "string", "description": "Directory to index"}, "top_k": {"type": "integer", "description": "Results count (default 5)"}}, "required": ["action"]}),
 
     "skill": (tool_skill, False,
@@ -4310,7 +4327,7 @@ Use todo_write to plan and track multi-step tasks. Only ONE todo in_progress at 
 - create_pdf (.pdf): reports with text, tables, images
 - create_notebook (.ipynb): Jupyter notebooks with code and markdown cells
 - create_markdown (.md): documentation files
-- For structural diagrams (architecture, flowcharts): use ASCII art, NOT create_chart.
+- For flowcharts/architecture diagrams: use ASCII art. create_chart is for data charts only (bar, line, pie, scatter).
 
 # Security & Safety
 - Workspace boundary enforced — cannot access files outside project directory.
@@ -4337,7 +4354,7 @@ Use the `task` tool to delegate complex subtasks to specialized agents:
 Proactively delegate when a task benefits from focused execution.
 
 # MCP (Model Context Protocol)
-MCP tools from `opencode.json` are auto-registered as `mcp_<server>_<tool>`. Prefer MCP tools over generic alternatives.
+MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Prefer MCP tools when available.
 
 # Commands
 `/cost`, `/revert <file|all>`, `/verify [full|quick|pre-commit]`, `/checkpoint [name|list]`, `/commands` (custom).
@@ -5409,39 +5426,57 @@ def create_chat_ui(mock_mode: bool = None):
         session_dropdown.options = options
 
     def update_tokens_display():
-        """Update token display with progress bar."""
+        """Update token display with cost monitor and context progress bar."""
         stats = TOKENS.get_stats()
         c = get_colors()
 
-        # Use message-based estimation for context % (consistent with auto-compact trigger)
-        # This shows actual context window usage, not cumulative API call totals
+        # Context window estimation (message-based, consistent with auto-compact trigger)
         if ui_state["agent"] and ui_state["agent"].messages:
             ctx_tokens = CONTEXT.estimate_tokens(ui_state["agent"].messages)
         else:
             ctx_tokens = 0
-        max_ctx = CONFIG.context_max_tokens  # 200000
+        max_ctx = CONFIG.context_max_tokens
         ctx_pct = (ctx_tokens / max_ctx * 100) if max_ctx > 0 else 0
 
         # Color based on context usage
         if ctx_pct >= 90:
-            ctx_color = "#f44336"  # red
+            ctx_color = "#f44336"
         elif ctx_pct >= 75:
-            ctx_color = "#ff9800"  # orange
+            ctx_color = "#ff9800"
         else:
-            ctx_color = "#4caf50"  # green
+            ctx_color = "#4caf50"
 
-        # Progress bar
         bar_width = min(ctx_pct, 100)
 
-        # Show both: cumulative totals (info) and context window % (important)
+        # Cost formatting
+        session_cost = stats["session_cost_usd"]
+        last_cost = stats["last_cost_usd"]
+        cost_fmt = f"${session_cost:.4f}" if session_cost < 0.01 else f"${session_cost:.2f}"
+        last_fmt = f"${last_cost:.4f}" if last_cost < 0.01 else f"${last_cost:.2f}"
+
+        # Model rate (per 1M tokens for readability)
+        pricing = _MODEL_PRICING.get(CONFIG.model_id)
+        if pricing:
+            rate_str = f'${pricing["input"]*1000:.2f}/${pricing["output"]*1000:.2f} per 1M in/out'
+        else:
+            rate_str = 'pricing N/A'
+
+        # Fixed overhead per API call (system prompt + tool schemas + Bedrock)
+        overhead = TOKENS.get_fixed_overhead()
+        true_ctx = ctx_tokens + overhead
+
         tokens_html.value = f'''
-        <div style="font-size:11px;color:{c["fg_muted"]};">
-            <span>📊 API Totals - In: <b>{stats["session_input"]:,}</b> | Out: <b>{stats["session_output"]:,}</b> | Calls: {stats["api_calls"]}</span>
-            <div style="margin-top:3px;">
+        <div style="font-size:11px;color:{c["fg_muted"]};line-height:1.5;">
+            <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
+                <span>📊 API: In <b>{stats["session_input"]:,}</b> | Out <b>{stats["session_output"]:,}</b> | Calls {stats["api_calls"]}</span>
+                <span>💰 Cost: <b>{cost_fmt}</b> | Last: {last_fmt} | {rate_str}</span>
+            </div>
+            <div style="margin-top:3px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
                 <span style="color:{ctx_color}">Context Window: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,})</span>
-                <div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">
-                    <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;"></div>
-                </div>
+                <span style="font-size:10px;">True context/call: ~{true_ctx:,} (msgs + ~{overhead:,} overhead)</span>
+            </div>
+            <div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">
+                <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;"></div>
             </div>
         </div>
         '''
@@ -5794,13 +5829,22 @@ def create_chat_ui(mock_mode: bool = None):
             return
         if msg == "/cost":
             stats = TOKENS.get_stats()
+            pricing = _MODEL_PRICING.get(CONFIG.model_id)
+            rate_str = ""
+            if pricing:
+                rate_str = f"\n- Rate: ${pricing['input']*1000:.2f} / ${pricing['output']*1000:.2f} per 1M in/out"
+            overhead = TOKENS.get_fixed_overhead()
+            last_cost = stats['last_cost_usd']
+            last_fmt = f"${last_cost:.4f}" if last_cost < 0.01 else f"${last_cost:.2f}"
             add_message('system',
                 f"Session Cost: **{TOKENS.get_cost()}**\n"
                 f"- Input: {stats['session_input']:,} tokens\n"
                 f"- Output: {stats['session_output']:,} tokens\n"
                 f"- Cache read: {stats['session_cache_read']:,} tokens\n"
                 f"- API calls: {stats['api_calls']}\n"
-                f"- Model: {CONFIG.model_id}")
+                f"- Last call cost: {last_fmt}\n"
+                f"- Model: {CONFIG.model_id}{rate_str}\n"
+                f"- Fixed overhead/call: ~{overhead:,} tokens (system prompt + tool schemas + Bedrock)")
             input_box.value = ""
             return
         # /verify command - auto-loads verify skill and runs verification
