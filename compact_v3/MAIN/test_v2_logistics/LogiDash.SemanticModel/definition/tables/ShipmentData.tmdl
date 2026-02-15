@@ -1,0 +1,263 @@
+table ShipmentData
+	lineageTag: 3f3f7a01-38de-5131-a5e7-597106c27c1e
+
+	measure 'Total Shipments' = SUM(ShipmentData[Shipments])
+		formatString: #,##0
+		lineageTag: 17692a86-2dc0-54d8-84e5-36ab6911de23
+
+	measure 'Total Units' = SUM(ShipmentData[UnitsShipped])
+		formatString: #,##0
+		lineageTag: 27322a33-9247-52f3-a4df-892d63995229
+
+	measure 'Avg Delivery Days' = AVERAGE(ShipmentData[DeliveryDays])
+		formatString: #,##0.0
+		lineageTag: af678e13-a11c-57d1-aee4-60e0f96d01d1
+
+	measure 'Total Freight Cost' = SUM(ShipmentData[FreightCost])
+		formatString: $#,##0
+		lineageTag: 8c072fdc-1c24-5438-af93-ca5ffeb06a43
+
+	measure 'On-Time %' = DIVIDE(SUM(ShipmentData[OnTimeCount]), SUM(ShipmentData[Shipments]))
+		formatString: #,##0.0%
+		lineageTag: 2db8d22d-d24a-5941-800d-0787f1189d72
+
+	measure 'Damage Rate' = DIVIDE(SUM(ShipmentData[DamagedUnits]), SUM(ShipmentData[UnitsShipped]))
+		formatString: #,##0.00%
+		lineageTag: 42c0dbaf-08b2-57d3-974d-59503d6563fb
+
+	measure 'Avg Freight Per Unit' = DIVIDE(SUM(ShipmentData[FreightCost]), SUM(ShipmentData[UnitsShipped]))
+		formatString: $#,##0.00
+		lineageTag: fccf2494-d64f-5593-b1a6-a45201a6ed52
+
+	measure 'Total Returns' = SUM(ShipmentData[ReturnCount])
+		formatString: #,##0
+		lineageTag: 98686dea-3a7d-51ec-a0ae-15871f4a2092
+
+	measure 'Return Rate' = DIVIDE(SUM(ShipmentData[ReturnCount]), SUM(ShipmentData[Shipments]))
+		formatString: #,##0.0%
+		lineageTag: fc38182d-ce2d-54fb-bede-3cf9b089170e
+
+	column DateKey
+		dataType: int64
+		lineageTag: f292d78e-672e-57dc-a7ef-19862784ec07
+		summarizeBy: none
+		sourceColumn: DateKey
+
+	column WarehouseKey
+		dataType: string
+		lineageTag: 795858ae-e6e3-5a38-babc-fcb89e4facb8
+		summarizeBy: none
+		sourceColumn: WarehouseKey
+
+	column CarrierKey
+		dataType: string
+		lineageTag: 79a02220-cbe1-5337-829f-ac590b90ca3e
+		summarizeBy: none
+		sourceColumn: CarrierKey
+
+	column ProductTypeKey
+		dataType: string
+		lineageTag: 5dc78980-a6ab-5ffe-ab48-48a879187f93
+		summarizeBy: none
+		sourceColumn: ProductTypeKey
+
+	column Warehouse
+		dataType: string
+		lineageTag: cba6aa99-b7cc-5621-8340-f327fa443c32
+		summarizeBy: none
+		sourceColumn: Warehouse
+
+	column Region
+		dataType: string
+		lineageTag: 32dafbf1-a03b-5aa4-93dc-776f83fbea9c
+		summarizeBy: none
+		sourceColumn: Region
+
+	column Carrier
+		dataType: string
+		lineageTag: 9d4d3e16-9a7a-50bb-8665-e90cde9f59ef
+		summarizeBy: none
+		sourceColumn: Carrier
+
+	column ProductType
+		dataType: string
+		lineageTag: b2cc741a-bfdb-564f-9d41-b539e5ed4602
+		summarizeBy: none
+		sourceColumn: ProductType
+
+	column Year
+		dataType: int64
+		lineageTag: c07da00a-d437-5416-aa20-97a552d0a805
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Quarter
+		dataType: string
+		lineageTag: 873a258c-fbd2-5277-84bd-212cdde628da
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column Month
+		dataType: string
+		lineageTag: 30f38e93-a616-50aa-be52-5ff32d61c316
+		summarizeBy: none
+		sourceColumn: Month
+
+	column MonthNum
+		dataType: int64
+		lineageTag: 270bdb3f-3cf0-56d0-8021-e4957488d4e7
+		summarizeBy: none
+		sourceColumn: MonthNum
+
+	column YearMonth
+		dataType: string
+		lineageTag: 0ce17f48-5105-5a23-aecb-1489b0d36672
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+	column YearMonthSort
+		dataType: int64
+		lineageTag: 6fec693f-2d23-5c9f-ac24-d77ff5f6d287
+		summarizeBy: none
+		sourceColumn: YearMonthSort
+
+	column Shipments
+		dataType: int64
+		lineageTag: 0b824d4a-3ae8-5584-af61-7dc69c3c5aef
+		summarizeBy: sum
+		sourceColumn: Shipments
+
+	column UnitsShipped
+		dataType: int64
+		lineageTag: 92a6014e-b817-5229-9799-1567fd6324e5
+		summarizeBy: sum
+		sourceColumn: UnitsShipped
+
+	column DeliveryDays
+		dataType: double
+		lineageTag: 1421eea4-68e4-582e-94da-9bc714ad7792
+		summarizeBy: average
+		sourceColumn: DeliveryDays
+
+	column FreightCost
+		dataType: double
+		lineageTag: 4a99f31b-3b18-5095-96b5-c3d587bdcc5e
+		summarizeBy: sum
+		sourceColumn: FreightCost
+
+	column DamagedUnits
+		dataType: int64
+		lineageTag: e2414a39-1ec3-57cb-82a4-f6efcfae4799
+		summarizeBy: sum
+		sourceColumn: DamagedUnits
+
+	column OnTimeCount
+		dataType: int64
+		lineageTag: 32ace226-2278-5d16-9eb6-45e2414ed2f8
+		summarizeBy: sum
+		sourceColumn: OnTimeCount
+
+	column ReturnCount
+		dataType: int64
+		lineageTag: 49dfa054-544d-5bfc-b836-d5183414a0cf
+		summarizeBy: sum
+		sourceColumn: ReturnCount
+
+	column 'DeliveryStatus' = IF([DeliveryDays] <= 3, "Fast", IF([DeliveryDays] <= 7, "Standard", "Slow"))
+		dataType: string
+		lineageTag: afc72bf3-7864-552f-8fb4-e9a4d0c03790
+		summarizeBy: none
+		isDataTypeInferred: true
+
+	column 'FreightPerUnit' = DIVIDE([FreightCost], [UnitsShipped])
+		dataType: double
+		lineageTag: 4676c344-a295-5797-80de-292159cb1e2e
+		summarizeBy: average
+		formatString: $#,##0.00
+		isDataTypeInferred: true
+
+	column 'DamageRate' = DIVIDE([DamagedUnits], [UnitsShipped])
+		dataType: double
+		lineageTag: 939b8fdc-a5cf-5f4d-aaf9-cc265ac3cf77
+		summarizeBy: average
+		formatString: #,##0.0%
+		isDataTypeInferred: true
+
+	partition ShipmentData = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [DateKey = Int64.Type, WarehouseKey = text, CarrierKey = text, ProductTypeKey = text, Warehouse = text, Region = text, Carrier = text, ProductType = text, Year = Int64.Type, Quarter = text, Month = text, MonthNum = Int64.Type, YearMonth = text, YearMonthSort = Int64.Type, Shipments = Int64.Type, UnitsShipped = Int64.Type, DeliveryDays = number, FreightCost = number, DamagedUnits = Int64.Type, OnTimeCount = Int64.Type, ReturnCount = Int64.Type],
+					{
+						{202401, "WH-N", "STD", "FRAG", "North Hub", "North", "Standard Logistics", "Fragile", 2024, "Q1", "January", 1, "2024-01", 202401, 70, 2070, 3.5, 23521.72, 9, 136, 7},
+						{202401, "WH-S", "EXP", "ELEC", "South Hub", "South", "Express Freight", "Electronics", 2024, "Q1", "January", 1, "2024-01", 202401, 91, 332, 11.9, 12680.18, 25, 63, 12},
+						{202401, "WH-E", "EXP", "FRAG", "East Hub", "East", "Express Freight", "Fragile", 2024, "Q1", "January", 1, "2024-01", 202401, 102, 1060, 2.1, 19578.62, 17, 135, 6},
+						{202401, "WH-W", "EXP", "PERI", "West Hub", "West", "Express Freight", "Perishables", 2024, "Q1", "January", 1, "2024-01", 202401, 38, 763, 12.0, 17582.15, 28, 127, 2},
+						{202401, "WH-C", "EXP", "PERI", "Central Hub", "Central", "Express Freight", "Perishables", 2024, "Q1", "January", 1, "2024-01", 202401, 104, 818, 2.2, 11800.34, 2, 152, 3},
+						{202402, "WH-N", "STD", "BULK", "North Hub", "North", "Standard Logistics", "Bulk Goods", 2024, "Q1", "February", 2, "2024-02", 202402, 180, 4622, 13.7, 9109.63, 16, 29, 12},
+						{202402, "WH-S", "ECO", "PERI", "South Hub", "South", "Economy Shipping", "Perishables", 2024, "Q1", "February", 2, "2024-02", 202402, 76, 4791, 7.1, 18584.66, 24, 113, 0},
+						{202402, "WH-E", "EXP", "ELEC", "East Hub", "East", "Express Freight", "Electronics", 2024, "Q1", "February", 2, "2024-02", 202402, 146, 423, 10.7, 19123.86, 13, 45, 8},
+						{202402, "WH-W", "ECO", "BULK", "West Hub", "West", "Economy Shipping", "Bulk Goods", 2024, "Q1", "February", 2, "2024-02", 202402, 34, 3962, 11.7, 16535.71, 4, 91, 2},
+						{202402, "WH-C", "EXP", "BULK", "Central Hub", "Central", "Express Freight", "Bulk Goods", 2024, "Q1", "February", 2, "2024-02", 202402, 110, 3503, 8.5, 2023.86, 15, 52, 0},
+						{202403, "WH-N", "ECO", "ELEC", "North Hub", "North", "Economy Shipping", "Electronics", 2024, "Q1", "March", 3, "2024-03", 202403, 81, 822, 9.7, 11923.49, 27, 114, 15},
+						{202403, "WH-S", "EXP", "PERI", "South Hub", "South", "Express Freight", "Perishables", 2024, "Q1", "March", 3, "2024-03", 202403, 81, 2242, 3.7, 21021.72, 5, 57, 4},
+						{202403, "WH-E", "EXP", "ELEC", "East Hub", "East", "Express Freight", "Electronics", 2024, "Q1", "March", 3, "2024-03", 202403, 79, 4208, 11.0, 24189.73, 18, 168, 13},
+						{202403, "WH-W", "STD", "FRAG", "West Hub", "West", "Standard Logistics", "Fragile", 2024, "Q1", "March", 3, "2024-03", 202403, 173, 944, 7.1, 10667.87, 17, 85, 9},
+						{202403, "WH-C", "STD", "PERI", "Central Hub", "Central", "Standard Logistics", "Perishables", 2024, "Q1", "March", 3, "2024-03", 202403, 24, 4948, 7.3, 1373.47, 23, 51, 0},
+						{202404, "WH-N", "EXP", "ELEC", "North Hub", "North", "Express Freight", "Electronics", 2024, "Q2", "April", 4, "2024-04", 202404, 150, 1771, 9.8, 19586.78, 5, 42, 12},
+						{202404, "WH-S", "STD", "BULK", "South Hub", "South", "Standard Logistics", "Bulk Goods", 2024, "Q2", "April", 4, "2024-04", 202404, 145, 4462, 10.0, 19325.34, 6, 181, 13},
+						{202404, "WH-E", "STD", "FRAG", "East Hub", "East", "Standard Logistics", "Fragile", 2024, "Q2", "April", 4, "2024-04", 202404, 42, 4389, 5.2, 22890.02, 24, 86, 11},
+						{202404, "WH-W", "ECO", "BULK", "West Hub", "West", "Economy Shipping", "Bulk Goods", 2024, "Q2", "April", 4, "2024-04", 202404, 187, 4396, 6.1, 13594.94, 27, 80, 12},
+						{202404, "WH-C", "ECO", "FRAG", "Central Hub", "Central", "Economy Shipping", "Fragile", 2024, "Q2", "April", 4, "2024-04", 202404, 40, 2346, 9.8, 4053.4, 11, 193, 1},
+						{202405, "WH-N", "EXP", "ELEC", "North Hub", "North", "Express Freight", "Electronics", 2024, "Q2", "May", 5, "2024-05", 202405, 155, 281, 12.1, 24049.78, 3, 178, 4},
+						{202405, "WH-S", "STD", "PERI", "South Hub", "South", "Standard Logistics", "Perishables", 2024, "Q2", "May", 5, "2024-05", 202405, 187, 2910, 1.8, 13133.51, 19, 164, 12},
+						{202405, "WH-E", "EXP", "FRAG", "East Hub", "East", "Express Freight", "Fragile", 2024, "Q2", "May", 5, "2024-05", 202405, 40, 3045, 6.9, 15694.36, 27, 16, 1},
+						{202405, "WH-W", "STD", "PERI", "West Hub", "West", "Standard Logistics", "Perishables", 2024, "Q2", "May", 5, "2024-05", 202405, 146, 3415, 11.2, 13561.31, 26, 34, 13},
+						{202405, "WH-C", "EXP", "ELEC", "Central Hub", "Central", "Express Freight", "Electronics", 2024, "Q2", "May", 5, "2024-05", 202405, 28, 3179, 11.2, 1439.62, 25, 178, 8},
+						{202406, "WH-N", "ECO", "FRAG", "North Hub", "North", "Economy Shipping", "Fragile", 2024, "Q2", "June", 6, "2024-06", 202406, 182, 1529, 8.1, 16877.18, 2, 26, 12},
+						{202406, "WH-S", "ECO", "ELEC", "South Hub", "South", "Economy Shipping", "Electronics", 2024, "Q2", "June", 6, "2024-06", 202406, 65, 4045, 3.7, 14411.23, 23, 97, 10},
+						{202406, "WH-E", "STD", "PERI", "East Hub", "East", "Standard Logistics", "Perishables", 2024, "Q2", "June", 6, "2024-06", 202406, 68, 4081, 8.5, 23524.98, 12, 183, 6},
+						{202406, "WH-W", "STD", "ELEC", "West Hub", "West", "Standard Logistics", "Electronics", 2024, "Q2", "June", 6, "2024-06", 202406, 74, 2612, 9.4, 8602.5, 30, 179, 13},
+						{202406, "WH-C", "EXP", "FRAG", "Central Hub", "Central", "Express Freight", "Fragile", 2024, "Q2", "June", 6, "2024-06", 202406, 184, 1846, 4.3, 20012.55, 30, 55, 11},
+						{202407, "WH-N", "ECO", "PERI", "North Hub", "North", "Economy Shipping", "Perishables", 2024, "Q3", "July", 7, "2024-07", 202407, 87, 4415, 13.4, 7664.64, 15, 76, 3},
+						{202407, "WH-S", "STD", "ELEC", "South Hub", "South", "Standard Logistics", "Electronics", 2024, "Q3", "July", 7, "2024-07", 202407, 91, 2469, 3.2, 725.88, 9, 164, 13},
+						{202407, "WH-E", "STD", "BULK", "East Hub", "East", "Standard Logistics", "Bulk Goods", 2024, "Q3", "July", 7, "2024-07", 202407, 196, 3377, 12.4, 20148.17, 21, 127, 11},
+						{202407, "WH-W", "STD", "BULK", "West Hub", "West", "Standard Logistics", "Bulk Goods", 2024, "Q3", "July", 7, "2024-07", 202407, 117, 1488, 6.0, 21750.2, 13, 171, 8},
+						{202407, "WH-C", "EXP", "FRAG", "Central Hub", "Central", "Express Freight", "Fragile", 2024, "Q3", "July", 7, "2024-07", 202407, 92, 3693, 7.6, 11324.46, 18, 20, 2},
+						{202408, "WH-N", "STD", "FRAG", "North Hub", "North", "Standard Logistics", "Fragile", 2024, "Q3", "August", 8, "2024-08", 202408, 115, 2277, 8.8, 21569.07, 11, 106, 4},
+						{202408, "WH-S", "EXP", "BULK", "South Hub", "South", "Express Freight", "Bulk Goods", 2024, "Q3", "August", 8, "2024-08", 202408, 198, 1277, 3.2, 12573.9, 9, 102, 11},
+						{202408, "WH-E", "EXP", "FRAG", "East Hub", "East", "Express Freight", "Fragile", 2024, "Q3", "August", 8, "2024-08", 202408, 55, 1517, 5.3, 17580.32, 15, 165, 3},
+						{202408, "WH-W", "ECO", "BULK", "West Hub", "West", "Economy Shipping", "Bulk Goods", 2024, "Q3", "August", 8, "2024-08", 202408, 79, 1741, 10.4, 14862.94, 30, 138, 3},
+						{202408, "WH-C", "ECO", "BULK", "Central Hub", "Central", "Economy Shipping", "Bulk Goods", 2024, "Q3", "August", 8, "2024-08", 202408, 25, 843, 1.4, 18278.27, 15, 134, 8},
+						{202409, "WH-N", "STD", "ELEC", "North Hub", "North", "Standard Logistics", "Electronics", 2024, "Q3", "September", 9, "2024-09", 202409, 69, 4275, 5.7, 6149.54, 28, 194, 1},
+						{202409, "WH-S", "ECO", "PERI", "South Hub", "South", "Economy Shipping", "Perishables", 2024, "Q3", "September", 9, "2024-09", 202409, 65, 4688, 11.3, 7295.71, 30, 92, 1},
+						{202409, "WH-E", "ECO", "ELEC", "East Hub", "East", "Economy Shipping", "Electronics", 2024, "Q3", "September", 9, "2024-09", 202409, 153, 1644, 5.8, 11526.93, 21, 137, 7},
+						{202409, "WH-W", "EXP", "BULK", "West Hub", "West", "Express Freight", "Bulk Goods", 2024, "Q3", "September", 9, "2024-09", 202409, 134, 3242, 10.4, 14971.64, 3, 109, 5},
+						{202409, "WH-C", "EXP", "BULK", "Central Hub", "Central", "Express Freight", "Bulk Goods", 2024, "Q3", "September", 9, "2024-09", 202409, 79, 2425, 11.5, 12932.2, 10, 82, 10},
+						{202410, "WH-N", "STD", "FRAG", "North Hub", "North", "Standard Logistics", "Fragile", 2024, "Q4", "October", 10, "2024-10", 202410, 100, 1976, 12.7, 1225.11, 0, 157, 7},
+						{202410, "WH-S", "ECO", "ELEC", "South Hub", "South", "Economy Shipping", "Electronics", 2024, "Q4", "October", 10, "2024-10", 202410, 128, 845, 13.3, 18384.57, 21, 124, 7},
+						{202410, "WH-E", "ECO", "BULK", "East Hub", "East", "Economy Shipping", "Bulk Goods", 2024, "Q4", "October", 10, "2024-10", 202410, 83, 2597, 5.3, 23158.71, 3, 180, 10},
+						{202410, "WH-W", "STD", "BULK", "West Hub", "West", "Standard Logistics", "Bulk Goods", 2024, "Q4", "October", 10, "2024-10", 202410, 66, 3376, 7.3, 10524.24, 5, 22, 1},
+						{202410, "WH-C", "EXP", "PERI", "Central Hub", "Central", "Express Freight", "Perishables", 2024, "Q4", "October", 10, "2024-10", 202410, 24, 3093, 13.5, 12523.01, 17, 134, 2},
+						{202411, "WH-N", "STD", "BULK", "North Hub", "North", "Standard Logistics", "Bulk Goods", 2024, "Q4", "November", 11, "2024-11", 202411, 159, 885, 8.9, 22683.26, 1, 49, 11},
+						{202411, "WH-S", "STD", "PERI", "South Hub", "South", "Standard Logistics", "Perishables", 2024, "Q4", "November", 11, "2024-11", 202411, 46, 1435, 13.2, 22924.13, 24, 90, 3},
+						{202411, "WH-E", "ECO", "FRAG", "East Hub", "East", "Economy Shipping", "Fragile", 2024, "Q4", "November", 11, "2024-11", 202411, 153, 2209, 1.2, 7606.15, 14, 72, 13},
+						{202411, "WH-W", "STD", "FRAG", "West Hub", "West", "Standard Logistics", "Fragile", 2024, "Q4", "November", 11, "2024-11", 202411, 64, 154, 8.2, 22597.1, 24, 138, 5},
+						{202411, "WH-C", "ECO", "ELEC", "Central Hub", "Central", "Economy Shipping", "Electronics", 2024, "Q4", "November", 11, "2024-11", 202411, 200, 347, 11.3, 17739.28, 20, 113, 6},
+						{202412, "WH-N", "STD", "PERI", "North Hub", "North", "Standard Logistics", "Perishables", 2024, "Q4", "December", 12, "2024-12", 202412, 51, 2634, 11.6, 20938.31, 29, 94, 6},
+						{202412, "WH-S", "ECO", "BULK", "South Hub", "South", "Economy Shipping", "Bulk Goods", 2024, "Q4", "December", 12, "2024-12", 202412, 83, 4552, 4.5, 10159.59, 4, 185, 0},
+						{202412, "WH-E", "EXP", "ELEC", "East Hub", "East", "Express Freight", "Electronics", 2024, "Q4", "December", 12, "2024-12", 202412, 55, 2623, 6.5, 11509.72, 19, 48, 7},
+						{202412, "WH-W", "ECO", "PERI", "West Hub", "West", "Economy Shipping", "Perishables", 2024, "Q4", "December", 12, "2024-12", 202412, 146, 804, 10.2, 15284.67, 16, 72, 13},
+						{202412, "WH-C", "STD", "BULK", "Central Hub", "Central", "Standard Logistics", "Bulk Goods", 2024, "Q4", "December", 12, "2024-12", 202412, 121, 304, 3.6, 1410.35, 6, 115, 13}
+					}
+				),
+				NormalizeMetrics = Table.TransformColumns(
+					Source,
+					{
+						{"DeliveryDays", each if _ < 0.5 then 0.5 else if _ > 30 then 30 else _, type number}
+					}
+				),
+				SortRows = Table.Sort(NormalizeMetrics, {{"WarehouseKey", Order.Ascending}})
+			in
+				SortRows

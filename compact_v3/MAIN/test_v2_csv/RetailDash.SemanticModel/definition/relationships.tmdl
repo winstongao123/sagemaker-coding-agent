@@ -1,0 +1,11 @@
+relationship 145ce82d-7655-523d-8171-bbff3e13afd4
+	fromColumn: SalesData.DateKey
+	toColumn: DimDate.DateKey
+
+relationship 89077dad-ed45-5942-a3d6-3fbadf79ad7b
+	fromColumn: SalesData.Store
+	toColumn: DimStore.Store
+
+relationship 2705ed11-db6d-5c99-9a49-eb94d9ac883a
+	fromColumn: SalesData.Category
+	toColumn: DimCategory.Category

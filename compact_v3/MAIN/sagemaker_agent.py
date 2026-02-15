@@ -5602,7 +5602,11 @@ def create_chat_ui(mock_mode: bool = None):
                 f'</div>'
             ))
         approval_box.layout.display = 'block'
-        send_btn.disabled = True
+        # Enable Send button as fallback — pressing Send = approve
+        # (fixes SageMaker Studio where dedicated Approve/Deny buttons may not fire)
+        send_btn.disabled = False
+        send_btn.layout.display = 'inline-block'
+        input_box.placeholder = 'Press Send to approve (or use Approve/Deny buttons above)...'
 
         # Wait with timeout (5 min max)
         max_wait = 300
@@ -5615,7 +5619,11 @@ def create_chat_ui(mock_mode: bool = None):
             waited += 0.1
 
         approval_box.layout.display = 'none'
-        send_btn.disabled = False
+        # Restore Send button to hidden state (agent still running)
+        send_btn.disabled = True
+        send_btn.layout.display = 'none'
+        input_box.placeholder = 'Type your message...'
+        pending_approval["event"] = None  # Clear stale event reference
 
         with approval_output:
             clear_output()
@@ -5691,7 +5699,11 @@ def create_chat_ui(mock_mode: bool = None):
                 f'{opts_html}</div>'
             ))
         ask_user_box.layout.display = 'block'
-        send_btn.disabled = True
+        # Enable Send button as fallback — user can type answer in chat input and press Send
+        # (fixes SageMaker Studio where dedicated Submit/Skip buttons may not fire)
+        send_btn.disabled = False
+        send_btn.layout.display = 'inline-block'
+        input_box.placeholder = 'Type your answer here and press Send (or use Submit above)...'
 
         # Wait with timeout (5 min max)
         max_wait = 300
@@ -5704,7 +5716,11 @@ def create_chat_ui(mock_mode: bool = None):
             waited += 0.1
 
         ask_user_box.layout.display = 'none'
-        send_btn.disabled = False
+        # Restore Send button to hidden state (agent still running)
+        send_btn.disabled = True
+        send_btn.layout.display = 'none'
+        input_box.placeholder = 'Type your message...'
+        pending_user_input["event"] = None  # Clear stale event reference
         with ask_user_output:
             clear_output()
 
@@ -6419,7 +6435,23 @@ def create_chat_ui(mock_mode: bool = None):
         """Run on_send in background thread so kernel thread stays free for widget events.
         Fixes: ask_user Submit/Skip buttons, Stop button, and approval dialogs all require
         the kernel thread to process click callbacks. Without threading, agent.run() blocks
-        the kernel thread and creates a deadlock."""
+        the kernel thread and creates a deadlock.
+
+        Also acts as fallback for ask_user and approval dialogs: if the dedicated widget
+        buttons (Submit/Skip/Approve/Deny) don't fire (e.g. SageMaker Studio comm issues),
+        the user can type in the regular input box and press Send instead."""
+        # Fallback: if ask_user is waiting, redirect Send input as the response
+        if pending_user_input.get("event") and pending_user_input["result"] is None:
+            val = input_box.value.strip() or "(no response)"
+            input_box.value = ""
+            pending_user_input["result"] = val
+            pending_user_input["event"].set()
+            return
+        # Fallback: if approval is waiting, Send = approve
+        if pending_approval.get("event") and pending_approval["result"] is None:
+            pending_approval["result"] = True
+            pending_approval["event"].set()
+            return
         if ui_state.get("lock"):
             return  # Agent already running
         ui_state["lock"] = True  # Set lock BEFORE spawning thread (atomic on kernel thread)

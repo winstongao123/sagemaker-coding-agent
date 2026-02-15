@@ -1,0 +1,257 @@
+table SalesData
+	lineageTag: ff42246c-cf21-520d-b910-f1c9d800cf30
+
+	measure 'Total Revenue' = SUM(SalesData[Revenue])
+		formatString: $#,##0
+		lineageTag: a7a2a644-6bdf-5ad0-b4e5-ed46269ab93b
+
+	measure 'Total Cost' = SUM(SalesData[Cost])
+		formatString: $#,##0
+		lineageTag: 62577277-a4e2-5be0-88ca-300bf13e855c
+
+	measure 'Total Profit' = SUM(SalesData[Revenue]) - SUM(SalesData[Cost])
+		formatString: $#,##0
+		lineageTag: 199f9962-231d-56fb-9bbb-4d15c421e677
+
+	measure 'Profit Margin %' = DIVIDE(SUM(SalesData[Revenue]) - SUM(SalesData[Cost]), SUM(SalesData[Revenue]))
+		formatString: #,##0.0%
+		lineageTag: c689c03e-80e2-592c-ab86-253cab711683
+
+	measure 'Total Units Sold' = SUM(SalesData[UnitsSold])
+		formatString: #,##0
+		lineageTag: bcd2b9b6-f3a2-53ba-9567-35cce3920a5d
+
+	measure 'Total Customers' = SUM(SalesData[CustomerCount])
+		formatString: #,##0
+		lineageTag: 53c78fe0-9a95-531f-88a3-0da3de200503
+
+	measure 'Avg Revenue per Customer' = DIVIDE(SUM(SalesData[Revenue]), SUM(SalesData[CustomerCount]))
+		formatString: $#,##0.00
+		lineageTag: 2e74f05e-31b2-5199-9abc-caf4935549fb
+
+	measure 'Return Rate %' = DIVIDE(SUM(SalesData[ReturnCount]), SUM(SalesData[UnitsSold]))
+		formatString: #,##0.0%
+		lineageTag: fc38182d-ce2d-54fb-bede-3cf9b089170e
+
+	measure 'Total Returns' = SUM(SalesData[ReturnCount])
+		formatString: #,##0
+		lineageTag: 98686dea-3a7d-51ec-a0ae-15871f4a2092
+
+	measure 'Avg Units per Customer' = DIVIDE(SUM(SalesData[UnitsSold]), SUM(SalesData[CustomerCount]))
+		formatString: #,##0.00
+		lineageTag: 9bfba8aa-d090-5de1-8a70-13d35e12283a
+
+	column DateKey
+		dataType: int64
+		lineageTag: f292d78e-672e-57dc-a7ef-19862784ec07
+		summarizeBy: none
+		sourceColumn: DateKey
+
+	column Store
+		dataType: string
+		lineageTag: 1de416b5-d93f-5200-b1b2-68b8233817ea
+		summarizeBy: none
+		sourceColumn: Store
+
+	column Category
+		dataType: string
+		lineageTag: 4990328f-ff05-558b-a297-5e3f2646a146
+		summarizeBy: none
+		sourceColumn: Category
+
+	column Region
+		dataType: string
+		lineageTag: 32dafbf1-a03b-5aa4-93dc-776f83fbea9c
+		summarizeBy: none
+		sourceColumn: Region
+
+	column Product
+		dataType: string
+		lineageTag: c068e393-87fd-598b-b37d-f9eeeb9148ad
+		summarizeBy: none
+		sourceColumn: Product
+
+	column Year
+		dataType: int64
+		lineageTag: c07da00a-d437-5416-aa20-97a552d0a805
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Quarter
+		dataType: string
+		lineageTag: 873a258c-fbd2-5277-84bd-212cdde628da
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column Month
+		dataType: string
+		lineageTag: 30f38e93-a616-50aa-be52-5ff32d61c316
+		summarizeBy: none
+		sourceColumn: Month
+		sortByColumn: MonthNum
+
+	column MonthNum
+		dataType: int64
+		lineageTag: 270bdb3f-3cf0-56d0-8021-e4957488d4e7
+		summarizeBy: none
+		sourceColumn: MonthNum
+
+	column YearMonth
+		dataType: string
+		lineageTag: 0ce17f48-5105-5a23-aecb-1489b0d36672
+		summarizeBy: none
+		sourceColumn: YearMonth
+		sortByColumn: YearMonthSort
+
+	column YearMonthSort
+		dataType: int64
+		lineageTag: 6fec693f-2d23-5c9f-ac24-d77ff5f6d287
+		summarizeBy: none
+		sourceColumn: YearMonthSort
+
+	column UnitsSold
+		dataType: int64
+		lineageTag: 1cc411a7-2f4a-50e5-bafe-6aa71745c32b
+		summarizeBy: sum
+		sourceColumn: UnitsSold
+
+	column Revenue
+		dataType: double
+		lineageTag: 04439262-687d-5429-a97d-61fafd950f57
+		summarizeBy: sum
+		sourceColumn: Revenue
+
+	column Cost
+		dataType: double
+		lineageTag: 9415d1ba-93aa-5e15-88d2-ea116053328b
+		summarizeBy: sum
+		sourceColumn: Cost
+
+	column CustomerCount
+		dataType: int64
+		lineageTag: 41b36cfe-72f8-5bd2-834c-cdbcd3488697
+		summarizeBy: sum
+		sourceColumn: CustomerCount
+
+	column ReturnCount
+		dataType: int64
+		lineageTag: 49dfa054-544d-5bfc-b836-d5183414a0cf
+		summarizeBy: sum
+		sourceColumn: ReturnCount
+
+	column 'Profit' = [Revenue] - [Cost]
+		dataType: double
+		lineageTag: e7416eae-d297-5dff-ad05-c3be2efffdae
+		summarizeBy: sum
+		formatString: $#,##0.00
+		isDataTypeInferred: true
+
+	column 'ProfitMargin' = DIVIDE([Revenue] - [Cost], [Revenue])
+		dataType: double
+		lineageTag: 58a11b75-06f8-592c-b4c8-7272bf0a7d47
+		summarizeBy: average
+		formatString: #,##0.0%
+		isDataTypeInferred: true
+
+	column 'ReturnRate' = DIVIDE([ReturnCount], [UnitsSold])
+		dataType: double
+		lineageTag: 411903ff-2833-57ed-b0aa-04b197985400
+		summarizeBy: average
+		formatString: #,##0.0%
+		isDataTypeInferred: true
+
+	partition SalesData = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [DateKey = Int64.Type, Store = text, Category = text, Region = text, Product = text, Year = Int64.Type, Quarter = text, Month = text, MonthNum = Int64.Type, YearMonth = text, YearMonthSort = Int64.Type, UnitsSold = Int64.Type, Revenue = number, Cost = number, CustomerCount = Int64.Type, ReturnCount = Int64.Type],
+					{
+						{202301, "Downtown", "Electronics", "East", "Laptop", 2023, "Q1", "January", 1, "2023-01", 202301, 12, 18000.0, 14400.0, 45, 1},
+						{202301, "Downtown", "Electronics", "East", "Phone", 2023, "Q1", "January", 1, "2023-01", 202301, 28, 14000.0, 9800.0, 82, 3},
+						{202301, "Downtown", "Clothing", "East", "Jacket", 2023, "Q1", "January", 1, "2023-01", 202301, 15, 2250.0, 1350.0, 35, 2},
+						{202301, "Downtown", "Clothing", "East", "Shoes", 2023, "Q1", "January", 1, "2023-01", 202301, 22, 3300.0, 1980.0, 55, 1},
+						{202301, "Mall", "Electronics", "East", "Laptop", 2023, "Q1", "January", 1, "2023-01", 202301, 8, 12000.0, 9600.0, 30, 0},
+						{202301, "Mall", "Electronics", "East", "Phone", 2023, "Q1", "January", 1, "2023-01", 202301, 35, 17500.0, 12250.0, 95, 4},
+						{202301, "Mall", "Clothing", "East", "Jacket", 2023, "Q1", "January", 1, "2023-01", 202301, 20, 3000.0, 1800.0, 48, 1},
+						{202301, "Mall", "Clothing", "East", "Shoes", 2023, "Q1", "January", 1, "2023-01", 202301, 30, 4500.0, 2700.0, 72, 2},
+						{202301, "Suburb", "Electronics", "West", "Laptop", 2023, "Q1", "January", 1, "2023-01", 202301, 5, 7500.0, 6000.0, 18, 0},
+						{202301, "Suburb", "Electronics", "West", "Phone", 2023, "Q1", "January", 1, "2023-01", 202301, 18, 9000.0, 6300.0, 42, 2},
+						{202301, "Suburb", "Clothing", "West", "Jacket", 2023, "Q1", "January", 1, "2023-01", 202301, 10, 1500.0, 900.0, 25, 1},
+						{202301, "Suburb", "Clothing", "West", "Shoes", 2023, "Q1", "January", 1, "2023-01", 202301, 14, 2100.0, 1260.0, 32, 0},
+						{202302, "Downtown", "Electronics", "East", "Laptop", 2023, "Q1", "February", 2, "2023-02", 202302, 15, 22500.0, 18000.0, 52, 2},
+						{202302, "Downtown", "Electronics", "East", "Phone", 2023, "Q1", "February", 2, "2023-02", 202302, 32, 16000.0, 11200.0, 88, 2},
+						{202302, "Downtown", "Clothing", "East", "Jacket", 2023, "Q1", "February", 2, "2023-02", 202302, 18, 2700.0, 1620.0, 42, 1},
+						{202302, "Downtown", "Clothing", "East", "Shoes", 2023, "Q1", "February", 2, "2023-02", 202302, 25, 3750.0, 2250.0, 60, 3},
+						{202302, "Mall", "Electronics", "East", "Laptop", 2023, "Q1", "February", 2, "2023-02", 202302, 10, 15000.0, 12000.0, 35, 1},
+						{202302, "Mall", "Electronics", "East", "Phone", 2023, "Q1", "February", 2, "2023-02", 202302, 40, 20000.0, 14000.0, 105, 3},
+						{202302, "Mall", "Clothing", "East", "Jacket", 2023, "Q1", "February", 2, "2023-02", 202302, 22, 3300.0, 1980.0, 55, 2},
+						{202302, "Mall", "Clothing", "East", "Shoes", 2023, "Q1", "February", 2, "2023-02", 202302, 35, 5250.0, 3150.0, 80, 1},
+						{202302, "Suburb", "Electronics", "West", "Laptop", 2023, "Q1", "February", 2, "2023-02", 202302, 7, 10500.0, 8400.0, 22, 1},
+						{202302, "Suburb", "Electronics", "West", "Phone", 2023, "Q1", "February", 2, "2023-02", 202302, 20, 10000.0, 7000.0, 48, 1},
+						{202302, "Suburb", "Clothing", "West", "Jacket", 2023, "Q1", "February", 2, "2023-02", 202302, 12, 1800.0, 1080.0, 28, 0},
+						{202302, "Suburb", "Clothing", "West", "Shoes", 2023, "Q1", "February", 2, "2023-02", 202302, 16, 2400.0, 1440.0, 38, 1},
+						{202303, "Downtown", "Electronics", "East", "Laptop", 2023, "Q1", "March", 3, "2023-03", 202303, 18, 27000.0, 21600.0, 58, 1},
+						{202303, "Downtown", "Electronics", "East", "Phone", 2023, "Q1", "March", 3, "2023-03", 202303, 38, 19000.0, 13300.0, 95, 4},
+						{202303, "Downtown", "Clothing", "East", "Jacket", 2023, "Q1", "March", 3, "2023-03", 202303, 25, 3750.0, 2250.0, 60, 2},
+						{202303, "Downtown", "Clothing", "East", "Shoes", 2023, "Q1", "March", 3, "2023-03", 202303, 30, 4500.0, 2700.0, 70, 2},
+						{202303, "Mall", "Electronics", "East", "Laptop", 2023, "Q1", "March", 3, "2023-03", 202303, 12, 18000.0, 14400.0, 40, 1},
+						{202303, "Mall", "Electronics", "East", "Phone", 2023, "Q1", "March", 3, "2023-03", 202303, 45, 22500.0, 15750.0, 110, 5},
+						{202303, "Mall", "Clothing", "East", "Jacket", 2023, "Q1", "March", 3, "2023-03", 202303, 28, 4200.0, 2520.0, 65, 3},
+						{202303, "Mall", "Clothing", "East", "Shoes", 2023, "Q1", "March", 3, "2023-03", 202303, 40, 6000.0, 3600.0, 90, 2},
+						{202303, "Suburb", "Electronics", "West", "Laptop", 2023, "Q1", "March", 3, "2023-03", 202303, 8, 12000.0, 9600.0, 25, 0},
+						{202303, "Suburb", "Electronics", "West", "Phone", 2023, "Q1", "March", 3, "2023-03", 202303, 22, 11000.0, 7700.0, 52, 2},
+						{202303, "Suburb", "Clothing", "West", "Jacket", 2023, "Q1", "March", 3, "2023-03", 202303, 15, 2250.0, 1350.0, 35, 1},
+						{202303, "Suburb", "Clothing", "West", "Shoes", 2023, "Q1", "March", 3, "2023-03", 202303, 20, 3000.0, 1800.0, 45, 1},
+						{202304, "Downtown", "Electronics", "East", "Laptop", 2023, "Q2", "April", 4, "2023-04", 202304, 14, 21000.0, 16800.0, 48, 2},
+						{202304, "Downtown", "Electronics", "East", "Phone", 2023, "Q2", "April", 4, "2023-04", 202304, 30, 15000.0, 10500.0, 78, 3},
+						{202304, "Downtown", "Clothing", "East", "Jacket", 2023, "Q2", "April", 4, "2023-04", 202304, 20, 3000.0, 1800.0, 50, 1},
+						{202304, "Downtown", "Clothing", "East", "Shoes", 2023, "Q2", "April", 4, "2023-04", 202304, 28, 4200.0, 2520.0, 65, 2},
+						{202304, "Mall", "Electronics", "East", "Laptop", 2023, "Q2", "April", 4, "2023-04", 202304, 9, 13500.0, 10800.0, 32, 1},
+						{202304, "Mall", "Electronics", "East", "Phone", 2023, "Q2", "April", 4, "2023-04", 202304, 38, 19000.0, 13300.0, 100, 4},
+						{202304, "Mall", "Clothing", "East", "Jacket", 2023, "Q2", "April", 4, "2023-04", 202304, 24, 3600.0, 2160.0, 58, 2},
+						{202304, "Mall", "Clothing", "East", "Shoes", 2023, "Q2", "April", 4, "2023-04", 202304, 32, 4800.0, 2880.0, 78, 1},
+						{202304, "Suburb", "Electronics", "West", "Laptop", 2023, "Q2", "April", 4, "2023-04", 202304, 6, 9000.0, 7200.0, 20, 0},
+						{202304, "Suburb", "Electronics", "West", "Phone", 2023, "Q2", "April", 4, "2023-04", 202304, 16, 8000.0, 5600.0, 40, 1},
+						{202304, "Suburb", "Clothing", "West", "Jacket", 2023, "Q2", "April", 4, "2023-04", 202304, 11, 1650.0, 990.0, 28, 1},
+						{202304, "Suburb", "Clothing", "West", "Shoes", 2023, "Q2", "April", 4, "2023-04", 202304, 15, 2250.0, 1350.0, 35, 0},
+						{202305, "Downtown", "Electronics", "East", "Laptop", 2023, "Q2", "May", 5, "2023-05", 202305, 16, 24000.0, 19200.0, 55, 1},
+						{202305, "Downtown", "Electronics", "East", "Phone", 2023, "Q2", "May", 5, "2023-05", 202305, 35, 17500.0, 12250.0, 90, 3},
+						{202305, "Downtown", "Clothing", "East", "Jacket", 2023, "Q2", "May", 5, "2023-05", 202305, 22, 3300.0, 1980.0, 55, 2},
+						{202305, "Downtown", "Clothing", "East", "Shoes", 2023, "Q2", "May", 5, "2023-05", 202305, 26, 3900.0, 2340.0, 62, 1},
+						{202305, "Mall", "Electronics", "East", "Laptop", 2023, "Q2", "May", 5, "2023-05", 202305, 11, 16500.0, 13200.0, 38, 1},
+						{202305, "Mall", "Electronics", "East", "Phone", 2023, "Q2", "May", 5, "2023-05", 202305, 42, 21000.0, 14700.0, 108, 4},
+						{202305, "Mall", "Clothing", "East", "Jacket", 2023, "Q2", "May", 5, "2023-05", 202305, 26, 3900.0, 2340.0, 62, 2},
+						{202305, "Mall", "Clothing", "East", "Shoes", 2023, "Q2", "May", 5, "2023-05", 202305, 36, 5400.0, 3240.0, 85, 2},
+						{202305, "Suburb", "Electronics", "West", "Laptop", 2023, "Q2", "May", 5, "2023-05", 202305, 7, 10500.0, 8400.0, 22, 1},
+						{202305, "Suburb", "Electronics", "West", "Phone", 2023, "Q2", "May", 5, "2023-05", 202305, 19, 9500.0, 6650.0, 45, 1},
+						{202305, "Suburb", "Clothing", "West", "Jacket", 2023, "Q2", "May", 5, "2023-05", 202305, 13, 1950.0, 1170.0, 32, 0},
+						{202305, "Suburb", "Clothing", "West", "Shoes", 2023, "Q2", "May", 5, "2023-05", 202305, 18, 2700.0, 1620.0, 42, 1},
+						{202306, "Downtown", "Electronics", "East", "Laptop", 2023, "Q2", "June", 6, "2023-06", 202306, 20, 30000.0, 24000.0, 65, 2},
+						{202306, "Downtown", "Electronics", "East", "Phone", 2023, "Q2", "June", 6, "2023-06", 202306, 40, 20000.0, 14000.0, 100, 5},
+						{202306, "Downtown", "Clothing", "East", "Jacket", 2023, "Q2", "June", 6, "2023-06", 202306, 28, 4200.0, 2520.0, 68, 3},
+						{202306, "Downtown", "Clothing", "East", "Shoes", 2023, "Q2", "June", 6, "2023-06", 202306, 32, 4800.0, 2880.0, 75, 2},
+						{202306, "Mall", "Electronics", "East", "Laptop", 2023, "Q2", "June", 6, "2023-06", 202306, 14, 21000.0, 16800.0, 45, 1},
+						{202306, "Mall", "Electronics", "East", "Phone", 2023, "Q2", "June", 6, "2023-06", 202306, 48, 24000.0, 16800.0, 120, 6},
+						{202306, "Mall", "Clothing", "East", "Jacket", 2023, "Q2", "June", 6, "2023-06", 202306, 30, 4500.0, 2700.0, 72, 2},
+						{202306, "Mall", "Clothing", "East", "Shoes", 2023, "Q2", "June", 6, "2023-06", 202306, 42, 6300.0, 3780.0, 95, 3},
+						{202306, "Suburb", "Electronics", "West", "Laptop", 2023, "Q2", "June", 6, "2023-06", 202306, 9, 13500.0, 10800.0, 28, 1},
+						{202306, "Suburb", "Electronics", "West", "Phone", 2023, "Q2", "June", 6, "2023-06", 202306, 24, 12000.0, 8400.0, 55, 2},
+						{202306, "Suburb", "Clothing", "West", "Jacket", 2023, "Q2", "June", 6, "2023-06", 202306, 16, 2400.0, 1440.0, 38, 1},
+						{202306, "Suburb", "Clothing", "West", "Shoes", 2023, "Q2", "June", 6, "2023-06", 202306, 22, 3300.0, 1980.0, 50, 1}
+					}
+				),
+				CleanText = Table.TransformColumns(
+					Source,
+					{
+						{"Store", each Text.Trim(_), type text},
+						{"Region", each Text.Trim(_), type text},
+						{"Category", each Text.Trim(_), type text},
+						{"Product", each Text.Trim(_), type text}
+					}
+				),
+				FillMissingText = Table.ReplaceValue(CleanText, null, "Unknown", Replacer.ReplaceValue, {"Store", "Region", "Category", "Product"}),
+				SortRows = Table.Sort(FillMissingText, {{"DateKey", Order.Ascending}, {"Store", Order.Ascending}}),
+				FilterInvalid = Table.SelectRows(SortRows, each [Revenue] >= 0 and [UnitsSold] > 0)
+			in
+				FilterInvalid

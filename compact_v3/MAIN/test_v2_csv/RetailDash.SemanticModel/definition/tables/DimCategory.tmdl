@@ -1,0 +1,30 @@
+table DimCategory
+	lineageTag: 8ba732f6-f9df-5ea4-bf16-be256f77420e
+
+	column Category
+		dataType: string
+		lineageTag: 408b1370-dcba-56d9-adee-424ec17ed55d
+		summarizeBy: none
+		sourceColumn: Category
+
+	column Product
+		dataType: string
+		lineageTag: 36ca4262-4c3c-5d63-8a7f-7062078173ee
+		summarizeBy: none
+		sourceColumn: Product
+
+	partition DimCategory = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [Category = text, Product = text],
+					{
+						{"Clothing", "Jacket"},
+						{"Clothing", "Shoes"},
+						{"Electronics", "Laptop"},
+						{"Electronics", "Phone"}
+					}
+				)
+			in
+				Source

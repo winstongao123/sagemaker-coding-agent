@@ -272,6 +272,9 @@ Open `RetailDash/RetailDash.pbip` in Power BI Desktop. The dashboard loads with:
 | UniEnroll (test_v2/) | University Enrollment | Generated | 4 | 432 | 5 | 13 | 0 |
 | HealthDash (test_v2_healthcare/) | Healthcare | Generated | 5 | 480 | 4 | 14 | 0 |
 | RetailDash (test_v2_csv/) | Retail Sales | CSV (72 rows) | 3 | 72 | 2 | 10 | 3 |
+| HRDash (test_v2_hr/) | HR Workforce | Generated | 3 | 480 | 3 | 10 | 3 |
+| LogiDash (test_v2_logistics/) | Supply Chain | Generated | 4 | 60 | 3 | 9 | 3 |
+| MarketDash (test_v2_marketing/) | Marketing | Generated | 3 | 360 | 3 | 11 | 4 |
 
 ## Architecture
 
@@ -296,6 +299,9 @@ test_v2_csv/               <- Retail CSV test (real CSV data, 3 pages, calculate
     retail_sales.csv       <- Source CSV file (72 rows)
   generate_project.py
 test_v2_healthcare/        <- Healthcare test (generated data, 5 pages)
+test_v2_hr/                <- HR Workforce (3 pages, calc cols, M preprocessing, funnel+waterfall+treemap)
+test_v2_logistics/         <- Supply Chain (4 pages, calc cols, M normalize+sort, combo charts)
+test_v2_marketing/         <- Marketing (3 pages, 4 calc cols, M filter+sort+drop, all visual types)
 ```
 
 ## Testing Instructions
@@ -323,6 +329,30 @@ python test_v2_healthcare/generate_project.py
 ```
 Expected: `Generated HealthDash with 480 data rows, 5 pages.`
 Then open `test_v2_healthcare/HealthDash/HealthDash.pbip` in Power BI Desktop.
+
+### HR Workforce Test
+```bash
+cd compact_v3/MAIN
+python test_v2_hr/generate_project.py
+```
+Expected: 480 rows, 3 pages. Calc cols: TenureBand, SalaryBand, NetHires. M preprocessing: text_trim + null_fill_text.
+Then open `test_v2_hr/HRDash/HRDash.pbip` in Power BI Desktop.
+
+### Logistics Test
+```bash
+cd compact_v3/MAIN
+python test_v2_logistics/generate_project.py
+```
+Expected: 60 rows, 4 pages. Calc cols: DeliveryStatus, FreightPerUnit, DamageRate. M preprocessing: normalize + sort_by.
+Then open `test_v2_logistics/LogiDash/LogiDash.pbip` in Power BI Desktop.
+
+### Marketing Test
+```bash
+cd compact_v3/MAIN
+python test_v2_marketing/generate_project.py
+```
+Expected: 360 rows, 3 pages. Calc cols: ROI, CPA, CTR, PerformanceTier. M preprocessing: filter_expr + add_sort_key + sort_by + drop_columns.
+Then open `test_v2_marketing/MarketDash/MarketDash.pbip` in Power BI Desktop.
 
 ### What to Verify in Power BI Desktop
 1. **Dashboard opens without errors** — no "corrupt file" or schema errors

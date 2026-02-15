@@ -1,0 +1,29 @@
+table DimLevel
+	lineageTag: cbfdf975-70d6-5cfc-9c82-b69a33fc1b38
+
+	column LevelKey
+		dataType: string
+		lineageTag: 16783250-2395-5d1b-a224-6d5dc7108ae1
+		summarizeBy: none
+		sourceColumn: LevelKey
+
+	column StudyLevel
+		dataType: string
+		lineageTag: 61b2e830-78cf-5e69-bff7-d5a404b5b773
+		summarizeBy: none
+		sourceColumn: StudyLevel
+
+	partition DimLevel = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [LevelKey = text, StudyLevel = text],
+					{
+						{"UG", "Undergraduate"},
+						{"PG", "Postgraduate"},
+						{"PHD", "PhD/Research"}
+					}
+				)
+			in
+				Source

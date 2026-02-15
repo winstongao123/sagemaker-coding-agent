@@ -1,0 +1,31 @@
+table DimJobLevel
+	lineageTag: ef7c5b31-7a4a-5210-8ac6-91920633df00
+
+	column LevelKey
+		dataType: string
+		lineageTag: d1262149-2373-5a6e-8238-11f989a3b783
+		summarizeBy: none
+		sourceColumn: LevelKey
+
+	column JobLevel
+		dataType: string
+		lineageTag: e0f1a229-113d-5982-b43e-4796799abf8c
+		summarizeBy: none
+		sourceColumn: JobLevel
+
+	partition DimJobLevel = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [LevelKey = text, JobLevel = text],
+					{
+						{"JR", "Junior"},
+						{"MID", "Mid-Level"},
+						{"SR", "Senior"},
+						{"MGR", "Manager"},
+						{"DIR", "Director"}
+					}
+				)
+			in
+				Source

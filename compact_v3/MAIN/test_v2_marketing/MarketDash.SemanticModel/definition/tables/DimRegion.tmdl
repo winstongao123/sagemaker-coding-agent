@@ -1,0 +1,29 @@
+table DimRegion
+	lineageTag: b8340e38-0b70-5e39-8fbe-c2690d69bba0
+
+	column RegionKey
+		dataType: string
+		lineageTag: 9c4dcd15-078c-54cd-af77-fd681c22c592
+		summarizeBy: none
+		sourceColumn: RegionKey
+
+	column Region
+		dataType: string
+		lineageTag: 7ecf3901-8fbd-53e5-8670-01458ef71c8b
+		summarizeBy: none
+		sourceColumn: Region
+
+	partition DimRegion = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [RegionKey = text, Region = text],
+					{
+						{"APAC", "Asia-Pacific"},
+						{"EMEA", "Europe"},
+						{"AMER", "Americas"}
+					}
+				)
+			in
+				Source

@@ -1,0 +1,35 @@
+table DimCampus
+	lineageTag: 6e5141a6-f34f-58bc-a385-01ade955db63
+
+	column CampusKey
+		dataType: string
+		lineageTag: c259de86-60ec-5573-8e23-fa3d89715f88
+		summarizeBy: none
+		sourceColumn: CampusKey
+
+	column Campus
+		dataType: string
+		lineageTag: 4a60e460-a77b-59aa-98cc-0ee980e38dc2
+		summarizeBy: none
+		sourceColumn: Campus
+
+	column CampusType
+		dataType: string
+		lineageTag: 01d142a9-e908-5025-b697-aa854292cd4a
+		summarizeBy: none
+		sourceColumn: CampusType
+
+	partition DimCampus = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [CampusKey = text, Campus = text, CampusType = text],
+					{
+						{"MAIN", "Main Campus", "On-Campus"},
+						{"CITY", "City Centre", "On-Campus"},
+						{"ONLINE", "Online", "Remote"}
+					}
+				)
+			in
+				Source

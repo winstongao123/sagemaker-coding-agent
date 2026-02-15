@@ -1,0 +1,15 @@
+relationship 92afc37b-71ae-5410-8584-1b3c93ab92c5
+	fromColumn: CampaignData.DateKey
+	toColumn: DimDate.DateKey
+
+relationship ea90df3f-0fb3-5597-96d9-c8b22930c014
+	fromColumn: CampaignData.CampaignKey
+	toColumn: DimCampaign.CampaignKey
+
+relationship 4e6e791a-69c6-526c-b91e-761ae85813e6
+	fromColumn: CampaignData.ChannelKey
+	toColumn: DimChannel.ChannelKey
+
+relationship 46088cd5-74b2-5d71-9494-c637ac594d41
+	fromColumn: CampaignData.RegionKey
+	toColumn: DimRegion.RegionKey

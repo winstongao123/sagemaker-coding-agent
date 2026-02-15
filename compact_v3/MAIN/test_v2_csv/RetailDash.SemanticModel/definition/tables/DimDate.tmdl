@@ -1,0 +1,58 @@
+table DimDate
+	lineageTag: 1994baac-1ab7-58da-9539-2cd57450dcbf
+
+	column DateKey
+		dataType: int64
+		lineageTag: 3a03dc73-264c-59ce-bbe2-1c812dc5c239
+		summarizeBy: none
+		sourceColumn: DateKey
+
+	column Year
+		dataType: int64
+		lineageTag: 060d8251-a872-57e6-b719-89afa59a209b
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Quarter
+		dataType: string
+		lineageTag: 2c4391ce-35bf-5598-9fa6-07da53e7f799
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column Month
+		dataType: string
+		lineageTag: c59e7550-24ab-53e4-8ea5-971d9fd24897
+		summarizeBy: none
+		sourceColumn: Month
+		sortByColumn: MonthNum
+
+	column MonthNum
+		dataType: int64
+		lineageTag: 1407730b-37e7-5169-a9f2-5897a4a0ab8e
+		summarizeBy: none
+		sourceColumn: MonthNum
+
+	column YearMonth
+		dataType: string
+		lineageTag: 4d8438f0-5c82-52ad-a8f3-e3789562e317
+		summarizeBy: none
+		sourceColumn: YearMonth
+		sortByColumn: DateKey
+
+	partition DimDate = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [DateKey = Int64.Type, Year = Int64.Type, Quarter = text, Month = text, MonthNum = Int64.Type, YearMonth = text],
+					{
+						{202301, 2023, "Q1", "January", 1, "2023-01"},
+						{202302, 2023, "Q1", "February", 2, "2023-02"},
+						{202303, 2023, "Q1", "March", 3, "2023-03"},
+						{202304, 2023, "Q2", "April", 4, "2023-04"},
+						{202305, 2023, "Q2", "May", 5, "2023-05"},
+						{202306, 2023, "Q2", "June", 6, "2023-06"}
+					}
+				)
+			in
+				Source

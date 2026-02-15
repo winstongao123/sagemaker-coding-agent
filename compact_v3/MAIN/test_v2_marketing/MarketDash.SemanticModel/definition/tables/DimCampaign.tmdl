@@ -1,0 +1,32 @@
+table DimCampaign
+	lineageTag: 30268623-df61-547c-b464-3d533edc68f0
+
+	column CampaignKey
+		dataType: string
+		lineageTag: 2014980a-01d1-576e-84c8-0fa6e2e46e17
+		summarizeBy: none
+		sourceColumn: CampaignKey
+
+	column Campaign
+		dataType: string
+		lineageTag: b8a0292f-2258-58be-bfee-795d8c4e1b97
+		summarizeBy: none
+		sourceColumn: Campaign
+
+	partition DimCampaign = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [CampaignKey = text, Campaign = text],
+					{
+						{"BF24", "Black Friday 2024"},
+						{"HOLI", "Holiday Season"},
+						{"SPRG", "Spring Launch"},
+						{"SUMR", "Summer Sale"},
+						{"EOFY", "End of Year"},
+						{"NEWP", "New Product Launch"}
+					}
+				)
+			in
+				Source
