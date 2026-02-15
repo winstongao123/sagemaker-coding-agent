@@ -221,6 +221,19 @@ create_chat_ui()
 
 ---
 
+## Token Display
+
+The chat UI shows two token metrics:
+
+| Metric | What it shows |
+|--------|---------------|
+| **API Totals (In/Out/Calls)** | Cumulative tokens across ALL API calls. Each call sends system prompt + tool definitions + full conversation history, so this grows fast. |
+| **Context Window (% / max)** | Current conversation size only (user + assistant messages). Does NOT include system prompt (~3K tokens) or tool schemas (~3K tokens). |
+
+The gap between them is normal. Example: 6 API calls with ~6K tokens each (system prompt + tools + messages) = ~36K cumulative input, but context window may show only ~900 tokens (just the conversation messages).
+
+---
+
 ## Quick Start Examples
 
 | Task | Example Prompt |
@@ -371,7 +384,7 @@ Optional JSON/JSONC config file for:
 | **Write guard** | Must `read_file` before `write_file` on existing files |
 | **Permissions** | Configurable per-tool rules via `opencode.json` |
 | **Audit** | Immutable audit trail with integrity verification |
-| **Approval** | Optional tool approval toggle for restricted operations |
+| **Approval** | Tool approval ON by default (Approve/Deny dialog for bash, python_exec, task, web_fetch) |
 
 ### System Prompt Rules (V3)
 
@@ -410,32 +423,40 @@ Use `/cost` to see token usage and estimated cost. Pricing is per-model based on
 
 ```
 compact_v3/MAIN/
-  sagemaker_agent.py    <- Agent engine (6,558 lines)
-  chat.ipynb            <- This notebook (UI launcher)
-  opencode.json         <- External config (permissions, commands)
-  USER_GUIDE.md         <- Full documentation
-  skills/
-    review/SKILL.md           <- Code review skill (84 lines)
-    verify/SKILL.md           <- Verification loop skill (148 lines)
-    coding-standards/SKILL.md <- Coding standards skill (154 lines)
-    powerbi-dashboard/        <- Power BI V1 dashboard generator (template-based)
-      SKILL.md                  <- Skill prompt (322 lines)
-      GUIDE.md                  <- Beginner guide
-      generate_template.py      <- Working template (95 KB)
-      reference/
-        SOP.md                  <- 25 lessons learned
-        STYLING.md              <- Visual styling reference
-        theme.json              <- Color palette
-      tested/
-        generate_project.py     <- University dashboard example
-    powerbi-dashboard-v2/     <- Power BI V2 dashboard generator (config-driven)
-      SKILL.md                  <- Skill prompt (461 lines)
-      GUIDE.md                  <- Guide with tested examples
-      generate_engine.py        <- Config-driven engine
-      reference/
-        SOP.md                  <- Lessons learned
-        STYLING.md              <- Visual styling reference
-        theme.json              <- Color palette
-      tested/
-        generate_project.py     <- University enrollment example
+  agent/
+    sagemaker_agent.py    <- Agent engine (6,558 lines)
+    chat.ipynb            <- This notebook (UI launcher)
+    opencode.json         <- External config (permissions, commands)
+    USER_GUIDE.md         <- Full documentation
+    skills/
+      review/SKILL.md           <- Code review skill (84 lines)
+      verify/SKILL.md           <- Verification loop skill (148 lines)
+      coding-standards/SKILL.md <- Coding standards skill (154 lines)
+      powerbi-dashboard/        <- Power BI V1 dashboard generator (template-based)
+        SKILL.md                  <- Skill prompt (322 lines)
+        GUIDE.md                  <- Beginner guide
+        generate_template.py      <- Working template (95 KB)
+        reference/
+          SOP.md                  <- 25 lessons learned
+          STYLING.md              <- Visual styling reference
+          theme.json              <- Color palette
+        tested/
+          generate_project.py     <- University dashboard example
+      powerbi-dashboard-v2/     <- Power BI V2 dashboard generator (config-driven)
+        SKILL.md                  <- Skill prompt (461 lines)
+        GUIDE.md                  <- Guide with tested examples
+        generate_engine.py        <- Config-driven engine
+        reference/
+          SOP.md                  <- Lessons learned
+          STYLING.md              <- Visual styling reference
+          theme.json              <- Color palette
+        tested/
+          generate_project.py     <- University enrollment example
+  tests/
+    enrollment/             <- Enrollment test (generated data, 4 pages)
+    csv/                    <- Retail CSV test (real CSV data, 3 pages)
+    healthcare/             <- Healthcare test (generated data, 5 pages)
+    hr/                     <- HR Workforce test (3 pages, calc cols)
+    logistics/              <- Supply Chain test (4 pages, combo charts)
+    marketing/              <- Marketing test (3 pages, all visual types)
 ```
