@@ -615,8 +615,7 @@ class Config:
 
     # Operational controls
     require_auth: bool = False
-    require_tool_approval: bool = False  # For single-user SageMaker, default OFF avoids stuck approval UI
-    sagemaker_auto_approve: bool = True  # Auto-approve tools when running in SageMaker (set False to show approval dialogs)
+    require_tool_approval: bool = True  # Show Approve/Deny dialog for bash, python_exec, etc.
     auth_token_env: str = "SAGEMAKER_AGENT_AUTH_TOKEN"
     max_user_messages_per_minute: int = 10
     max_user_messages_per_session: int = 150
@@ -709,7 +708,7 @@ def _apply_config_file(config: 'Config') -> None:
         "bash_allow_interpreters": bool, "bash_allow_docker": bool,
         "execution_mode": str, "exec_docker_image": str,
         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
-        "require_auth": bool, "require_tool_approval": bool, "sagemaker_auto_approve": bool,
+        "require_auth": bool, "require_tool_approval": bool,
         "enable_skills": bool, "skills_dir": str,
         "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
         "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
@@ -5480,14 +5479,6 @@ def create_chat_ui(mock_mode: bool = None):
                             return False
                         if action == "allow":
                             return True
-        if CONFIG.sagemaker_auto_approve:
-            is_sagemaker = bool(
-                os.getenv("SAGEMAKER_DOMAIN_ID")
-                or os.getenv("SAGEMAKER_INTERNAL_IMAGE_URI")
-                or "SAGEMAKER" in os.getenv("AWS_EXECUTION_ENV", "").upper()
-            )
-            if is_sagemaker:
-                return True  # Auto-approve in SageMaker (disable via sagemaker_auto_approve in opencode.json)
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
