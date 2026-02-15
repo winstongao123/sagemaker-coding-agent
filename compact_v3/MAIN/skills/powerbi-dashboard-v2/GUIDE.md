@@ -268,8 +268,8 @@ Open `RetailDash/RetailDash.pbip` in Power BI Desktop. The dashboard loads with:
 
 | Dashboard | Domain | Data Source | Pages | Rows | Dims | Measures | Calc Cols |
 |-----------|--------|-------------|-------|------|------|----------|-----------|
-| AIPower (default) | Regional Sales | Generated | 6 | 576 | 5 | 20 | 0 |
-| UniEnroll (tested/) | University Enrollment | Generated | 4 | 432 | 4 | 13 | 0 |
+| AIPower (engine default) | Regional Sales | Generated | 6 | 576 | 5 | 20 | 0 |
+| UniEnroll (test_v2/) | University Enrollment | Generated | 4 | 432 | 5 | 13 | 0 |
 | HealthDash (test_v2_healthcare/) | Healthcare | Generated | 5 | 480 | 4 | 14 | 0 |
 | RetailDash (test_v2_csv/) | Retail Sales | CSV (72 rows) | 3 | 72 | 2 | 10 | 3 |
 
@@ -290,7 +290,7 @@ powerbi-dashboard-v2/
 
 Test projects (in compact_v3/MAIN/):
 ```
-test_v2/                   <- Default sales test (generated data, 6 pages)
+test_v2/                   <- Enrollment test (generated data, 4 pages)
 test_v2_csv/               <- Retail CSV test (real CSV data, 3 pages, calculated columns)
   source_data/
     retail_sales.csv       <- Source CSV file (72 rows)
@@ -300,13 +300,13 @@ test_v2_healthcare/        <- Healthcare test (generated data, 5 pages)
 
 ## Testing Instructions
 
-### Quick Test (Generated Data)
+### Enrollment Test (Generated Data)
 ```bash
 cd compact_v3/MAIN
 python test_v2/generate_project.py
 ```
-Expected: `Generated AIPower with 576 data rows, 6 pages.`
-Then open `test_v2/AIPower/AIPower.pbip` in Power BI Desktop.
+Expected: `Generated UniEnroll with 432 data rows, 4 pages.`
+Then open `test_v2/UniEnroll/UniEnroll.pbip` in Power BI Desktop.
 
 ### CSV Ingestion Test
 ```bash
