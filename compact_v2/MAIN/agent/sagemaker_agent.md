@@ -2260,6 +2260,19 @@ class TokenTracker:
             "last_cost_usd": round(self.last_cost, 6),
         }
 
+    def restore(self, stats: dict):
+        """Restore counters from saved session metadata."""
+        self.session_input = int(stats.get("session_input", 0))
+        self.session_output = int(stats.get("session_output", 0))
+        self.session_total = self.session_input + self.session_output
+        self.session_cache_read = int(stats.get("session_cache_read", 0))
+        self.session_cache_write = int(stats.get("session_cache_write", 0))
+        self.last_input = int(stats.get("last_input", 0))
+        self.last_output = int(stats.get("last_output", 0))
+        self.api_calls = int(stats.get("api_calls", 0))
+        self.session_cost = float(stats.get("session_cost_usd", 0.0))
+        self.last_cost = float(stats.get("last_cost_usd", 0.0))
+
 # Initialize token tracker
 TOKENS = TokenTracker()
 
@@ -5962,6 +5975,7 @@ def create_chat_ui(mock_mode: bool = None):
                             "exec_calls": ui_state["agent"].exec_calls,
                             "exec_seconds": ui_state["agent"].exec_seconds,
                             "active_skills": list(ui_state.get("active_skills", [])),
+                            "token_stats": TOKENS.get_stats(),
                         },
                         todos=_TODOS.copy() if _TODOS else []
                     )
@@ -6006,6 +6020,7 @@ def create_chat_ui(mock_mode: bool = None):
             metadata["exec_calls"] = ui_state["agent"].exec_calls
             metadata["exec_seconds"] = ui_state["agent"].exec_seconds
             metadata["active_skills"] = list(ui_state.get("active_skills", []))
+            metadata["token_stats"] = TOKENS.get_stats()
             ui_state["session"].metadata = metadata
             # Save todos with session (store as metadata)
             ui_state["session"].todos = ui_state["todos"].copy() if ui_state["todos"] else []
@@ -6063,6 +6078,8 @@ def create_chat_ui(mock_mode: bool = None):
 
         # Reset and load
         TOKENS.reset()
+        if isinstance(session.metadata, dict) and "token_stats" in session.metadata:
+            TOKENS.restore(session.metadata["token_stats"])
         ui_state["session"] = session
         ui_state["agent"] = Agent(
             ui_state["client"],
