@@ -6276,10 +6276,8 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["model_connection_ok"] = active_ok
         ui_state["model_connection_msg"] = active_msg
 
-        # Reset and load (restore saved token stats if available)
+        # Reset token counters (start fresh — saved stats kept in session JSON for history)
         TOKENS.reset()
-        if isinstance(session.metadata, dict) and "token_stats" in session.metadata:
-            TOKENS.restore(session.metadata["token_stats"])
         ui_state["session"] = session
         ui_state["agent"] = Agent(
             ui_state["client"],
