@@ -747,7 +747,15 @@ def _get_fact_columns(schema):
 
 
 def generate_data(schema):
-    """Generate synthetic data rows from SCHEMA config."""
+    """Generate or load data rows from SCHEMA config.
+
+    If data_source.type == "csv", reads from a CSV file.
+    Otherwise generates synthetic data from SCHEMA gen specs.
+    """
+    data_source = schema.get("data_source", {"type": "generated"})
+    if isinstance(data_source, dict) and data_source.get("type") == "csv":
+        return _load_csv_data(schema)
+
     random.seed(schema.get("seed", 42))
     date_cfg = schema["date"]
     dims = schema["dimensions"]
@@ -804,6 +812,136 @@ def generate_data(schema):
                     row[fc["name"]] = row.get(g["col"], "")
             rows.append(row)
     return rows
+
+
+def _load_csv_data(schema):
+    """Load data from a CSV file and map to SCHEMA columns."""
+    data_source = schema["data_source"]
+    csv_path = data_source["path"]
+
+    # Resolve path relative to generate_project.py
+    full_path = os.path.join(PROJECT_DIR, csv_path)
+    if not os.path.isfile(full_path):
+        raise FileNotFoundError(f"CSV file not found: {full_path}")
+
+    # Read CSV (utf-8-sig handles BOM from Excel exports)
+    with open(full_path, "r", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        raw_rows = list(reader)
+    if not raw_rows:
+        raise ValueError(f"CSV file is empty: {full_path}")
+
+    # Column mapping: {schema_column_name: csv_column_name}
+    col_map = data_source.get("column_mapping", {})
+
+    # Build type map from all SCHEMA columns
+    type_map = {}
+    date_cfg = schema["date"]
+    type_map[date_cfg["key_column"]] = "int64"
+    for dim in schema.get("dimensions", []):
+        for c in dim["columns"]:
+            type_map[c["name"]] = c["type"]
+    for fc in schema.get("fact_columns", []):
+        type_map[fc["name"]] = fc["type"]
+    # Standard date value columns
+    for name, typ in [("Year", "int64"), ("Quarter", "string"), ("Month", "string"),
+                      ("MonthNum", "int64"), ("YearMonth", "string"), ("YearMonthSort", "int64")]:
+        type_map[name] = typ
+
+    # Check if we need to derive date columns from a date_column
+    date_column = data_source.get("date_column")  # e.g. "Date" (YYYY-MM-DD format)
+
+    rows = []
+    for raw in raw_rows:
+        row = {}
+
+        # If date_column is specified, parse it to derive date fields
+        if date_column:
+            csv_date_col = col_map.get(date_column, date_column)
+            date_str = raw.get(csv_date_col, "")
+            if date_str:
+                # Parse YYYY-MM-DD or YYYY-MM or MM/DD/YYYY
+                try:
+                    if "/" in date_str:
+                        parts = date_str.split("/")
+                        if len(parts[2]) == 4:  # MM/DD/YYYY
+                            year, month_idx = int(parts[2]), int(parts[0])
+                        else:  # MM/DD/YY — add 2000 for 2-digit years
+                            year = int(parts[2])
+                            if year < 100:
+                                year += 2000
+                            month_idx = int(parts[0])
+                    elif "-" in date_str:
+                        parts = date_str.split("-")
+                        year, month_idx = int(parts[0]), int(parts[1])
+                    else:
+                        year, month_idx = 2024, 1
+                except (ValueError, IndexError):
+                    year, month_idx = 2024, 1
+
+                dk = year * 100 + month_idx
+                row[date_cfg["key_column"]] = dk
+                row["Year"] = year
+                row["Quarter"] = f"Q{((month_idx - 1) // 3) + 1}"
+                row["Month"] = MONTH_NAMES[month_idx - 1] if 1 <= month_idx <= 12 else "January"
+                row["MonthNum"] = month_idx
+                row["YearMonth"] = f"{year}-{month_idx:02d}"
+                row["YearMonthSort"] = dk
+
+        # Map all other columns
+        for schema_col, col_type in type_map.items():
+            if schema_col in row:
+                continue  # Already set (e.g. date fields)
+            csv_col = col_map.get(schema_col, schema_col)
+            if csv_col in raw:
+                val = raw[csv_col].strip() if raw[csv_col] else ""
+                if col_type == "int64":
+                    try:
+                        row[schema_col] = int(float(val)) if val else 0
+                    except ValueError:
+                        row[schema_col] = 0
+                elif col_type == "double":
+                    try:
+                        row[schema_col] = round(float(val), 2) if val else 0.0
+                    except ValueError:
+                        row[schema_col] = 0.0
+                else:
+                    row[schema_col] = val
+            else:
+                # Column not in CSV — use type-appropriate default
+                if col_type == "int64":
+                    row[schema_col] = 0
+                elif col_type == "double":
+                    row[schema_col] = 0.0
+                else:
+                    row[schema_col] = ""
+
+        rows.append(row)
+
+    print(f"  Loaded {len(rows)} rows from {csv_path}")
+    return rows
+
+
+def _auto_populate_dim_values(data_rows, schema):
+    """Auto-populate dimension values from loaded data when not explicitly provided.
+
+    Call this after generate_data() when using CSV data source.
+    Modifies schema dimensions in-place.
+    """
+    for dim in schema.get("dimensions", []):
+        if dim.get("values"):
+            continue  # Already has explicit values
+        cols = dim["columns"]
+        seen = set()
+        values = []
+        for row in data_rows:
+            key = tuple(row.get(c["name"], "") for c in cols)
+            if key not in seen:
+                seen.add(key)
+                val = {c["name"]: row.get(c["name"], "") for c in cols}
+                values.append(val)
+        dim["values"] = sorted(values, key=lambda v: v[cols[0]["name"]])
+        print(f"  Auto-extracted {len(values)} unique values for {dim['dim_table']}")
 
 
 # ---- M type mapping ----
@@ -991,6 +1129,23 @@ def _build_fact_tmdl(data_rows, schema):
         lines.append(f'\t\tsourceColumn: {name}')
         if name in schema.get("sort_by_column", {}):
             lines.append(f'\t\tsortByColumn: {schema["sort_by_column"][name]}')
+        lines.append('')
+
+    # Calculated columns (DAX-computed, no sourceColumn)
+    for cc in schema.get("calculated_columns", []):
+        name = cc["name"]
+        dax = cc["dax"]
+        dtype = tmdl_type_map.get(cc.get("type", "double"), "double")
+        summarize = cc.get("summarize", "none")
+        fmt = cc.get("format", "")
+        slug = re.sub(r'[^A-Za-z0-9]', '', name)
+        lines.append(f"\tcolumn '{name}' = {dax}")
+        lines.append(f'\t\tdataType: {dtype}')
+        lines.append(f'\t\tlineageTag: {make_uuid("calcCol." + slug)}')
+        lines.append(f'\t\tsummarizeBy: {summarize}')
+        if fmt:
+            lines.append(f'\t\tformatString: {fmt}')
+        lines.append(f'\t\tisDataTypeInferred: true')
         lines.append('')
 
     # Partition
@@ -1600,7 +1755,17 @@ def gen_report(schema):
 
 def gen_csv(data_rows, schema):
     """Export data rows to CSV."""
-    write_csv_file("data/sales_data.csv", data_rows)
+    pn = schema["project_name"]
+    data_source = schema.get("data_source", {"type": "generated"})
+    if isinstance(data_source, dict) and data_source.get("type") == "csv":
+        # Copy source CSV to output data/ folder
+        src = os.path.join(PROJECT_DIR, data_source["path"])
+        dst = os.path.join(PROJECT_DIR, f"data/{pn}_data.csv")
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
+        print(f"  Copied: data/{pn}_data.csv")
+    else:
+        write_csv_file(f"data/{pn}_data.csv", data_rows)
 
 
 # ============================================================
@@ -1614,15 +1779,24 @@ def main():
     print(f"Output: {PROJECT_DIR}")
     print()
 
-    # Clean previous
+    data_source = schema.get("data_source", {"type": "generated"})
+    is_csv = isinstance(data_source, dict) and data_source.get("type") == "csv"
+
+    # Load data BEFORE cleanup (CSV source file may be inside project dir)
+    if is_csv:
+        print(f"[1/5] Loading CSV data from {data_source['path']}...")
+    else:
+        print("[1/5] Generating data...")
+    data = generate_data(schema)
+    if is_csv:
+        _auto_populate_dim_values(data, schema)
+    print(f"  Total rows: {len(data)}")
+
+    # Clean previous output (after data is loaded)
     for d in [f"{pn}.Report", f"{pn}.SemanticModel", "data"]:
         full = os.path.join(PROJECT_DIR, d)
         if os.path.isdir(full):
             shutil.rmtree(full)
-
-    print("[1/5] Generating data...")
-    data = generate_data(schema)
-    print(f"  Generated {len(data)} rows")
 
     print("[2/5] Creating project structure...")
     gen_pbip(schema)

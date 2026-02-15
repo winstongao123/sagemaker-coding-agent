@@ -1,15 +1,10 @@
-"""Power BI PBIR Project Generator - Config-Driven Engine (V2)
+"""Power BI PBIR Project Generator - CSV Ingestion Test
 
-Unlike generate_template.py (Level 1, hardcoded sales), this engine reads
-a SCHEMA dict and generates a complete .pbip project for ANY domain.
-
-Usage:
-    1. Edit the SCHEMA dict below to match your domain
-    2. Run: python generate_engine.py
-    3. Open {project_name}.pbip in Power BI Desktop
-
-The agent ONLY edits the SCHEMA dict. Everything below the
-ENGINE marker is auto-logic - do NOT modify.
+Tests the V2 engine's ability to:
+1. Read real data from a CSV file (instead of generating random data)
+2. Auto-extract dimension values from CSV
+3. Use calculated columns (DAX-computed)
+4. Build a complete dashboard from real data
 """
 
 import os
@@ -30,212 +25,146 @@ MONTH_NAMES = [
 # ============================================================
 
 SCHEMA = {
-    "project_name": "HealthDash",
-    "brand_label": "PATIENT OUTCOMES",
-    "seed": 77,
-    "fact_table": "PatientData",
+    "project_name": "RetailDash",
+    "brand_label": "RETAIL SALES ANALYTICS",
+    "fact_table": "SalesData",
+
+    # ── CSV Data Source ──
+    "data_source": {
+        "type": "csv",
+        "path": "source_data/retail_sales.csv",
+        "date_column": "Date",  # YYYY-MM-DD format, auto-derives Year/Quarter/Month
+        # "column_mapping": {},  # optional: {schema_col: csv_col} if names differ
+    },
 
     "date": {
-        "years": [2023, 2024],
+        "years": [2023],
         "dim_table": "DimDate",
         "key_column": "DateKey",
     },
 
     "dimensions": [
         {
-            "dim_table": "DimDepartment", "key_column": "DeptKey",
+            "dim_table": "DimStore", "key_column": "Store",
             "columns": [
-                {"name": "DeptKey", "type": "string"},
-                {"name": "Department", "type": "string"},
+                {"name": "Store", "type": "string"},
+                {"name": "Region", "type": "string"},
             ],
-            "values": [
-                {"DeptKey": "Emergency", "Department": "Emergency"},
-                {"DeptKey": "Cardiology", "Department": "Cardiology"},
-                {"DeptKey": "Orthopedics", "Department": "Orthopedics"},
-                {"DeptKey": "Neurology", "Department": "Neurology"},
-                {"DeptKey": "Oncology", "Department": "Oncology"},
-            ],
+            # "values": auto-extracted from CSV by engine
             "assignment": "cross",
         },
         {
-            "dim_table": "DimWard", "key_column": "WardKey",
+            "dim_table": "DimCategory", "key_column": "Category",
             "columns": [
-                {"name": "WardKey", "type": "string"},
-                {"name": "Ward", "type": "string"},
-                {"name": "WardType", "type": "string"},
+                {"name": "Category", "type": "string"},
+                {"name": "Product", "type": "string"},
             ],
-            "values": [
-                {"WardKey": "Ward-A", "Ward": "Ward-A", "WardType": "General"},
-                {"WardKey": "Ward-B", "Ward": "Ward-B", "WardType": "ICU"},
-                {"WardKey": "Ward-C", "Ward": "Ward-C", "WardType": "Surgical"},
-                {"WardKey": "Ward-D", "Ward": "Ward-D", "WardType": "Recovery"},
-            ],
+            # "values": auto-extracted from CSV by engine
             "assignment": "cross",
-        },
-        {
-            "dim_table": "DimAdmission", "key_column": "AdmissionType",
-            "columns": [
-                {"name": "AdmissionType", "type": "string"},
-            ],
-            "values": [
-                {"AdmissionType": "Emergency"},
-                {"AdmissionType": "Elective"},
-                {"AdmissionType": "Transfer"},
-            ],
-            "assignment": "random",
         },
     ],
 
     "fact_columns": [
-        {"name": "Admissions", "type": "int64", "summarize": "sum", "gen": {"type": "random_int", "min": 1, "max": 80}},
-        {"name": "Discharges", "type": "int64", "summarize": "sum", "gen": {"type": "random_int", "min": 1, "max": 75}},
-        {"name": "Readmissions", "type": "int64", "summarize": "sum", "gen": {"type": "random_int", "min": 0, "max": 15}},
-        {"name": "AvgStayDays", "type": "double", "summarize": "average", "gen": {"type": "random_float", "min": 1.5, "max": 14.0, "decimals": 1}},
-        {"name": "SatisfactionScore", "type": "double", "summarize": "average", "gen": {"type": "random_float", "min": 2.5, "max": 5.0, "decimals": 2}},
-        {"name": "MortalityCount", "type": "int64", "summarize": "sum", "gen": {"type": "random_int", "min": 0, "max": 5}},
-        {"name": "BedOccupancyPct", "type": "double", "summarize": "average", "gen": {"type": "random_float", "min": 55.0, "max": 98.0, "decimals": 1}},
-        {"name": "WaitTimeHours", "type": "double", "summarize": "average", "gen": {"type": "random_float", "min": 0.5, "max": 8.0, "decimals": 1}},
+        {"name": "UnitsSold", "type": "int64", "summarize": "sum"},
+        {"name": "Revenue", "type": "double", "summarize": "sum"},
+        {"name": "Cost", "type": "double", "summarize": "sum"},
+        {"name": "CustomerCount", "type": "int64", "summarize": "sum"},
+        {"name": "ReturnCount", "type": "int64", "summarize": "sum"},
+    ],
+
+    # ── Calculated Columns (DAX-computed, evaluated per row) ──
+    "calculated_columns": [
+        {"name": "Profit", "dax": "[Revenue] - [Cost]", "type": "double", "summarize": "sum", "format": "$#,##0.00"},
+        {"name": "ProfitMargin", "dax": "DIVIDE([Revenue] - [Cost], [Revenue])", "type": "double", "summarize": "average", "format": "#,##0.0%"},
+        {"name": "ReturnRate", "dax": "DIVIDE([ReturnCount], [UnitsSold])", "type": "double", "summarize": "average", "format": "#,##0.0%"},
     ],
 
     "measures": [
-        {"name": "Total Admissions", "dax": "SUM(PatientData[Admissions])", "format": "#,##0"},
-        {"name": "Total Discharges", "dax": "SUM(PatientData[Discharges])", "format": "#,##0"},
-        {"name": "Total Readmissions", "dax": "SUM(PatientData[Readmissions])", "format": "#,##0"},
-        {"name": "Readmission Rate %", "dax": "DIVIDE([Total Readmissions], [Total Admissions])", "format": "#,##0.0\"%\""},
-        {"name": "Avg Length of Stay", "dax": "AVERAGE(PatientData[AvgStayDays])", "format": "#,##0.0"},
-        {"name": "Avg Satisfaction", "dax": "AVERAGE(PatientData[SatisfactionScore])", "format": "#,##0.00"},
-        {"name": "Total Mortality", "dax": "SUM(PatientData[MortalityCount])", "format": "#,##0"},
-        {"name": "Mortality Rate %", "dax": "DIVIDE([Total Mortality], [Total Admissions])", "format": "#,##0.0\"%\""},
-        {"name": "Avg Bed Occupancy %", "dax": "AVERAGE(PatientData[BedOccupancyPct])", "format": "#,##0.0\"%\""},
-        {"name": "Avg Wait Time", "dax": "AVERAGE(PatientData[WaitTimeHours])", "format": "#,##0.0"},
+        {"name": "Total Revenue", "dax": "SUM(SalesData[Revenue])", "format": "$#,##0"},
+        {"name": "Total Cost", "dax": "SUM(SalesData[Cost])", "format": "$#,##0"},
+        {"name": "Total Profit", "dax": "SUM(SalesData[Revenue]) - SUM(SalesData[Cost])", "format": "$#,##0"},
+        {"name": "Profit Margin %", "dax": "DIVIDE(SUM(SalesData[Revenue]) - SUM(SalesData[Cost]), SUM(SalesData[Revenue]))", "format": "#,##0.0%"},
+        {"name": "Total Units Sold", "dax": "SUM(SalesData[UnitsSold])", "format": "#,##0"},
+        {"name": "Total Customers", "dax": "SUM(SalesData[CustomerCount])", "format": "#,##0"},
+        {"name": "Avg Revenue per Customer", "dax": "DIVIDE(SUM(SalesData[Revenue]), SUM(SalesData[CustomerCount]))", "format": "$#,##0.00"},
+        {"name": "Return Rate %", "dax": "DIVIDE(SUM(SalesData[ReturnCount]), SUM(SalesData[UnitsSold]))", "format": "#,##0.0%"},
+        {"name": "Total Returns", "dax": "SUM(SalesData[ReturnCount])", "format": "#,##0"},
+        {"name": "Avg Units per Customer", "dax": "DIVIDE(SUM(SalesData[UnitsSold]), SUM(SalesData[CustomerCount]))", "format": "#,##0.00"},
     ],
 
     "relationships": [
-        {"from": "PatientData.DateKey", "to": "DimDate.DateKey"},
-        {"from": "PatientData.DeptKey", "to": "DimDepartment.DeptKey"},
-        {"from": "PatientData.WardKey", "to": "DimWard.WardKey"},
-        {"from": "PatientData.AdmissionType", "to": "DimAdmission.AdmissionType"},
+        {"from": "SalesData.DateKey", "to": "DimDate.DateKey"},
+        {"from": "SalesData.Store", "to": "DimStore.Store"},
+        {"from": "SalesData.Category", "to": "DimCategory.Category"},
     ],
 
     "m_preprocessing": {
-        "text_trim": ["Department", "Ward"],
-        "null_fill_text": ["Department", "Ward"],
-        "normalize": [
-            {"column": "SatisfactionScore", "min": 0, "max": 5},
-            {"column": "BedOccupancyPct", "min": 0, "max": 100},
-        ],
-        "add_sort_key": {"name": "YearMonthSort", "expr": "[Year] * 100 + [MonthNum]", "type": "Int64.Type"},
-        "sort_by": [["YearMonthSort", "Ascending"]],
-        "drop_columns": ["YearMonthSort"],
-        "filter_expr": "[Admissions] >= 0",
+        "text_trim": ["Store", "Region", "Category", "Product"],
+        "null_fill_text": ["Store", "Region", "Category", "Product"],
+        "sort_by": [["DateKey", "Ascending"], ["Store", "Ascending"]],
+        "filter_expr": "[Revenue] >= 0 and [UnitsSold] > 0",
     },
 
-    "sort_by_column": {"Month": "MonthNum", "YearMonth": "DateKey"},
+    "sort_by_column": {"Month": "MonthNum", "YearMonth": "YearMonthSort"},
 
     "pages": [
-        # ── Page 1: Patient Overview ──
-        {"id": "exec01", "title": "Patient Overview", "has_slicers": False, "slicers": [], "visuals": [
-            {"type": "card", "title": "Total Admissions", "query": {"Values": [{"measure": "Total Admissions"}]}},
-            {"type": "card", "title": "Readmission Rate %", "query": {"Values": [{"measure": "Readmission Rate %"}]}},
-            {"type": "card", "title": "Avg Satisfaction", "query": {"Values": [{"measure": "Avg Satisfaction"}]}},
-            {"type": "card", "title": "Avg Bed Occupancy %", "query": {"Values": [{"measure": "Avg Bed Occupancy %"}]}},
-            {"type": "donutChart", "title": "Admissions by Department", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}], "Y": [{"agg_col": ["Admissions", 0]}]}},
-            {"type": "lineClusteredColumnComboChart", "title": "Admissions & Discharges Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}],
-                "Y": [{"agg_col": ["Admissions", 0]}], "Y2": [{"agg_col": ["Discharges", 0]}]}},
-            {"type": "clusteredBarChart", "title": "Admissions by Ward", "query": {
-                "Category": [{"col": ["DimWard", "Ward"]}], "Y": [{"agg_col": ["Admissions", 0]}]}},
-            {"type": "areaChart", "title": "Monthly Satisfaction Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["SatisfactionScore", 1]}]}},
-            {"type": "tableEx", "title": "Department Summary", "query": {"Values": [
-                {"col": ["DimDepartment", "Department"]},
-                {"measure": "Total Admissions"}, {"measure": "Readmission Rate %"}, {"measure": "Avg Satisfaction"}]}},
-            {"type": "funnel", "title": "Admissions by Type", "query": {
-                "Category": [{"col": ["DimAdmission", "AdmissionType"]}], "Y": [{"agg_col": ["Admissions", 0]}]}},
+        # ── Page 1: Executive Overview ──
+        {"id": "exec01", "title": "Executive Overview", "has_slicers": False, "slicers": [], "visuals": [
+            {"type": "card", "title": "Total Revenue", "query": {"Values": [{"measure": "Total Revenue"}]}},
+            {"type": "card", "title": "Total Profit", "query": {"Values": [{"measure": "Total Profit"}]}},
+            {"type": "card", "title": "Profit Margin %", "query": {"Values": [{"measure": "Profit Margin %"}]}},
+            {"type": "card", "title": "Total Units Sold", "query": {"Values": [{"measure": "Total Units Sold"}]}},
+            {"type": "donutChart", "title": "Revenue by Region", "query": {
+                "Category": [{"col": ["DimStore", "Region"]}], "Y": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "clusteredBarChart", "title": "Revenue by Store", "query": {
+                "Category": [{"col": ["DimStore", "Store"]}], "Y": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "lineChart", "title": "Monthly Revenue Trend", "query": {
+                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "treemap", "title": "Revenue by Category & Product", "query": {
+                "Group": [{"col": ["DimCategory", "Category"]}, {"col": ["DimCategory", "Product"]}],
+                "Values": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "tableEx", "title": "Store Summary", "query": {"Values": [
+                {"col": ["DimStore", "Store"]}, {"col": ["DimStore", "Region"]},
+                {"measure": "Total Revenue"}, {"measure": "Total Profit"}, {"measure": "Profit Margin %"}]}},
         ]},
 
-        # ── Page 2: Department Analysis ──
-        {"id": "dept02", "title": "Department Analysis", "has_slicers": True, "slicers": [
-            {"title": "Department", "col": ["DimDepartment", "Department"]},
-            {"title": "Year", "col": ["DimDate", "Year"]},
-        ], "visuals": [
-            {"type": "clusteredColumnChart", "title": "Admissions by Dept & Ward", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}],
-                "Series": [{"col": ["DimWard", "Ward"]}],
-                "Y": [{"agg_col": ["Admissions", 0]}]}},
-            {"type": "donutChart", "title": "Readmissions by Department", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}], "Y": [{"agg_col": ["Readmissions", 0]}]}},
-            {"type": "lineChart", "title": "Monthly Readmission Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["Readmissions", 0]}]}},
-            {"type": "treemap", "title": "Admissions by Dept & Type", "query": {
-                "Group": [{"col": ["DimDepartment", "Department"]}, {"col": ["DimAdmission", "AdmissionType"]}],
-                "Values": [{"agg_col": ["Admissions", 0]}]}},
-            {"type": "tableEx", "title": "Department Detail", "query": {"Values": [
-                {"col": ["DimDepartment", "Department"]}, {"col": ["DimWard", "Ward"]},
-                {"measure": "Total Admissions"}, {"measure": "Total Readmissions"}, {"measure": "Readmission Rate %"}]}},
-            {"type": "waterfallChart", "title": "Admissions Contribution by Dept", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}], "Y": [{"agg_col": ["Admissions", 0]}]}},
-        ]},
-
-        # ── Page 3: Ward Performance ──
-        {"id": "ward03", "title": "Ward Performance", "has_slicers": True, "slicers": [
-            {"title": "Ward", "col": ["DimWard", "Ward"]},
+        # ── Page 2: Store Performance ──
+        {"id": "store02", "title": "Store Performance", "has_slicers": True, "slicers": [
+            {"title": "Store", "col": ["DimStore", "Store"]},
             {"title": "Month", "col": ["DimDate", "Month"]},
         ], "visuals": [
-            {"type": "clusteredBarChart", "title": "Bed Occupancy by Ward", "query": {
-                "Category": [{"col": ["DimWard", "Ward"]}], "Y": [{"agg_col": ["BedOccupancyPct", 1]}]}},
-            {"type": "lineChart", "title": "Occupancy Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["BedOccupancyPct", 1]}]}},
-            {"type": "donutChart", "title": "Discharges by Ward Type", "query": {
-                "Category": [{"col": ["DimWard", "WardType"]}], "Y": [{"agg_col": ["Discharges", 0]}]}},
-            {"type": "areaChart", "title": "Wait Time Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["WaitTimeHours", 1]}]}},
-            {"type": "tableEx", "title": "Ward Detail", "query": {"Values": [
-                {"col": ["DimWard", "Ward"]}, {"col": ["DimWard", "WardType"]},
-                {"measure": "Avg Bed Occupancy %"}, {"measure": "Avg Wait Time"}, {"measure": "Avg Length of Stay"}]}},
-            {"type": "clusteredColumnChart", "title": "Length of Stay by Dept", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}], "Y": [{"agg_col": ["AvgStayDays", 1]}]}},
+            {"type": "clusteredColumnChart", "title": "Revenue & Cost by Store", "query": {
+                "Category": [{"col": ["DimStore", "Store"]}],
+                "Y": [{"agg_col": ["Revenue", 0]}, {"agg_col": ["Cost", 0]}]}},
+            {"type": "lineChart", "title": "Monthly Profit Trend", "query": {
+                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"measure": "Total Profit"}]}},
+            {"type": "donutChart", "title": "Units by Category", "query": {
+                "Category": [{"col": ["DimCategory", "Category"]}], "Y": [{"agg_col": ["UnitsSold", 0]}]}},
+            {"type": "clusteredBarChart", "title": "Customers by Store", "query": {
+                "Category": [{"col": ["DimStore", "Store"]}], "Y": [{"agg_col": ["CustomerCount", 0]}]}},
+            {"type": "tableEx", "title": "Store Detail", "query": {"Values": [
+                {"col": ["DimStore", "Store"]}, {"measure": "Total Revenue"},
+                {"measure": "Total Customers"}, {"measure": "Avg Revenue per Customer"}]}},
         ]},
 
-        # ── Page 4: Patient Safety ──
-        {"id": "safety04", "title": "Patient Safety", "has_slicers": True, "slicers": [
-            {"title": "Department", "col": ["DimDepartment", "Department"]},
+        # ── Page 3: Product Analysis ──
+        {"id": "product03", "title": "Product Analysis", "has_slicers": True, "slicers": [
+            {"title": "Category", "col": ["DimCategory", "Category"]},
         ], "visuals": [
-            {"type": "clusteredBarChart", "title": "Mortality by Department", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}], "Y": [{"agg_col": ["MortalityCount", 0]}]}},
-            {"type": "lineChart", "title": "Mortality Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["MortalityCount", 0]}]}},
-            {"type": "donutChart", "title": "Mortality by Ward Type", "query": {
-                "Category": [{"col": ["DimWard", "WardType"]}], "Y": [{"agg_col": ["MortalityCount", 0]}]}},
-            {"type": "lineClusteredColumnComboChart", "title": "Readmissions vs Satisfaction", "query": {
+            {"type": "clusteredColumnChart", "title": "Revenue by Product", "query": {
+                "Category": [{"col": ["DimCategory", "Product"]}],
+                "Series": [{"col": ["DimCategory", "Category"]}],
+                "Y": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "lineClusteredColumnComboChart", "title": "Units & Revenue Trend", "query": {
                 "Category": [{"col": ["DimDate", "YearMonth"]}],
-                "Y": [{"agg_col": ["Readmissions", 0]}], "Y2": [{"agg_col": ["SatisfactionScore", 1]}]}},
-            {"type": "tableEx", "title": "Safety Detail", "query": {"Values": [
-                {"col": ["DimDepartment", "Department"]},
-                {"measure": "Total Mortality"}, {"measure": "Mortality Rate %"}, {"measure": "Readmission Rate %"}, {"measure": "Avg Satisfaction"}]}},
-            {"type": "waterfallChart", "title": "Mortality by Department", "query": {
-                "Category": [{"col": ["DimDepartment", "Department"]}], "Y": [{"agg_col": ["MortalityCount", 0]}]}},
-        ]},
-
-        # ── Page 5: Trends & KPIs ──
-        {"id": "trends05", "title": "Trends & KPIs", "has_slicers": True, "slicers": [
-            {"title": "Year", "col": ["DimDate", "Year"]},
-            {"title": "Department", "col": ["DimDepartment", "Department"]},
-        ], "visuals": [
-            {"type": "lineChart", "title": "Admissions Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["Admissions", 0]}]}},
-            {"type": "lineChart", "title": "Satisfaction Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["SatisfactionScore", 1]}]}},
-            {"type": "clusteredColumnChart", "title": "Quarterly Admissions", "query": {
-                "Category": [{"col": ["DimDate", "Quarter"]}], "Y": [{"agg_col": ["Admissions", 0]}]}},
-            {"type": "areaChart", "title": "Bed Occupancy Trend", "query": {
-                "Category": [{"col": ["DimDate", "YearMonth"]}], "Y": [{"agg_col": ["BedOccupancyPct", 1]}]}},
-            {"type": "tableEx", "title": "KPI Summary", "query": {"Values": [
-                {"col": ["DimDepartment", "Department"]},
-                {"measure": "Total Admissions"}, {"measure": "Avg Length of Stay"}, {"measure": "Avg Bed Occupancy %"}, {"measure": "Avg Wait Time"}]}},
-            {"type": "funnel", "title": "Discharges by Type", "query": {
-                "Category": [{"col": ["DimAdmission", "AdmissionType"]}], "Y": [{"agg_col": ["Discharges", 0]}]}},
+                "Y": [{"agg_col": ["Revenue", 0]}], "Y2": [{"agg_col": ["UnitsSold", 0]}]}},
+            {"type": "funnel", "title": "Revenue Funnel by Product", "query": {
+                "Category": [{"col": ["DimCategory", "Product"]}], "Y": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "waterfallChart", "title": "Profit Contribution by Product", "query": {
+                "Category": [{"col": ["DimCategory", "Product"]}], "Y": [{"agg_col": ["Revenue", 0]}]}},
+            {"type": "tableEx", "title": "Product Detail", "query": {"Values": [
+                {"col": ["DimCategory", "Product"]}, {"col": ["DimCategory", "Category"]},
+                {"measure": "Total Revenue"}, {"measure": "Total Units Sold"}, {"measure": "Return Rate %"}]}},
         ]},
     ],
 }
