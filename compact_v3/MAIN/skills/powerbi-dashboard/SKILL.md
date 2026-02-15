@@ -10,7 +10,9 @@ You are an expert Power BI PBIR dashboard generator. You create professional Pow
 ## How This Skill Works
 
 1. The user describes their dashboard requirements (data source, metrics, pages)
-2. You customize `generate_template.py` to match their needs
+2. Choose the right generator:
+   - **Level 1 (Quick Path)**: Sales/business dashboards → copy & edit `generate_template.py`
+   - **Level 2 (Custom Domain)**: Any domain (healthcare, HR, education, etc.) → copy & edit `generate_engine.py` SCHEMA
 3. Run the generator to produce a complete `.pbip` project
 4. The user opens it in Power BI Desktop
 
@@ -41,16 +43,12 @@ The template's existing data includes:
 
 This is rich enough for most sales/business dashboards. The agent MUST reuse these existing measures and columns — do NOT invent new ones that don't exist in the data.
 
-#### Level 2 — Full Customization (completely different data, 25+ turns)
-⚠️ **WARNING: Data, semantic model, and visuals are TIGHTLY COUPLED.** If you change field names in `generate_data()`, you MUST also update ALL of these consistently:
-- SalesData fact table M expression `#table()` column schema AND row builder format strings (~line 276-340)
-- All measure DAX formulas that reference column names (~line 350-430)
-- All dimension table extractions that read dict keys from data_rows (~line 650-690)
-- All dimension table M expression `#table()` type definitions and literals (~line 693-885)
-- All relationship definitions in `gen_semantic_model()` (~line 886-910)
-- All visual field references in `gen_report()` (~line 1470+)
+#### Level 2 — Custom Domain via Engine (any data schema, ≤20 turns) ← USE FOR NON-SALES DOMAINS
+Use `generate_engine.py` — a config-driven engine where you edit ONLY the `SCHEMA` dict at the top. The engine handles all coupling (data generation, M expressions, TMDL, relationships, visuals) automatically.
 
-Only use Level 2 if the user explicitly provides a completely different data schema (e.g., healthcare, HR, manufacturing). For sales/revenue dashboards, Level 1 is almost always sufficient.
+**When to use Level 2**: The user wants a dashboard for a completely different domain (education, healthcare, HR, manufacturing, etc.) that doesn't fit the sales data model.
+
+**How it works**: Copy `generate_engine.py`, edit only the `SCHEMA` dict, run it. The engine reads the SCHEMA and auto-generates everything — data, star schema, M expressions with preprocessing, TMDL files, and report pages with auto-layout. No manual coupling needed.
 
 ### What NOT to change:
 - Helper functions (`_lit_bool`, `_lit_num`, `_solid_color`, `_projection`, etc.)
@@ -111,6 +109,99 @@ write_json(f"{page_path}/visuals/KPIRevenue/visual.json", _visual_json(
         "Values": {"projections": [_projection(_measure_field("SalesData", "Total Revenue"), "SalesData.Total Revenue")]},
     },
 ))
+```
+
+## Level 2 Engine: SCHEMA Reference
+
+The `generate_engine.py` SCHEMA dict has these sections. Edit ONLY these — do NOT modify engine functions below the `ENGINE` marker.
+
+### SCHEMA Structure
+```python
+SCHEMA = {
+    "project_name": "MyProject",       # Output folder name
+    "brand_label": "MY DASHBOARD",      # Header bar text
+    "seed": 42,                         # Random seed for reproducible data
+    "fact_table": "FactTableName",      # Fact table name used in DAX/M
+
+    "date": {                           # Date dimension (auto-generated)
+        "years": [2023, 2024],
+        "dim_table": "DimDate",
+        "key_column": "DateKey",
+    },
+
+    "dimensions": [ ... ],              # Dimension tables (see below)
+    "fact_columns": [ ... ],            # Fact table metric columns
+    "measures": [ ... ],                # DAX measures
+    "relationships": [ ... ],           # Star schema relationships
+    "m_preprocessing": { ... },         # M/Power Query data cleaning steps
+    "sort_by_column": { ... },          # Column sort-by mappings
+    "pages": [ ... ],                   # Dashboard pages with visuals
+}
+```
+
+### Dimension Config
+```python
+{"dim_table": "DimFaculty", "key_column": "FacultyKey",
+ "columns": [
+     {"name": "FacultyKey", "type": "string"},
+     {"name": "Faculty", "type": "string"},
+ ],
+ "values": [
+     {"FacultyKey": "Business", "Faculty": "Business"},
+     {"FacultyKey": "Engineering", "Faculty": "Engineering"},
+ ],
+ "assignment": "cross"}  # REQUIRED: "cross" = cartesian product, "random" = random per row
+```
+
+### Fact Column Gen Types
+```python
+{"name": "Revenue", "type": "double", "summarize": "sum",
+ "gen": {"type": "random_float", "min": 1000, "max": 50000, "decimals": 2}}
+{"name": "Count", "type": "int64", "summarize": "sum",
+ "gen": {"type": "random_int", "min": 10, "max": 500}}
+{"name": "Status", "type": "string", "summarize": "none",
+ "gen": {"type": "random_choice", "choices": ["Active", "Inactive"]}}
+{"name": "Status", "type": "string", "summarize": "none",
+ "gen": {"type": "weighted_choice", "choices": ["Pass", "Fail"], "weights": [0.8, 0.2]}}
+{"name": "Region", "type": "string", "summarize": "none",
+ "gen": {"type": "from_dim", "dim": "DimCity", "col": "Region"}}
+```
+
+### Visual Query Shorthand (in page visuals)
+```python
+{"measure": "Total Revenue"}              # → _measure_field(fact_table, "Total Revenue")
+{"col": ["DimCity", "Region"]}             # → _col_field("DimCity", "Region")
+{"agg_col": ["Revenue", 0]}               # → _agg_col_field(fact_table, "Revenue", 0=Sum)
+{"agg_col": ["Score", 1]}                 # → _agg_col_field(fact_table, "Score", 1=Avg)
+```
+
+### Page Visual Config
+```python
+{"id": "page01", "title": "Overview", "has_slicers": False, "slicers": [], "visuals": [
+    {"type": "card", "title": "Total Revenue", "query": {"Values": [{"measure": "Total Revenue"}]}},
+    {"type": "clusteredBarChart", "title": "By City", "query": {
+        "Category": [{"col": ["DimCity", "City"]}], "Y": [{"agg_col": ["Revenue", 0]}]}},
+]}
+```
+Slicers support two formats plus optional width override:
+```python
+{"title": "City", "col": ["DimCity", "City"]}                              # Shorthand
+{"title": "City", "query": {"Values": [{"col": ["DimCity", "City"]}]}}     # Full query format
+{"title": "Select Cities", "col": ["DimCity", "City"], "w": 1260}          # With custom width
+```
+Default slicer width: 2 slicers split 625px each; 1 slicer uses full 1260px (or custom `w`).
+
+### M Preprocessing Config
+```python
+"m_preprocessing": {
+    "text_trim": ["City", "Name"],              # Text.Trim on these columns
+    "null_fill_text": ["City", "Name"],          # Replace null with "Unknown"
+    "normalize": [{"column": "Score", "min": 0, "max": 100}],  # Clamp values
+    "add_sort_key": {"name": "SortKey", "expr": "[Year] * 100 + [MonthNum]", "type": "Int64.Type"},
+    "sort_by": [["SortKey", "Ascending"]],       # Table.Sort
+    "drop_columns": ["SortKey"],                 # Remove helper columns
+    "filter_expr": "[Revenue] >= 0",             # Table.SelectRows
+}
 ```
 
 ## Supported Visual Types (14 total)
@@ -213,29 +304,43 @@ y=504   Table (w=625) + Chart (w=625) (h=170)
 
 ### Phase 4: Build & Validate
 8. Read `reference/SOP.md` **completely** (use offset to read ALL pages — lessons learned start at line 460+)
-9. **CRITICAL — Use bash `cp` to copy the template file. Do NOT use write_file.** Run:
+
+#### Level 1 Build Path (sales/business dashboards — DEFAULT)
+9. **Copy the template file using bash `cp`. Do NOT use write_file.** Run:
    ```
    mkdir -p {project_name}
    cp skills/powerbi-dashboard/generate_template.py {project_name}/generate_project.py
    ```
-   This preserves all 2187 lines (95KB) of helper functions, styling, PBIR patterns, and validated schemas. The template is TOO LARGE to reproduce from memory — you MUST copy the file literally.
-10. **Edit the copied file using `edit_file` (surgical edits). Choose your customization level:**
-
-    **Level 1 — Quick Path (DEFAULT):** Only edit these:
+10. **Edit the copied file using `edit_file` (surgical edits):**
     - `PROJECT_NAME = "AIPower"` → change to user's project name (~line 24)
     - `write_header_bar()` → change brand name (~line 1398, nested inside `gen_report()`)
     - `gen_report()` → remove unwanted page blocks, adjust visuals on remaining pages (~line 1267)
     - DO NOT change `generate_data()` or `gen_semantic_model()` — reuse the existing data schema
-
-    **Level 2 — Full Customization (only if user has completely different data):**
-    - `PROJECT_NAME` → change (~line 24)
-    - `generate_data()` → replace data schema (~line 120)
-    - `gen_semantic_model()` → update ALL tables, columns, relationships, measures (~line 262)
-    - `gen_report()` → update ALL visual field references to match new schema (~line 1267)
-    - ⚠️ These 3 functions are tightly coupled — you MUST update them ALL consistently or you'll get KeyError/field-not-found cascading errors
-
-    Do NOT touch helper functions, `gen_pbip()`, `gen_gitignore()`, `_visual_json()`, or any `_lit_*`/`_solid_color`/`_projection` functions.
+    - Do NOT touch helper functions, `gen_pbip()`, `gen_gitignore()`, `_visual_json()`, or any `_lit_*`/`_solid_color`/`_projection` functions.
 11. Run `python {project_name}/generate_project.py`
+
+#### Level 2 Build Path (custom domain — non-sales data)
+9. **Copy the engine file using bash `cp`. Do NOT use write_file.** Run:
+   ```
+   mkdir -p {project_name}
+   cp skills/powerbi-dashboard/generate_engine.py {project_name}/generate_project.py
+   ```
+10. **Edit ONLY the `SCHEMA` dict in the copied file using `edit_file`:**
+    - `"project_name"` → user's project name
+    - `"brand_label"` → dashboard header text
+    - `"fact_table"` → fact table name matching the domain
+    - `"date"` → year range for the data
+    - `"dimensions"` → define dimension tables with columns and values
+    - `"fact_columns"` → define metrics with gen specs (random_int, random_float, etc.)
+    - `"measures"` → define DAX measures with format strings
+    - `"relationships"` → star schema FK→PK relationships
+    - `"m_preprocessing"` → M/Power Query cleaning steps
+    - `"sort_by_column"` → column sort mappings
+    - `"pages"` → dashboard pages with visual query shorthand
+    - Do NOT modify anything below the `ENGINE` marker line
+11. Run `python {project_name}/generate_project.py`
+
+#### Common Steps (both levels)
 12. If errors occur, read the error, fix the specific issue with `edit_file`, and re-run. Do NOT rewrite the entire file for small fixes.
 13. Validate: all JSON parses, no visual overlaps, correct indentation
 14. Tell user to open `{project_name}/{project_name}.pbip` in Power BI Desktop
