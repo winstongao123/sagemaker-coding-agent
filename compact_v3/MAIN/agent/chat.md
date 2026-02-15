@@ -62,17 +62,157 @@ See `USER_GUIDE.md` for full documentation.
 
 ## Cell 1 (code)
 
-
+```python
+# Install dependencies (run once)
+!pip install -q boto3 ipywidgets Pillow python-docx pandas openpyxl
+```
 
 
 ## Cell 2 (code)
 
+```python
+# ============================================================
+# CONFIGURATION
+# ============================================================
+# Models are imported from sagemaker_agent.py (single source of truth)
 
+import ipywidgets as widgets
+from IPython.display import display, HTML
+from sagemaker_agent import BEDROCK_MODELS
+
+# Convert BEDROCK_MODELS list-of-tuples to dict for config cell
+AVAILABLE_MODELS = dict(BEDROCK_MODELS)
+
+# Temperature options
+TEMPERATURE_OPTIONS = {
+    "0.0 - Deterministic": 0.0,
+    "0.3 - Low creativity": 0.3,
+    "0.5 - Balanced": 0.5,
+    "0.7 - High creativity": 0.7,
+    "1.0 - Maximum creativity": 1.0,
+}
+
+# Thinking budget options
+THINKING_BUDGET_OPTIONS = {
+    "1024 - Minimal": 1024,
+    "2048 - Light": 2048,
+    "4096 - Standard": 4096,
+    "8192 - Extended": 8192,
+    "16000 - Maximum": 16000,
+}
+
+# Region - Sydney (ap-southeast-2)
+REGION = "ap-southeast-2"
+
+# Create configuration widgets
+display(HTML("<h3>Agent Configuration</h3>"))
+
+model_dropdown = widgets.Dropdown(
+    options=list(AVAILABLE_MODELS.keys()),
+    value="Claude 3 Haiku",
+    description='Model:',
+    style={'description_width': '120px'},
+    layout=widgets.Layout(width='450px')
+)
+
+temperature_dropdown = widgets.Dropdown(
+    options=list(TEMPERATURE_OPTIONS.keys()),
+    value="0.0 - Deterministic",
+    description='Temperature:',
+    style={'description_width': '120px'},
+    layout=widgets.Layout(width='350px')
+)
+
+thinking_checkbox = widgets.Checkbox(
+    value=False,
+    description='Enable Extended Thinking (slower, uses more tokens)',
+    indent=False,
+    style={'description_width': 'auto'}
+)
+
+thinking_budget_dropdown = widgets.Dropdown(
+    options=list(THINKING_BUDGET_OPTIONS.keys()),
+    value="4096 - Standard",
+    description='Thinking Budget:',
+    style={'description_width': '120px'},
+    layout=widgets.Layout(width='350px')
+)
+
+max_turns_slider = widgets.IntSlider(
+    value=60,
+    min=5,
+    max=100,
+    step=5,
+    description='Max Turns:',
+    style={'description_width': '120px'},
+    layout=widgets.Layout(width='400px')
+)
+
+workspace_input = widgets.Text(
+    value='.',
+    description='Workspace:',
+    placeholder='Directory for file operations',
+    style={'description_width': '120px'},
+    layout=widgets.Layout(width='400px')
+)
+
+mock_toggle = widgets.Checkbox(
+    value=False,
+    description='Mock Mode (test without API)',
+    indent=False,
+    style={'description_width': 'auto'}
+)
+
+# Display configuration UI
+config_box = widgets.VBox([
+    model_dropdown,
+    widgets.HTML(f"<p style='margin:5px 0;color:#888;'>Region: Sydney ({REGION})</p>"),
+    temperature_dropdown,
+    thinking_checkbox,
+    thinking_budget_dropdown,
+    workspace_input,
+    max_turns_slider,
+    mock_toggle,
+], layout=widgets.Layout(padding='10px', border='1px solid #444', margin='10px 0', background='#2d2d2d'))
+
+display(config_box)
+display(HTML("<p style='color:#888;font-size:12px;'>Configure settings above, then run the next cell to start.</p>"))
+```
 
 
 ## Cell 3 (code)
 
+```python
+# ============================================================
+# LAUNCH AGENT WITH CONFIGURATION
+# ============================================================
 
+from sagemaker_agent import CONFIG, create_chat_ui
+from IPython.display import display, HTML
+
+# Apply configuration from widgets above
+CONFIG.model_id = AVAILABLE_MODELS[model_dropdown.value]
+CONFIG.region = REGION  # Sydney
+CONFIG.workspace = workspace_input.value
+CONFIG.max_turns = max_turns_slider.value
+CONFIG.mock_mode = mock_toggle.value
+CONFIG.temperature = TEMPERATURE_OPTIONS[temperature_dropdown.value]
+CONFIG.thinking_enabled = thinking_checkbox.value
+CONFIG.thinking_budget = THINKING_BUDGET_OPTIONS[thinking_budget_dropdown.value]
+
+# Display current config
+thinking_str = f"Thinking: On (budget: {CONFIG.thinking_budget})" if CONFIG.thinking_enabled else "Thinking: Off"
+display(HTML(f"""
+<div style="background:#1e3a1e;padding:10px;border-radius:5px;margin:10px 0;color:#d4d4d4;">
+<b>Configuration Applied</b><br>
+Model: {model_dropdown.value} | Region: Sydney | Temp: {CONFIG.temperature}<br>
+{thinking_str} | Mock: {'Yes' if CONFIG.mock_mode else 'No'}
+</div>
+"""))
+
+# Launch the chat interface
+create_chat_ui()
+```
 
 
 ## Cell 4 (markdown)
@@ -94,14 +234,15 @@ The chat UI shows two token metrics:
 |-----------|--------|------------|
 | System prompt | ~1,200 | Yes (compressed from ~2,100) |
 | Tool schemas (22 tools) | ~1,800 | Yes (trimmed redundant descriptions) |
-| **Fixed overhead** | **~3,000** | **Saved ~1,300 tokens/call vs pre-optimization** |
+| Tool use system prompt (Bedrock) | ~346 | Added by Bedrock automatically when tools present |
+| **Fixed overhead** | **~3,350** | **Saved ~1,300 tokens/call vs pre-optimization** |
 
 The gap between API Totals and Context Window is normal. Example: 6 API calls with ~5K tokens each = ~30K cumulative input, but Context Window shows only ~900 tokens (just conversation messages).
 
 ### What's Optimized
 - System prompt compressed 128 -> 62 lines (removed redundancy, merged sections)
 - Tool descriptions shortened (removed duplicate info already in parameter schemas)
-- Sub-agents use filtered tool sets (explore: 5 tools, plan: 10, review: 6 — not all 22)
+- Sub-agents use filtered tool sets (explore: 5 tools, plan: 10, review: 6 -- not all 22)
 - History compaction at 80% context window (LLM summary + tool output pruning)
 
 ### Not Yet Possible (Bedrock limitation)
@@ -283,15 +424,23 @@ Optional JSON/JSONC config file for:
 
 ---
 
-## Cost Tracking
+## Cost Tracking (Updated 2026-02)
 
-Use `/cost` to see token usage and estimated cost. Pricing is per-model based on Bedrock rates.
+Use `/cost` to see token usage and estimated cost. Pricing per model on Bedrock (Sydney region).
+AU regional endpoints have 10% premium over global for Claude 4.5+ models.
 
-| Model | Input (per 1M tokens) | Output (per 1M tokens) |
-|-------|----------------------|----------------------|
-| Claude 3 Haiku | $0.25 | $1.25 |
-| Claude 3 Sonnet | $3.00 | $15.00 |
-| Claude 3.5 Sonnet | $3.00 | $15.00 |
+| Model | Input (per 1M tokens) | Output (per 1M tokens) | Notes |
+|-------|----------------------|----------------------|-------|
+| Claude 3 Haiku | $0.25 | $1.25 | Legacy, cheapest |
+| Claude 3 Sonnet | $3.00 | $15.00 | Legacy |
+| Claude 3.5 Haiku | $0.80 | $4.00 | Legacy |
+| Claude 3.5 Sonnet (v1/v2) | $3.00 | $15.00 | Legacy |
+| Claude 4.5 Haiku (AU) | $1.10 | $5.50 | 10% AU premium |
+| Claude 4.5 Sonnet (AU) | $3.30 | $16.50 | 10% AU premium |
+| Claude 4.5 Opus (Global) | $5.00 | $25.00 | Global endpoint |
+| Claude 4.6 Opus (AU) | $5.50 | $27.50 | 10% AU premium |
+
+Sources: [Anthropic Pricing](https://platform.claude.com/docs/en/about-claude/pricing), [AWS Bedrock Pricing](https://aws.amazon.com/bedrock/pricing/)
 
 ---
 

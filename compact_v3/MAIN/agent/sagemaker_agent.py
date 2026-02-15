@@ -2152,16 +2152,24 @@ CONTEXT = ContextManager(CONFIG.context_max_tokens)
 # TOKEN TRACKER
 # ============================================================
 
-# Bedrock pricing per 1K tokens (USD, ap-southeast-2 as of 2025)
+# Bedrock pricing per 1K tokens (USD, 2026-02)
+# Regional (AU) endpoints have 10% premium over global for Claude 4.5+ models.
+# Sources: platform.claude.com/docs/en/about-claude/pricing, aws.amazon.com/bedrock/pricing
 _MODEL_PRICING = {
-    "anthropic.claude-3-haiku-20240307-v1:0":     {"input": 0.00025, "output": 0.00125},
-    "anthropic.claude-3-5-haiku-20241022-v1:0":    {"input": 0.001,   "output": 0.005},
-    "anthropic.claude-3-sonnet-20240229-v1:0":     {"input": 0.003,   "output": 0.015},
-    "anthropic.claude-3-5-sonnet-20240620-v1:0":   {"input": 0.003,   "output": 0.015},
-    "anthropic.claude-3-5-sonnet-20241022-v2:0":   {"input": 0.003,   "output": 0.015},
-    "anthropic.claude-3-opus-20240229-v1:0":       {"input": 0.015,   "output": 0.075},
-    "us.anthropic.claude-sonnet-4-20250514-v1:0":  {"input": 0.003,   "output": 0.015},
-    "us.anthropic.claude-opus-4-20250514-v1:0":    {"input": 0.015,   "output": 0.075},
+    # Claude 3 (legacy, no regional premium)
+    "anthropic.claude-3-haiku-20240307-v1:0":          {"input": 0.00025, "output": 0.00125},
+    "anthropic.claude-3-sonnet-20240229-v1:0":         {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-opus-20240229-v1:0":           {"input": 0.015,   "output": 0.075},
+    # Claude 3.5 (legacy, no regional premium)
+    "anthropic.claude-3-5-haiku-20241022-v1:0":        {"input": 0.0008,  "output": 0.004},
+    "anthropic.claude-3-5-sonnet-20240620-v1:0":       {"input": 0.003,   "output": 0.015},
+    "anthropic.claude-3-5-sonnet-20241022-v2:0":       {"input": 0.003,   "output": 0.015},
+    # Claude 4.5 - AU regional endpoints (10% premium: $3.30/$16.50, $1.10/$5.50, $5.50/$27.50)
+    "au.anthropic.claude-sonnet-4-5-20250929-v1:0":    {"input": 0.0033,  "output": 0.0165},
+    "au.anthropic.claude-haiku-4-5-20251001-v1:0":     {"input": 0.0011,  "output": 0.0055},
+    "global.anthropic.claude-opus-4-5-20251101-v1:0":  {"input": 0.005,   "output": 0.025},
+    # Claude 4.6 - AU regional endpoint (10% premium: $5.50/$27.50)
+    "au.anthropic.claude-opus-4-6-v1":                 {"input": 0.0055,  "output": 0.0275},
 }
 
 
