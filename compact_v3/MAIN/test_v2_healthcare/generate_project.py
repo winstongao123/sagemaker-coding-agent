@@ -1522,7 +1522,7 @@ def gen_report(schema):
             folder_name = f"V{vi:02d}_{title_slug}"
 
             write_json(f"{page_path}/visuals/{folder_name}/visual.json", _visual_json(
-                name=make_uuid(f"visual.{page_id}.{v_title}"),
+                name=make_uuid(f"visual.{page_id}.{vi}.{v_title}"),
                 visual_type=v_type,
                 x=vx, y=vy, w=vw, h=vh,
                 tab_order=tab_order,
