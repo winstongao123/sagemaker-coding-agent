@@ -4127,7 +4127,7 @@ TOOLS = {
     "python_exec": (tool_python_exec, True, "Execute Python code for data processing, calculations, scripting.",
         {"type": "object", "properties": {"code": {"type": "string"}, "timeout": {"type": "integer", "description": "Seconds (max 300)"}}, "required": ["code"]}),
 
-    "create_word": (tool_create_word, True, "Create Word doc (.docx) with markdown formatting. Supports headings, bold, italic, bullets, tables, ---PAGE--- breaks, ![alt](image.png) images.",
+    "create_word": (tool_create_word, True, "Create Word doc (.docx) with markdown formatting. Supports headings, bold, italic, bullets, tables, ---PAGE--- breaks, ![alt](image.png) images. Images must be actual image files (.png/.jpg), NOT Excel files. Use create_chart first for chart images.",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Markdown content. Use ![caption](image.png) to embed images."}, "title": {"type": "string", "description": "Document title"}, "include_toc": {"type": "boolean", "description": "Add Table of Contents"}, "header": {"type": "string"}, "footer": {"type": "string"}}, "required": ["filepath", "content"]}),
 
     "create_excel": (tool_create_excel, True, "Create Excel spreadsheet (.xlsx) with optional embedded chart",
