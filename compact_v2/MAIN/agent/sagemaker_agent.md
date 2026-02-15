@@ -5425,8 +5425,8 @@ def create_chat_ui(mock_mode: bool = None):
                 <span>💰 Cost: <b>{cost_fmt}</b> | Last: {last_fmt} | {rate_str}</span>
             </div>
             <div style="margin-top:3px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
-                <span style="color:{ctx_color}">Context Window: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,})</span>
-                <span style="font-size:10px;">True context/call: ~{true_ctx:,} (msgs + ~{overhead:,} overhead)</span>
+                <span style="color:{ctx_color}">Context Window: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,}) — your conversation size, compacts at 80%</span>
+                <span style="font-size:10px;">Sent per call: ~{true_ctx:,} — conversation ({ctx_tokens:,}) + fixed overhead (~{overhead:,})</span>
             </div>
             <div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">
                 <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;"></div>
