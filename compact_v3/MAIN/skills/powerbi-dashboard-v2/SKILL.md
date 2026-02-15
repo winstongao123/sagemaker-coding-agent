@@ -334,3 +334,38 @@ y=504   Content row 3 (h=170, 2 visuals)
 9. Run `python {project_name}/generate_project.py`
 10. If errors, read the traceback, fix ONLY the SCHEMA issue with `edit_file`, re-run
 11. Tell user to open `{project_name}/{project_name}.pbip` in Power BI Desktop
+
+## Capabilities & Limitations
+
+### What V2 CAN do (agent controls via SCHEMA)
+- **Any data domain**: healthcare, education, HR, finance, manufacturing, retail, etc.
+- **Custom star schema**: any fact table name, any number of dimensions (tested up to 5)
+- **Custom columns**: int64, double, string types with 5 data generators (random_int, random_float, random_choice, weighted_choice, from_dim)
+- **Custom DAX measures**: SUM, AVERAGE, CALCULATE, DIVIDE, any DAX formula with format strings
+- **Custom relationships**: any many-to-one FK->PK star schema relationships
+- **M preprocessing pipeline**: text trimming, null handling, value normalization, computed columns, sorting, filtering
+- **14 visual types**: card, slicer, pageNavigator, clusteredColumnChart, clusteredBarChart, lineChart, areaChart, donutChart, lineClusteredColumnComboChart, lineStackedColumnComboChart, treemap, waterfallChart, funnel, tableEx
+- **4-8 pages**: executive overview (no slicers) + detail pages (with slicers)
+- **Auto-layout**: engine computes x/y/w/h positions automatically (2 visuals per row)
+- **Slicers**: on any dimension column, 1-2 per page, auto-width
+
+### What V2 CANNOT do (hardcoded in engine)
+- **No live data connections**: generates sample data via M `#table()` only. Cannot connect to SQL Server, CSV files, APIs, or SharePoint. User must swap data source in Power BI Desktop after opening.
+- **No custom visual positioning**: layout is fixed 1280x720, 2-per-row grid. Cannot place a visual at arbitrary x/y or resize beyond the grid.
+- **Single fact table only**: star schema with 1 fact + N dimensions. No multi-fact, snowflake, or bridge tables.
+- **No custom colors per visual**: uses a fixed professional color scheme (navy/slate/white). Theme applies globally.
+- **Max ~7 content visuals per page**: auto-layout supports 3 rows of 2 visuals + up to 4 cards. Cannot add a 4th content row.
+- **No calculated columns**: only DAX measures. Cannot add Power Query computed columns to existing tables (preprocessing `add_sort_key` is the exception, but it's dropped before output).
+- **No drill-through pages**: cannot configure drill-through actions between pages.
+- **No bookmarks or toggles**: cannot create show/hide bookmark groups.
+- **No custom visuals**: only the 14 built-in visual types. No AppSource marketplace visuals.
+- **No row-level security (RLS)**: cannot define security roles.
+- **No incremental refresh**: data is fully embedded, not incrementally loaded.
+- **Date dimension is fixed format**: always generates Year, Quarter, Month, MonthNum, YearMonth, DateKey. Cannot add Week, DayOfWeek, or fiscal calendar columns.
+
+### After generation (what user can do in Power BI Desktop)
+- Swap embedded `#table()` data for real data sources (SQL, CSV, API)
+- Add more visuals, pages, or custom visuals via the Power BI UI
+- Change colors, fonts, and themes
+- Add drill-through, bookmarks, or RLS
+- Publish to Power BI Service

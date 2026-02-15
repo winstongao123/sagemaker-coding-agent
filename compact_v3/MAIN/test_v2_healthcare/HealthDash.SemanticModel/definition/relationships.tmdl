@@ -1,0 +1,15 @@
+relationship 57a6ff91-c7a4-5a8f-9b3c-0c38761ddf55
+	fromColumn: PatientData.DateKey
+	toColumn: DimDate.DateKey
+
+relationship d6d66d44-115b-55a4-a665-cb294c699aa4
+	fromColumn: PatientData.DeptKey
+	toColumn: DimDepartment.DeptKey
+
+relationship 560a1a50-1bff-56fb-9687-7646ca37214f
+	fromColumn: PatientData.WardKey
+	toColumn: DimWard.WardKey
+
+relationship 05bdcb33-859a-5909-8162-69811c4e7654
+	fromColumn: PatientData.AdmissionType
+	toColumn: DimAdmission.AdmissionType

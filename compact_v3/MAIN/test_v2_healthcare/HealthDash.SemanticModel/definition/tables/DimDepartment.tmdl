@@ -1,0 +1,31 @@
+table DimDepartment
+	lineageTag: 83633de3-1d10-5140-ad98-64e4905c3b25
+
+	column DeptKey
+		dataType: string
+		lineageTag: c0ec5d28-fe82-5302-b042-86cb453bbcba
+		summarizeBy: none
+		sourceColumn: DeptKey
+
+	column Department
+		dataType: string
+		lineageTag: db9a3a83-2033-5878-8fad-c3c82502dd05
+		summarizeBy: none
+		sourceColumn: Department
+
+	partition DimDepartment = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [DeptKey = text, Department = text],
+					{
+						{"Emergency", "Emergency"},
+						{"Cardiology", "Cardiology"},
+						{"Orthopedics", "Orthopedics"},
+						{"Neurology", "Neurology"},
+						{"Oncology", "Oncology"}
+					}
+				)
+			in
+				Source

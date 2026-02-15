@@ -1,0 +1,681 @@
+table PatientData
+	lineageTag: b4aeaedb-02ff-5065-9200-077ebf632be9
+
+	measure 'Total Admissions' = SUM(PatientData[Admissions])
+		formatString: #,##0
+		lineageTag: 9005886f-4ce1-5768-8f76-058a6276f123
+
+	measure 'Total Discharges' = SUM(PatientData[Discharges])
+		formatString: #,##0
+		lineageTag: 7aa1f6a4-a018-57c7-bdd3-3b4afb21d219
+
+	measure 'Total Readmissions' = SUM(PatientData[Readmissions])
+		formatString: #,##0
+		lineageTag: 7574e584-0839-51d4-a81f-dba6875ba248
+
+	measure 'Readmission Rate %' = DIVIDE([Total Readmissions], [Total Admissions])
+		formatString: #,##0.0"%"
+		lineageTag: 1bcf768b-b141-5949-840d-98c74bb348c0
+
+	measure 'Avg Length of Stay' = AVERAGE(PatientData[AvgStayDays])
+		formatString: #,##0.0
+		lineageTag: 8c35a2f8-4130-5755-a40b-6177757233f1
+
+	measure 'Avg Satisfaction' = AVERAGE(PatientData[SatisfactionScore])
+		formatString: #,##0.00
+		lineageTag: 01762435-cb37-579d-9809-8bd08b2b9f62
+
+	measure 'Total Mortality' = SUM(PatientData[MortalityCount])
+		formatString: #,##0
+		lineageTag: 75f127f2-25f8-59b2-8c85-e2b57b5e6706
+
+	measure 'Mortality Rate %' = DIVIDE([Total Mortality], [Total Admissions])
+		formatString: #,##0.0"%"
+		lineageTag: 2d05f02c-17e5-569a-b925-fb4b4634526b
+
+	measure 'Avg Bed Occupancy %' = AVERAGE(PatientData[BedOccupancyPct])
+		formatString: #,##0.0"%"
+		lineageTag: 3a1b3e83-a262-5934-aa0b-5531592aa5f8
+
+	measure 'Avg Wait Time' = AVERAGE(PatientData[WaitTimeHours])
+		formatString: #,##0.0
+		lineageTag: 6cfbc47b-00ca-53a6-bb8f-799dce6fe12d
+
+	column DateKey
+		dataType: int64
+		lineageTag: f292d78e-672e-57dc-a7ef-19862784ec07
+		summarizeBy: none
+		sourceColumn: DateKey
+
+	column DeptKey
+		dataType: string
+		lineageTag: 234b26e3-c9c1-5f7f-96e6-1e7c526b320c
+		summarizeBy: none
+		sourceColumn: DeptKey
+
+	column WardKey
+		dataType: string
+		lineageTag: 474d7218-ef73-5db3-a375-fb09a3848d39
+		summarizeBy: none
+		sourceColumn: WardKey
+
+	column AdmissionType
+		dataType: string
+		lineageTag: fbc8f46a-7166-584e-b981-9bd01f89750e
+		summarizeBy: none
+		sourceColumn: AdmissionType
+
+	column Department
+		dataType: string
+		lineageTag: c4d62c0f-4c1a-5ad2-942d-3a3a1917a66f
+		summarizeBy: none
+		sourceColumn: Department
+
+	column Ward
+		dataType: string
+		lineageTag: 56f52f12-ec2a-5868-afbe-af8e4d0efc44
+		summarizeBy: none
+		sourceColumn: Ward
+
+	column WardType
+		dataType: string
+		lineageTag: e38df4d9-6c05-5476-abcc-ea982d2d5c8b
+		summarizeBy: none
+		sourceColumn: WardType
+
+	column Year
+		dataType: int64
+		lineageTag: c07da00a-d437-5416-aa20-97a552d0a805
+		summarizeBy: none
+		sourceColumn: Year
+
+	column Quarter
+		dataType: string
+		lineageTag: 873a258c-fbd2-5277-84bd-212cdde628da
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column Month
+		dataType: string
+		lineageTag: 30f38e93-a616-50aa-be52-5ff32d61c316
+		summarizeBy: none
+		sourceColumn: Month
+		sortByColumn: MonthNum
+
+	column MonthNum
+		dataType: int64
+		lineageTag: 270bdb3f-3cf0-56d0-8021-e4957488d4e7
+		summarizeBy: none
+		sourceColumn: MonthNum
+
+	column YearMonth
+		dataType: string
+		lineageTag: 0ce17f48-5105-5a23-aecb-1489b0d36672
+		summarizeBy: none
+		sourceColumn: YearMonth
+		sortByColumn: DateKey
+
+	column YearMonthSort
+		dataType: int64
+		lineageTag: 6fec693f-2d23-5c9f-ac24-d77ff5f6d287
+		summarizeBy: none
+		sourceColumn: YearMonthSort
+
+	column Admissions
+		dataType: int64
+		lineageTag: 684f84dc-1174-55ca-b691-446bbb319f89
+		summarizeBy: sum
+		sourceColumn: Admissions
+
+	column Discharges
+		dataType: int64
+		lineageTag: a5ef8932-c012-5835-84c5-c5b84e342f40
+		summarizeBy: sum
+		sourceColumn: Discharges
+
+	column Readmissions
+		dataType: int64
+		lineageTag: 23f7a19e-b339-523b-90df-bcc7f3d4a7da
+		summarizeBy: sum
+		sourceColumn: Readmissions
+
+	column AvgStayDays
+		dataType: double
+		lineageTag: c12c0026-8b46-59c4-a0cc-dc1161df4725
+		summarizeBy: average
+		sourceColumn: AvgStayDays
+
+	column SatisfactionScore
+		dataType: double
+		lineageTag: c2b9d18b-74e0-500d-bf8e-77b2313bbe4b
+		summarizeBy: average
+		sourceColumn: SatisfactionScore
+
+	column MortalityCount
+		dataType: int64
+		lineageTag: 2718e1e9-bae8-5229-88a1-f06cb19351ea
+		summarizeBy: sum
+		sourceColumn: MortalityCount
+
+	column BedOccupancyPct
+		dataType: double
+		lineageTag: 9cca3f7b-ab96-5bd0-940e-c01bf1816064
+		summarizeBy: average
+		sourceColumn: BedOccupancyPct
+
+	column WaitTimeHours
+		dataType: double
+		lineageTag: 6171edd8-81a8-5422-a124-c3179fa2bda3
+		summarizeBy: average
+		sourceColumn: WaitTimeHours
+
+	partition PatientData = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					type table [DateKey = Int64.Type, DeptKey = text, WardKey = text, AdmissionType = text, Department = text, Ward = text, WardType = text, Year = Int64.Type, Quarter = text, Month = text, MonthNum = Int64.Type, YearMonth = text, YearMonthSort = Int64.Type, Admissions = Int64.Type, Discharges = Int64.Type, Readmissions = Int64.Type, AvgStayDays = number, SatisfactionScore = number, MortalityCount = Int64.Type, BedOccupancyPct = number, WaitTimeHours = number],
+					{
+						{202301, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2023, "Q1", "January", 1, "2023-01", 202301, 42, 26, 7, 3.9, 4.85, 2, 75.5, 4.7},
+						{202301, "Emergency", "Ward-B", "Transfer", "Emergency", "Ward-B", "ICU", 2023, "Q1", "January", 1, "2023-01", 202301, 31, 19, 0, 12.1, 2.57, 3, 62.4, 6.6},
+						{202301, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2023, "Q1", "January", 1, "2023-01", 202301, 50, 24, 10, 5.5, 2.72, 2, 78.0, 2.0},
+						{202301, "Emergency", "Ward-D", "Emergency", "Emergency", "Ward-D", "Recovery", 2023, "Q1", "January", 1, "2023-01", 202301, 10, 11, 6, 10.2, 4.75, 4, 85.3, 1.1},
+						{202301, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q1", "January", 1, "2023-01", 202301, 28, 43, 2, 2.7, 3.65, 0, 94.4, 6.4},
+						{202301, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q1", "January", 1, "2023-01", 202301, 35, 57, 3, 5.9, 3.82, 3, 87.3, 7.6},
+						{202301, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2023, "Q1", "January", 1, "2023-01", 202301, 32, 29, 15, 6.5, 2.85, 3, 55.6, 7.9},
+						{202301, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2023, "Q1", "January", 1, "2023-01", 202301, 64, 6, 11, 11.0, 3.58, 2, 97.4, 7.3},
+						{202301, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2023, "Q1", "January", 1, "2023-01", 202301, 63, 8, 15, 11.8, 4.14, 1, 67.8, 1.2},
+						{202301, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2023, "Q1", "January", 1, "2023-01", 202301, 46, 54, 0, 2.3, 3.7, 0, 85.1, 2.3},
+						{202301, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2023, "Q1", "January", 1, "2023-01", 202301, 60, 15, 12, 13.7, 2.76, 1, 65.3, 2.1},
+						{202301, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2023, "Q1", "January", 1, "2023-01", 202301, 21, 22, 4, 1.8, 4.9, 1, 83.8, 6.3},
+						{202301, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2023, "Q1", "January", 1, "2023-01", 202301, 77, 54, 15, 7.8, 4.0, 0, 75.3, 3.6},
+						{202301, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2023, "Q1", "January", 1, "2023-01", 202301, 36, 37, 14, 12.4, 2.55, 3, 58.0, 0.6},
+						{202301, "Neurology", "Ward-C", "Emergency", "Neurology", "Ward-C", "Surgical", 2023, "Q1", "January", 1, "2023-01", 202301, 2, 12, 3, 7.9, 4.2, 3, 62.1, 7.6},
+						{202301, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2023, "Q1", "January", 1, "2023-01", 202301, 37, 59, 15, 8.2, 4.54, 3, 63.3, 6.7},
+						{202301, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2023, "Q1", "January", 1, "2023-01", 202301, 33, 37, 2, 12.2, 3.31, 1, 88.4, 7.8},
+						{202301, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q1", "January", 1, "2023-01", 202301, 62, 68, 12, 7.8, 3.5, 2, 71.3, 6.1},
+						{202301, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2023, "Q1", "January", 1, "2023-01", 202301, 40, 11, 8, 9.9, 2.86, 2, 95.0, 5.7},
+						{202301, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q1", "January", 1, "2023-01", 202301, 76, 72, 1, 8.1, 4.64, 4, 60.2, 5.7},
+						{202302, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2023, "Q1", "February", 2, "2023-02", 202302, 35, 21, 10, 2.3, 3.79, 4, 80.1, 3.3},
+						{202302, "Emergency", "Ward-B", "Transfer", "Emergency", "Ward-B", "ICU", 2023, "Q1", "February", 2, "2023-02", 202302, 39, 11, 11, 7.2, 4.05, 0, 57.0, 6.1},
+						{202302, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2023, "Q1", "February", 2, "2023-02", 202302, 64, 52, 2, 6.9, 2.77, 3, 88.6, 0.8},
+						{202302, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2023, "Q1", "February", 2, "2023-02", 202302, 34, 33, 5, 8.3, 4.17, 0, 56.9, 8.0},
+						{202302, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q1", "February", 2, "2023-02", 202302, 50, 66, 2, 3.7, 3.7, 4, 79.4, 6.0},
+						{202302, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2023, "Q1", "February", 2, "2023-02", 202302, 61, 30, 6, 7.6, 3.59, 4, 71.6, 5.4},
+						{202302, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2023, "Q1", "February", 2, "2023-02", 202302, 26, 52, 3, 4.1, 4.03, 5, 68.2, 5.5},
+						{202302, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2023, "Q1", "February", 2, "2023-02", 202302, 55, 25, 11, 11.3, 3.03, 2, 89.2, 7.5},
+						{202302, "Orthopedics", "Ward-A", "Elective", "Orthopedics", "Ward-A", "General", 2023, "Q1", "February", 2, "2023-02", 202302, 19, 34, 14, 5.2, 3.73, 5, 95.5, 4.1},
+						{202302, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2023, "Q1", "February", 2, "2023-02", 202302, 9, 36, 9, 3.7, 2.52, 2, 80.0, 3.7},
+						{202302, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2023, "Q1", "February", 2, "2023-02", 202302, 79, 55, 12, 12.5, 4.5, 5, 73.9, 7.0},
+						{202302, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2023, "Q1", "February", 2, "2023-02", 202302, 61, 63, 12, 12.7, 3.46, 4, 73.5, 6.1},
+						{202302, "Neurology", "Ward-A", "Emergency", "Neurology", "Ward-A", "General", 2023, "Q1", "February", 2, "2023-02", 202302, 77, 40, 9, 7.0, 4.68, 5, 79.4, 4.8},
+						{202302, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2023, "Q1", "February", 2, "2023-02", 202302, 43, 48, 8, 9.0, 4.65, 2, 70.3, 1.4},
+						{202302, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2023, "Q1", "February", 2, "2023-02", 202302, 19, 22, 1, 7.7, 3.24, 2, 95.8, 7.1},
+						{202302, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2023, "Q1", "February", 2, "2023-02", 202302, 33, 18, 5, 5.6, 4.24, 3, 80.3, 4.3},
+						{202302, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2023, "Q1", "February", 2, "2023-02", 202302, 30, 26, 1, 13.2, 4.83, 0, 81.3, 3.7},
+						{202302, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2023, "Q1", "February", 2, "2023-02", 202302, 12, 4, 1, 10.6, 3.72, 2, 72.4, 1.1},
+						{202302, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2023, "Q1", "February", 2, "2023-02", 202302, 66, 47, 7, 8.8, 4.68, 0, 83.5, 6.5},
+						{202302, "Oncology", "Ward-D", "Transfer", "Oncology", "Ward-D", "Recovery", 2023, "Q1", "February", 2, "2023-02", 202302, 22, 23, 6, 5.0, 4.87, 0, 86.9, 4.5},
+						{202303, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2023, "Q1", "March", 3, "2023-03", 202303, 25, 47, 14, 10.3, 3.7, 1, 59.9, 4.1},
+						{202303, "Emergency", "Ward-B", "Transfer", "Emergency", "Ward-B", "ICU", 2023, "Q1", "March", 3, "2023-03", 202303, 50, 53, 14, 2.7, 2.92, 5, 76.4, 2.6},
+						{202303, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2023, "Q1", "March", 3, "2023-03", 202303, 41, 34, 10, 13.3, 3.41, 2, 64.8, 6.5},
+						{202303, "Emergency", "Ward-D", "Emergency", "Emergency", "Ward-D", "Recovery", 2023, "Q1", "March", 3, "2023-03", 202303, 4, 72, 7, 11.2, 4.0, 0, 73.2, 1.2},
+						{202303, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2023, "Q1", "March", 3, "2023-03", 202303, 55, 30, 15, 10.4, 3.12, 2, 65.1, 6.2},
+						{202303, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q1", "March", 3, "2023-03", 202303, 43, 63, 15, 3.8, 3.5, 3, 61.5, 0.7},
+						{202303, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2023, "Q1", "March", 3, "2023-03", 202303, 7, 22, 0, 13.7, 4.91, 3, 66.0, 4.0},
+						{202303, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2023, "Q1", "March", 3, "2023-03", 202303, 36, 55, 3, 9.1, 4.76, 0, 60.8, 3.3},
+						{202303, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2023, "Q1", "March", 3, "2023-03", 202303, 14, 21, 8, 10.9, 4.81, 0, 96.7, 3.3},
+						{202303, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2023, "Q1", "March", 3, "2023-03", 202303, 33, 2, 5, 5.1, 3.6, 3, 65.9, 3.0},
+						{202303, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2023, "Q1", "March", 3, "2023-03", 202303, 1, 72, 15, 12.2, 2.97, 5, 56.4, 5.8},
+						{202303, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2023, "Q1", "March", 3, "2023-03", 202303, 56, 50, 6, 11.5, 2.82, 2, 89.9, 6.8},
+						{202303, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2023, "Q1", "March", 3, "2023-03", 202303, 28, 60, 7, 8.3, 4.2, 0, 60.5, 6.3},
+						{202303, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2023, "Q1", "March", 3, "2023-03", 202303, 66, 75, 0, 3.2, 3.55, 3, 66.8, 1.5},
+						{202303, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2023, "Q1", "March", 3, "2023-03", 202303, 68, 20, 15, 11.6, 4.27, 4, 86.6, 2.2},
+						{202303, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2023, "Q1", "March", 3, "2023-03", 202303, 56, 52, 12, 10.4, 4.95, 1, 64.0, 5.2},
+						{202303, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2023, "Q1", "March", 3, "2023-03", 202303, 55, 15, 3, 8.4, 3.81, 4, 89.4, 3.2},
+						{202303, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q1", "March", 3, "2023-03", 202303, 74, 67, 4, 3.6, 3.25, 5, 60.9, 1.0},
+						{202303, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2023, "Q1", "March", 3, "2023-03", 202303, 10, 1, 13, 11.2, 4.49, 2, 71.9, 1.6},
+						{202303, "Oncology", "Ward-D", "Transfer", "Oncology", "Ward-D", "Recovery", 2023, "Q1", "March", 3, "2023-03", 202303, 30, 59, 0, 6.6, 3.64, 3, 66.0, 6.9},
+						{202304, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2023, "Q2", "April", 4, "2023-04", 202304, 6, 16, 7, 5.4, 3.82, 0, 97.7, 6.7},
+						{202304, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2023, "Q2", "April", 4, "2023-04", 202304, 57, 56, 6, 12.0, 3.29, 0, 67.2, 2.9},
+						{202304, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2023, "Q2", "April", 4, "2023-04", 202304, 38, 39, 0, 5.3, 4.14, 2, 58.7, 2.0},
+						{202304, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2023, "Q2", "April", 4, "2023-04", 202304, 3, 64, 15, 3.0, 4.63, 3, 95.2, 7.4},
+						{202304, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2023, "Q2", "April", 4, "2023-04", 202304, 73, 49, 9, 4.5, 4.1, 4, 85.4, 4.9},
+						{202304, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q2", "April", 4, "2023-04", 202304, 51, 63, 1, 6.9, 4.15, 3, 71.1, 6.2},
+						{202304, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2023, "Q2", "April", 4, "2023-04", 202304, 6, 3, 7, 6.3, 4.65, 0, 65.7, 3.3},
+						{202304, "Cardiology", "Ward-D", "Transfer", "Cardiology", "Ward-D", "Recovery", 2023, "Q2", "April", 4, "2023-04", 202304, 66, 44, 12, 11.0, 4.38, 4, 56.0, 7.4},
+						{202304, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2023, "Q2", "April", 4, "2023-04", 202304, 74, 55, 13, 3.9, 4.0, 0, 95.6, 1.2},
+						{202304, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2023, "Q2", "April", 4, "2023-04", 202304, 38, 26, 10, 5.8, 3.05, 4, 88.9, 3.0},
+						{202304, "Orthopedics", "Ward-C", "Emergency", "Orthopedics", "Ward-C", "Surgical", 2023, "Q2", "April", 4, "2023-04", 202304, 71, 48, 11, 9.1, 4.75, 1, 73.0, 3.7},
+						{202304, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2023, "Q2", "April", 4, "2023-04", 202304, 24, 6, 3, 11.9, 4.52, 4, 80.5, 3.7},
+						{202304, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2023, "Q2", "April", 4, "2023-04", 202304, 28, 72, 5, 3.1, 4.98, 0, 83.2, 4.3},
+						{202304, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2023, "Q2", "April", 4, "2023-04", 202304, 45, 25, 7, 6.4, 4.1, 5, 81.6, 5.7},
+						{202304, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2023, "Q2", "April", 4, "2023-04", 202304, 67, 63, 15, 2.9, 3.92, 1, 75.5, 0.6},
+						{202304, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2023, "Q2", "April", 4, "2023-04", 202304, 73, 23, 15, 13.3, 2.8, 2, 96.4, 5.9},
+						{202304, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2023, "Q2", "April", 4, "2023-04", 202304, 68, 30, 4, 2.4, 3.7, 4, 59.9, 2.4},
+						{202304, "Oncology", "Ward-B", "Elective", "Oncology", "Ward-B", "ICU", 2023, "Q2", "April", 4, "2023-04", 202304, 41, 40, 3, 9.7, 4.18, 3, 98.0, 7.8},
+						{202304, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2023, "Q2", "April", 4, "2023-04", 202304, 19, 6, 9, 2.8, 2.57, 3, 72.7, 4.6},
+						{202304, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q2", "April", 4, "2023-04", 202304, 74, 31, 9, 9.9, 3.77, 2, 59.6, 7.3},
+						{202305, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2023, "Q2", "May", 5, "2023-05", 202305, 71, 20, 5, 3.8, 2.83, 3, 77.7, 2.1},
+						{202305, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2023, "Q2", "May", 5, "2023-05", 202305, 21, 45, 6, 3.7, 4.72, 2, 57.3, 0.8},
+						{202305, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2023, "Q2", "May", 5, "2023-05", 202305, 48, 23, 3, 10.0, 4.59, 4, 78.9, 6.3},
+						{202305, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2023, "Q2", "May", 5, "2023-05", 202305, 5, 48, 13, 11.3, 4.53, 2, 58.2, 2.9},
+						{202305, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q2", "May", 5, "2023-05", 202305, 8, 6, 0, 2.1, 3.87, 2, 56.8, 7.0},
+						{202305, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q2", "May", 5, "2023-05", 202305, 49, 39, 5, 2.8, 4.31, 0, 94.2, 4.1},
+						{202305, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2023, "Q2", "May", 5, "2023-05", 202305, 72, 20, 1, 12.1, 3.45, 5, 83.4, 7.3},
+						{202305, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2023, "Q2", "May", 5, "2023-05", 202305, 9, 60, 5, 12.5, 4.81, 4, 67.0, 1.5},
+						{202305, "Orthopedics", "Ward-A", "Elective", "Orthopedics", "Ward-A", "General", 2023, "Q2", "May", 5, "2023-05", 202305, 52, 64, 14, 10.0, 4.69, 4, 77.6, 7.2},
+						{202305, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2023, "Q2", "May", 5, "2023-05", 202305, 49, 40, 4, 8.7, 3.31, 2, 93.4, 1.8},
+						{202305, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2023, "Q2", "May", 5, "2023-05", 202305, 68, 41, 0, 2.7, 4.07, 4, 72.0, 5.0},
+						{202305, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2023, "Q2", "May", 5, "2023-05", 202305, 73, 68, 2, 7.5, 2.54, 5, 91.8, 0.6},
+						{202305, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2023, "Q2", "May", 5, "2023-05", 202305, 30, 60, 13, 6.3, 2.91, 2, 93.7, 6.5},
+						{202305, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2023, "Q2", "May", 5, "2023-05", 202305, 58, 52, 0, 9.6, 3.97, 0, 79.9, 7.4},
+						{202305, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2023, "Q2", "May", 5, "2023-05", 202305, 61, 71, 9, 11.1, 3.77, 1, 76.4, 3.7},
+						{202305, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2023, "Q2", "May", 5, "2023-05", 202305, 8, 26, 13, 11.5, 4.23, 4, 73.4, 0.8},
+						{202305, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2023, "Q2", "May", 5, "2023-05", 202305, 19, 7, 8, 7.2, 2.7, 4, 58.4, 0.6},
+						{202305, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q2", "May", 5, "2023-05", 202305, 78, 36, 11, 3.0, 4.9, 3, 95.7, 1.6},
+						{202305, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2023, "Q2", "May", 5, "2023-05", 202305, 42, 3, 13, 8.9, 4.38, 0, 66.3, 3.6},
+						{202305, "Oncology", "Ward-D", "Transfer", "Oncology", "Ward-D", "Recovery", 2023, "Q2", "May", 5, "2023-05", 202305, 38, 65, 9, 8.4, 4.19, 5, 69.0, 1.3},
+						{202306, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2023, "Q2", "June", 6, "2023-06", 202306, 2, 66, 3, 4.1, 2.65, 5, 86.8, 6.3},
+						{202306, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2023, "Q2", "June", 6, "2023-06", 202306, 71, 69, 9, 7.1, 3.47, 2, 93.2, 3.0},
+						{202306, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2023, "Q2", "June", 6, "2023-06", 202306, 37, 19, 9, 4.3, 2.81, 1, 81.8, 1.4},
+						{202306, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2023, "Q2", "June", 6, "2023-06", 202306, 51, 64, 7, 8.2, 4.82, 1, 78.0, 6.7},
+						{202306, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q2", "June", 6, "2023-06", 202306, 41, 11, 10, 13.9, 2.57, 2, 57.4, 0.8},
+						{202306, "Cardiology", "Ward-B", "Transfer", "Cardiology", "Ward-B", "ICU", 2023, "Q2", "June", 6, "2023-06", 202306, 59, 26, 7, 10.5, 2.69, 1, 92.7, 5.3},
+						{202306, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2023, "Q2", "June", 6, "2023-06", 202306, 38, 41, 13, 5.7, 3.06, 4, 56.2, 2.3},
+						{202306, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2023, "Q2", "June", 6, "2023-06", 202306, 52, 42, 7, 9.5, 4.93, 1, 85.0, 0.6},
+						{202306, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2023, "Q2", "June", 6, "2023-06", 202306, 31, 17, 1, 4.7, 4.18, 5, 94.2, 5.9},
+						{202306, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2023, "Q2", "June", 6, "2023-06", 202306, 71, 33, 11, 9.6, 2.78, 5, 74.9, 7.6},
+						{202306, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2023, "Q2", "June", 6, "2023-06", 202306, 10, 13, 9, 7.0, 4.69, 0, 66.2, 6.7},
+						{202306, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2023, "Q2", "June", 6, "2023-06", 202306, 36, 55, 13, 2.0, 3.77, 5, 96.2, 7.4},
+						{202306, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2023, "Q2", "June", 6, "2023-06", 202306, 2, 63, 0, 7.3, 2.58, 0, 91.4, 4.0},
+						{202306, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2023, "Q2", "June", 6, "2023-06", 202306, 6, 21, 6, 7.5, 2.92, 2, 63.6, 7.8},
+						{202306, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2023, "Q2", "June", 6, "2023-06", 202306, 57, 5, 3, 2.7, 3.94, 0, 69.5, 3.0},
+						{202306, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2023, "Q2", "June", 6, "2023-06", 202306, 65, 17, 0, 2.6, 3.04, 0, 62.7, 4.5},
+						{202306, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2023, "Q2", "June", 6, "2023-06", 202306, 35, 57, 11, 11.9, 4.57, 4, 89.7, 5.2},
+						{202306, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2023, "Q2", "June", 6, "2023-06", 202306, 6, 11, 4, 2.3, 4.83, 5, 65.2, 6.1},
+						{202306, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2023, "Q2", "June", 6, "2023-06", 202306, 35, 37, 10, 12.1, 3.64, 3, 65.8, 3.5},
+						{202306, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q2", "June", 6, "2023-06", 202306, 36, 59, 0, 2.5, 3.0, 2, 70.7, 4.7},
+						{202307, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2023, "Q3", "July", 7, "2023-07", 202307, 48, 41, 8, 11.2, 3.56, 1, 90.4, 5.2},
+						{202307, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2023, "Q3", "July", 7, "2023-07", 202307, 79, 18, 14, 8.9, 3.59, 4, 55.1, 4.9},
+						{202307, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2023, "Q3", "July", 7, "2023-07", 202307, 5, 65, 12, 11.9, 4.52, 0, 67.5, 1.4},
+						{202307, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2023, "Q3", "July", 7, "2023-07", 202307, 48, 34, 9, 6.2, 4.98, 0, 78.3, 1.4},
+						{202307, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q3", "July", 7, "2023-07", 202307, 46, 21, 0, 6.1, 4.69, 2, 61.4, 4.7},
+						{202307, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q3", "July", 7, "2023-07", 202307, 70, 40, 11, 6.3, 4.0, 2, 92.6, 7.5},
+						{202307, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2023, "Q3", "July", 7, "2023-07", 202307, 71, 62, 3, 11.4, 4.4, 4, 79.0, 6.7},
+						{202307, "Cardiology", "Ward-D", "Transfer", "Cardiology", "Ward-D", "Recovery", 2023, "Q3", "July", 7, "2023-07", 202307, 35, 47, 8, 10.2, 3.23, 3, 96.2, 6.4},
+						{202307, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2023, "Q3", "July", 7, "2023-07", 202307, 13, 58, 4, 12.9, 4.2, 5, 88.3, 1.2},
+						{202307, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2023, "Q3", "July", 7, "2023-07", 202307, 42, 14, 8, 3.3, 4.32, 4, 97.6, 6.9},
+						{202307, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2023, "Q3", "July", 7, "2023-07", 202307, 2, 48, 9, 7.5, 2.64, 5, 88.0, 2.6},
+						{202307, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2023, "Q3", "July", 7, "2023-07", 202307, 53, 22, 2, 3.8, 3.53, 1, 63.9, 1.3},
+						{202307, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2023, "Q3", "July", 7, "2023-07", 202307, 43, 44, 15, 5.5, 3.75, 2, 67.0, 4.9},
+						{202307, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2023, "Q3", "July", 7, "2023-07", 202307, 32, 70, 1, 6.0, 4.69, 2, 95.0, 4.1},
+						{202307, "Neurology", "Ward-C", "Emergency", "Neurology", "Ward-C", "Surgical", 2023, "Q3", "July", 7, "2023-07", 202307, 1, 17, 4, 5.5, 3.2, 0, 59.6, 1.9},
+						{202307, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2023, "Q3", "July", 7, "2023-07", 202307, 54, 49, 8, 8.3, 4.97, 0, 90.3, 3.8},
+						{202307, "Oncology", "Ward-A", "Transfer", "Oncology", "Ward-A", "General", 2023, "Q3", "July", 7, "2023-07", 202307, 21, 11, 7, 10.9, 3.55, 5, 93.0, 7.4},
+						{202307, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q3", "July", 7, "2023-07", 202307, 33, 23, 11, 6.7, 3.48, 1, 80.3, 1.6},
+						{202307, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2023, "Q3", "July", 7, "2023-07", 202307, 16, 50, 12, 13.7, 4.28, 2, 83.0, 2.6},
+						{202307, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q3", "July", 7, "2023-07", 202307, 75, 14, 10, 1.6, 2.73, 1, 85.9, 3.9},
+						{202308, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2023, "Q3", "August", 8, "2023-08", 202308, 43, 23, 1, 2.1, 2.72, 2, 73.1, 7.1},
+						{202308, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2023, "Q3", "August", 8, "2023-08", 202308, 7, 30, 8, 11.5, 3.56, 5, 90.1, 2.8},
+						{202308, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2023, "Q3", "August", 8, "2023-08", 202308, 32, 22, 12, 4.3, 2.68, 3, 57.2, 1.4},
+						{202308, "Emergency", "Ward-D", "Emergency", "Emergency", "Ward-D", "Recovery", 2023, "Q3", "August", 8, "2023-08", 202308, 26, 26, 1, 8.6, 4.96, 3, 95.7, 3.0},
+						{202308, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q3", "August", 8, "2023-08", 202308, 11, 14, 10, 8.6, 4.77, 1, 84.5, 1.0},
+						{202308, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q3", "August", 8, "2023-08", 202308, 34, 5, 5, 9.9, 2.97, 2, 71.6, 2.5},
+						{202308, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2023, "Q3", "August", 8, "2023-08", 202308, 66, 60, 5, 10.1, 3.27, 2, 61.5, 6.2},
+						{202308, "Cardiology", "Ward-D", "Transfer", "Cardiology", "Ward-D", "Recovery", 2023, "Q3", "August", 8, "2023-08", 202308, 77, 43, 9, 7.8, 4.8, 4, 71.7, 1.4},
+						{202308, "Orthopedics", "Ward-A", "Elective", "Orthopedics", "Ward-A", "General", 2023, "Q3", "August", 8, "2023-08", 202308, 21, 15, 10, 5.5, 3.12, 2, 97.0, 5.5},
+						{202308, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2023, "Q3", "August", 8, "2023-08", 202308, 13, 3, 10, 2.2, 2.8, 4, 75.9, 5.9},
+						{202308, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2023, "Q3", "August", 8, "2023-08", 202308, 80, 72, 3, 7.3, 2.77, 3, 80.8, 6.8},
+						{202308, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2023, "Q3", "August", 8, "2023-08", 202308, 5, 13, 12, 10.7, 2.54, 0, 91.7, 5.2},
+						{202308, "Neurology", "Ward-A", "Emergency", "Neurology", "Ward-A", "General", 2023, "Q3", "August", 8, "2023-08", 202308, 5, 65, 5, 13.1, 3.95, 3, 59.3, 2.5},
+						{202308, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2023, "Q3", "August", 8, "2023-08", 202308, 27, 21, 10, 14.0, 4.63, 3, 56.3, 6.9},
+						{202308, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2023, "Q3", "August", 8, "2023-08", 202308, 79, 73, 10, 5.9, 3.6, 3, 76.3, 0.9},
+						{202308, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2023, "Q3", "August", 8, "2023-08", 202308, 5, 66, 6, 9.7, 3.87, 0, 74.8, 2.7},
+						{202308, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2023, "Q3", "August", 8, "2023-08", 202308, 15, 40, 9, 8.8, 3.83, 2, 84.5, 4.3},
+						{202308, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q3", "August", 8, "2023-08", 202308, 1, 34, 15, 12.4, 3.18, 3, 72.3, 1.2},
+						{202308, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2023, "Q3", "August", 8, "2023-08", 202308, 75, 19, 2, 2.2, 4.77, 5, 66.3, 3.1},
+						{202308, "Oncology", "Ward-D", "Elective", "Oncology", "Ward-D", "Recovery", 2023, "Q3", "August", 8, "2023-08", 202308, 70, 66, 15, 2.0, 3.18, 4, 57.2, 5.0},
+						{202309, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2023, "Q3", "September", 9, "2023-09", 202309, 54, 10, 5, 9.9, 3.72, 3, 79.9, 4.0},
+						{202309, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2023, "Q3", "September", 9, "2023-09", 202309, 5, 46, 7, 10.0, 4.07, 4, 72.3, 2.9},
+						{202309, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2023, "Q3", "September", 9, "2023-09", 202309, 76, 27, 7, 10.6, 3.56, 1, 57.0, 2.8},
+						{202309, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2023, "Q3", "September", 9, "2023-09", 202309, 28, 34, 4, 4.0, 4.63, 1, 55.3, 4.0},
+						{202309, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q3", "September", 9, "2023-09", 202309, 13, 43, 1, 9.9, 4.26, 5, 90.2, 2.1},
+						{202309, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q3", "September", 9, "2023-09", 202309, 16, 31, 15, 9.1, 4.04, 1, 74.3, 1.6},
+						{202309, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2023, "Q3", "September", 9, "2023-09", 202309, 37, 72, 6, 11.0, 4.73, 0, 70.4, 7.2},
+						{202309, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2023, "Q3", "September", 9, "2023-09", 202309, 51, 29, 11, 4.4, 3.0, 5, 78.3, 0.8},
+						{202309, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2023, "Q3", "September", 9, "2023-09", 202309, 75, 38, 15, 10.8, 2.91, 3, 95.3, 5.6},
+						{202309, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2023, "Q3", "September", 9, "2023-09", 202309, 48, 34, 1, 1.7, 4.25, 1, 94.5, 1.9},
+						{202309, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2023, "Q3", "September", 9, "2023-09", 202309, 58, 65, 15, 3.5, 3.28, 5, 73.7, 4.6},
+						{202309, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2023, "Q3", "September", 9, "2023-09", 202309, 62, 39, 4, 3.0, 2.56, 4, 72.4, 4.8},
+						{202309, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2023, "Q3", "September", 9, "2023-09", 202309, 63, 35, 12, 6.1, 3.86, 4, 75.1, 2.3},
+						{202309, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2023, "Q3", "September", 9, "2023-09", 202309, 60, 54, 14, 7.7, 3.68, 1, 64.0, 3.3},
+						{202309, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2023, "Q3", "September", 9, "2023-09", 202309, 48, 29, 4, 13.3, 4.42, 2, 83.0, 2.2},
+						{202309, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2023, "Q3", "September", 9, "2023-09", 202309, 35, 1, 6, 4.9, 3.37, 4, 97.0, 0.8},
+						{202309, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2023, "Q3", "September", 9, "2023-09", 202309, 12, 18, 9, 10.3, 4.77, 3, 70.6, 0.7},
+						{202309, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q3", "September", 9, "2023-09", 202309, 61, 29, 14, 2.7, 3.66, 1, 71.0, 7.5},
+						{202309, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2023, "Q3", "September", 9, "2023-09", 202309, 71, 14, 0, 7.9, 4.48, 5, 73.1, 4.7},
+						{202309, "Oncology", "Ward-D", "Elective", "Oncology", "Ward-D", "Recovery", 2023, "Q3", "September", 9, "2023-09", 202309, 31, 38, 0, 12.3, 3.67, 1, 84.9, 7.8},
+						{202310, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2023, "Q4", "October", 10, "2023-10", 202310, 27, 36, 11, 10.6, 4.05, 2, 70.6, 6.3},
+						{202310, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2023, "Q4", "October", 10, "2023-10", 202310, 72, 16, 1, 9.5, 2.8, 2, 69.7, 6.1},
+						{202310, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2023, "Q4", "October", 10, "2023-10", 202310, 6, 69, 15, 4.1, 4.42, 1, 96.4, 5.3},
+						{202310, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2023, "Q4", "October", 10, "2023-10", 202310, 71, 28, 9, 12.4, 2.82, 0, 56.0, 7.1},
+						{202310, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q4", "October", 10, "2023-10", 202310, 75, 73, 4, 10.8, 3.49, 2, 62.4, 0.5},
+						{202310, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2023, "Q4", "October", 10, "2023-10", 202310, 12, 58, 3, 7.5, 4.58, 4, 92.1, 1.2},
+						{202310, "Cardiology", "Ward-C", "Elective", "Cardiology", "Ward-C", "Surgical", 2023, "Q4", "October", 10, "2023-10", 202310, 4, 1, 12, 4.7, 3.31, 3, 73.3, 7.4},
+						{202310, "Cardiology", "Ward-D", "Transfer", "Cardiology", "Ward-D", "Recovery", 2023, "Q4", "October", 10, "2023-10", 202310, 18, 53, 9, 12.2, 3.3, 5, 66.9, 1.9},
+						{202310, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2023, "Q4", "October", 10, "2023-10", 202310, 3, 63, 12, 13.5, 4.2, 4, 67.7, 2.0},
+						{202310, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2023, "Q4", "October", 10, "2023-10", 202310, 75, 71, 6, 5.8, 2.75, 4, 61.0, 4.7},
+						{202310, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2023, "Q4", "October", 10, "2023-10", 202310, 6, 44, 12, 6.2, 4.58, 1, 69.0, 7.7},
+						{202310, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2023, "Q4", "October", 10, "2023-10", 202310, 24, 49, 3, 5.9, 3.13, 3, 75.8, 2.0},
+						{202310, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2023, "Q4", "October", 10, "2023-10", 202310, 37, 34, 15, 7.8, 4.5, 2, 92.7, 3.4},
+						{202310, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2023, "Q4", "October", 10, "2023-10", 202310, 28, 6, 12, 11.6, 3.58, 2, 97.6, 5.1},
+						{202310, "Neurology", "Ward-C", "Emergency", "Neurology", "Ward-C", "Surgical", 2023, "Q4", "October", 10, "2023-10", 202310, 17, 39, 10, 11.0, 2.85, 3, 78.9, 6.5},
+						{202310, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2023, "Q4", "October", 10, "2023-10", 202310, 55, 39, 0, 3.8, 3.6, 1, 93.2, 7.3},
+						{202310, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2023, "Q4", "October", 10, "2023-10", 202310, 6, 14, 13, 1.6, 4.34, 5, 81.6, 2.5},
+						{202310, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2023, "Q4", "October", 10, "2023-10", 202310, 16, 25, 8, 8.3, 2.9, 5, 57.6, 5.7},
+						{202310, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2023, "Q4", "October", 10, "2023-10", 202310, 2, 1, 15, 3.5, 2.92, 4, 60.9, 2.3},
+						{202310, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q4", "October", 10, "2023-10", 202310, 66, 42, 10, 11.0, 4.06, 2, 88.8, 1.8},
+						{202311, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2023, "Q4", "November", 11, "2023-11", 202311, 63, 58, 9, 7.7, 4.3, 0, 78.0, 5.1},
+						{202311, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2023, "Q4", "November", 11, "2023-11", 202311, 46, 51, 9, 1.9, 4.29, 2, 69.3, 5.7},
+						{202311, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2023, "Q4", "November", 11, "2023-11", 202311, 56, 20, 4, 5.8, 2.52, 1, 61.2, 4.8},
+						{202311, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2023, "Q4", "November", 11, "2023-11", 202311, 49, 34, 13, 10.5, 3.08, 1, 84.3, 0.8},
+						{202311, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2023, "Q4", "November", 11, "2023-11", 202311, 51, 47, 15, 5.1, 3.99, 4, 79.3, 5.5},
+						{202311, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2023, "Q4", "November", 11, "2023-11", 202311, 76, 67, 0, 7.9, 2.72, 1, 76.8, 1.5},
+						{202311, "Cardiology", "Ward-C", "Elective", "Cardiology", "Ward-C", "Surgical", 2023, "Q4", "November", 11, "2023-11", 202311, 21, 15, 1, 6.0, 3.16, 0, 77.1, 6.5},
+						{202311, "Cardiology", "Ward-D", "Transfer", "Cardiology", "Ward-D", "Recovery", 2023, "Q4", "November", 11, "2023-11", 202311, 28, 10, 9, 7.2, 4.01, 1, 84.2, 1.2},
+						{202311, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2023, "Q4", "November", 11, "2023-11", 202311, 44, 4, 11, 3.8, 3.18, 2, 62.6, 4.8},
+						{202311, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2023, "Q4", "November", 11, "2023-11", 202311, 52, 71, 13, 8.5, 3.42, 1, 76.2, 3.5},
+						{202311, "Orthopedics", "Ward-C", "Emergency", "Orthopedics", "Ward-C", "Surgical", 2023, "Q4", "November", 11, "2023-11", 202311, 50, 4, 2, 3.9, 3.06, 3, 58.8, 2.3},
+						{202311, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2023, "Q4", "November", 11, "2023-11", 202311, 30, 55, 10, 2.9, 2.98, 0, 81.0, 2.8},
+						{202311, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2023, "Q4", "November", 11, "2023-11", 202311, 30, 45, 1, 13.0, 2.57, 0, 62.4, 3.5},
+						{202311, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2023, "Q4", "November", 11, "2023-11", 202311, 45, 62, 14, 5.6, 4.32, 4, 94.2, 6.7},
+						{202311, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2023, "Q4", "November", 11, "2023-11", 202311, 59, 14, 0, 9.2, 2.84, 0, 75.4, 6.6},
+						{202311, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2023, "Q4", "November", 11, "2023-11", 202311, 17, 39, 15, 8.9, 4.05, 2, 59.1, 1.5},
+						{202311, "Oncology", "Ward-A", "Transfer", "Oncology", "Ward-A", "General", 2023, "Q4", "November", 11, "2023-11", 202311, 15, 38, 9, 6.8, 2.73, 2, 83.2, 4.7},
+						{202311, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2023, "Q4", "November", 11, "2023-11", 202311, 43, 10, 10, 10.2, 2.78, 5, 88.6, 4.7},
+						{202311, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2023, "Q4", "November", 11, "2023-11", 202311, 8, 6, 12, 9.4, 2.73, 4, 77.0, 2.5},
+						{202311, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q4", "November", 11, "2023-11", 202311, 70, 2, 14, 9.0, 4.19, 5, 66.5, 4.6},
+						{202312, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2023, "Q4", "December", 12, "2023-12", 202312, 23, 58, 2, 3.7, 4.41, 5, 81.0, 3.8},
+						{202312, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2023, "Q4", "December", 12, "2023-12", 202312, 5, 1, 0, 5.8, 4.28, 0, 72.2, 5.8},
+						{202312, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2023, "Q4", "December", 12, "2023-12", 202312, 31, 3, 0, 5.0, 3.41, 5, 87.8, 3.4},
+						{202312, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2023, "Q4", "December", 12, "2023-12", 202312, 8, 40, 12, 7.3, 3.59, 4, 58.0, 6.4},
+						{202312, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2023, "Q4", "December", 12, "2023-12", 202312, 14, 12, 4, 8.2, 3.11, 5, 72.1, 1.5},
+						{202312, "Cardiology", "Ward-B", "Transfer", "Cardiology", "Ward-B", "ICU", 2023, "Q4", "December", 12, "2023-12", 202312, 63, 48, 13, 5.2, 3.2, 1, 78.4, 5.6},
+						{202312, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2023, "Q4", "December", 12, "2023-12", 202312, 10, 25, 1, 2.4, 4.19, 4, 73.3, 4.3},
+						{202312, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2023, "Q4", "December", 12, "2023-12", 202312, 58, 7, 14, 11.8, 4.08, 4, 83.9, 4.8},
+						{202312, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2023, "Q4", "December", 12, "2023-12", 202312, 23, 48, 0, 8.8, 4.31, 3, 94.6, 6.4},
+						{202312, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2023, "Q4", "December", 12, "2023-12", 202312, 78, 5, 15, 11.3, 2.84, 1, 77.3, 5.5},
+						{202312, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2023, "Q4", "December", 12, "2023-12", 202312, 80, 54, 0, 4.0, 3.93, 4, 78.8, 4.6},
+						{202312, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2023, "Q4", "December", 12, "2023-12", 202312, 77, 27, 15, 1.9, 4.65, 4, 95.6, 3.6},
+						{202312, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2023, "Q4", "December", 12, "2023-12", 202312, 19, 51, 1, 7.3, 3.05, 2, 68.8, 4.0},
+						{202312, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2023, "Q4", "December", 12, "2023-12", 202312, 62, 67, 8, 3.2, 2.89, 0, 95.6, 1.5},
+						{202312, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2023, "Q4", "December", 12, "2023-12", 202312, 5, 56, 15, 11.9, 2.59, 0, 67.3, 6.0},
+						{202312, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2023, "Q4", "December", 12, "2023-12", 202312, 23, 9, 12, 3.3, 3.31, 5, 91.8, 4.6},
+						{202312, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2023, "Q4", "December", 12, "2023-12", 202312, 53, 40, 6, 10.3, 4.06, 1, 63.3, 1.2},
+						{202312, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2023, "Q4", "December", 12, "2023-12", 202312, 32, 73, 9, 3.2, 2.77, 1, 92.6, 5.7},
+						{202312, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2023, "Q4", "December", 12, "2023-12", 202312, 25, 23, 10, 8.7, 4.79, 1, 63.5, 2.2},
+						{202312, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2023, "Q4", "December", 12, "2023-12", 202312, 75, 26, 11, 5.7, 3.55, 2, 72.2, 3.5},
+						{202401, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2024, "Q1", "January", 1, "2024-01", 202401, 17, 59, 14, 11.4, 4.26, 3, 81.4, 2.3},
+						{202401, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2024, "Q1", "January", 1, "2024-01", 202401, 14, 54, 6, 4.8, 4.28, 5, 70.4, 6.9},
+						{202401, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2024, "Q1", "January", 1, "2024-01", 202401, 69, 21, 5, 11.0, 4.39, 3, 58.0, 3.5},
+						{202401, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2024, "Q1", "January", 1, "2024-01", 202401, 33, 60, 3, 8.9, 3.01, 4, 78.3, 5.4},
+						{202401, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2024, "Q1", "January", 1, "2024-01", 202401, 44, 59, 9, 9.4, 4.06, 1, 59.5, 4.2},
+						{202401, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2024, "Q1", "January", 1, "2024-01", 202401, 54, 41, 5, 3.9, 3.71, 3, 69.3, 7.3},
+						{202401, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2024, "Q1", "January", 1, "2024-01", 202401, 31, 16, 0, 2.9, 4.13, 5, 84.2, 0.8},
+						{202401, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q1", "January", 1, "2024-01", 202401, 35, 52, 15, 3.8, 3.83, 2, 59.4, 3.4},
+						{202401, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2024, "Q1", "January", 1, "2024-01", 202401, 18, 64, 3, 6.2, 4.25, 1, 79.3, 0.8},
+						{202401, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2024, "Q1", "January", 1, "2024-01", 202401, 34, 59, 2, 3.2, 2.95, 3, 75.1, 4.3},
+						{202401, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2024, "Q1", "January", 1, "2024-01", 202401, 18, 62, 13, 4.1, 3.17, 2, 68.9, 5.5},
+						{202401, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2024, "Q1", "January", 1, "2024-01", 202401, 56, 36, 8, 4.7, 3.74, 0, 70.6, 6.9},
+						{202401, "Neurology", "Ward-A", "Emergency", "Neurology", "Ward-A", "General", 2024, "Q1", "January", 1, "2024-01", 202401, 80, 18, 14, 13.5, 4.8, 5, 61.7, 4.9},
+						{202401, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2024, "Q1", "January", 1, "2024-01", 202401, 20, 42, 9, 5.5, 3.25, 5, 67.0, 0.9},
+						{202401, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2024, "Q1", "January", 1, "2024-01", 202401, 15, 70, 9, 13.8, 4.77, 2, 60.5, 1.6},
+						{202401, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2024, "Q1", "January", 1, "2024-01", 202401, 51, 62, 0, 14.0, 4.09, 2, 59.5, 4.9},
+						{202401, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2024, "Q1", "January", 1, "2024-01", 202401, 3, 51, 13, 9.3, 2.69, 4, 82.7, 0.7},
+						{202401, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2024, "Q1", "January", 1, "2024-01", 202401, 40, 22, 7, 7.7, 3.46, 5, 87.9, 3.4},
+						{202401, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q1", "January", 1, "2024-01", 202401, 24, 69, 9, 7.4, 3.22, 3, 57.2, 4.2},
+						{202401, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2024, "Q1", "January", 1, "2024-01", 202401, 15, 58, 14, 7.5, 3.73, 3, 88.4, 7.5},
+						{202402, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2024, "Q1", "February", 2, "2024-02", 202402, 62, 65, 1, 9.2, 4.66, 3, 75.7, 0.9},
+						{202402, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2024, "Q1", "February", 2, "2024-02", 202402, 44, 1, 10, 6.8, 4.37, 1, 62.0, 7.9},
+						{202402, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2024, "Q1", "February", 2, "2024-02", 202402, 64, 17, 6, 11.7, 4.61, 0, 88.7, 0.6},
+						{202402, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q1", "February", 2, "2024-02", 202402, 72, 33, 10, 7.9, 4.49, 0, 74.7, 7.3},
+						{202402, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2024, "Q1", "February", 2, "2024-02", 202402, 39, 41, 8, 6.5, 3.64, 1, 96.6, 3.6},
+						{202402, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2024, "Q1", "February", 2, "2024-02", 202402, 14, 31, 12, 10.3, 4.0, 0, 91.3, 4.0},
+						{202402, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2024, "Q1", "February", 2, "2024-02", 202402, 45, 46, 13, 2.1, 3.57, 4, 76.0, 2.6},
+						{202402, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q1", "February", 2, "2024-02", 202402, 30, 6, 14, 9.9, 3.77, 5, 59.1, 7.3},
+						{202402, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2024, "Q1", "February", 2, "2024-02", 202402, 42, 52, 13, 8.5, 4.24, 2, 80.8, 2.6},
+						{202402, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2024, "Q1", "February", 2, "2024-02", 202402, 62, 35, 6, 10.9, 4.23, 0, 84.4, 1.8},
+						{202402, "Orthopedics", "Ward-C", "Emergency", "Orthopedics", "Ward-C", "Surgical", 2024, "Q1", "February", 2, "2024-02", 202402, 19, 75, 14, 12.6, 3.9, 2, 62.6, 3.4},
+						{202402, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2024, "Q1", "February", 2, "2024-02", 202402, 63, 43, 8, 11.0, 4.03, 5, 94.9, 7.0},
+						{202402, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2024, "Q1", "February", 2, "2024-02", 202402, 11, 4, 9, 13.3, 3.98, 5, 88.5, 2.1},
+						{202402, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2024, "Q1", "February", 2, "2024-02", 202402, 53, 1, 8, 12.9, 2.9, 4, 71.7, 5.8},
+						{202402, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2024, "Q1", "February", 2, "2024-02", 202402, 3, 13, 1, 6.2, 4.54, 3, 59.9, 5.0},
+						{202402, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2024, "Q1", "February", 2, "2024-02", 202402, 10, 30, 2, 12.8, 3.11, 0, 67.3, 4.3},
+						{202402, "Oncology", "Ward-A", "Transfer", "Oncology", "Ward-A", "General", 2024, "Q1", "February", 2, "2024-02", 202402, 39, 46, 5, 2.6, 3.74, 3, 93.5, 0.8},
+						{202402, "Oncology", "Ward-B", "Elective", "Oncology", "Ward-B", "ICU", 2024, "Q1", "February", 2, "2024-02", 202402, 13, 33, 13, 8.7, 4.97, 3, 94.8, 4.9},
+						{202402, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q1", "February", 2, "2024-02", 202402, 60, 34, 15, 8.7, 2.77, 1, 63.2, 5.9},
+						{202402, "Oncology", "Ward-D", "Transfer", "Oncology", "Ward-D", "Recovery", 2024, "Q1", "February", 2, "2024-02", 202402, 23, 70, 5, 6.6, 4.22, 4, 82.7, 5.5},
+						{202403, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2024, "Q1", "March", 3, "2024-03", 202403, 47, 30, 8, 4.5, 4.48, 5, 66.1, 4.5},
+						{202403, "Emergency", "Ward-B", "Transfer", "Emergency", "Ward-B", "ICU", 2024, "Q1", "March", 3, "2024-03", 202403, 20, 8, 14, 11.7, 5.0, 4, 64.4, 3.3},
+						{202403, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2024, "Q1", "March", 3, "2024-03", 202403, 44, 45, 1, 3.3, 3.88, 5, 68.0, 6.9},
+						{202403, "Emergency", "Ward-D", "Emergency", "Emergency", "Ward-D", "Recovery", 2024, "Q1", "March", 3, "2024-03", 202403, 54, 55, 7, 13.6, 3.76, 1, 85.0, 0.9},
+						{202403, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2024, "Q1", "March", 3, "2024-03", 202403, 47, 55, 14, 11.5, 2.6, 2, 83.3, 6.1},
+						{202403, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2024, "Q1", "March", 3, "2024-03", 202403, 31, 11, 9, 7.4, 2.91, 5, 92.6, 4.4},
+						{202403, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2024, "Q1", "March", 3, "2024-03", 202403, 31, 32, 15, 6.5, 3.54, 3, 87.5, 7.7},
+						{202403, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2024, "Q1", "March", 3, "2024-03", 202403, 35, 49, 8, 6.7, 3.35, 3, 81.7, 4.1},
+						{202403, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2024, "Q1", "March", 3, "2024-03", 202403, 46, 10, 5, 7.4, 4.11, 5, 58.3, 5.7},
+						{202403, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2024, "Q1", "March", 3, "2024-03", 202403, 29, 18, 1, 3.7, 3.78, 4, 57.1, 2.2},
+						{202403, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2024, "Q1", "March", 3, "2024-03", 202403, 40, 5, 2, 3.7, 3.71, 3, 89.7, 3.4},
+						{202403, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2024, "Q1", "March", 3, "2024-03", 202403, 42, 41, 13, 5.0, 4.62, 0, 69.0, 1.5},
+						{202403, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2024, "Q1", "March", 3, "2024-03", 202403, 56, 12, 14, 5.2, 4.76, 2, 95.6, 6.0},
+						{202403, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2024, "Q1", "March", 3, "2024-03", 202403, 64, 25, 8, 6.4, 3.57, 2, 61.5, 4.6},
+						{202403, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2024, "Q1", "March", 3, "2024-03", 202403, 5, 30, 13, 6.7, 4.05, 1, 79.1, 1.8},
+						{202403, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2024, "Q1", "March", 3, "2024-03", 202403, 70, 48, 14, 4.1, 3.85, 5, 63.9, 2.0},
+						{202403, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2024, "Q1", "March", 3, "2024-03", 202403, 10, 42, 8, 8.6, 4.39, 4, 80.9, 3.5},
+						{202403, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2024, "Q1", "March", 3, "2024-03", 202403, 19, 51, 9, 2.3, 3.4, 4, 88.5, 2.7},
+						{202403, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q1", "March", 3, "2024-03", 202403, 64, 68, 15, 8.2, 2.8, 1, 73.6, 4.4},
+						{202403, "Oncology", "Ward-D", "Transfer", "Oncology", "Ward-D", "Recovery", 2024, "Q1", "March", 3, "2024-03", 202403, 67, 52, 0, 8.1, 3.57, 2, 92.2, 5.3},
+						{202404, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2024, "Q2", "April", 4, "2024-04", 202404, 10, 28, 9, 5.0, 4.25, 3, 92.3, 3.9},
+						{202404, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2024, "Q2", "April", 4, "2024-04", 202404, 54, 37, 13, 9.9, 3.06, 3, 69.6, 1.1},
+						{202404, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2024, "Q2", "April", 4, "2024-04", 202404, 31, 26, 15, 2.1, 2.97, 4, 96.6, 1.7},
+						{202404, "Emergency", "Ward-D", "Emergency", "Emergency", "Ward-D", "Recovery", 2024, "Q2", "April", 4, "2024-04", 202404, 34, 69, 0, 7.9, 4.86, 4, 55.8, 5.6},
+						{202404, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2024, "Q2", "April", 4, "2024-04", 202404, 67, 33, 7, 8.2, 4.92, 3, 66.8, 0.9},
+						{202404, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2024, "Q2", "April", 4, "2024-04", 202404, 35, 32, 0, 10.5, 4.62, 2, 91.1, 5.8},
+						{202404, "Cardiology", "Ward-C", "Elective", "Cardiology", "Ward-C", "Surgical", 2024, "Q2", "April", 4, "2024-04", 202404, 76, 5, 7, 8.7, 3.79, 1, 58.6, 1.7},
+						{202404, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2024, "Q2", "April", 4, "2024-04", 202404, 66, 60, 10, 9.2, 3.44, 1, 81.6, 7.6},
+						{202404, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2024, "Q2", "April", 4, "2024-04", 202404, 16, 41, 3, 3.2, 3.31, 4, 92.9, 7.9},
+						{202404, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2024, "Q2", "April", 4, "2024-04", 202404, 7, 39, 6, 8.4, 4.29, 5, 90.5, 6.1},
+						{202404, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2024, "Q2", "April", 4, "2024-04", 202404, 33, 64, 3, 10.3, 2.99, 2, 88.0, 7.5},
+						{202404, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2024, "Q2", "April", 4, "2024-04", 202404, 8, 63, 15, 10.8, 3.46, 4, 86.9, 2.5},
+						{202404, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2024, "Q2", "April", 4, "2024-04", 202404, 38, 62, 15, 2.8, 4.71, 5, 96.6, 1.4},
+						{202404, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2024, "Q2", "April", 4, "2024-04", 202404, 69, 48, 12, 13.8, 4.83, 4, 68.7, 8.0},
+						{202404, "Neurology", "Ward-C", "Emergency", "Neurology", "Ward-C", "Surgical", 2024, "Q2", "April", 4, "2024-04", 202404, 53, 8, 13, 6.6, 3.89, 4, 63.1, 6.0},
+						{202404, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2024, "Q2", "April", 4, "2024-04", 202404, 40, 15, 6, 6.1, 2.74, 4, 71.8, 1.3},
+						{202404, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2024, "Q2", "April", 4, "2024-04", 202404, 67, 2, 2, 13.7, 3.33, 5, 87.8, 1.3},
+						{202404, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2024, "Q2", "April", 4, "2024-04", 202404, 8, 28, 2, 12.9, 4.67, 0, 82.2, 7.8},
+						{202404, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2024, "Q2", "April", 4, "2024-04", 202404, 14, 19, 10, 12.3, 2.55, 2, 62.5, 2.1},
+						{202404, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2024, "Q2", "April", 4, "2024-04", 202404, 52, 65, 5, 7.6, 3.91, 5, 85.3, 7.7},
+						{202405, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2024, "Q2", "May", 5, "2024-05", 202405, 1, 23, 12, 10.3, 3.34, 4, 58.6, 6.9},
+						{202405, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2024, "Q2", "May", 5, "2024-05", 202405, 64, 64, 9, 13.4, 4.17, 1, 88.8, 7.1},
+						{202405, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2024, "Q2", "May", 5, "2024-05", 202405, 78, 46, 0, 4.5, 3.05, 3, 77.3, 4.3},
+						{202405, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q2", "May", 5, "2024-05", 202405, 45, 60, 12, 11.3, 2.77, 4, 95.8, 7.0},
+						{202405, "Cardiology", "Ward-A", "Transfer", "Cardiology", "Ward-A", "General", 2024, "Q2", "May", 5, "2024-05", 202405, 34, 8, 7, 13.2, 4.69, 0, 63.5, 1.7},
+						{202405, "Cardiology", "Ward-B", "Transfer", "Cardiology", "Ward-B", "ICU", 2024, "Q2", "May", 5, "2024-05", 202405, 79, 50, 1, 7.6, 4.79, 2, 76.1, 2.7},
+						{202405, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2024, "Q2", "May", 5, "2024-05", 202405, 2, 50, 4, 8.2, 3.14, 0, 89.5, 0.7},
+						{202405, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q2", "May", 5, "2024-05", 202405, 69, 27, 15, 4.8, 3.6, 2, 94.7, 6.7},
+						{202405, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2024, "Q2", "May", 5, "2024-05", 202405, 16, 74, 5, 13.6, 4.88, 5, 66.7, 1.3},
+						{202405, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2024, "Q2", "May", 5, "2024-05", 202405, 73, 66, 5, 4.4, 4.98, 1, 58.9, 1.4},
+						{202405, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2024, "Q2", "May", 5, "2024-05", 202405, 26, 48, 3, 3.4, 3.22, 5, 68.0, 3.4},
+						{202405, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2024, "Q2", "May", 5, "2024-05", 202405, 77, 68, 15, 8.1, 4.37, 3, 76.0, 2.1},
+						{202405, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2024, "Q2", "May", 5, "2024-05", 202405, 54, 27, 1, 10.1, 3.92, 4, 68.0, 3.2},
+						{202405, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2024, "Q2", "May", 5, "2024-05", 202405, 24, 49, 9, 5.1, 3.85, 3, 78.0, 3.0},
+						{202405, "Neurology", "Ward-C", "Emergency", "Neurology", "Ward-C", "Surgical", 2024, "Q2", "May", 5, "2024-05", 202405, 63, 34, 6, 12.4, 3.06, 0, 63.9, 1.7},
+						{202405, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2024, "Q2", "May", 5, "2024-05", 202405, 40, 25, 6, 1.8, 4.25, 4, 88.9, 3.5},
+						{202405, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2024, "Q2", "May", 5, "2024-05", 202405, 68, 73, 11, 7.8, 4.13, 5, 61.8, 7.8},
+						{202405, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2024, "Q2", "May", 5, "2024-05", 202405, 21, 62, 13, 2.3, 3.02, 1, 59.5, 4.0},
+						{202405, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2024, "Q2", "May", 5, "2024-05", 202405, 27, 67, 13, 7.6, 3.16, 0, 83.6, 4.0},
+						{202405, "Oncology", "Ward-D", "Elective", "Oncology", "Ward-D", "Recovery", 2024, "Q2", "May", 5, "2024-05", 202405, 18, 41, 8, 8.1, 2.78, 0, 81.7, 7.5},
+						{202406, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2024, "Q2", "June", 6, "2024-06", 202406, 42, 21, 2, 8.7, 3.68, 4, 70.0, 3.5},
+						{202406, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2024, "Q2", "June", 6, "2024-06", 202406, 22, 75, 11, 6.0, 3.04, 2, 82.3, 6.3},
+						{202406, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2024, "Q2", "June", 6, "2024-06", 202406, 50, 30, 4, 1.6, 3.87, 5, 91.8, 0.6},
+						{202406, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q2", "June", 6, "2024-06", 202406, 34, 17, 12, 7.8, 2.54, 5, 89.6, 2.0},
+						{202406, "Cardiology", "Ward-A", "Elective", "Cardiology", "Ward-A", "General", 2024, "Q2", "June", 6, "2024-06", 202406, 36, 12, 0, 5.8, 4.39, 5, 94.4, 4.2},
+						{202406, "Cardiology", "Ward-B", "Transfer", "Cardiology", "Ward-B", "ICU", 2024, "Q2", "June", 6, "2024-06", 202406, 6, 10, 12, 13.1, 3.82, 2, 65.7, 5.9},
+						{202406, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2024, "Q2", "June", 6, "2024-06", 202406, 79, 52, 11, 3.7, 4.34, 1, 78.8, 0.6},
+						{202406, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2024, "Q2", "June", 6, "2024-06", 202406, 80, 6, 9, 4.4, 2.85, 4, 64.4, 5.1},
+						{202406, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2024, "Q2", "June", 6, "2024-06", 202406, 80, 64, 14, 13.3, 4.25, 4, 90.8, 3.7},
+						{202406, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2024, "Q2", "June", 6, "2024-06", 202406, 11, 41, 3, 4.5, 2.67, 2, 76.6, 5.1},
+						{202406, "Orthopedics", "Ward-C", "Emergency", "Orthopedics", "Ward-C", "Surgical", 2024, "Q2", "June", 6, "2024-06", 202406, 39, 36, 4, 6.1, 4.85, 4, 86.0, 5.2},
+						{202406, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2024, "Q2", "June", 6, "2024-06", 202406, 34, 24, 3, 2.2, 4.7, 2, 88.6, 7.5},
+						{202406, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2024, "Q2", "June", 6, "2024-06", 202406, 34, 70, 11, 4.6, 3.05, 0, 62.2, 6.5},
+						{202406, "Neurology", "Ward-B", "Emergency", "Neurology", "Ward-B", "ICU", 2024, "Q2", "June", 6, "2024-06", 202406, 28, 1, 5, 13.4, 4.08, 4, 90.2, 3.1},
+						{202406, "Neurology", "Ward-C", "Emergency", "Neurology", "Ward-C", "Surgical", 2024, "Q2", "June", 6, "2024-06", 202406, 37, 1, 3, 6.4, 2.72, 3, 57.4, 1.3},
+						{202406, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2024, "Q2", "June", 6, "2024-06", 202406, 60, 18, 8, 4.6, 3.0, 5, 74.1, 1.1},
+						{202406, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2024, "Q2", "June", 6, "2024-06", 202406, 14, 27, 4, 1.7, 3.94, 2, 82.7, 1.4},
+						{202406, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2024, "Q2", "June", 6, "2024-06", 202406, 72, 45, 3, 12.7, 3.38, 5, 67.4, 6.1},
+						{202406, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q2", "June", 6, "2024-06", 202406, 28, 17, 9, 13.1, 2.8, 1, 76.0, 2.0},
+						{202406, "Oncology", "Ward-D", "Elective", "Oncology", "Ward-D", "Recovery", 2024, "Q2", "June", 6, "2024-06", 202406, 66, 44, 12, 12.2, 4.8, 2, 80.5, 2.2},
+						{202407, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2024, "Q3", "July", 7, "2024-07", 202407, 25, 19, 6, 7.5, 2.77, 0, 63.0, 5.1},
+						{202407, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2024, "Q3", "July", 7, "2024-07", 202407, 51, 67, 9, 9.6, 3.28, 1, 72.5, 1.6},
+						{202407, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2024, "Q3", "July", 7, "2024-07", 202407, 57, 17, 0, 13.0, 3.1, 5, 77.9, 1.0},
+						{202407, "Emergency", "Ward-D", "Emergency", "Emergency", "Ward-D", "Recovery", 2024, "Q3", "July", 7, "2024-07", 202407, 79, 59, 8, 8.9, 4.14, 0, 66.4, 6.8},
+						{202407, "Cardiology", "Ward-A", "Elective", "Cardiology", "Ward-A", "General", 2024, "Q3", "July", 7, "2024-07", 202407, 66, 1, 1, 10.2, 2.72, 4, 56.7, 1.4},
+						{202407, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2024, "Q3", "July", 7, "2024-07", 202407, 65, 48, 10, 1.6, 4.85, 1, 59.8, 2.9},
+						{202407, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2024, "Q3", "July", 7, "2024-07", 202407, 68, 69, 3, 5.8, 3.49, 1, 71.3, 0.6},
+						{202407, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q3", "July", 7, "2024-07", 202407, 58, 29, 7, 10.2, 4.04, 2, 88.2, 2.5},
+						{202407, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2024, "Q3", "July", 7, "2024-07", 202407, 63, 23, 10, 6.8, 4.45, 3, 56.7, 2.8},
+						{202407, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2024, "Q3", "July", 7, "2024-07", 202407, 42, 21, 2, 8.8, 3.35, 0, 81.8, 6.6},
+						{202407, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2024, "Q3", "July", 7, "2024-07", 202407, 30, 74, 6, 10.5, 4.28, 1, 83.8, 3.4},
+						{202407, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2024, "Q3", "July", 7, "2024-07", 202407, 45, 29, 15, 4.2, 3.08, 4, 89.4, 1.4},
+						{202407, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2024, "Q3", "July", 7, "2024-07", 202407, 22, 39, 14, 12.5, 4.81, 0, 90.1, 4.1},
+						{202407, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2024, "Q3", "July", 7, "2024-07", 202407, 22, 5, 15, 6.8, 3.8, 0, 84.7, 3.6},
+						{202407, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2024, "Q3", "July", 7, "2024-07", 202407, 59, 6, 4, 3.3, 3.74, 5, 72.9, 1.5},
+						{202407, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2024, "Q3", "July", 7, "2024-07", 202407, 4, 67, 4, 12.8, 3.17, 0, 58.4, 7.0},
+						{202407, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2024, "Q3", "July", 7, "2024-07", 202407, 29, 14, 13, 14.0, 3.19, 5, 60.4, 3.2},
+						{202407, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2024, "Q3", "July", 7, "2024-07", 202407, 26, 47, 3, 12.3, 2.51, 3, 68.8, 3.5},
+						{202407, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q3", "July", 7, "2024-07", 202407, 59, 26, 12, 11.6, 4.21, 3, 64.8, 7.3},
+						{202407, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2024, "Q3", "July", 7, "2024-07", 202407, 51, 57, 5, 2.4, 3.51, 5, 82.6, 3.5},
+						{202408, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2024, "Q3", "August", 8, "2024-08", 202408, 3, 3, 13, 13.1, 4.34, 0, 97.0, 0.6},
+						{202408, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2024, "Q3", "August", 8, "2024-08", 202408, 15, 16, 14, 1.8, 4.45, 5, 87.6, 0.8},
+						{202408, "Emergency", "Ward-C", "Elective", "Emergency", "Ward-C", "Surgical", 2024, "Q3", "August", 8, "2024-08", 202408, 54, 41, 14, 4.9, 3.75, 1, 98.0, 4.6},
+						{202408, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q3", "August", 8, "2024-08", 202408, 1, 27, 6, 9.0, 4.24, 2, 55.9, 3.4},
+						{202408, "Cardiology", "Ward-A", "Elective", "Cardiology", "Ward-A", "General", 2024, "Q3", "August", 8, "2024-08", 202408, 31, 46, 9, 6.7, 3.79, 4, 75.1, 3.3},
+						{202408, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2024, "Q3", "August", 8, "2024-08", 202408, 76, 21, 14, 5.9, 2.93, 1, 70.7, 6.4},
+						{202408, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2024, "Q3", "August", 8, "2024-08", 202408, 25, 19, 6, 6.5, 3.26, 4, 77.1, 1.8},
+						{202408, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q3", "August", 8, "2024-08", 202408, 35, 16, 0, 9.4, 3.71, 1, 93.3, 7.1},
+						{202408, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2024, "Q3", "August", 8, "2024-08", 202408, 67, 12, 6, 12.4, 4.16, 1, 72.1, 4.1},
+						{202408, "Orthopedics", "Ward-B", "Elective", "Orthopedics", "Ward-B", "ICU", 2024, "Q3", "August", 8, "2024-08", 202408, 79, 30, 8, 9.1, 3.77, 5, 67.7, 5.1},
+						{202408, "Orthopedics", "Ward-C", "Elective", "Orthopedics", "Ward-C", "Surgical", 2024, "Q3", "August", 8, "2024-08", 202408, 70, 49, 11, 2.9, 4.21, 0, 57.4, 7.4},
+						{202408, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2024, "Q3", "August", 8, "2024-08", 202408, 4, 59, 9, 12.4, 4.55, 4, 91.9, 1.5},
+						{202408, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2024, "Q3", "August", 8, "2024-08", 202408, 79, 38, 5, 12.1, 4.29, 5, 86.1, 2.1},
+						{202408, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2024, "Q3", "August", 8, "2024-08", 202408, 17, 8, 9, 2.0, 2.83, 2, 73.5, 5.0},
+						{202408, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2024, "Q3", "August", 8, "2024-08", 202408, 35, 50, 7, 4.8, 4.71, 0, 68.8, 7.2},
+						{202408, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2024, "Q3", "August", 8, "2024-08", 202408, 65, 39, 2, 9.7, 4.51, 4, 91.9, 4.6},
+						{202408, "Oncology", "Ward-A", "Transfer", "Oncology", "Ward-A", "General", 2024, "Q3", "August", 8, "2024-08", 202408, 40, 20, 9, 12.8, 3.58, 0, 57.1, 7.2},
+						{202408, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2024, "Q3", "August", 8, "2024-08", 202408, 33, 34, 5, 8.2, 3.52, 0, 69.5, 1.0},
+						{202408, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q3", "August", 8, "2024-08", 202408, 8, 14, 8, 12.0, 4.89, 0, 72.4, 6.4},
+						{202408, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2024, "Q3", "August", 8, "2024-08", 202408, 26, 3, 13, 12.9, 4.23, 1, 70.6, 7.2},
+						{202409, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2024, "Q3", "September", 9, "2024-09", 202409, 2, 57, 15, 6.8, 4.71, 1, 75.4, 2.5},
+						{202409, "Emergency", "Ward-B", "Emergency", "Emergency", "Ward-B", "ICU", 2024, "Q3", "September", 9, "2024-09", 202409, 80, 38, 15, 9.8, 3.63, 4, 97.6, 0.7},
+						{202409, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2024, "Q3", "September", 9, "2024-09", 202409, 58, 29, 6, 8.4, 2.77, 5, 61.6, 6.1},
+						{202409, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q3", "September", 9, "2024-09", 202409, 74, 30, 6, 7.0, 2.64, 2, 66.2, 4.4},
+						{202409, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2024, "Q3", "September", 9, "2024-09", 202409, 38, 24, 0, 14.0, 4.99, 4, 75.1, 3.8},
+						{202409, "Cardiology", "Ward-B", "Transfer", "Cardiology", "Ward-B", "ICU", 2024, "Q3", "September", 9, "2024-09", 202409, 50, 27, 10, 7.7, 3.64, 2, 78.9, 1.4},
+						{202409, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2024, "Q3", "September", 9, "2024-09", 202409, 59, 41, 2, 7.1, 4.93, 5, 81.2, 3.8},
+						{202409, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q3", "September", 9, "2024-09", 202409, 46, 62, 14, 3.0, 3.38, 1, 96.4, 2.3},
+						{202409, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2024, "Q3", "September", 9, "2024-09", 202409, 38, 59, 15, 8.8, 3.41, 1, 77.4, 4.8},
+						{202409, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2024, "Q3", "September", 9, "2024-09", 202409, 74, 39, 14, 13.1, 4.81, 1, 80.9, 2.6},
+						{202409, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2024, "Q3", "September", 9, "2024-09", 202409, 42, 2, 5, 2.8, 2.87, 1, 65.6, 0.7},
+						{202409, "Orthopedics", "Ward-D", "Emergency", "Orthopedics", "Ward-D", "Recovery", 2024, "Q3", "September", 9, "2024-09", 202409, 40, 19, 11, 2.8, 3.91, 3, 68.7, 5.1},
+						{202409, "Neurology", "Ward-A", "Emergency", "Neurology", "Ward-A", "General", 2024, "Q3", "September", 9, "2024-09", 202409, 46, 75, 15, 4.5, 2.5, 1, 63.2, 7.9},
+						{202409, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2024, "Q3", "September", 9, "2024-09", 202409, 55, 45, 15, 6.6, 3.71, 3, 78.4, 5.4},
+						{202409, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2024, "Q3", "September", 9, "2024-09", 202409, 19, 68, 10, 2.0, 4.55, 1, 59.9, 4.8},
+						{202409, "Neurology", "Ward-D", "Emergency", "Neurology", "Ward-D", "Recovery", 2024, "Q3", "September", 9, "2024-09", 202409, 34, 35, 1, 8.0, 2.66, 4, 84.2, 7.8},
+						{202409, "Oncology", "Ward-A", "Emergency", "Oncology", "Ward-A", "General", 2024, "Q3", "September", 9, "2024-09", 202409, 7, 21, 5, 12.5, 2.79, 0, 69.8, 1.8},
+						{202409, "Oncology", "Ward-B", "Elective", "Oncology", "Ward-B", "ICU", 2024, "Q3", "September", 9, "2024-09", 202409, 76, 24, 6, 5.7, 3.78, 1, 71.7, 7.9},
+						{202409, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q3", "September", 9, "2024-09", 202409, 78, 55, 11, 11.9, 3.23, 1, 92.6, 5.1},
+						{202409, "Oncology", "Ward-D", "Transfer", "Oncology", "Ward-D", "Recovery", 2024, "Q3", "September", 9, "2024-09", 202409, 69, 42, 7, 8.3, 3.9, 2, 72.0, 6.9},
+						{202410, "Emergency", "Ward-A", "Transfer", "Emergency", "Ward-A", "General", 2024, "Q4", "October", 10, "2024-10", 202410, 78, 10, 6, 13.8, 3.02, 1, 67.9, 1.3},
+						{202410, "Emergency", "Ward-B", "Transfer", "Emergency", "Ward-B", "ICU", 2024, "Q4", "October", 10, "2024-10", 202410, 51, 37, 14, 6.7, 4.6, 1, 66.7, 5.2},
+						{202410, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2024, "Q4", "October", 10, "2024-10", 202410, 10, 47, 13, 7.2, 2.61, 5, 71.4, 3.4},
+						{202410, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q4", "October", 10, "2024-10", 202410, 52, 63, 11, 8.5, 4.23, 2, 71.2, 1.9},
+						{202410, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2024, "Q4", "October", 10, "2024-10", 202410, 6, 47, 12, 12.9, 3.77, 1, 85.7, 7.0},
+						{202410, "Cardiology", "Ward-B", "Elective", "Cardiology", "Ward-B", "ICU", 2024, "Q4", "October", 10, "2024-10", 202410, 51, 60, 1, 3.2, 3.23, 1, 81.4, 3.0},
+						{202410, "Cardiology", "Ward-C", "Transfer", "Cardiology", "Ward-C", "Surgical", 2024, "Q4", "October", 10, "2024-10", 202410, 10, 14, 15, 5.0, 3.0, 4, 59.4, 3.8},
+						{202410, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2024, "Q4", "October", 10, "2024-10", 202410, 48, 75, 14, 4.4, 3.64, 0, 80.3, 3.9},
+						{202410, "Orthopedics", "Ward-A", "Elective", "Orthopedics", "Ward-A", "General", 2024, "Q4", "October", 10, "2024-10", 202410, 77, 45, 3, 5.7, 2.55, 5, 76.3, 1.1},
+						{202410, "Orthopedics", "Ward-B", "Emergency", "Orthopedics", "Ward-B", "ICU", 2024, "Q4", "October", 10, "2024-10", 202410, 6, 74, 9, 3.7, 4.07, 1, 55.9, 0.6},
+						{202410, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2024, "Q4", "October", 10, "2024-10", 202410, 57, 28, 11, 10.2, 4.35, 3, 56.2, 2.8},
+						{202410, "Orthopedics", "Ward-D", "Elective", "Orthopedics", "Ward-D", "Recovery", 2024, "Q4", "October", 10, "2024-10", 202410, 33, 32, 10, 11.4, 4.62, 5, 83.6, 8.0},
+						{202410, "Neurology", "Ward-A", "Elective", "Neurology", "Ward-A", "General", 2024, "Q4", "October", 10, "2024-10", 202410, 71, 23, 9, 2.3, 2.94, 3, 79.9, 2.0},
+						{202410, "Neurology", "Ward-B", "Elective", "Neurology", "Ward-B", "ICU", 2024, "Q4", "October", 10, "2024-10", 202410, 45, 35, 12, 9.7, 2.85, 2, 62.6, 1.6},
+						{202410, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2024, "Q4", "October", 10, "2024-10", 202410, 4, 58, 0, 11.4, 4.54, 4, 71.6, 7.0},
+						{202410, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2024, "Q4", "October", 10, "2024-10", 202410, 78, 27, 0, 4.5, 2.51, 3, 69.9, 2.2},
+						{202410, "Oncology", "Ward-A", "Elective", "Oncology", "Ward-A", "General", 2024, "Q4", "October", 10, "2024-10", 202410, 64, 45, 5, 9.9, 4.48, 0, 60.8, 6.1},
+						{202410, "Oncology", "Ward-B", "Transfer", "Oncology", "Ward-B", "ICU", 2024, "Q4", "October", 10, "2024-10", 202410, 7, 66, 8, 5.9, 4.56, 5, 62.3, 1.6},
+						{202410, "Oncology", "Ward-C", "Elective", "Oncology", "Ward-C", "Surgical", 2024, "Q4", "October", 10, "2024-10", 202410, 73, 46, 13, 12.7, 4.62, 2, 60.3, 6.3},
+						{202410, "Oncology", "Ward-D", "Elective", "Oncology", "Ward-D", "Recovery", 2024, "Q4", "October", 10, "2024-10", 202410, 79, 11, 15, 12.3, 4.83, 4, 56.9, 2.1},
+						{202411, "Emergency", "Ward-A", "Emergency", "Emergency", "Ward-A", "General", 2024, "Q4", "November", 11, "2024-11", 202411, 77, 67, 3, 3.9, 4.33, 3, 67.7, 5.2},
+						{202411, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2024, "Q4", "November", 11, "2024-11", 202411, 80, 61, 12, 9.6, 3.31, 5, 55.0, 3.2},
+						{202411, "Emergency", "Ward-C", "Emergency", "Emergency", "Ward-C", "Surgical", 2024, "Q4", "November", 11, "2024-11", 202411, 7, 30, 9, 13.2, 2.89, 1, 77.2, 3.1},
+						{202411, "Emergency", "Ward-D", "Transfer", "Emergency", "Ward-D", "Recovery", 2024, "Q4", "November", 11, "2024-11", 202411, 18, 5, 13, 9.4, 4.09, 3, 68.7, 1.5},
+						{202411, "Cardiology", "Ward-A", "Emergency", "Cardiology", "Ward-A", "General", 2024, "Q4", "November", 11, "2024-11", 202411, 64, 50, 12, 7.5, 3.08, 2, 89.3, 7.8},
+						{202411, "Cardiology", "Ward-B", "Emergency", "Cardiology", "Ward-B", "ICU", 2024, "Q4", "November", 11, "2024-11", 202411, 55, 71, 8, 5.7, 3.31, 1, 82.6, 6.5},
+						{202411, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2024, "Q4", "November", 11, "2024-11", 202411, 59, 68, 5, 8.4, 2.95, 1, 65.4, 3.5},
+						{202411, "Cardiology", "Ward-D", "Emergency", "Cardiology", "Ward-D", "Recovery", 2024, "Q4", "November", 11, "2024-11", 202411, 53, 29, 8, 6.3, 4.6, 4, 55.2, 5.4},
+						{202411, "Orthopedics", "Ward-A", "Transfer", "Orthopedics", "Ward-A", "General", 2024, "Q4", "November", 11, "2024-11", 202411, 18, 54, 3, 8.7, 2.88, 1, 90.6, 2.1},
+						{202411, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2024, "Q4", "November", 11, "2024-11", 202411, 11, 56, 11, 12.4, 3.88, 0, 94.8, 2.8},
+						{202411, "Orthopedics", "Ward-C", "Emergency", "Orthopedics", "Ward-C", "Surgical", 2024, "Q4", "November", 11, "2024-11", 202411, 14, 66, 3, 3.3, 2.89, 3, 93.5, 2.9},
+						{202411, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2024, "Q4", "November", 11, "2024-11", 202411, 32, 15, 4, 2.9, 2.86, 3, 84.7, 3.5},
+						{202411, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2024, "Q4", "November", 11, "2024-11", 202411, 28, 3, 5, 3.4, 2.94, 3, 75.6, 2.3},
+						{202411, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2024, "Q4", "November", 11, "2024-11", 202411, 51, 21, 15, 10.3, 3.48, 1, 67.3, 1.0},
+						{202411, "Neurology", "Ward-C", "Elective", "Neurology", "Ward-C", "Surgical", 2024, "Q4", "November", 11, "2024-11", 202411, 33, 27, 4, 2.3, 3.37, 5, 56.0, 4.8},
+						{202411, "Neurology", "Ward-D", "Elective", "Neurology", "Ward-D", "Recovery", 2024, "Q4", "November", 11, "2024-11", 202411, 70, 12, 0, 5.3, 3.89, 3, 62.7, 3.2},
+						{202411, "Oncology", "Ward-A", "Transfer", "Oncology", "Ward-A", "General", 2024, "Q4", "November", 11, "2024-11", 202411, 51, 23, 9, 5.3, 4.66, 5, 61.2, 3.1},
+						{202411, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2024, "Q4", "November", 11, "2024-11", 202411, 80, 68, 2, 2.5, 3.62, 2, 86.8, 3.9},
+						{202411, "Oncology", "Ward-C", "Emergency", "Oncology", "Ward-C", "Surgical", 2024, "Q4", "November", 11, "2024-11", 202411, 37, 24, 14, 3.5, 2.81, 0, 91.7, 2.3},
+						{202411, "Oncology", "Ward-D", "Emergency", "Oncology", "Ward-D", "Recovery", 2024, "Q4", "November", 11, "2024-11", 202411, 55, 14, 5, 12.3, 3.93, 0, 63.5, 3.5},
+						{202412, "Emergency", "Ward-A", "Elective", "Emergency", "Ward-A", "General", 2024, "Q4", "December", 12, "2024-12", 202412, 79, 1, 5, 5.6, 4.26, 1, 95.3, 3.6},
+						{202412, "Emergency", "Ward-B", "Elective", "Emergency", "Ward-B", "ICU", 2024, "Q4", "December", 12, "2024-12", 202412, 20, 68, 6, 2.1, 4.09, 1, 65.7, 3.5},
+						{202412, "Emergency", "Ward-C", "Transfer", "Emergency", "Ward-C", "Surgical", 2024, "Q4", "December", 12, "2024-12", 202412, 70, 48, 9, 2.6, 4.69, 0, 87.7, 7.4},
+						{202412, "Emergency", "Ward-D", "Elective", "Emergency", "Ward-D", "Recovery", 2024, "Q4", "December", 12, "2024-12", 202412, 36, 57, 6, 8.7, 4.81, 0, 64.6, 7.1},
+						{202412, "Cardiology", "Ward-A", "Elective", "Cardiology", "Ward-A", "General", 2024, "Q4", "December", 12, "2024-12", 202412, 55, 28, 3, 3.3, 4.3, 3, 56.1, 0.6},
+						{202412, "Cardiology", "Ward-B", "Transfer", "Cardiology", "Ward-B", "ICU", 2024, "Q4", "December", 12, "2024-12", 202412, 28, 5, 15, 12.8, 3.56, 4, 93.3, 5.7},
+						{202412, "Cardiology", "Ward-C", "Emergency", "Cardiology", "Ward-C", "Surgical", 2024, "Q4", "December", 12, "2024-12", 202412, 4, 43, 1, 8.1, 3.08, 1, 70.4, 2.2},
+						{202412, "Cardiology", "Ward-D", "Elective", "Cardiology", "Ward-D", "Recovery", 2024, "Q4", "December", 12, "2024-12", 202412, 11, 2, 6, 9.9, 4.95, 4, 76.6, 8.0},
+						{202412, "Orthopedics", "Ward-A", "Emergency", "Orthopedics", "Ward-A", "General", 2024, "Q4", "December", 12, "2024-12", 202412, 45, 9, 6, 5.0, 4.41, 5, 79.5, 3.9},
+						{202412, "Orthopedics", "Ward-B", "Transfer", "Orthopedics", "Ward-B", "ICU", 2024, "Q4", "December", 12, "2024-12", 202412, 12, 37, 8, 11.8, 4.03, 3, 76.2, 2.5},
+						{202412, "Orthopedics", "Ward-C", "Transfer", "Orthopedics", "Ward-C", "Surgical", 2024, "Q4", "December", 12, "2024-12", 202412, 53, 41, 12, 12.4, 3.24, 0, 78.3, 0.6},
+						{202412, "Orthopedics", "Ward-D", "Transfer", "Orthopedics", "Ward-D", "Recovery", 2024, "Q4", "December", 12, "2024-12", 202412, 15, 45, 4, 13.3, 4.12, 5, 71.1, 7.3},
+						{202412, "Neurology", "Ward-A", "Transfer", "Neurology", "Ward-A", "General", 2024, "Q4", "December", 12, "2024-12", 202412, 2, 69, 12, 12.3, 3.73, 3, 96.0, 1.6},
+						{202412, "Neurology", "Ward-B", "Transfer", "Neurology", "Ward-B", "ICU", 2024, "Q4", "December", 12, "2024-12", 202412, 15, 62, 2, 5.9, 4.58, 4, 61.1, 7.4},
+						{202412, "Neurology", "Ward-C", "Transfer", "Neurology", "Ward-C", "Surgical", 2024, "Q4", "December", 12, "2024-12", 202412, 19, 42, 4, 9.8, 3.64, 0, 76.4, 1.4},
+						{202412, "Neurology", "Ward-D", "Transfer", "Neurology", "Ward-D", "Recovery", 2024, "Q4", "December", 12, "2024-12", 202412, 22, 41, 9, 3.6, 4.72, 2, 69.8, 1.1},
+						{202412, "Oncology", "Ward-A", "Transfer", "Oncology", "Ward-A", "General", 2024, "Q4", "December", 12, "2024-12", 202412, 19, 14, 9, 12.0, 3.46, 4, 97.3, 2.1},
+						{202412, "Oncology", "Ward-B", "Emergency", "Oncology", "Ward-B", "ICU", 2024, "Q4", "December", 12, "2024-12", 202412, 72, 60, 2, 8.4, 4.3, 0, 58.4, 4.6},
+						{202412, "Oncology", "Ward-C", "Transfer", "Oncology", "Ward-C", "Surgical", 2024, "Q4", "December", 12, "2024-12", 202412, 67, 68, 14, 2.4, 3.0, 1, 84.7, 0.7},
+						{202412, "Oncology", "Ward-D", "Elective", "Oncology", "Ward-D", "Recovery", 2024, "Q4", "December", 12, "2024-12", 202412, 38, 37, 8, 8.1, 4.43, 3, 67.4, 4.5}
+					}
+				),
+				CleanText = Table.TransformColumns(
+					Source,
+					{
+						{"Department", each Text.Trim(_), type text},
+						{"Ward", each Text.Trim(_), type text}
+					}
+				),
+				FillMissingText = Table.ReplaceValue(CleanText, null, "Unknown", Replacer.ReplaceValue, {"Department", "Ward"}),
+				NormalizeMetrics = Table.TransformColumns(
+					FillMissingText,
+					{
+						{"SatisfactionScore", each if _ < 0 then 0 else if _ > 5 then 5 else _, type number},
+						{"BedOccupancyPct", each if _ < 0 then 0 else if _ > 100 then 100 else _, type number}
+					}
+				),
+				AddSortKey = Table.AddColumn(NormalizeMetrics, "YearMonthSort", each [Year] * 100 + [MonthNum], Int64.Type),
+				SortRows = Table.Sort(AddSortKey, {{"YearMonthSort", Order.Ascending}}),
+				DropHelper = Table.RemoveColumns(SortRows, {"YearMonthSort"}),
+				FilterInvalid = Table.SelectRows(DropHelper, each [Admissions] >= 0)
+			in
+				FilterInvalid
