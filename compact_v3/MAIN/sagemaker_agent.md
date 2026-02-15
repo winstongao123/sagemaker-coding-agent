@@ -1355,6 +1355,14 @@ AUDIT = AuditLogger(CONFIG.audit_dir)
 # ============================================================
 
 import boto3
+from botocore.config import Config as _BotoConfig
+
+# Bedrock client config: 600s read timeout for large outputs (e.g., 2000+ line file generation)
+_BEDROCK_CLIENT_CONFIG = _BotoConfig(
+    read_timeout=600,
+    connect_timeout=10,
+    retries={"max_attempts": 2}
+)
 
 @dataclass
 class ToolCall:
@@ -1379,7 +1387,7 @@ class BedrockClient:
         self.region = region
         self.mock_mode = mock_mode
         if not mock_mode:
-            self.client = boto3.client("bedrock-runtime", region_name=region)
+            self.client = boto3.client("bedrock-runtime", region_name=region, config=_BEDROCK_CLIENT_CONFIG)
         else:
             self.client = None
             print("[MOCK MODE] No API calls will be made")
@@ -2868,8 +2876,17 @@ _ALLOWED = {
     "posixpath", "ntpath", "genericpath", "stat",
     "sys", "types", "zipimport", "_frozen_importlib",
     "_frozen_importlib_external", "_bootlocale",
+    # C-extension accelerators (imported absolutely by their parent stdlib packages)
+    "_json", "_csv", "_datetime", "_struct", "_decimal", "_random",
+    "_hashlib", "_bisect", "_heapq", "_statistics",
+    "_sre", "sre_compile", "sre_parse", "sre_constants", "_string",
 }
 def _safe_import(name, *args, **kwargs):
+    # Allow relative imports (level > 0) — they resolve within already-allowed packages
+    # e.g. json/__init__.py does "from .decoder import ..." which calls __import__("decoder", ..., level=1)
+    level = args[3] if len(args) > 3 else kwargs.get("level", 0)
+    if level > 0:
+        return _original_import(name, *args, **kwargs)
     top = name.split(".")[0]
     if top in _ALLOWED:
         return _original_import(name, *args, **kwargs)
@@ -3649,7 +3666,7 @@ class SemanticSearch:
 
     def _ensure_client(self):
         if self.client is None:
-            self.client = boto3.client("bedrock-runtime", region_name=self.region)
+            self.client = boto3.client("bedrock-runtime", region_name=self.region, config=_BEDROCK_CLIENT_CONFIG)
 
     def _get_embedding(self, text: str) -> List[float]:
         """Get embedding vector for text."""
@@ -5585,7 +5602,11 @@ def create_chat_ui(mock_mode: bool = None):
                 f'</div>'
             ))
         approval_box.layout.display = 'block'
-        send_btn.disabled = True
+        # Enable Send button as fallback — pressing Send = approve
+        # (fixes SageMaker Studio where dedicated Approve/Deny buttons may not fire)
+        send_btn.disabled = False
+        send_btn.layout.display = 'inline-block'
+        input_box.placeholder = 'Press Send to approve (or use Approve/Deny buttons above)...'
 
         # Wait with timeout (5 min max)
         max_wait = 300
@@ -5598,7 +5619,11 @@ def create_chat_ui(mock_mode: bool = None):
             waited += 0.1
 
         approval_box.layout.display = 'none'
-        send_btn.disabled = False
+        # Restore Send button to hidden state (agent still running)
+        send_btn.disabled = True
+        send_btn.layout.display = 'none'
+        input_box.placeholder = 'Type your message...'
+        pending_approval["event"] = None  # Clear stale event reference
 
         with approval_output:
             clear_output()
@@ -5674,7 +5699,11 @@ def create_chat_ui(mock_mode: bool = None):
                 f'{opts_html}</div>'
             ))
         ask_user_box.layout.display = 'block'
-        send_btn.disabled = True
+        # Enable Send button as fallback — user can type answer in chat input and press Send
+        # (fixes SageMaker Studio where dedicated Submit/Skip buttons may not fire)
+        send_btn.disabled = False
+        send_btn.layout.display = 'inline-block'
+        input_box.placeholder = 'Type your answer here and press Send (or use Submit above)...'
 
         # Wait with timeout (5 min max)
         max_wait = 300
@@ -5687,7 +5716,11 @@ def create_chat_ui(mock_mode: bool = None):
             waited += 0.1
 
         ask_user_box.layout.display = 'none'
-        send_btn.disabled = False
+        # Restore Send button to hidden state (agent still running)
+        send_btn.disabled = True
+        send_btn.layout.display = 'none'
+        input_box.placeholder = 'Type your message...'
+        pending_user_input["event"] = None  # Clear stale event reference
         with ask_user_output:
             clear_output()
 
@@ -6034,7 +6067,7 @@ def create_chat_ui(mock_mode: bool = None):
             if active_skills:
                 blocks = []
                 for skill_name in active_skills:
-                    ok, txt = SKILLS.read_skill(skill_name, max_chars=4000)
+                    ok, txt = SKILLS.read_skill(skill_name, max_chars=8000)
                     if ok and txt.strip():
                         blocks.append(f"[SKILL: {skill_name}]\n{txt}")
                 if blocks:
@@ -6402,7 +6435,23 @@ def create_chat_ui(mock_mode: bool = None):
         """Run on_send in background thread so kernel thread stays free for widget events.
         Fixes: ask_user Submit/Skip buttons, Stop button, and approval dialogs all require
         the kernel thread to process click callbacks. Without threading, agent.run() blocks
-        the kernel thread and creates a deadlock."""
+        the kernel thread and creates a deadlock.
+
+        Also acts as fallback for ask_user and approval dialogs: if the dedicated widget
+        buttons (Submit/Skip/Approve/Deny) don't fire (e.g. SageMaker Studio comm issues),
+        the user can type in the regular input box and press Send instead."""
+        # Fallback: if ask_user is waiting, redirect Send input as the response
+        if pending_user_input.get("event") and pending_user_input["result"] is None:
+            val = input_box.value.strip() or "(no response)"
+            input_box.value = ""
+            pending_user_input["result"] = val
+            pending_user_input["event"].set()
+            return
+        # Fallback: if approval is waiting, Send = approve
+        if pending_approval.get("event") and pending_approval["result"] is None:
+            pending_approval["result"] = True
+            pending_approval["event"].set()
+            return
         if ui_state.get("lock"):
             return  # Agent already running
         ui_state["lock"] = True  # Set lock BEFORE spawning thread (atomic on kernel thread)

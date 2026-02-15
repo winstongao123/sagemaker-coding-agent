@@ -1,4 +1,8 @@
 # chat.ipynb
+> Auto-generated markdown copy of `chat.ipynb`.
+> Source of truth is always the `.ipynb` file.
+>
+> Stats: 5 cells (2 markdown, 3 code)
 
 ## Cell 0 (markdown)
 
@@ -20,6 +24,9 @@ Secure AI coding assistant powered by AWS Bedrock Claude.
 - Diff tracking on every edit
 - Permission rules (per-tool, file-pattern, command-pattern)
 - SSRF-hardened web fetch
+- Bedrock client config (600s read timeout for large outputs)
+- Python sandbox: C-extension accelerator whitelist + relative import support
+- SageMaker deadlock fix (Send button fallback for approval dialogs)
 
 **Security:** 3-layer bash + 3-layer Python + workspace boundary + SSRF protection
 
@@ -103,7 +110,7 @@ thinking_budget_dropdown = widgets.Dropdown(
 )
 
 max_turns_slider = widgets.IntSlider(
-    value=30,
+    value=60,
     min=5,
     max=100,
     step=5,
@@ -194,6 +201,7 @@ create_chat_ui()
 | **Create Excel** | "Create an Excel file with employee data" |
 | **Create Word** | "Write a project summary document" |
 | **Create PDF** | "Create a PDF report with table and chart summary" |
+| **Create Notebook** | "Create a notebook that loads and analyzes data" |
 | **Web Fetch** | "Fetch https://example.com and summarize it" |
 | **Plan** | "Help me build a REST API with Flask" |
 
@@ -220,7 +228,7 @@ create_chat_ui()
 - **File:** `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `list_dir`
 - **Exec:** `bash`, `python_exec`
 - **Docs:** `create_word`, `create_excel`, `create_markdown`, `create_notebook`, `create_pdf`
-- **Charts:** `create_chart` (bar, line, pie, scatter — displayed inline)
+- **Charts:** `create_chart` (bar, line, pie, scatter -- displayed inline)
 - **Vision:** `view_image`
 - **Search:** `semantic_search` (Bedrock Titan embeddings)
 - **Planning:** `todo_write`, `todo_read`
@@ -239,4 +247,3 @@ create_chat_ui()
 - Workspace boundary enforcement
 - Configurable permission rules via `opencode.json`
 - Audit logging and session persistence
-

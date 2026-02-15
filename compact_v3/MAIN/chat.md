@@ -28,7 +28,7 @@ The original single-file agent, ported from OpenCode patterns to Python/SageMake
 - Sub-agents (build, plan, explore, general)
 - Skills system and MCP client
 
-### V2 (compact_v2/) -- 6,119 lines (+1,077 over V1)
+### V2 (compact_v2/) -- 6,323 lines (+1,281 over V1)
 Major feature release adding external config, cost tracking, and error recovery.
 - External config (`opencode.json`) with JSONC support
 - Skills system with YAML frontmatter (`/skills`, `/skill use <name>`, `/skill clear`)
@@ -41,8 +41,11 @@ Major feature release adding external config, cost tracking, and error recovery.
 - SSRF-hardened web fetch
 - Error recovery (tool name repair, arg auto-fix, type conversion, fuzzy suggest)
 - Auto-save sessions every message
+- Bedrock client config (600s read timeout for large outputs)
+- Python sandbox: C-extension accelerator whitelist + relative import support
+- SageMaker deadlock fix (Send button fallback for approval dialogs)
 
-### V3 (compact_v3/) -- 6,341 lines (+222 over V2, 27 bugs fixed)
+### V3 (compact_v3/) -- 6,558 lines (+235 over V2, 27 bugs fixed)
 Best practices integration from [everything-claude-code](https://github.com/winstonpgao/everything-claude-code). 6 rounds of code review.
 - **Review agent** type (security, quality, performance, architecture, testing)
 - **Enhanced planner** prompt (restate requirements, assess risks, phased plan)
@@ -51,13 +54,14 @@ Best practices integration from [everything-claude-code](https://github.com/wins
 - **`/checkpoint` command** (named checkpoints with create/list, capped at 50)
 - **Git workflow rules** (conventional commits, atomic changes, branch naming)
 - **Testing discipline rules** (TDD, 80% coverage target, AAA pattern)
-- **4 skills**: verification-loop (148 lines), coding-standards (154 lines), review (84 lines), powerbi-dashboard (138 lines, from [AIPower](https://github.com/winstonpgao/AIPower))
+- **5 skills**: verification-loop (148 lines), coding-standards (154 lines), review (84 lines), powerbi-dashboard (V1 template-based), powerbi-dashboard-v2 (config-driven engine, 461 lines)
 - Interactive `ask_user` with text input widget + submit/skip buttons
 - Session checkpoint persistence (save/load/restore with deepcopy)
 - ASCII system messages (no emoji encoding issues)
 - `_FILES_READ` reset on session load (no stale write-guard)
 - Single skill injection path (no double-injection)
 - Session ID collision prevention (`os.urandom(3).hex()` suffix)
+- SageMaker deadlock fix (Send button fallback for approval + ask_user dialogs)
 
 See `USER_GUIDE.md` for full documentation.
 
@@ -139,7 +143,7 @@ thinking_budget_dropdown = widgets.Dropdown(
 )
 
 max_turns_slider = widgets.IntSlider(
-    value=30,
+    value=60,
     min=5,
     max=100,
     step=5,
@@ -302,7 +306,7 @@ create_chat_ui()
 
 ---
 
-## Skills (4)
+## Skills (5)
 
 Skills are markdown files with YAML frontmatter in the `skills/` directory. When activated via `/skill use <name>`, their content is injected into the system prompt. The agent proactively matches user requests to available skills and auto-loads them (no manual activation needed).
 
@@ -311,7 +315,8 @@ Skills are markdown files with YAML frontmatter in the `skills/` directory. When
 | **review** | 84 | Code review checklist: security (CRITICAL), quality (HIGH), performance (MEDIUM), architecture, testing. Structured output with severity ratings. |
 | **verify** | 148 | 6-phase verification loop: (1) build check, (2) type check (pyright/mypy/tsc), (3) lint (ruff/eslint), (4) test suite with coverage, (5) security scan (secrets, .env), (6) diff review. Outputs VERIFICATION REPORT with PASS/FAIL per phase. |
 | **coding-standards** | 154 | Language-agnostic coding standards: KISS, DRY, YAGNI, naming conventions, error handling, function design (<50 lines), testing (AAA pattern, 80% coverage), code smells. |
-| **powerbi-dashboard** | 138 | Power BI dashboard generator: 4-phase workflow (requirements, data analysis, design, build). 13 chart types, star schema, DAX measures, PBIR/TMDL output. Source: [AIPower](https://github.com/winstonpgao/AIPower). |
+| **powerbi-dashboard** | 322 | Power BI V1 dashboard generator (template-based): 4-phase workflow (requirements, data analysis, design, build). 14 chart types, star schema, DAX measures, PBIR/TMDL output. Sales/business data only. |
+| **powerbi-dashboard-v2** | 461 | Power BI V2 config-driven engine: edit SCHEMA dict for any data domain. Supports CSV ingestion, calculated columns, M preprocessing, auto-layout. Tested with 7 dashboards across sales, enrollment, healthcare, HR, logistics, marketing, retail. |
 
 **Skill format**: `skills/<name>/SKILL.md` with optional YAML frontmatter (`name`, `description`, `version`).
 
@@ -327,7 +332,7 @@ Skills are markdown files with YAML frontmatter in the `skills/` directory. When
 | **Temperature** | 0.0 (deterministic) to 1.0 (max creativity) | 0.0 |
 | **Extended Thinking** | On/Off (uses more tokens, slower, better reasoning) | Off |
 | **Thinking Budget** | 1024 / 2048 / 4096 / 8192 / 16000 tokens | 4096 |
-| **Max Turns** | 5-100 (agent loop iterations per message) | 30 |
+| **Max Turns** | 5-100 (agent loop iterations per message) | 60 |
 | **Workspace** | Directory path for file operations | `.` (current) |
 | **Mock Mode** | Test UI without API calls | Off |
 
@@ -405,7 +410,7 @@ Use `/cost` to see token usage and estimated cost. Pricing is per-model based on
 
 ```
 compact_v3/MAIN/
-  sagemaker_agent.py    <- Agent engine (6,341 lines)
+  sagemaker_agent.py    <- Agent engine (6,558 lines)
   chat.ipynb            <- This notebook (UI launcher)
   opencode.json         <- External config (permissions, commands)
   USER_GUIDE.md         <- Full documentation
@@ -413,8 +418,8 @@ compact_v3/MAIN/
     review/SKILL.md           <- Code review skill (84 lines)
     verify/SKILL.md           <- Verification loop skill (148 lines)
     coding-standards/SKILL.md <- Coding standards skill (154 lines)
-    powerbi-dashboard/        <- Power BI dashboard generator
-      SKILL.md                  <- Skill prompt (138 lines)
+    powerbi-dashboard/        <- Power BI V1 dashboard generator (template-based)
+      SKILL.md                  <- Skill prompt (322 lines)
       GUIDE.md                  <- Beginner guide
       generate_template.py      <- Working template (95 KB)
       reference/
@@ -423,4 +428,14 @@ compact_v3/MAIN/
         theme.json              <- Color palette
       tested/
         generate_project.py     <- University dashboard example
+    powerbi-dashboard-v2/     <- Power BI V2 dashboard generator (config-driven)
+      SKILL.md                  <- Skill prompt (461 lines)
+      GUIDE.md                  <- Guide with tested examples
+      generate_engine.py        <- Config-driven engine
+      reference/
+        SOP.md                  <- Lessons learned
+        STYLING.md              <- Visual styling reference
+        theme.json              <- Color palette
+      tested/
+        generate_project.py     <- University enrollment example
 ```
