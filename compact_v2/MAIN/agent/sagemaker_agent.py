@@ -6006,6 +6006,7 @@ def create_chat_ui(mock_mode: bool = None):
         render_todos()  # Update todo display
         status_html.value = '<span style="color:#4caf50"><b>● Ready</b></span>'
         update_tokens_display()
+        update_session_list()
 
     def on_save(b):
         """Save current session with todos."""
@@ -6013,6 +6014,10 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', 'Agent is running. Stop it first.')
             return
         if ui_state["session"] and ui_state["agent"]:
+            # Update title if user typed a new name
+            new_name = session_name_input.value.strip()
+            if new_name:
+                ui_state["session"].title = new_name
             ui_state["session"].messages = copy.deepcopy(ui_state["agent"].messages)
             metadata = ui_state["session"].metadata or {}
             metadata["model"] = model_dropdown.value
