@@ -5479,14 +5479,8 @@ def create_chat_ui(mock_mode: bool = None):
                             return False
                         if action == "allow":
                             return True
-        is_sagemaker = bool(
-            os.getenv("SAGEMAKER_DOMAIN_ID")
-            or os.getenv("SAGEMAKER_INTERNAL_IMAGE_URI")
-            or "SAGEMAKER" in os.getenv("AWS_EXECUTION_ENV", "").upper()
-        )
-        if is_sagemaker:
-            add_message('system', 'SageMaker detected: auto-approving. Toggle "Require Approval" OFF to suppress this message, or use permission_rules in opencode.json for fine-grained control.')
-            return True  # Auto-approve in SageMaker to prevent stuck UI
+        # SageMaker auto-approve bypass removed — deadlock fix (threading + Send
+        # button fallback) makes approval dialogs work reliably on SageMaker now.
         # "Always" only works for low-risk tools (file creation, etc.)
         # bash and python_exec require per-invocation approval since args vary wildly
         if tool_name not in HIGH_RISK_TOOLS and tool_name in ui_state.get("always_allow", set()):
