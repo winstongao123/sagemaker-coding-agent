@@ -814,6 +814,36 @@ def generate_data(schema):
     return rows
 
 
+def _auto_map_columns(csv_headers, schema_columns):
+    """Build auto column mapping from CSV headers to SCHEMA column names.
+
+    Tries: exact match → case-insensitive → normalized (no underscores/spaces).
+    Returns dict: {schema_col_name: csv_header_name} for non-exact matches.
+    """
+    col_map = {}
+    csv_header_set = set(csv_headers)
+    csv_lower = {h.lower(): h for h in csv_headers}
+    # Normalized: strip underscores, spaces, hyphens, compare lowercase
+    csv_norm = {}
+    for h in csv_headers:
+        key = h.lower().replace("_", "").replace(" ", "").replace("-", "")
+        csv_norm[key] = h
+
+    for schema_col in schema_columns:
+        if schema_col in csv_header_set:
+            continue  # Exact match — no mapping needed
+        lower = schema_col.lower()
+        if lower in csv_lower:
+            col_map[schema_col] = csv_lower[lower]
+            continue
+        norm = lower.replace("_", "").replace(" ", "").replace("-", "")
+        if norm in csv_norm:
+            col_map[schema_col] = csv_norm[norm]
+            continue
+
+    return col_map
+
+
 def _load_csv_data(schema):
     """Load data from a CSV file and map to SCHEMA columns."""
     data_source = schema["data_source"]
@@ -831,8 +861,11 @@ def _load_csv_data(schema):
     if not raw_rows:
         raise ValueError(f"CSV file is empty: {full_path}")
 
-    # Column mapping: {schema_column_name: csv_column_name}
-    col_map = data_source.get("column_mapping", {})
+    csv_headers = list(raw_rows[0].keys())
+    print(f"  CSV headers: {csv_headers}")
+
+    # Column mapping: explicit overrides + auto-detected fuzzy matches
+    explicit_map = data_source.get("column_mapping", {})
 
     # Build type map from all SCHEMA columns
     type_map = {}
@@ -848,8 +881,37 @@ def _load_csv_data(schema):
                       ("MonthNum", "int64"), ("YearMonth", "string"), ("YearMonthSort", "int64")]:
         type_map[name] = typ
 
+    # Auto-map: fuzzy-match SCHEMA columns to CSV headers, then merge explicit overrides
+    auto_map = _auto_map_columns(csv_headers, list(type_map.keys()))
+    col_map = {**auto_map, **explicit_map}  # explicit wins over auto
+
+    if auto_map:
+        print(f"  Auto-mapped columns: {auto_map}")
+    if explicit_map:
+        print(f"  Explicit column_mapping: {explicit_map}")
+
+    # Warn about SCHEMA columns with no CSV match at all
+    unmapped = []
+    date_derived = {"DateKey", "Year", "Quarter", "Month", "MonthNum", "YearMonth", "YearMonthSort",
+                    date_cfg["key_column"]}
+    for schema_col in type_map:
+        if schema_col in date_derived:
+            continue  # These are derived from date_column, not from CSV directly
+        csv_col = col_map.get(schema_col, schema_col)
+        if csv_col not in set(csv_headers):
+            unmapped.append(f"{schema_col} (tried: '{csv_col}')")
+    if unmapped:
+        print(f"  WARNING: No CSV match for: {unmapped}")
+        print(f"  Available CSV headers: {csv_headers}")
+
     # Check if we need to derive date columns from a date_column
     date_column = data_source.get("date_column")  # e.g. "Date" (YYYY-MM-DD format)
+    # Auto-resolve date_column name against CSV headers too
+    if date_column and date_column not in set(csv_headers):
+        date_auto = _auto_map_columns(csv_headers, [date_column])
+        if date_auto:
+            col_map[date_column] = date_auto[date_column]
+            print(f"  Auto-mapped date_column: {date_column} -> {date_auto[date_column]}")
 
     rows = []
     for raw in raw_rows:

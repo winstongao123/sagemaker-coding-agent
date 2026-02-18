@@ -1,6 +1,27 @@
-# Compact V3 Changelog: Tier 1 Best Practices Integration
+# Compact V3 Changelog
 
-## Source
+## v3.0.0 — Engine Auto-Column-Mapping + Cost Monitor (2026-02-13)
+
+### Engine (generate_engine.py)
+- **Auto-column-mapping**: CSV columns now fuzzy-match to SCHEMA names (exact → case-insensitive → normalized). Eliminates LLM debugging loops when CSV headers use snake_case/lowercase vs SCHEMA PascalCase.
+- **Diagnostic output**: Prints CSV headers, auto-mapped columns, and warnings for unmapped columns at load time. LLM sees issues immediately instead of discovering them after failed visuals.
+- **Date column auto-resolve**: `date_column` name also fuzzy-matched against CSV headers.
+
+### Agent (sagemaker_agent.py)
+- **Cost monitor widget**: Real-time session cost, last call cost, model rate per 1M tokens displayed alongside token metrics.
+- **Token display clarity**: "Context Window" (conversation size, compacts at 80%) and "Sent per call" (conversation + fixed overhead) with inline descriptions.
+- **Tool descriptions**: Improved for small LLM compatibility (glob, grep, semantic_search use plain English instead of jargon).
+- **System prompt**: Clarified ASCII art vs create_chart, simplified MCP reference.
+- **Model pricing bug fix**: Cost now uses `CONFIG.model_id` (current model) instead of cached `self._model_id` (init-time model).
+- **Session save**: Token stats saved with session metadata for historical record (not restored on load — fresh start).
+- **Session UX**: Save button reads name input to rename sessions; Clear button refreshes session dropdown.
+- **Version**: 2.5.0 → 3.0.0
+
+---
+
+## Tier 1 Best Practices Integration
+
+### Source
 
 Lessons learned from [everything-claude-code](https://github.com/winstonpgao/everything-claude-code) — a collection of 62 skills, rules, commands, agents, and hooks for AI coding assistants. We analyzed all items, ranked them by practical value for coding, code review, memory management, and state persistence, then integrated the top 10 (Tier 1, score 85-100) into V3.
 

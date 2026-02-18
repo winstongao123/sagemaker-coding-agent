@@ -25,7 +25,7 @@ A single Python script (`generate_project.py`) that outputs:
 Engine generates random data using `fact_columns[].gen` specs (random_int, random_float, random_choice, weighted_choice, from_dim). Good for demos and prototyping.
 
 ### Mode B: CSV Data Ingestion
-Engine reads a real CSV file, auto-extracts dimension values, auto-parses dates, type-converts columns, and embeds real data as M `#table()` literals. Good for production dashboards with real data.
+Engine reads a real CSV file, **auto-maps column names** (case-insensitive + normalized matching), auto-extracts dimension values, auto-parses dates, type-converts columns, and embeds real data as M `#table()` literals. Good for production dashboards with real data. The engine prints CSV headers, auto-mapped columns, and warnings for any unmatched columns — so the LLM can fix issues in one pass instead of debugging loops.
 
 ## V1 vs V2
 
@@ -383,6 +383,6 @@ Then open `MarketDash/MarketDash.pbip` in Power BI Desktop.
 | KeyError on dimension | Ensure `dim_table` name in SCHEMA matches relationship refs |
 | Missing measure | Add to `"measures"` list in SCHEMA |
 | Wrong aggregation | Check agg function code: 0=Sum, 1=Avg, 2=Min, 3=Max, 5=Count |
-| CSV column not found | Check `column_mapping`: key=SCHEMA name, value=CSV header name |
+| CSV column not found | Engine auto-maps (case-insensitive + snake_case). Check output for "WARNING: No CSV match" and "Auto-mapped columns" messages. Use explicit `column_mapping` only if auto-map fails. |
 | Calculated column blank | Ensure referenced columns exist in `fact_columns` |
-| Date not parsed | Use YYYY-MM-DD or MM/DD/YYYY format in CSV date column |
+| Date not parsed | Use YYYY-MM-DD or MM/DD/YYYY format in CSV date column. Engine auto-resolves date_column name too. |

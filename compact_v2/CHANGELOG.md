@@ -1,5 +1,22 @@
 # Compact V2 Changelog
 
+## v2.10.0 — Cost Monitor + Token Display (2026-02-13)
+
+### New Features
+- **Cost monitor widget**: Real-time session cost, last call cost, model rate per 1M tokens.
+- **Token display clarity**: "Context Window" and "Sent per call" with inline descriptions.
+- **Session save**: Token stats saved with session metadata for historical record.
+
+### Improvements
+- **Tool descriptions**: Improved for small LLM compatibility (plain English).
+- **System prompt**: Clarified ASCII art vs create_chart, simplified MCP reference.
+- **Session UX**: Save button reads name input to rename; Clear refreshes dropdown.
+
+### Bug Fixes
+- **Model pricing bug**: Cost now uses `CONFIG.model_id` instead of cached `self._model_id`.
+
+---
+
 ## v2.9.4 — Plan Mode Safety (2026-02-13)
 
 ### Bug Fixes
