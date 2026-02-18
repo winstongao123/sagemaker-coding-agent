@@ -1534,6 +1534,7 @@ class SessionManager:
     def list_sessions(self) -> List[Dict]:
         """List all sessions."""
         sessions = []
+        os.makedirs(self.sessions_dir, exist_ok=True)
         for filename in os.listdir(self.sessions_dir):
             if filename.endswith(".json"):
                 try:
