@@ -682,7 +682,12 @@ def generate_data(schema):
 def _auto_map_columns(csv_headers, schema_columns):
     """Build auto column mapping from CSV headers to SCHEMA column names.
 
-    Tries: exact match → case-insensitive → normalized (no underscores/spaces).
+    4-tier matching:
+      1. Exact match (skip — no mapping needed)
+      2. Case-insensitive match
+      3. Normalized (strip underscores/spaces/hyphens)
+      4. Suffix-stripped (remove Name/Desc/Label/etc. then re-match)
+
     Returns dict: {schema_col_name: csv_header_name} for non-exact matches.
     """
     col_map = {}
@@ -692,6 +697,9 @@ def _auto_map_columns(csv_headers, schema_columns):
     for h in csv_headers:
         key = h.lower().replace("_", "").replace(" ", "").replace("-", "")
         csv_norm[key] = h
+
+    _DISPLAY_SUFFIXES = ["name", "desc", "description", "label", "title", "category",
+                         "type", "status", "value", "text", "info"]
 
     for schema_col in schema_columns:
         if schema_col in csv_header_set:
@@ -704,6 +712,12 @@ def _auto_map_columns(csv_headers, schema_columns):
         if norm in csv_norm:
             col_map[schema_col] = csv_norm[norm]
             continue
+        for suffix in _DISPLAY_SUFFIXES:
+            if norm.endswith(suffix) and len(norm) > len(suffix):
+                stripped = norm[:-len(suffix)]
+                if stripped in csv_norm:
+                    col_map[schema_col] = csv_norm[stripped]
+                    break
 
     return col_map
 
@@ -849,24 +863,136 @@ def _load_csv_data(schema):
 
 
 def _auto_populate_dim_values(data_rows, schema):
-    """Auto-populate dimension values from loaded data when not explicitly provided.
+    """Auto-populate dimension values from loaded CSV data.
 
-    Call this after generate_data() when using CSV data source.
-    Modifies schema dimensions in-place.
+    Handles three common LLM-generated dimension patterns:
+      Pattern A: String key IS the display value (key_column="Department")
+      Pattern B: Int key + display col matching fact data (DepartmentKey + Department)
+      Pattern C: Int key + renamed display col (DepartmentKey + DepartmentName)
+
+    For patterns B/C with int64 keys:
+      1. Find which non-key columns have real data in fact rows
+      2. For columns without data, search fact columns by stripping suffixes
+         (DepartmentName → Department) or by dimension table name (DimDepartment → Department)
+      3. Extract unique values and auto-assign sequential integer keys
+      4. Back-fill fact rows with assigned keys
+
+    Modifies schema dimensions AND data_rows in-place.
     """
+    if not data_rows:
+        return
+
+    fact_col_names = list(data_rows[0].keys())
+
     for dim in schema.get("dimensions", []):
         if dim.get("values"):
             continue  # Already has explicit values
+
+        key_col = dim["key_column"]
         cols = dim["columns"]
+        key_type = next((c["type"] for c in cols if c["name"] == key_col), "string")
+        non_key_cols = [c for c in cols if c["name"] != key_col]
+
+        # --- Detect whether key column has real data or just defaults ---
+        sample_key = data_rows[0].get(key_col)
+        if key_type == "int64":
+            has_real_keys = sample_key is not None and sample_key != 0
+        else:
+            has_real_keys = sample_key is not None and sample_key != ""
+
+        if has_real_keys or not non_key_cols:
+            # Key column has real CSV data (pattern A/direct) — extract as-is
+            seen = set()
+            values = []
+            for row in data_rows:
+                tup = tuple(row.get(c["name"], "") for c in cols)
+                if tup not in seen:
+                    seen.add(tup)
+                    values.append({c["name"]: row.get(c["name"], "") for c in cols})
+            dim["values"] = sorted(values, key=lambda v: str(v[cols[0]["name"]]))
+            print(f"  Auto-extracted {len(values)} unique values for {dim['dim_table']}")
+            continue
+
+        # --- Int64 key needs auto-assignment (patterns B & C) ---
+        source_map = {}
+        _SUFFIXES = ["Name", "Desc", "Description", "Label", "Title", "Category",
+                      "Type", "Status", "Value", "Text", "Info"]
+
+        for c in non_key_cols:
+            cname = c["name"]
+            sample = data_rows[0].get(cname)
+            if sample is not None and sample != "" and sample != 0 and sample != 0.0:
+                source_map[cname] = cname
+                continue
+            for suffix in _SUFFIXES:
+                if cname.endswith(suffix) and len(cname) > len(suffix):
+                    candidate = cname[:-len(suffix)]
+                    if candidate in data_rows[0]:
+                        cand_val = data_rows[0][candidate]
+                        if cand_val not in ("", 0, 0.0, None):
+                            source_map[cname] = candidate
+                            break
+            if cname in source_map:
+                continue
+            dim_base = dim["dim_table"]
+            if dim_base.startswith("Dim"):
+                dim_base = dim_base[3:]
+            for fact_name in fact_col_names:
+                if fact_name.lower() == dim_base.lower():
+                    fval = data_rows[0].get(fact_name, "")
+                    if fval not in ("", 0, 0.0, None):
+                        source_map[cname] = fact_name
+                        break
+            if cname in source_map:
+                continue
+            norm_c = cname.lower().replace("_", "").replace(" ", "").replace("-", "")
+            for fact_name in fact_col_names:
+                norm_f = fact_name.lower().replace("_", "").replace(" ", "").replace("-", "")
+                if norm_c == norm_f:
+                    source_map[cname] = fact_name
+                    break
+
+        if source_map:
+            mapped_info = {k: v for k, v in source_map.items() if k != v}
+            if mapped_info:
+                print(f"  Dim '{dim['dim_table']}' source mapping: {mapped_info}")
+
         seen = set()
         values = []
+        key_counter = 1
+        resolve_cols = list(source_map.keys()) if source_map else [c["name"] for c in non_key_cols]
+
         for row in data_rows:
-            key = tuple(row.get(c["name"], "") for c in cols)
-            if key not in seen:
-                seen.add(key)
-                val = {c["name"]: row.get(c["name"], "") for c in cols}
-                values.append(val)
-        dim["values"] = sorted(values, key=lambda v: v[cols[0]["name"]])
+            tup = tuple(row.get(source_map.get(dc, dc), row.get(dc, "")) for dc in resolve_cols)
+            if tup in seen:
+                continue
+            if all(v in ("", 0, 0.0, None) for v in tup):
+                continue
+            seen.add(tup)
+            entry = {key_col: key_counter}
+            for c in non_key_cols:
+                src = source_map.get(c["name"], c["name"])
+                entry[c["name"]] = row.get(src, row.get(c["name"], ""))
+            values.append(entry)
+            key_counter += 1
+
+        dim["values"] = values
+
+        if values:
+            lookup = {}
+            for v in values:
+                display_tup = tuple(v.get(c["name"], "") for c in non_key_cols)
+                lookup[display_tup] = v[key_col]
+
+            for row in data_rows:
+                for c in non_key_cols:
+                    src = source_map.get(c["name"])
+                    if src and src != c["name"]:
+                        row[c["name"]] = row.get(src, "")
+                display_tup = tuple(row.get(c["name"], "") for c in non_key_cols)
+                if display_tup in lookup:
+                    row[key_col] = lookup[display_tup]
+
         print(f"  Auto-extracted {len(values)} unique values for {dim['dim_table']}")
 
 

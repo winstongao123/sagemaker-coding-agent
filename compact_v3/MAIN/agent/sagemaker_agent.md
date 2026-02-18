@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "2.5.0"
+__version__ = "3.1.0"
 
 # ============================================================
 # IMPORTS
@@ -1534,6 +1534,7 @@ class SessionManager:
     def list_sessions(self) -> List[Dict]:
         """List all sessions."""
         sessions = []
+        os.makedirs(self.sessions_dir, exist_ok=True)
         for filename in os.listdir(self.sessions_dir):
             if filename.endswith(".json"):
                 try:

@@ -1,5 +1,22 @@
 # Compact V3 Changelog
 
+## v3.1.0 — Robust CSV Dimension Extraction (2026-02-13)
+
+### Engine (generate_engine.py)
+- **4-tier column matching**: Added suffix-stripped matching (tier 4) to `_auto_map_columns`. Columns like `DepartmentName` now auto-map to CSV `department` by stripping common display suffixes (Name, Desc, Label, Title, Category, etc.).
+- **Smart dimension extraction**: Rewrote `_auto_populate_dim_values` to handle three LLM dimension patterns:
+  - Pattern A: String key = display value (e.g., key_column="Department") — extracts directly
+  - Pattern B: Int key + matching fact column (e.g., DepartmentKey + Department) — auto-assigns keys
+  - Pattern C: Int key + renamed display column (e.g., DepartmentKey + DepartmentName) — finds source fact column via suffix stripping and dim table name, auto-assigns keys, back-fills fact rows
+- **Dimension source mapping**: When display columns (DepartmentName) don't match fact columns (Department), the engine searches by suffix stripping, dimension table name (DimDepartment → Department), and normalized matching. Prints mapping info for diagnostics.
+- **Key auto-assignment**: Int64 dimension keys with only default values (0) get sequential keys 1, 2, 3... and fact rows are back-filled with correct foreign keys.
+- **Fixes**: Eliminates "duplicate value ''" errors in Power BI when dimension key columns have no CSV source.
+
+### Agent (sagemaker_agent.py)
+- **Version**: 3.0.0 → 3.1.0
+
+---
+
 ## v3.0.0 — Engine Auto-Column-Mapping + Cost Monitor (2026-02-13)
 
 ### Engine (generate_engine.py)
