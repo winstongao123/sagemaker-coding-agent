@@ -2486,7 +2486,10 @@ def tool_write_file(args: Dict) -> str:
             os.makedirs(dir_path, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
-        _FILES_READ.add(os.path.abspath(path))
+        abs_path = os.path.abspath(path)
+        _FILES_READ.add(abs_path)
+        FILE_CACHE.put(abs_path, content)
+        FILE_CACHE._in_context.discard(abs_path)
 
         # Generate and store diff
         if is_new:
@@ -2638,7 +2641,12 @@ def tool_grep(args: Dict) -> str:
         except (OSError, UnicodeError):
             continue
 
-    return "\n".join(results) if results else "No matches found"
+    if not results:
+        return "No matches found"
+    output = "\n".join(results)
+    if len(results) >= 50:
+        output += "\n\n[WARNING: Results capped at 50 matches. Use a more specific pattern or narrower path to get complete results.]"
+    return output
 
 
 def tool_list_dir(args: Dict) -> str:
@@ -4472,6 +4480,10 @@ class Agent:
             except Exception:
                 pass  # Fall back to parent's client
 
+        # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
+        _saved_in_context = FILE_CACHE._in_context.copy()
+        FILE_CACHE.clear_context()
+
         sub = Agent(
             sub_client,
             session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
@@ -4486,14 +4498,18 @@ class Agent:
         sub_output = []
         is_plan_mode = agent_type == "plan"
 
-        result = sub.run(
-            prompt,
-            output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
-            system_prompt=sub_prompt,
-            plan_mode=is_plan_mode,
-            count_towards_limits=False,
-            max_turns_override=max_turns,
-        )
+        try:
+            result = sub.run(
+                prompt,
+                output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
+                system_prompt=sub_prompt,
+                plan_mode=is_plan_mode,
+                count_towards_limits=False,
+                max_turns_override=max_turns,
+            )
+        finally:
+            # Restore parent's context markers only — sub-agent's markers are ephemeral
+            FILE_CACHE._in_context = _saved_in_context
 
         tail = "\n".join(sub_output[-8:])
         header = f"[Sub-agent: {agent_type} | {description}]"
@@ -4877,6 +4893,19 @@ class Agent:
             self.messages.append({"role": "user", "content": tool_results})
 
         output_fn(f"[Reached max turns ({_effective_max_turns})]")
+        # Collect all assistant text outputs so sub-agents return complete findings
+        all_texts = []
+        for msg in self.messages:
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    all_texts.append(content)
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip():
+                            all_texts.append(item["text"])
+        if all_texts:
+            return f"[INCOMPLETE — max turns reached ({_effective_max_turns})]\n" + "\n---\n".join(all_texts)
         return response.text if response else ""
 
     def reset(self):
