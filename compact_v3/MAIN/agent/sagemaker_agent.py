@@ -4867,9 +4867,10 @@ class Agent:
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
 
-            # Track token usage
+            # Track token usage — pass actual model_id so sub-agents using
+            # different models (e.g. Haiku) get costed at their own rate
             if response.usage:
-                TOKENS.add(response.usage)
+                TOKENS.add(response.usage, model_id=self.client.model_id)
                 if self.on_tokens:
                     self.on_tokens(TOKENS.get_stats())
 
