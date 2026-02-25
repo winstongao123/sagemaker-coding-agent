@@ -5674,6 +5674,55 @@ def create_chat_ui(mock_mode: bool = None):
         add_message('system', f'Tool approvals {"enabled" if CONFIG.require_tool_approval else "disabled"}')
         update_mode_display()
 
+    # Sub-agent model overrides UI
+    _sa_model_options = [("Same as main", "")] + list(BEDROCK_MODELS)
+    _sa_types = ["explore", "review", "general", "build", "plan"]
+    _sa_dropdowns = {}
+    for _sa_type in _sa_types:
+        _current = CONFIG.agent_overrides.get(_sa_type, {}).get("model", "")
+        _sa_dropdowns[_sa_type] = widgets.Dropdown(
+            description=f'{_sa_type}:',
+            options=_sa_model_options,
+            value=_current if _current in [m[1] for m in BEDROCK_MODELS] else "",
+            layout=widgets.Layout(width='320px'),
+            style={'description_width': '70px'}
+        )
+
+    def _on_sa_model_change(agent_type):
+        def handler(change):
+            new_val = change['new']
+            if agent_type not in CONFIG.agent_overrides:
+                CONFIG.agent_overrides[agent_type] = {}
+            if new_val:
+                CONFIG.agent_overrides[agent_type]["model"] = new_val
+                label = next((n for n, v in BEDROCK_MODELS if v == new_val), new_val)
+                add_message('system', f'Sub-agent `{agent_type}` model → {label}')
+            else:
+                CONFIG.agent_overrides[agent_type].pop("model", None)
+                add_message('system', f'Sub-agent `{agent_type}` model → same as main')
+        return handler
+
+    for _sa_type in _sa_types:
+        _sa_dropdowns[_sa_type].observe(_on_sa_model_change(_sa_type), names='value')
+
+    _sa_toggle = widgets.ToggleButton(
+        value=False, description='Sub-Agent Models ▶',
+        button_style='', icon='cogs',
+        layout=widgets.Layout(width='180px', height='28px'),
+        style={'font_weight': 'normal'}
+    )
+    _sa_panel = widgets.VBox([_sa_dropdowns[t] for t in _sa_types])
+    _sa_panel.layout.display = 'none'
+
+    def _on_sa_toggle(change):
+        if change['new']:
+            _sa_panel.layout.display = 'flex'
+            _sa_toggle.description = 'Sub-Agent Models ▼'
+        else:
+            _sa_panel.layout.display = 'none'
+            _sa_toggle.description = 'Sub-Agent Models ▶'
+    _sa_toggle.observe(_on_sa_toggle, names='value')
+
     model_dropdown.observe(on_model_change, names='value')
     temp_slider.observe(on_temp_change, names='value')
     thinking_checkbox.observe(on_thinking_change, names='value')
@@ -6809,7 +6858,7 @@ def create_chat_ui(mock_mode: bool = None):
 
     # Row 2: Parameters
     row2 = widgets.HBox([
-        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox, approval_checkbox
+        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox, approval_checkbox, _sa_toggle
     ])
     row2.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 12px')
 
@@ -6821,6 +6870,7 @@ def create_chat_ui(mock_mode: bool = None):
         header,
         row1,
         row2,
+        _sa_panel,  # Collapsible sub-agent model overrides
         mode_html,
         todo_display,  # Collapsible todo list (OpenCode-style)
         chat_display,  # HTML widget with internal scroll
