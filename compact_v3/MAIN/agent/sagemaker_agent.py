@@ -4495,9 +4495,13 @@ def _load_persistent_memory() -> str:
     memory_path = os.path.join(CONFIG.workspace, "memory.md")
     if os.path.isfile(memory_path):
         try:
+            total_size = os.path.getsize(memory_path)
             with open(memory_path, 'r', encoding='utf-8') as f:
                 content = f.read(10000)  # Cap at 10K chars (~2500 tokens)
-            return f"\n\n# Persistent Memory (from memory.md)\n{content}\n"
+            header = "\n\n# Persistent Memory (from memory.md)\n"
+            if total_size > 10000:
+                header += f"[WARNING: memory.md is {total_size:,} chars but only first 10,000 loaded. Prune old entries to stay under limit.]\n\n"
+            return f"{header}{content}\n"
         except Exception:
             pass
     return ""
