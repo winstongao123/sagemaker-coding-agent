@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 2.5.0 (January 2025)
+Version: 3.1.0 (February 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -4524,6 +4524,7 @@ You help users with software engineering, document creation, and data analysis.
 
 # Tool Usage
 - ALWAYS read a file before editing it. old_string in edit_file must be an EXACT match.
+- write_file supports mode='append' to add content to end of file without reading first.
 - Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep).
 - Reserve bash for: git commands, pip/npm install, running scripts, system operations.
 - Call multiple independent tools in parallel. Sequential only when one depends on another.
@@ -4546,11 +4547,11 @@ Use todo_write to plan and track multi-step tasks. Only ONE todo in_progress at 
 # Document & Chart Creation
 - create_word (.docx): reports with headings, tables, images via ![alt](image.png)
 - create_excel (.xlsx): spreadsheets with optional charts. Data as list of dicts.
-- create_chart (.png): bar, line, pie, scatter visualizations
+- create_chart (.png): bar, line, pie, scatter, horizontal_bar visualizations
 - create_pdf (.pdf): reports with text, tables, images
 - create_notebook (.ipynb): Jupyter notebooks with code and markdown cells
 - create_markdown (.md): documentation files
-- For flowcharts/architecture diagrams: use ASCII art. create_chart is for data charts only (bar, line, pie, scatter).
+- For flowcharts/architecture diagrams: use ASCII art. create_chart is for data charts only.
 
 # Security & Safety
 - Workspace boundary enforced — cannot access files outside project directory.
@@ -4573,7 +4574,7 @@ Use the `task` tool to delegate complex subtasks to specialized agents:
 - `plan`: Architecture analysis (read-only, 15 turns)
 - `review`: Code review — security, quality, performance (read-only, 10 turns)
 - `build`: Full development agent (all tools, 25 turns)
-- `general`: Multi-step research (read + write, 15 turns)
+- `general`: Multi-step research (read + write + bash, 15 turns — no doc creation tools)
 Proactively delegate when a task benefits from focused execution.
 
 # MCP (Model Context Protocol)
@@ -6545,7 +6546,8 @@ def create_chat_ui(mock_mode: bool = None):
                     )
                     SESSIONS.save(ui_state["session"])
                 except Exception as e:
-                    print(f"[Auto-save error: {e}]")  # Log instead of silent fail
+                    import logging
+                    logging.warning(f"Auto-save error: {e}")
 
     def on_clear(b):
         """Clear current session."""

@@ -1,4 +1,4 @@
-# SageMaker Coding Agent V2 — User Guide
+# SageMaker Coding Agent V3 — User Guide (v3.1.0)
 
 A single-file AI coding assistant that runs inside a Jupyter notebook on AWS SageMaker, powered by Bedrock Claude.
 
