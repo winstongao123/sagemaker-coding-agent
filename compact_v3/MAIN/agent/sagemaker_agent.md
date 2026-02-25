@@ -97,6 +97,7 @@ import shutil
 import urllib.request
 import urllib.error
 import urllib.parse
+import concurrent.futures
 
 # ============================================================
 # RETRY LOGIC (OpenCode-style)
@@ -338,10 +339,18 @@ Format as a comprehensive summary that preserves all context needed to continue 
             logging.warning(f"LLM summary failed: {e}")
         return None
 
+    # Fallback fixed overhead estimate; actual is computed dynamically by TOKENS.get_fixed_overhead()
+    FIXED_OVERHEAD_TOKENS = 6000
+
     @classmethod
     def should_compact(cls, messages: List[Dict], max_tokens: int) -> bool:
-        """Check if compaction is needed."""
-        total_tokens = sum(cls.estimate_tokens(str(m.get("content", ""))) for m in messages)
+        """Check if compaction is needed. Accounts for system prompt + tool overhead."""
+        # Use dynamically calculated overhead when available, else fallback
+        try:
+            overhead = TOKENS.get_fixed_overhead()
+        except Exception:
+            overhead = cls.FIXED_OVERHEAD_TOKENS
+        total_tokens = CONTEXT.estimate_tokens(messages) + overhead
         return total_tokens > max_tokens * cls.SUMMARY_TRIGGER_PERCENT
 
     KEEP_LAST_MESSAGES = 3  # Keep last N messages after compact
@@ -386,9 +395,10 @@ class Truncation:
     TRUNCATED_DIR = "./truncated_outputs"
 
     @classmethod
-    def smart_truncate(cls, text: str, head_lines: int = 100, tail_lines: int = 50) -> Tuple[str, bool]:
+    def smart_truncate(cls, text: str, head_lines: int = None, tail_lines: int = None) -> Tuple[str, bool]:
         """
         Smart truncation: show head + tail, skip middle.
+        Uses proportional split (60/40) up to MAX_LINES if head/tail not specified.
         Returns: (truncated_text, was_truncated)
         """
         lines = text.split('\n')
@@ -399,9 +409,16 @@ class Truncation:
         if total_lines <= cls.MAX_LINES and total_bytes <= cls.MAX_BYTES:
             return text, False
 
-        # Smart truncate: head + tail
-        if total_lines <= head_lines + tail_lines + 10:
-            return text, False  # Not worth truncating
+        # Proportional head/tail if not specified (60/40 split up to MAX_LINES)
+        max_keep = max(0, min(cls.MAX_LINES, total_lines - 10))
+        if head_lines is None:
+            head_lines = int(max_keep * 0.6)
+        if tail_lines is None:
+            tail_lines = max_keep - head_lines
+
+        # Not worth truncating if gap is small
+        if total_lines < head_lines + tail_lines + 10:
+            return text, False
 
         head = lines[:head_lines]
         tail = lines[-tail_lines:] if tail_lines > 0 else []
@@ -409,7 +426,7 @@ class Truncation:
 
         result_parts = []
         result_parts.extend(head)
-        result_parts.append(f"\n... [{skipped} lines skipped - use grep to search or read_file with offset] ...\n")
+        result_parts.append(f"\n... [{skipped} lines skipped - use grep to search or read_file with offset={head_lines}] ...\n")
         result_parts.extend(tail)
 
         return '\n'.join(result_parts), True
@@ -506,61 +523,119 @@ class ToolResult:
 
 class FileCache:
     """
-    Cache for file reads to avoid re-reading same file.
+    Thread-safe LRU cache for file reads to avoid re-reading same file.
     Also tracks files already in context to enable dedup.
+
+    Context isolation: The _in_context set tracks which files are "already loaded"
+    in the current conversation. For parallel sub-agents, each thread gets its own
+    isolated context via thread-local storage, so sub-agents don't see each other's
+    file reads as "already in context".
     """
     def __init__(self, max_entries: int = 100):
         self.max_entries = max_entries
         self._cache: Dict[str, Tuple[str, float]] = {}  # path -> (content, mtime)
-        self._in_context: Set[str] = set()  # Files already read in this session
+        self._in_context: Set[str] = set()  # Main thread's context markers
+        self._lock = threading.RLock()
+        self._local = threading.local()  # Thread-local context for parallel sub-agents
+
+    def _get_context_set(self) -> Set[str]:
+        """Get the context set for the current thread (thread-local if set, else main).
+        Note: must use 'is not None' check, NOT 'or', because empty set is falsy."""
+        ctx = getattr(self._local, 'in_context', None)
+        return ctx if ctx is not None else self._in_context
 
     def get(self, path: str) -> Optional[str]:
-        """Get cached content if file hasn't changed."""
+        """Get cached content if file hasn't changed. Promotes to most-recent (LRU)."""
         abs_path = os.path.abspath(path)
-        if abs_path not in self._cache:
+        with self._lock:
+            if abs_path not in self._cache:
+                return None
+
+            content, cached_mtime = self._cache[abs_path]
+            try:
+                current_mtime = os.path.getmtime(abs_path)
+                if current_mtime == cached_mtime:
+                    # LRU: move to end (most recently used)
+                    self._cache[abs_path] = self._cache.pop(abs_path)
+                    return content
+            except OSError:
+                pass
+
+            # File changed or error, invalidate cache
+            del self._cache[abs_path]
             return None
 
-        content, cached_mtime = self._cache[abs_path]
-        try:
-            current_mtime = os.path.getmtime(abs_path)
-            if current_mtime == cached_mtime:
-                return content
-        except OSError:
-            pass
-
-        # File changed or error, invalidate cache
-        del self._cache[abs_path]
-        return None
-
     def put(self, path: str, content: str) -> None:
-        """Cache file content."""
+        """Cache file content (LRU: evicts least recently used)."""
         abs_path = os.path.abspath(path)
         try:
             mtime = os.path.getmtime(abs_path)
-            # Evict oldest if at capacity
-            if len(self._cache) >= self.max_entries:
-                oldest = next(iter(self._cache))
-                del self._cache[oldest]
-            self._cache[abs_path] = (content, mtime)
+            with self._lock:
+                # If already cached, remove first (will re-add at end)
+                if abs_path in self._cache:
+                    del self._cache[abs_path]
+                # Evict least recently used if at capacity
+                elif len(self._cache) >= self.max_entries:
+                    lru_key = next(iter(self._cache))
+                    del self._cache[lru_key]
+                self._cache[abs_path] = (content, mtime)
         except OSError:
             pass
 
     def is_in_context(self, path: str) -> bool:
-        """Check if file was already read in this session."""
-        return os.path.abspath(path) in self._in_context
+        """Check if file was already read in current context (thread-aware)."""
+        abs_path = os.path.abspath(path)
+        with self._lock:
+            return abs_path in self._get_context_set()
 
     def mark_in_context(self, path: str) -> None:
-        """Mark file as read in this session."""
-        self._in_context.add(os.path.abspath(path))
+        """Mark file as read in current context (thread-aware)."""
+        abs_path = os.path.abspath(path)
+        with self._lock:
+            self._get_context_set().add(abs_path)
 
     def clear_context(self) -> None:
-        """Clear context tracking (call on new session or compact)."""
-        self._in_context.clear()
+        """Clear context tracking for current thread."""
+        with self._lock:
+            ctx = getattr(self._local, 'in_context', None)
+            if ctx is not None:
+                ctx.clear()
+            else:
+                self._in_context.clear()
+
+    def save_and_clear_context(self) -> Set[str]:
+        """Atomically save and clear main context markers. Returns the saved set."""
+        with self._lock:
+            saved = self._in_context.copy()
+            self._in_context.clear()
+            return saved
+
+    def restore_context(self, saved: Set[str]) -> None:
+        """Atomically restore main context markers from a saved set."""
+        with self._lock:
+            self._in_context = saved
+
+    def enter_thread_local_context(self) -> None:
+        """Give the current thread its own isolated context set (empty).
+        Call this at the start of each parallel sub-agent thread."""
+        self._local.in_context = set()
+
+    def exit_thread_local_context(self) -> None:
+        """Remove thread-local context, reverting to main context.
+        Call this when the thread is done."""
+        self._local.in_context = None
+
+    def discard_from_context(self, path: str) -> None:
+        """Remove a file from context tracking (thread-aware)."""
+        abs_path = os.path.abspath(path)
+        with self._lock:
+            self._get_context_set().discard(abs_path)
 
     def clear_all(self) -> None:
-        """Clear all caches."""
-        self._cache.clear()
-        self._in_context.clear()
+        """Clear all caches and main context."""
+        with self._lock:
+            self._cache.clear()
+            self._in_context.clear()
 
 # Global file cache
 FILE_CACHE = FileCache()
@@ -1274,12 +1349,13 @@ class AuditEntry:
 
 
 class AuditLogger:
-    """Immutable audit trail with integrity verification."""
+    """Thread-safe immutable audit trail with integrity verification."""
 
     SENSITIVE_KEYS = {"password", "secret", "key", "token", "credential", "api_key", "auth", "bearer", "private"}
 
     def __init__(self, audit_dir: str):
         self.audit_dir = audit_dir
+        self._lock = threading.Lock()
         os.makedirs(audit_dir, exist_ok=True)
         self.prune_old_logs(CONFIG.audit_retention_days)
 
@@ -1289,7 +1365,7 @@ class AuditLogger:
 
     def log(self, session_id: str, action: str, tool_name: str = None,
             parameters: Dict = None, result_summary: str = "", user_approved: bool = True):
-        """Log an action to audit trail."""
+        """Log an action to audit trail (thread-safe)."""
         entry = AuditEntry(
             timestamp=datetime.now().isoformat(),
             session_id=session_id,
@@ -1300,8 +1376,9 @@ class AuditLogger:
             user_approved=user_approved,
         )
         log_path = self._get_log_path(session_id)
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(asdict(entry)) + "\n")
+        with self._lock:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(asdict(entry)) + "\n")
 
     def _sanitize_params(self, params: Dict) -> Dict:
         """Remove sensitive data from parameters."""
@@ -2175,10 +2252,11 @@ _MODEL_PRICING = {
 
 
 class TokenTracker:
-    """Tracks API token usage, cost, and cache hits per session."""
+    """Thread-safe tracker for API token usage, cost, and cache hits per session."""
 
     def __init__(self):
         self._fixed_overhead = None  # Cached: system prompt + tool schemas + Bedrock overhead
+        self._lock = threading.Lock()
         self.reset()
 
     def reset(self):
@@ -2196,30 +2274,41 @@ class TokenTracker:
         self._model_id = CONFIG.model_id
 
     def add(self, usage: dict, model_id: str = None):
-        """Add usage from API response."""
+        """Add usage from API response (thread-safe)."""
         input_tokens = usage.get("input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
         cache_read = usage.get("cache_read_input_tokens", 0)
         cache_write = usage.get("cache_creation_input_tokens", 0)
 
-        self.last_input = input_tokens
-        self.last_output = output_tokens
-        self.session_input += input_tokens
-        self.session_output += output_tokens
-        self.session_total = self.session_input + self.session_output
-        self.session_cache_read += cache_read
-        self.session_cache_write += cache_write
-        self.api_calls += 1
+        with self._lock:
+            self.last_input = input_tokens
+            self.last_output = output_tokens
+            self.session_input += input_tokens
+            self.session_output += output_tokens
+            self.session_total = self.session_input + self.session_output
+            self.session_cache_read += cache_read
+            self.session_cache_write += cache_write
+            self.api_calls += 1
 
-        # Calculate cost (use current CONFIG.model_id in case user changed model mid-session)
-        mid = model_id or CONFIG.model_id
-        pricing = _MODEL_PRICING.get(mid)
-        if pricing:
-            cost = (input_tokens / 1000) * pricing["input"] + (output_tokens / 1000) * pricing["output"]
-            self.session_cost += cost
-            self.last_cost = cost
-        else:
-            self.last_cost = 0.0
+            # Calculate cost accounting for cache pricing (Bedrock prompt caching)
+            # ASSUMPTION: Bedrock input_tokens = TOTAL including cache_read + cache_write.
+            # Cache reads are 90% cheaper, cache writes are 25% more expensive.
+            mid = model_id or CONFIG.model_id
+            pricing = _MODEL_PRICING.get(mid)
+            if pricing:
+                base_input = pricing["input"]
+                # Separate cache tokens from regular input
+                regular_input = max(0, input_tokens - cache_read - cache_write)
+                cost = (
+                    (regular_input / 1000) * base_input +          # Regular input: full price
+                    (cache_read / 1000) * base_input * 0.1 +       # Cache read: 90% discount
+                    (cache_write / 1000) * base_input * 1.25 +     # Cache write: 25% premium
+                    (output_tokens / 1000) * pricing["output"]     # Output: full price
+                )
+                self.session_cost += cost
+                self.last_cost = cost
+            else:
+                self.last_cost = 0.0
 
     def get_last(self) -> str:
         """Get last call usage as string."""
@@ -2230,10 +2319,13 @@ class TokenTracker:
         return f"In:{self.session_input:,} Out:{self.session_output:,} Total:{self.session_total:,}"
 
     def get_cost(self) -> str:
-        """Get session cost as string."""
-        if self.session_cost < 0.01:
-            return f"${self.session_cost:.4f}"
-        return f"${self.session_cost:.2f}"
+        """Get session cost as string, with cache efficiency if applicable."""
+        cost_str = f"${self.session_cost:.4f}" if self.session_cost < 0.01 else f"${self.session_cost:.2f}"
+        # Show cache efficiency if caching is active
+        if self.session_cache_read > 0 and self.session_input > 0:
+            cache_pct = (self.session_cache_read / self.session_input) * 100
+            cost_str += f" (cache: {cache_pct:.0f}%)"
+        return cost_str
 
     def get_fixed_overhead(self) -> int:
         """Get fixed token overhead per API call (system prompt + tool schemas + Bedrock). Cached."""
@@ -2285,6 +2377,7 @@ TOKENS = TokenTracker()
 # Global state
 _TODOS = []  # Will be synced to ui_state["todos"] for persistence
 _FILES_READ = set()
+_FILES_READ_LOCK = threading.Lock()  # Protects _FILES_READ during parallel sub-agent execution
 
 # ============== FILE OPERATIONS ==============
 
@@ -2310,6 +2403,14 @@ def tool_read_file(args: Dict) -> str:
     if FILE_CACHE.is_in_context(abs_path) and offset == 0:
         return f"[File already in context: {os.path.basename(path)}]\n[Use offset parameter to read specific sections, or grep to search.]"
 
+    # Enforce max file size
+    try:
+        file_size = os.path.getsize(path)
+        if file_size > CONFIG.max_file_size:
+            return f"Error: File too large ({file_size:,} bytes, max {CONFIG.max_file_size:,}). Use grep to search or bash 'head'/'tail' to preview."
+    except OSError:
+        pass
+
     try:
         # Try cache first
         cached_content = FILE_CACHE.get(abs_path)
@@ -2319,11 +2420,31 @@ def tool_read_file(args: Dict) -> str:
         else:
             with open(path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
+
+            # Parse .ipynb notebooks into readable cell format
+            if path.endswith('.ipynb'):
+                try:
+                    nb = json.loads(content)
+                    cells = nb.get("cells") or []
+                    cell_lines = []
+                    for idx, cell in enumerate(cells):
+                        if not isinstance(cell, dict):
+                            continue
+                        cell_type = cell.get("cell_type", "code")
+                        source = "".join(cell.get("source") or [])
+                        cell_lines.append(f"# === Cell {idx + 1} ({cell_type}) ===")
+                        cell_lines.append(source)
+                        cell_lines.append("")
+                    content = "\n".join(cell_lines)
+                except (ValueError, KeyError, TypeError):
+                    pass  # Not valid notebook JSON, read as-is
+
             lines = content.split('\n')
             FILE_CACHE.put(abs_path, content)
             cache_hit = False
 
-        _FILES_READ.add(abs_path)
+        with _FILES_READ_LOCK:
+            _FILES_READ.add(abs_path)
         FILE_CACHE.mark_in_context(abs_path)
 
         # Select lines with offset/limit
@@ -2347,7 +2468,7 @@ def tool_read_file(args: Dict) -> str:
 
         # Smart truncation if output is large
         full_output = f"{header}\n{output}"
-        truncated, was_truncated = Truncation.smart_truncate(full_output, head_lines=100, tail_lines=50)
+        truncated, was_truncated = Truncation.smart_truncate(full_output)
 
         return SECURITY.truncate_output(truncated)
     except Exception as e:
@@ -2358,15 +2479,17 @@ import difflib as _difflib
 
 # Track recent diffs for session metadata
 _RECENT_DIFFS: List[Dict] = []
+_RECENT_DIFFS_LOCK = threading.Lock()  # Protects _RECENT_DIFFS during parallel sub-agent execution
 
 
 class SnapshotManager:
-    """Saves file backups before edits so users can revert agent changes."""
+    """Thread-safe file backup manager. Saves backups before edits so users can revert."""
 
     def __init__(self, workspace: str):
         self._workspace = workspace
         self._dir = os.path.join(workspace, ".snapshots")
         self._log: List[Dict] = []  # [{file, snapshot_path, timestamp}]
+        self._lock = threading.Lock()
 
     def save(self, filepath: str) -> Optional[str]:
         """Snapshot a file before modification. Returns snapshot path or None."""
@@ -2380,12 +2503,29 @@ class SnapshotManager:
             snap_path = os.path.join(self._dir, f"{ts}_{safe_name}")
             shutil.copy2(filepath, snap_path)
             entry = {"file": filepath, "rel": rel, "snapshot": snap_path, "time": time.time()}
-            self._log.append(entry)
-            # Keep max 100 snapshots
-            if len(self._log) > 100:
-                old = self._log.pop(0)
+            evicted_path = None
+            with self._lock:
+                self._log.append(entry)
+                # Keep max 200 snapshots, evict oldest per-file (keep at least 1 per file)
+                if len(self._log) > 200:
+                    file_counts = {}
+                    for e in self._log:
+                        file_counts[e["file"]] = file_counts.get(e["file"], 0) + 1
+                    most_snapped = max(file_counts, key=file_counts.get)
+                    evicted_any = False
+                    for i, e in enumerate(self._log):
+                        if e["file"] == most_snapped and file_counts[most_snapped] > 1:
+                            evicted = self._log.pop(i)
+                            evicted_path = evicted["snapshot"]
+                            evicted_any = True
+                            break
+                    if not evicted_any:
+                        evicted = self._log.pop(0)
+                        evicted_path = evicted["snapshot"]
+            # Remove evicted snapshot file outside lock (I/O can be slow)
+            if evicted_path:
                 try:
-                    os.remove(old["snapshot"])
+                    os.remove(evicted_path)
                 except OSError:
                     pass
             return snap_path
@@ -2445,9 +2585,10 @@ def _generate_unified_diff(filepath: str, old_content: str, new_content: str, co
 
 
 def tool_write_file(args: Dict) -> str:
-    """Write content to file."""
+    """Write content to file. Supports mode='append' to add to end."""
     path = args["file_path"]
     content = args["content"]
+    mode = args.get("mode", "write")
 
     ok, msg = SECURITY.validate_path(path)
     if not ok:
@@ -2459,8 +2600,12 @@ def tool_write_file(args: Dict) -> str:
     if not ok:
         return f"Error: {msg}"
 
-    if os.path.exists(path) and os.path.abspath(path) not in _FILES_READ:
-        return "Error: Must read file before writing. Use read_file first."
+    if mode not in ("write", "append"):
+        return "Error: mode must be 'write' or 'append'"
+
+    with _FILES_READ_LOCK:
+        if mode == "write" and os.path.exists(path) and os.path.abspath(path) not in _FILES_READ:
+            return "Error: Must read file before overwriting. Use read_file first, or use mode='append'."
 
     secrets = SECURITY.scan_secrets(content)
     if secrets:
@@ -2484,19 +2629,30 @@ def tool_write_file(args: Dict) -> str:
         dir_path = os.path.dirname(path)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
+        open_mode = 'a' if mode == "append" else 'w'
+        with open(path, open_mode, encoding='utf-8') as f:
             f.write(content)
-        _FILES_READ.add(os.path.abspath(path))
+        abs_path = os.path.abspath(path)
+        with _FILES_READ_LOCK:
+            _FILES_READ.add(abs_path)
+        # Cache the FULL file content (not just the fragment for append mode)
+        if mode == "append":
+            full_content = old_content + content
+        else:
+            full_content = content
+        FILE_CACHE.put(abs_path, full_content)
+        FILE_CACHE.discard_from_context(abs_path)
 
-        # Generate and store diff
+        # Generate and store diff (compare old vs new full content)
         if is_new:
             diff_text = f"--- /dev/null\n+++ b/{os.path.basename(path)}\n@@ -0,0 +1,{content.count(chr(10))+1} @@\n" + "".join(f"+{ln}\n" for ln in content.splitlines())
         else:
-            diff_text = _generate_unified_diff(path, old_content, content)
+            diff_text = _generate_unified_diff(path, old_content, full_content)
         if diff_text:
-            _RECENT_DIFFS.append({"file": path, "diff": diff_text, "time": time.time()})
-            if len(_RECENT_DIFFS) > 50:
-                _RECENT_DIFFS.pop(0)
+            with _RECENT_DIFFS_LOCK:
+                _RECENT_DIFFS.append({"file": path, "diff": diff_text, "time": time.time()})
+                if len(_RECENT_DIFFS) > 50:
+                    _RECENT_DIFFS.pop(0)
 
         result = f"Written {len(content):,} chars to {path}"
         if diff_text and not is_new:
@@ -2526,8 +2682,9 @@ def tool_edit_file(args: Dict) -> str:
         return f"Error: {msg}"
 
     abs_path = os.path.abspath(path)
-    if abs_path not in _FILES_READ:
-        return "Error: Must read file before editing. Use read_file first."
+    with _FILES_READ_LOCK:
+        if abs_path not in _FILES_READ:
+            return "Error: Must read file before editing. Use read_file first."
 
     try:
         # Snapshot before modification (for revert)
@@ -2551,14 +2708,15 @@ def tool_edit_file(args: Dict) -> str:
 
         # Invalidate cache for this file and clear context marker so re-read shows updated content
         FILE_CACHE.put(abs_path, new_content)
-        FILE_CACHE._in_context.discard(abs_path)
+        FILE_CACHE.discard_from_context(abs_path)
 
         # Generate and store unified diff
         diff_text = _generate_unified_diff(path, content, new_content)
         if diff_text:
-            _RECENT_DIFFS.append({"file": path, "diff": diff_text, "time": time.time()})
-            if len(_RECENT_DIFFS) > 50:
-                _RECENT_DIFFS.pop(0)
+            with _RECENT_DIFFS_LOCK:
+                _RECENT_DIFFS.append({"file": path, "diff": diff_text, "time": time.time()})
+                if len(_RECENT_DIFFS) > 50:
+                    _RECENT_DIFFS.pop(0)
 
         # DIFF-ONLY OUTPUT: Show only the change context, not whole file
         lines_before = content[:content.find(old_string)].count('\n') + 1
@@ -2591,11 +2749,20 @@ def tool_glob(args: Dict) -> str:
         return f"Error: {msg}"
 
     full_pattern = os.path.join(path, pattern)
-    raw_matches = glob_module.glob(full_pattern, recursive=True)[:200]
+    all_raw = glob_module.glob(full_pattern, recursive=True)
+    total_raw = len(all_raw)
+    raw_matches = all_raw[:200]
     # Per-file boundary check (symlink escape protection)
-    matches = [m for m in raw_matches if SECURITY.validate_path(m)[0]][:100]
+    all_valid = [m for m in raw_matches if SECURITY.validate_path(m)[0]]
+    total_valid = len(all_valid)
+    matches = all_valid[:100]
     matches = sorted(matches, key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0, reverse=True)
-    return "\n".join(matches) if matches else "No files found"
+    if not matches:
+        return "No files found"
+    output = "\n".join(matches)
+    if total_raw > 200 or total_valid > 100:
+        output += f"\n\n[WARNING: Showing {len(matches)} of {total_raw} total matches. Narrow your pattern for complete results.]"
+    return output
 
 
 def tool_grep(args: Dict) -> str:
@@ -2628,17 +2795,29 @@ def tool_grep(args: Dict) -> str:
         file_ok, _ = SECURITY.validate_path(filepath)
         if not file_ok:
             continue
+        # Skip binary files (check for null bytes in first 8KB)
+        try:
+            with open(filepath, 'rb') as bf:
+                if b'\x00' in bf.read(8192):
+                    continue
+        except OSError:
+            continue
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 for i, line in enumerate(f, 1):
                     if regex.search(line):
-                        results.append(f"{filepath}:{i}: {line.strip()[:100]}")
+                        results.append(f"{filepath}:{i}: {line.strip()[:200]}")
                         if len(results) >= 50:
                             break
         except (OSError, UnicodeError):
             continue
 
-    return "\n".join(results) if results else "No matches found"
+    if not results:
+        return "No matches found"
+    output = "\n".join(results)
+    if len(results) >= 50:
+        output += "\n\n[WARNING: Results capped at 50 matches. Use a more specific pattern or narrower path to get complete results.]"
+    return output
 
 
 def tool_list_dir(args: Dict) -> str:
@@ -4187,10 +4366,10 @@ for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
 
 TOOLS = {
     "read_file": (tool_read_file, False, "Read file contents with line numbers",
-        {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 500)"}}, "required": ["file_path"]}),
+        {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
 
-    "write_file": (tool_write_file, True, "Write content to file. Must read first if exists.",
-        {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}}, "required": ["file_path", "content"]}),
+    "write_file": (tool_write_file, True, "Write content to file. Must read first if overwriting. Use mode='append' to add to end.",
+        {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}, "mode": {"type": "string", "enum": ["write", "append"], "description": "write (default, overwrites) or append (adds to end)"}}, "required": ["file_path", "content"]}),
 
     "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. Must read first.",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences"}}, "required": ["file_path", "old_string", "new_string"]}),
@@ -4311,6 +4490,22 @@ def get_tool_definitions(allowed_tools: Optional[Set[str]] = None) -> List[Dict]
 # SYSTEM PROMPT
 # ============================================================
 
+def _load_persistent_memory() -> str:
+    """Load persistent memory from workspace memory.md file."""
+    memory_path = os.path.join(CONFIG.workspace, "memory.md")
+    if os.path.isfile(memory_path):
+        try:
+            total_size = os.path.getsize(memory_path)
+            with open(memory_path, 'r', encoding='utf-8') as f:
+                content = f.read(10000)  # Cap at 10K chars (~2500 tokens)
+            header = "\n\n# Persistent Memory (from memory.md)\n"
+            if total_size > 10000:
+                header += f"[WARNING: memory.md is {total_size:,} chars but only first 10,000 loaded. Prune old entries to stay under limit.]\n\n"
+            return f"{header}{content}\n"
+        except Exception:
+            pass
+    return ""
+
 SYSTEM_PROMPT = """You are SageMaker Coding Agent, a secure AI coding assistant running in AWS SageMaker Studio.
 You help users with software engineering, document creation, and data analysis.
 
@@ -4325,6 +4520,12 @@ You help users with software engineering, document creation, and data analysis.
 - Reserve bash for: git commands, pip/npm install, running scripts, system operations.
 - Call multiple independent tools in parallel. Sequential only when one depends on another.
 - If a tool call fails, don't retry the same call — investigate the error and adapt.
+
+# Persistent Memory
+- Use `write_file` with path `memory.md` to save important context across sessions.
+- Memory is automatically loaded at the start of every session.
+- Save: stable patterns, key decisions, file paths, project structure, user preferences.
+- Do NOT save: session-specific state, in-progress work, speculative conclusions.
 
 # Code Conventions
 - Follow existing code style. Make minimal, focused changes only.
@@ -4430,8 +4631,10 @@ class Agent:
         # Sub-agent or non-interactive context — return placeholder
         return f"[Question displayed: {question}] (No interactive UI — sub-agent context)"
 
-    def _run_task_tool(self, args: Dict, output_fn: Callable) -> str:
-        """Run a sub-agent with typed agent configuration (OpenCode-compatible)."""
+    def _run_task_tool(self, args: Dict, output_fn: Callable, _skip_cache_isolation: bool = False) -> str:
+        """Run a sub-agent with typed agent configuration (OpenCode-compatible).
+        _skip_cache_isolation: set True when caller already handles FILE_CACHE save/restore (parallel path).
+        """
         if self.subagent_depth >= CONFIG.subagent_max_depth:
             return f"Blocked: sub-agent depth limit reached ({CONFIG.subagent_max_depth})"
 
@@ -4472,28 +4675,54 @@ class Agent:
             except Exception:
                 pass  # Fall back to parent's client
 
+        # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
+        # When _skip_cache_isolation=True (parallel path), the caller already set up thread-local
+        # context isolation, so we just clear the thread-local set.
+        _saved_in_context = None
+        if not _skip_cache_isolation:
+            _saved_in_context = FILE_CACHE.save_and_clear_context()
+        else:
+            FILE_CACHE.clear_context()  # Clears thread-local context (safe: each thread has its own)
+
+        # Sub-agent stop check: scoped flag so stopping a sub-agent doesn't kill the parent
+        _sub_stopped = [False]
+        def _sub_stop_check():
+            if _sub_stopped[0]:
+                return True
+            # Propagate parent's stop (user clicked global stop)
+            if self.on_stop_check and self.on_stop_check():
+                _sub_stopped[0] = True
+                return True
+            return False
+
         sub = Agent(
             sub_client,
             session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
             on_approval=self.on_approval,
             on_ask_user=self.on_ask_user,
-            on_tokens=None,
+            on_tokens=self.on_tokens,
             on_thinking=None,
-            on_stop_check=self.on_stop_check,
+            on_stop_check=_sub_stop_check,
             tool_allowlist=allow,
             subagent_depth=self.subagent_depth + 1,
         )
         sub_output = []
         is_plan_mode = agent_type == "plan"
 
-        result = sub.run(
-            prompt,
-            output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
-            system_prompt=sub_prompt,
-            plan_mode=is_plan_mode,
-            count_towards_limits=False,
-            max_turns_override=max_turns,
-        )
+        try:
+            result = sub.run(
+                prompt,
+                output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
+                system_prompt=sub_prompt,
+                plan_mode=is_plan_mode,
+                count_towards_limits=False,
+                max_turns_override=max_turns,
+            )
+        finally:
+            # Restore parent's context markers only — sub-agent's markers are ephemeral
+            # (skipped when called from parallel path — caller handles restoration)
+            if _saved_in_context is not None:
+                FILE_CACHE.restore_context(_saved_in_context)
 
         tail = "\n".join(sub_output[-8:])
         header = f"[Sub-agent: {agent_type} | {description}]"
@@ -4520,7 +4749,11 @@ class Agent:
         # NOTE: Skill injection is handled ONLY by the UI send flow (on_send),
         # which appends active skill content before calling agent.run().
         # Do NOT inject skills here — it would cause double-injection.
-        self._system_prompt = system_prompt or SYSTEM_PROMPT
+        # Inject persistent memory into system prompt (only for top-level agent, not sub-agents)
+        _base_prompt = system_prompt or SYSTEM_PROMPT
+        if self.subagent_depth == 0:
+            _base_prompt += _load_persistent_memory()
+        self._system_prompt = _base_prompt
         self._plan_mode = plan_mode  # Store for tool execution check
 
         # Session/user rate limiting
@@ -4624,7 +4857,7 @@ class Agent:
                     raise _llm_result[1]
                 response = _llm_result[0]
             except Exception as e:
-                error_msg = f"Error calling Bedrock: {e}"
+                error_msg = f"[AGENT ERROR] Error calling Bedrock: {e}"
                 output_fn(error_msg)
                 AUDIT.log(self.session_id, "error", result_summary=str(e))
                 return error_msg
@@ -4634,9 +4867,10 @@ class Agent:
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
 
-            # Track token usage
+            # Track token usage — pass actual model_id so sub-agents using
+            # different models (e.g. Haiku) get costed at their own rate
             if response.usage:
-                TOKENS.add(response.usage)
+                TOKENS.add(response.usage, model_id=self.client.model_id)
                 if self.on_tokens:
                     self.on_tokens(TOKENS.get_stats())
 
@@ -4718,6 +4952,64 @@ class Agent:
             for tc in response.tool_calls:
                 assistant_content.append({"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.input})
             self.messages.append({"role": "assistant", "content": assistant_content})
+
+            # Parallel sub-agent execution: detect multiple task calls in same response
+            _task_tcs = [tc for tc in response.tool_calls if tc.name == "task" and tc.id not in _skipped_ids]
+            _parallel_results = {}  # tc.id -> result (populated if parallel execution used)
+            if len(_task_tcs) >= 2:
+                # Pre-check approval for parallel tasks (must happen before execution)
+                _task_tool_info = TOOLS.get("task")
+                _task_needs_approval = _task_tool_info[1] if _task_tool_info else False
+                _approved_tcs = []
+                if _task_needs_approval and self.on_approval:
+                    for tc in _task_tcs:
+                        approved = self.on_approval("task", tc.input or {})
+                        AUDIT.log(self.session_id, "approval_request", "task", tc.input,
+                                 "Approved" if approved else "Denied", approved)
+                        if approved:
+                            _approved_tcs.append(tc)
+                        else:
+                            _parallel_results[tc.id] = "User denied permission"
+                else:
+                    _approved_tcs = _task_tcs
+
+                if len(_approved_tcs) >= 2:
+                    _output_lock = threading.Lock()
+                    def _thread_safe_output(text):
+                        with _output_lock:
+                            output_fn(text)
+                    _thread_safe_output(f"[Running {len(_approved_tcs)} sub-agents in parallel...]")
+                    # Save parent's FILE_CACHE context, restore after all threads complete
+                    _parent_ctx = FILE_CACHE.save_and_clear_context()
+                    def _run_parallel_sub(tc_item):
+                        # Each thread gets its own isolated context via thread-local storage
+                        FILE_CACHE.enter_thread_local_context()
+                        args = tc_item.input or {}
+                        try:
+                            result = self._run_task_tool(args, _thread_safe_output, _skip_cache_isolation=True)
+                        except Exception as e:
+                            result = f"[AGENT ERROR] Sub-agent failed: {e}"
+                        finally:
+                            FILE_CACHE.exit_thread_local_context()
+                        return tc_item.id, result
+                    try:
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(_approved_tcs), 4)) as pool:
+                            future_to_tc = {pool.submit(_run_parallel_sub, tc): tc for tc in _approved_tcs}
+                            for f in concurrent.futures.as_completed(future_to_tc):
+                                tc_item = future_to_tc[f]
+                                try:
+                                    tc_id, result = f.result()
+                                    _parallel_results[tc_id] = SECURITY.truncate_output(result)
+                                except Exception as e:
+                                    _parallel_results[tc_item.id] = f"[AGENT ERROR] Sub-agent failed: {e}"
+                    except Exception as e:
+                        # Pool creation failed — tasks without results run sequentially in dispatch
+                        output_fn(f"[Parallel execution failed: {e}. Falling back to sequential.]")
+                    finally:
+                        FILE_CACHE.restore_context(_parent_ctx)
+                elif len(_approved_tcs) == 1:
+                    # Only 1 approved — run sequentially (will be handled in main dispatch loop)
+                    pass
 
             # Execute tools with 5-layer error recovery
             tool_results = []
@@ -4816,7 +5108,8 @@ class Agent:
                             args[field] = str(value)
 
                 # === LAYER 4: Permission Check ===
-                if needs_approval and self.on_approval:
+                # Skip approval for parallel results (already approved before parallel execution)
+                if tc.id not in _parallel_results and needs_approval and self.on_approval:
                     approved = self.on_approval(tool_name, args)
                     AUDIT.log(self.session_id, "approval_request", tool_name, args,
                              "Approved" if approved else "Denied", approved)
@@ -4827,7 +5120,10 @@ class Agent:
                 # === LAYER 5: Execute with Error Recovery ===
                 output_fn(f"[Calling {tool_name}...]")
                 try:
-                    if tool_name == "task":
+                    # Use pre-computed parallel result if available
+                    if tc.id in _parallel_results:
+                        result = _parallel_results[tc.id]
+                    elif tool_name == "task":
                         result = self._run_task_tool(args, output_fn)
                     elif tool_name == "ask_user":
                         result = self._run_ask_user_tool(args, output_fn)
@@ -4877,6 +5173,19 @@ class Agent:
             self.messages.append({"role": "user", "content": tool_results})
 
         output_fn(f"[Reached max turns ({_effective_max_turns})]")
+        # Collect all assistant text outputs so sub-agents return complete findings
+        all_texts = []
+        for msg in self.messages:
+            if msg.get("role") == "assistant":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    all_texts.append(content)
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text" and item.get("text", "").strip():
+                            all_texts.append(item["text"])
+        if all_texts:
+            return f"[INCOMPLETE — max turns reached ({_effective_max_turns})]\n" + "\n---\n".join(all_texts)
         return response.text if response else ""
 
     def reset(self):
@@ -5365,6 +5674,55 @@ def create_chat_ui(mock_mode: bool = None):
         CONFIG.require_tool_approval = change['new']
         add_message('system', f'Tool approvals {"enabled" if CONFIG.require_tool_approval else "disabled"}')
         update_mode_display()
+
+    # Sub-agent model overrides UI
+    _sa_model_options = [("Same as main", "")] + list(BEDROCK_MODELS)
+    _sa_types = ["explore", "review", "general", "build", "plan"]
+    _sa_dropdowns = {}
+    for _sa_type in _sa_types:
+        _current = CONFIG.agent_overrides.get(_sa_type, {}).get("model", "")
+        _sa_dropdowns[_sa_type] = widgets.Dropdown(
+            description=f'{_sa_type}:',
+            options=_sa_model_options,
+            value=_current if _current in [m[1] for m in BEDROCK_MODELS] else "",
+            layout=widgets.Layout(width='320px'),
+            style={'description_width': '70px'}
+        )
+
+    def _on_sa_model_change(agent_type):
+        def handler(change):
+            new_val = change['new']
+            if agent_type not in CONFIG.agent_overrides:
+                CONFIG.agent_overrides[agent_type] = {}
+            if new_val:
+                CONFIG.agent_overrides[agent_type]["model"] = new_val
+                label = next((n for n, v in BEDROCK_MODELS if v == new_val), new_val)
+                add_message('system', f'Sub-agent `{agent_type}` model → {label}')
+            else:
+                CONFIG.agent_overrides[agent_type].pop("model", None)
+                add_message('system', f'Sub-agent `{agent_type}` model → same as main')
+        return handler
+
+    for _sa_type in _sa_types:
+        _sa_dropdowns[_sa_type].observe(_on_sa_model_change(_sa_type), names='value')
+
+    _sa_toggle = widgets.ToggleButton(
+        value=False, description='Sub-Agent Models ▶',
+        button_style='', icon='cogs',
+        layout=widgets.Layout(width='180px', height='28px'),
+        style={'font_weight': 'normal'}
+    )
+    _sa_panel = widgets.VBox([_sa_dropdowns[t] for t in _sa_types])
+    _sa_panel.layout.display = 'none'
+
+    def _on_sa_toggle(change):
+        if change['new']:
+            _sa_panel.layout.display = 'flex'
+            _sa_toggle.description = 'Sub-Agent Models ▼'
+        else:
+            _sa_panel.layout.display = 'none'
+            _sa_toggle.description = 'Sub-Agent Models ▶'
+    _sa_toggle.observe(_on_sa_toggle, names='value')
 
     model_dropdown.observe(on_model_change, names='value')
     temp_slider.observe(on_temp_change, names='value')
@@ -6501,7 +6859,7 @@ def create_chat_ui(mock_mode: bool = None):
 
     # Row 2: Parameters
     row2 = widgets.HBox([
-        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox, approval_checkbox
+        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox, approval_checkbox, _sa_toggle
     ])
     row2.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 12px')
 
@@ -6513,6 +6871,7 @@ def create_chat_ui(mock_mode: bool = None):
         header,
         row1,
         row2,
+        _sa_panel,  # Collapsible sub-agent model overrides
         mode_html,
         todo_display,  # Collapsible todo list (OpenCode-style)
         chat_display,  # HTML widget with internal scroll
