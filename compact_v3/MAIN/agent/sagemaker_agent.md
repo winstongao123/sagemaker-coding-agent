@@ -113,7 +113,7 @@ class RetryHandler:
     """Handles retries with exponential backoff."""
 
     RETRYABLE_CODES = {429, 500, 502, 503, 504}  # Rate limit + server errors
-    RETRYABLE_MESSAGES = ["rate_limit", "overloaded", "temporarily unavailable", "quota exceeded", "throttl"]
+    RETRYABLE_MESSAGES = ["rate_limit", "overloaded", "temporarily unavailable", "quota exceeded", "throttl", "timed out", "timeout"]
 
     def __init__(self, max_retries: int = 5, base_delay: float = 2.0, max_delay: float = 60.0):
         self.max_retries = max_retries
@@ -332,6 +332,8 @@ Format as a comprehensive summary that preserves all context needed to continue 
                 max_tokens=2000,
                 temperature=0.0
             )
+            if response and response.usage:
+                TOKENS.add(response.usage, model_id=client.model_id)
             if response and response.text:
                 return response.text
         except Exception as e:
@@ -2261,6 +2263,10 @@ class TokenTracker:
 
     def reset(self):
         """Reset all counters."""
+        with self._lock:
+            self._reset_unlocked()
+
+    def _reset_unlocked(self):
         self.session_input = 0
         self.session_output = 0
         self.session_total = 0
@@ -2308,6 +2314,8 @@ class TokenTracker:
                 self.session_cost += cost
                 self.last_cost = cost
             else:
+                import logging
+                logging.warning(f"TokenTracker: no pricing for model '{mid}' — cost will show as $0")
                 self.last_cost = 0.0
 
     def get_last(self) -> str:
@@ -4672,7 +4680,9 @@ class Agent:
         if model_override:
             try:
                 sub_client = BedrockClient(model_override, CONFIG.region, CONFIG.mock_mode)
-            except Exception:
+            except Exception as e:
+                import logging
+                logging.warning(f"Sub-agent model override '{model_override}' failed: {e} — using parent model")
                 pass  # Fall back to parent's client
 
         # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
