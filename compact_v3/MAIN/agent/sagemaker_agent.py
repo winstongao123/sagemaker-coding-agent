@@ -2992,7 +2992,7 @@ def tool_grep(args: Dict) -> str:
     files = glob_module.glob(os.path.join(path, glob_pattern), recursive=True)
 
     for filepath in files:
-        if not os.path.isfile(filepath) or len(results) >= 50:
+        if not os.path.isfile(filepath) or len(results) >= 100:
             continue
         # Per-file boundary check (symlink escape protection)
         file_ok, _ = SECURITY.validate_path(filepath)
@@ -3009,8 +3009,8 @@ def tool_grep(args: Dict) -> str:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 for i, line in enumerate(f, 1):
                     if regex.search(line):
-                        results.append(f"{filepath}:{i}: {line.strip()[:200]}")
-                        if len(results) >= 50:
+                        results.append(f"{filepath}:{i}: {line.strip()[:300]}")
+                        if len(results) >= 100:
                             break
         except (OSError, UnicodeError):
             continue
@@ -3018,8 +3018,8 @@ def tool_grep(args: Dict) -> str:
     if not results:
         return "No matches found"
     output = "\n".join(results)
-    if len(results) >= 50:
-        output += "\n\n[WARNING: Results capped at 50 matches. Use a more specific pattern or narrower path to get complete results.]"
+    if len(results) >= 100:
+        output += "\n\n[WARNING: Results capped at 100 matches. Use a more specific pattern or narrower path to get complete results.]"
     return output
 
 
