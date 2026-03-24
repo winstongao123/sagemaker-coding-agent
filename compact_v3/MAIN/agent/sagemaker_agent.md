@@ -439,8 +439,6 @@ class Truncation:
         Truncate text if it exceeds limits.
         Returns: (truncated_text, was_truncated, saved_path)
         """
-        os.makedirs(cls.TRUNCATED_DIR, exist_ok=True)
-
         lines = text.split('\n')
         total_lines = len(lines)
         total_bytes = len(text.encode('utf-8'))
@@ -449,11 +447,14 @@ class Truncation:
         if total_lines <= cls.MAX_LINES and total_bytes <= cls.MAX_BYTES:
             return text, False, None
 
-        # Save full output to disk
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        saved_path = os.path.join(cls.TRUNCATED_DIR, f"output_{timestamp}.txt")
-        with open(saved_path, 'w', encoding='utf-8') as f:
-            f.write(text)
+        # Save full output to disk (skip in stealth mode)
+        saved_path = None
+        if not CONFIG.disable_local_traces:
+            os.makedirs(cls.TRUNCATED_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            saved_path = os.path.join(cls.TRUNCATED_DIR, f"output_{timestamp}.txt")
+            with open(saved_path, 'w', encoding='utf-8') as f:
+                f.write(text)
 
         # Truncate based on direction
         output_lines = []
@@ -700,6 +701,11 @@ class Config:
     max_exec_seconds_per_session: int = 900
     audit_retention_days: int = 30
 
+    # Isolation: block ALL AWS services except Bedrock (no S3, DynamoDB, Lambda, etc.)
+    aws_bedrock_only: bool = False  # Set True to block all boto3 except bedrock-runtime
+    # Stealth: disable all local file traces (sessions, audit, snapshots, code index)
+    disable_local_traces: bool = False  # Set True for zero local footprint
+
     # V4 capabilities
     enable_skills: bool = True
     skills_dir: str = "./skills"
@@ -786,6 +792,7 @@ def _apply_config_file(config: 'Config') -> None:
         "execution_mode": str, "exec_docker_image": str,
         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
         "require_auth": bool, "require_tool_approval": bool,
+        "aws_bedrock_only": bool, "disable_local_traces": bool,
         "enable_skills": bool, "skills_dir": str,
         "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
         "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
@@ -833,9 +840,10 @@ def _apply_config_file(config: 'Config') -> None:
 CONFIG = Config()
 _apply_config_file(CONFIG)
 
-# Create directories
-os.makedirs(CONFIG.sessions_dir, exist_ok=True)
-os.makedirs(CONFIG.audit_dir, exist_ok=True)
+# Create directories (skip if stealth mode)
+if not CONFIG.disable_local_traces:
+    os.makedirs(CONFIG.sessions_dir, exist_ok=True)
+    os.makedirs(CONFIG.audit_dir, exist_ok=True)
 
 
 # ============================================================
@@ -1172,10 +1180,15 @@ AWS access tiers (SageMaker execution role):
 
     def validate_command(self, command: str) -> Tuple[bool, str]:
         """Check if bash command is safe.
+        Layer 0: Bedrock-only - block aws CLI entirely
         Layer 1: Allowlist - base command must be in ALLOWED_COMMANDS
         Layer 2: Denylist - regex patterns block dangerous argument patterns
         Layer 3: Network - block network commands unless explicitly allowed
         """
+        # === LAYER 0: Bedrock-only mode — block aws CLI entirely ===
+        if CONFIG.aws_bedrock_only and re.search(r'\baws\s', command):
+            return False, "AWS CLI blocked (aws_bedrock_only=true). V3 only uses Bedrock via Python SDK."
+
         # === LAYER 1: Command allowlist ===
         bases = self._extract_base_command(command)
         if not bases:
@@ -1265,6 +1278,14 @@ AWS access tiers (SageMaker execution role):
 
     def validate_python(self, code: str) -> Tuple[bool, str]:
         """Check if Python code is safe using regex denylist + AST import allowlist."""
+        # Layer 0: Bedrock-only mode — block ALL boto3 clients except bedrock-runtime
+        if CONFIG.aws_bedrock_only:
+            # Match boto3.client('s3'), boto3.client("dynamodb"), session.client('lambda'), etc.
+            boto3_client_match = re.findall(r"\.client\s*\(\s*['\"]([^'\"]+)['\"]", code)
+            for svc in boto3_client_match:
+                if svc not in ("bedrock-runtime",):
+                    return False, f"AWS service '{svc}' blocked (aws_bedrock_only=true). Only bedrock-runtime is allowed."
+
         # Layer 1: Regex denylist (catches obfuscated patterns like __import__, exec, etc.)
         for pattern, reason in self.DANGEROUS_PYTHON:
             try:
@@ -1391,8 +1412,10 @@ class AuditLogger:
     def __init__(self, audit_dir: str):
         self.audit_dir = audit_dir
         self._lock = threading.Lock()
-        os.makedirs(audit_dir, exist_ok=True)
-        self.prune_old_logs(CONFIG.audit_retention_days)
+        self._disabled = CONFIG.disable_local_traces  # Stealth mode: no audit files
+        if not self._disabled:
+            os.makedirs(audit_dir, exist_ok=True)
+            self.prune_old_logs(CONFIG.audit_retention_days)
 
     def _get_log_path(self, session_id: str) -> str:
         date = datetime.now().strftime("%Y-%m-%d")
@@ -1400,7 +1423,9 @@ class AuditLogger:
 
     def log(self, session_id: str, action: str, tool_name: str = None,
             parameters: Dict = None, result_summary: str = "", user_approved: bool = True):
-        """Log an action to audit trail (thread-safe)."""
+        """Log an action to audit trail (thread-safe). No-op in stealth mode."""
+        if getattr(self, '_disabled', False):
+            return
         entry = AuditEntry(
             timestamp=datetime.now().isoformat(),
             session_id=session_id,
@@ -1625,7 +1650,9 @@ class SessionManager:
     _save_lock = threading.Lock()
 
     def save(self, session: Session):
-        """Save session to disk (atomic: write to temp then rename, with lock)."""
+        """Save session to disk (atomic: write to temp then rename, with lock). No-op in stealth mode."""
+        if CONFIG.disable_local_traces:
+            return
         session.updated_at = datetime.now().isoformat()
         path = os.path.join(self.sessions_dir, f"{session.id}.json")
         with self._save_lock:
@@ -2553,7 +2580,9 @@ class SnapshotManager:
         self._lock = threading.Lock()
 
     def save(self, filepath: str) -> Optional[str]:
-        """Snapshot a file before modification. Returns snapshot path or None."""
+        """Snapshot a file before modification. Returns snapshot path or None. No-op in stealth mode."""
+        if CONFIG.disable_local_traces:
+            return None
         if not os.path.isfile(filepath):
             return None
         try:
@@ -4259,7 +4288,9 @@ class SemanticSearch:
                 print(f"Warning: Failed to embed {filepath}: {e}")
 
     def _save_index(self):
-        """Save index to disk."""
+        """Save index to disk. No-op in stealth mode (keeps index in memory only)."""
+        if CONFIG.disable_local_traces:
+            return
         os.makedirs(self.index_path, exist_ok=True)
         with open(os.path.join(self.index_path, "chunks.json"), "w") as f:
             json.dump(self.chunks, f)
@@ -5793,6 +5824,7 @@ def create_chat_ui(mock_mode: bool = None):
     clear_btn = widgets.Button(description='Clear', button_style='warning', icon='trash')
     save_btn = widgets.Button(description='Save', button_style='info', icon='save')
     compact_btn = widgets.Button(description='Compact', button_style='', icon='compress', tooltip='Compress context by summarizing conversation')
+    cleanup_btn = widgets.Button(description='🧹 Clean', button_style='', icon='eraser', tooltip='Delete all local traces (sessions, audit, snapshots, index)')
     status_html = widgets.HTML(value='<span style="color:#4caf50"><b>● Ready</b></span>')
     mode_html = widgets.HTML(value='')
     tokens_html = widgets.HTML(value='<span style="color:gray;font-size:11px;">Tokens: 0</span>')
@@ -7150,10 +7182,31 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["lock"] = True  # Set lock BEFORE spawning thread (atomic on kernel thread)
         threading.Thread(target=on_compact, args=(b,), daemon=True).start()
 
+    def on_cleanup(b):
+        """Delete ALL local traces: sessions, audit logs, snapshots, code index, truncated outputs."""
+        import shutil as _shutil
+        cleaned = []
+        for name, path in [
+            ("sessions", CONFIG.sessions_dir),
+            ("audit_logs", CONFIG.audit_dir),
+            (".snapshots", os.path.join(CONFIG.workspace, ".snapshots")),
+            (".code_index", os.path.join(CONFIG.workspace, ".code_index")),
+            (".truncated", os.path.join(CONFIG.workspace, ".truncated")),
+        ]:
+            if os.path.isdir(path):
+                _shutil.rmtree(path, ignore_errors=True)
+                cleaned.append(name)
+        if cleaned:
+            add_message('system', f'🧹 Cleaned: {", ".join(cleaned)}')
+        else:
+            add_message('system', '🧹 Nothing to clean — no local traces found.')
+        render_chat()
+
     send_btn.on_click(_on_send_threaded)
     clear_btn.on_click(on_clear)
     save_btn.on_click(on_save)
     compact_btn.on_click(_on_compact_threaded)
+    cleanup_btn.on_click(on_cleanup)
     load_btn.on_click(on_load)
     new_btn.on_click(on_new)
 
@@ -7192,7 +7245,7 @@ def create_chat_ui(mock_mode: bool = None):
     row2.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 12px')
 
     # Row 3: Buttons (stop_btn hidden by default, shows during processing)
-    row3 = widgets.HBox([send_btn, stop_btn, clear_btn, compact_btn, status_html])
+    row3 = widgets.HBox([send_btn, stop_btn, clear_btn, compact_btn, cleanup_btn, status_html])
 
     # Full UI layout - using HTML widget for chat (no Output widget issues)
     ui = widgets.VBox([

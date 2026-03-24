@@ -1,10 +1,25 @@
 # Compact V3 Changelog
 
-## v3.2.1 — Security Hardening + Observability (2026-03-25)
+## v3.2.1 — Security Hardening + Isolation + Stealth (2026-03-25)
 
 ### Security
 - **CRITICAL: Workspace boundary bypass fixed** — `startswith(workspace)` → `startswith(workspace + os.sep)` in bash Layer 4, python runtime open/os.open/remove guards. Sibling directories (e.g. `workspace_evil/`) no longer pass boundary check.
 - Fixed in 5 locations: bash validate_command, builtins.open, os.open, io.open, os.remove/unlink/rmdir
+
+### AWS Isolation (`aws_bedrock_only` mode)
+- New config: `"aws_bedrock_only": true` blocks ALL boto3 clients except `bedrock-runtime`
+- Also blocks `aws` CLI commands entirely in bash
+- Code-level enforcement: regex check in validate_python Layer 0, validate_command Layer 0
+- Result: even if Python sandbox is bypassed, only Bedrock calls succeed
+
+### Stealth Mode (`disable_local_traces` mode)
+- New config: `"disable_local_traces": true` disables all local file persistence
+- Sessions: save becomes no-op (in-memory only)
+- Audit logs: log() becomes no-op (no JSONL files)
+- Snapshots: save becomes no-op (no .snapshots/)
+- Code index: _save_index becomes no-op (in-memory only)
+- Truncated outputs: no files written to .truncated/
+- **New UI button: 🧹 Clean** — one-click delete of sessions, audit_logs, .snapshots, .code_index, .truncated
 
 ### Testing
 - **81/81 tests** (60 production + 21 advanced, up from 76)
