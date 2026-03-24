@@ -1,8 +1,8 @@
 # SageAgent V3 — Final Consolidated Review
 
 **Date**: 2026-03-25
-**Version**: v3.2.1 (commit 8e07695)
-**Reviewers**: Claude Opus 4.6 + Codex gpt-5.3-codex (7 rounds of review)
+**Version**: v3.2.2 (commit pending)
+**Reviewers**: Claude Opus 4.6 + Codex gpt-5.3-codex (10 rounds of review)
 **Tests**: 81/81 passing (60 production + 21 advanced)
 
 ---
@@ -11,18 +11,20 @@
 
 | Dimension | Claude Score | Codex Score | Agreed | What Prevents 10/10 | At Max? |
 |-----------|-------------|-------------|--------|---------------------|---------|
-| **Performance** | 8.5/10 | 9.0/10 | **9.0/10** | Heuristic token estimate (chars/4), no streaming | Near max (streaming = UX, not correctness) |
-| **Security** | 8.0/10 | 8.2/10 | **8.0/10** | No Docker, shared IAM, selective member blocks | **YES — platform max** |
-| **Capabilities** | 8.5/10 | 8.5/10 | **8.5/10** | No REPL, no vision, no git tool, no browser | Near max (scope decisions, not bugs) |
-| **Cost Efficiency** | 9.0/10 | 9.3/10 | **9.0/10** | Static pricing table, no prompt-cache control | **YES — practically at max** |
-| **Reliability** | 8.5/10 | 9.1/10 | **8.8/10** | Daemon thread auto-save risks kernel death loss | Near max (kernel lifecycle = platform) |
+| **Performance** | 9.2/10 | 9.2/10 | **9.2/10** | No streaming, embedding sync, ContextManager still chars/4 | Near max |
+| **Security** | 8.3/10 | 8.3/10 | **8.3/10** | No Docker, CPython closures, shared IAM | Platform max with aws_bedrock_only |
+| **Capabilities** | 8.8/10 | 9.1/10 | **9.0/10** | No REPL, no multi-image, module-level code gaps | Near max |
+| **Cost Efficiency** | 9.4/10 | 9.5/10 | **9.4/10** | Per-turn budget (can overshoot 1 call), no per-tool attribution | Near max |
+| **Reliability** | 9.0/10 | 9.2/10 | **9.0/10** | Non-atomic exec budget writes, daemon auto-save | Near max |
 
-### Overall: **8.7/10** (up from 8.6)
+### Overall: **9.0/10** (up from 8.7)
 
-**Score movement from v3.2.0 → v3.2.1:**
-- Security: 7.5 → 8.0 (boundary bypass fixed, 5 new regression tests)
-- Cost: 9.2 → 9.0/9.3 (Codex raised, Claude more conservative)
-- Reliability: 8.8 → 8.8/9.1 (new observability tests confirmed improvements)
+**Score movement v3.2.0 → v3.2.2 (full session):**
+- Performance: 9.0 → 9.2 (tiktoken, AST search)
+- Security: 7.5 → 8.3 (boundary fix, aws_bedrock_only, AST enforcement)
+- Capabilities: 8.5 → 9.0 (image understanding, AST search, configurable pricing)
+- Cost: 9.0 → 9.4 (spend budget, configurable pricing, tiktoken accuracy)
+- Reliability: 8.5 → 9.0 (persistent exec budget, budget flags reset, image queue cleanup)
 - Overall: 8.6 → 8.7 (security fix + test coverage boost)
 
 ---

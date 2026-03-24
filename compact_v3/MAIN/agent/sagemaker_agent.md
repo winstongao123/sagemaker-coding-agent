@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "3.2.1"
+__version__ = "3.2.2"
 
 # ============================================================
 # IMPORTS
@@ -2402,6 +2402,8 @@ class TokenTracker:
         self.session_cost = 0.0
         self.last_cost = 0.0
         self._model_id = CONFIG.model_id
+        self._budget_warned = False
+        self._budget_stopped = False
 
     def add(self, usage: dict, model_id: str = None):
         """Add usage from API response (thread-safe)."""
@@ -7059,6 +7061,7 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["agent"].reset()
         ui_state["agent"] = None
         ui_state["session"] = None
+        _PENDING_IMAGES.clear()  # Clear any queued images
         _TODOS = []
         _FILES_READ = set()
         TOKENS.reset()
@@ -7232,6 +7235,7 @@ def create_chat_ui(mock_mode: bool = None):
         if ui_state["agent"]:
             ui_state["agent"].reset()
         ui_state["agent"] = None
+        _PENDING_IMAGES.clear()  # Clear any queued images
         ui_state["session"] = None
         _TODOS = []
         _FILES_READ = set()
