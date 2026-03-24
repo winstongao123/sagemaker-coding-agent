@@ -813,6 +813,92 @@ def t10_4():
 t10_4()
 
 # ============================================================
+# GROUP 11: v3.2.1 FIXES (boundary bypass, unknown-model warning, audit session_id)
+# ============================================================
+print("\n=== GROUP 11: v3.2.1 Security & Observability Fixes ===")
+
+@test("v3.2.1", "Workspace boundary: sibling dir blocked (startswith+sep fix)")
+def t11_1():
+    from sagemaker_agent import SECURITY, CONFIG
+    workspace = os.path.realpath(CONFIG.workspace)
+    # Sibling dir should be blocked
+    evil_cmd = f"cat {workspace}_outside/probe.txt"
+    ok, msg = SECURITY.validate_command(evil_cmd)
+    if ok:
+        return False, f"VULN: sibling dir bypass still works: {evil_cmd}"
+    # Legit workspace path should still pass
+    legit_cmd = f"cat {workspace}/sagemaker_agent.py"
+    ok2, msg2 = SECURITY.validate_command(legit_cmd)
+    if not ok2:
+        return False, f"False positive: blocked legit path: {msg2}"
+    # Workspace root itself should pass
+    root_cmd = f"ls {workspace}"
+    ok3, msg3 = SECURITY.validate_command(root_cmd)
+    if not ok3:
+        return False, f"False positive: blocked workspace root: {msg3}"
+    return True, "sibling blocked, legit+root allowed"
+t11_1()
+
+@test("v3.2.1", "Unknown model emits visible warning (not silent)")
+def t11_2():
+    from sagemaker_agent import TokenTracker
+    import io, logging
+    t = TokenTracker()
+    # Capture logging output
+    log_stream = io.StringIO()
+    handler = logging.StreamHandler(log_stream)
+    handler.setLevel(logging.WARNING)
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    try:
+        t.add({"input_tokens": 100, "output_tokens": 50}, model_id="fake.unknown.model.v999")
+        log_output = log_stream.getvalue()
+        has_warning = "no pricing" in log_output.lower() or "fake.unknown" in log_output
+        cost_zero = t.session_cost == 0
+        return has_warning and cost_zero, f"warning={'✓' if has_warning else '✗'}, cost=$0={'✓' if cost_zero else '✗'}"
+    finally:
+        logger.removeHandler(handler)
+t11_2()
+
+@test("v3.2.1", "Audit log entry contains session_id field")
+def t11_3():
+    from sagemaker_agent import AuditLogger
+    with tempfile.TemporaryDirectory() as td:
+        audit = AuditLogger.__new__(AuditLogger)
+        audit.audit_dir = td
+        audit._lock = threading.Lock()
+        test_sid = "test_session_abc123"
+        audit.log(session_id=test_sid, action="tool_call", tool_name="bash",
+                  parameters={"command": "echo hi"}, result_summary="ok")
+        entries = audit.get_session_log(test_sid)
+        if not entries:
+            return False, "no audit entries found"
+        entry = entries[0]
+        has_sid = entry.get("session_id") == test_sid
+        has_ts = "timestamp" in entry
+        has_action = entry.get("action") == "tool_call"
+        return has_sid and has_ts and has_action, f"session_id={'✓' if has_sid else '✗'}, timestamp={'✓' if has_ts else '✗'}, action={'✓' if has_action else '✗'}"
+t11_3()
+
+@test("v3.2.1", "Session atomic save: temp file + os.replace pattern")
+def t11_4():
+    from sagemaker_agent import SessionManager, Session
+    with tempfile.TemporaryDirectory() as td:
+        sm = SessionManager(td)
+        s = sm.create("atomic_test")
+        s.messages = [{"role": "user", "content": "test message"}]
+        sm.save(s)
+        # Verify file exists and is valid JSON
+        loaded = sm.load(s.id)
+        if not loaded:
+            return False, "failed to load saved session"
+        msg_match = len(loaded.messages) == 1 and loaded.messages[0]["content"] == "test message"
+        # Verify no temp files left behind
+        leftover = [f for f in os.listdir(td) if f.startswith("tmp")]
+        return msg_match and not leftover, f"roundtrip={'✓' if msg_match else '✗'}, no_temp_files={'✓' if not leftover else '✗ ('+str(leftover)+')'}"
+t11_4()
+
+# ============================================================
 # PERFORMANCE REPORT
 # ============================================================
 if PERF_LOG:

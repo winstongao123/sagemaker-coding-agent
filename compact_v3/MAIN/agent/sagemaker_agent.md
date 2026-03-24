@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 3.1.0 (February 2026)
+Version: 3.2.1 (March 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "3.1.0"
+__version__ = "3.2.1"
 
 # ============================================================
 # IMPORTS
@@ -1201,11 +1201,12 @@ AWS access tiers (SageMaker execution role):
         # === LAYER 4: Workspace boundary check ===
         # Block absolute paths outside workspace (prevents reading /etc/passwd etc.)
         workspace = os.path.realpath(CONFIG.workspace)
+        workspace_prefix = workspace + os.sep  # Prevent sibling-dir bypass (e.g. workspace_evil/)
         # Find absolute paths in command arguments
         for token in re.findall(r'(?:^|\s)(/[^\s;|&>]+)', command):
             real_token = os.path.realpath(token)
             # Allow standard tool paths and workspace paths
-            if real_token.startswith(workspace):
+            if real_token == workspace or real_token.startswith(workspace_prefix):
                 continue
             if real_token.startswith(("/usr/bin/", "/usr/local/bin/", "/bin/", "/opt/", "/tmp/")):
                 continue
@@ -3219,15 +3220,19 @@ def _install_sandbox():
 
     # --- 2. Workspace boundary for open() (runtime, not regex) ---
     _WORKSPACE = "{workspace}"
+    _WORKSPACE_SEP = _WORKSPACE + _os.sep  # Prevent sibling-dir bypass
     _orig_open = _b.open
-    _SAFE_READ_PREFIXES = (_WORKSPACE, "/tmp/")
-    _SAFE_WRITE_PREFIXES = (_WORKSPACE,)
+    _SAFE_READ_PREFIXES = (_WORKSPACE_SEP, "/tmp/")
+    _SAFE_WRITE_PREFIXES = (_WORKSPACE_SEP,)
+    _SAFE_READ_EXACT = (_WORKSPACE, "/tmp")
+    _SAFE_WRITE_EXACT = (_WORKSPACE,)
     def _safe_open(file, mode="r", *args, **kwargs):
         if isinstance(file, (str, _os.PathLike)):
             real = _os.path.realpath(str(file))
             is_write = any(c in str(mode) for c in "wxa+")
-            allowed_prefixes = _SAFE_WRITE_PREFIXES if is_write else _SAFE_READ_PREFIXES
-            if not any(real.startswith(p) for p in allowed_prefixes):
+            prefixes = _SAFE_WRITE_PREFIXES if is_write else _SAFE_READ_PREFIXES
+            exact = _SAFE_WRITE_EXACT if is_write else _SAFE_READ_EXACT
+            if not (real in exact or any(real.startswith(p) for p in prefixes)):
                 raise PermissionError(f"Security: cannot {{'write' if is_write else 'read'}} outside workspace: {{real}}")
         return _orig_open(file, mode, *args, **kwargs)
     _b.open = _safe_open
@@ -3237,8 +3242,9 @@ def _install_sandbox():
     def _safe_os_open(path, flags, *args, **kwargs):
         real = _os.path.realpath(str(path))
         is_write = bool(flags & (_os.O_WRONLY | _os.O_RDWR | _os.O_CREAT | _os.O_TRUNC | _os.O_APPEND))
-        allowed = _SAFE_WRITE_PREFIXES if is_write else _SAFE_READ_PREFIXES
-        if not any(real.startswith(p) for p in allowed):
+        prefixes = _SAFE_WRITE_PREFIXES if is_write else _SAFE_READ_PREFIXES
+        exact = _SAFE_WRITE_EXACT if is_write else _SAFE_READ_EXACT
+        if not (real in exact or any(real.startswith(p) for p in prefixes)):
             raise PermissionError(f"Security: os.open blocked outside workspace: {{real}}")
         return _orig_os_open(path, flags, *args, **kwargs)
     _os.open = _safe_os_open
@@ -3254,7 +3260,7 @@ def _install_sandbox():
             def _make_safe(orig, name):
                 def _safe(path, *a, **kw):
                     real = _os.path.realpath(str(path))
-                    if not real.startswith(_WORKSPACE):
+                    if not (real == _WORKSPACE or real.startswith(_WORKSPACE_SEP)):
                         raise PermissionError(f"Security: {{name}}() blocked outside workspace: {{real}}")
                     return orig(path, *a, **kw)
                 return _safe

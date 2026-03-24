@@ -263,6 +263,16 @@ def t4_5():
     return blocked, f"blocked={'✓' if blocked else '✗'}: {result[:80]}"
 t4_5()
 
+@test("security", "Workspace sibling-dir boundary bypass blocked")
+def t4_6b():
+    from sagemaker_agent import SECURITY, CONFIG
+    workspace = os.path.realpath(CONFIG.workspace)
+    # Sibling directory (workspace + "_evil") must NOT pass
+    evil = f"cat {workspace}_evil/secret.txt"
+    ok, _ = SECURITY.validate_command(evil)
+    return not ok, f"sibling dir {'blocked ✓' if not ok else 'ALLOWED ✗ — VULN!'}"
+t4_6b()
+
 @test("security", "Secret in file output: redacted in agent context")
 def t4_6():
     from sagemaker_agent import _scan_output_secrets

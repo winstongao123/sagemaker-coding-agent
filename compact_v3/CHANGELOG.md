@@ -1,5 +1,21 @@
 # Compact V3 Changelog
 
+## v3.2.1 — Security Hardening + Observability (2026-03-25)
+
+### Security
+- **CRITICAL: Workspace boundary bypass fixed** — `startswith(workspace)` → `startswith(workspace + os.sep)` in bash Layer 4, python runtime open/os.open/remove guards. Sibling directories (e.g. `workspace_evil/`) no longer pass boundary check.
+- Fixed in 5 locations: bash validate_command, builtins.open, os.open, io.open, os.remove/unlink/rmdir
+
+### Testing
+- **81/81 tests** (60 production + 21 advanced, up from 76)
+- Added GROUP 11: 4 new tests for v3.2.1 fixes (boundary bypass, unknown-model warning, audit session_id, atomic save)
+- Added advanced security test: workspace sibling-dir boundary bypass
+
+### Docs
+- Version bumped: 3.1.0 → 3.2.1
+
+---
+
 ## v3.2.0 — Production Readiness Fixes (2026-03-24)
 
 ### Security (from comprehensive review: Claude Opus + Codex gpt-5.3-codex)
