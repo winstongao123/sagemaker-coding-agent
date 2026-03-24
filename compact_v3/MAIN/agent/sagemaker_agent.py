@@ -1564,7 +1564,7 @@ class BedrockClient:
 
         response = self.client.invoke_model(
             modelId=self.model_id,
-            body=json.dumps(body),
+            body=json.dumps(body, separators=(',', ':')),  # Minified JSON saves ~5% payload
             contentType="application/json"
         )
         result = json.loads(response["body"].read())
@@ -3227,6 +3227,21 @@ def _install_sandbox():
         return _orig_open(file, mode, *args, **kwargs)
     _b.open = _safe_open
 
+    # --- 2b. Wrap os.open (low-level fd-based, bypasses builtins.open) ---
+    _orig_os_open = _os.open
+    def _safe_os_open(path, flags, *args, **kwargs):
+        real = _os.path.realpath(str(path))
+        is_write = bool(flags & (_os.O_WRONLY | _os.O_RDWR | _os.O_CREAT | _os.O_TRUNC | _os.O_APPEND))
+        allowed = _SAFE_WRITE_PREFIXES if is_write else _SAFE_READ_PREFIXES
+        if not any(real.startswith(p) for p in allowed):
+            raise PermissionError(f"Security: os.open blocked outside workspace: {{real}}")
+        return _orig_os_open(path, flags, *args, **kwargs)
+    _os.open = _safe_os_open
+
+    # --- 2c. Wrap io.open (aliases builtins.open but can be imported separately) ---
+    import io as _io
+    _io.open = _safe_open
+
     # --- 3. Block os.remove/unlink/rmdir outside workspace ---
     for _fn_name in ("remove", "unlink", "rmdir"):
         _orig_fn = getattr(_os, _fn_name, None)
@@ -4507,42 +4522,9 @@ def tool_todo_read(args: Dict) -> str:
 
 
 # Plan Mode System Prompt (OpenCode-style)
-PLAN_MODE_PROMPT = """You are in PLAN MODE. Your task is to EXPLORE and CREATE A PLAN, NOT execute.
-
-# Plan Mode Rules
-1. **READ-ONLY**: You can ONLY use these tools:
-   - read_file, glob, grep, list_dir (explore codebase)
-   - semantic_search, view_image (search and inspect)
-   - todo_write, todo_read (plan steps)
-   - skill (reference skill instructions)
-   - web_fetch (fetch reference material)
-   - ask_user (ask clarifying questions)
-2. **CREATE A PLAN**: Write your implementation plan as a structured document.
-3. **NO MODIFICATIONS**: Do not use write_file, edit_file, bash, python_exec or task.
-4. **ASK QUESTIONS**: If requirements are unclear, ask before planning.
-
-# Planning Process
-1. **Restate Requirements**: Before planning, restate the user's request in your own words to confirm understanding.
-2. **Explore First**: Read relevant code. Identify existing patterns, conventions, and reusable components.
-3. **Assess Risks**: Identify dependencies, potential breaking changes, and edge cases.
-4. **Create Phased Plan**: Break implementation into phases. Each phase should be independently testable.
-5. **WAIT**: After presenting the plan, WAIT for user confirmation before any execution.
-
-# Plan Format
-Structure your plan with:
-- **Summary**: What will be done and why (1-2 sentences)
-- **Requirements**: Restated requirements as you understand them
-- **Architecture**: How the change fits into existing code (affected components, patterns to follow)
-- **Phases**: Numbered implementation phases, each with:
-  - Steps with specific file paths and line numbers
-  - What to test after this phase
-  - Estimated complexity (trivial/moderate/complex)
-- **Files**: List of files to create/modify with action (create/edit/delete)
-- **Dependencies**: External packages or services needed
-- **Risks**: Potential issues and mitigations
-- **Testing Strategy**: How to verify the implementation works
-
-Remember: EXPLORE and PLAN only. No modifications!
+PLAN_MODE_PROMPT = """PLAN MODE — read-only. Explore code, create implementation plan, wait for approval.
+1. Restate requirements. 2. Read relevant code. 3. Write phased plan (summary, files, risks, tests). 4. Wait for user confirmation.
+No write_file, edit_file, bash, python_exec, or task. Read-only tools only.
 """
 
 # Plan Mode - Tools that are BLOCKED (write operations)
@@ -4678,43 +4660,38 @@ TOOLS = {
     "create_word": (tool_create_word, True, "Create .docx with markdown. Headings, bold, tables, ![caption|width=6.5](image.png). Create charts FIRST as PNG.",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Markdown content with ![alt](img) for images"}, "title": {"type": "string"}, "include_toc": {"type": "boolean"}, "header": {"type": "string"}, "footer": {"type": "string"}}, "required": ["filepath", "content"]}),
 
-    "create_excel": (tool_create_excel, True, "Create Excel spreadsheet (.xlsx). Optional chart: set chart_type + x_column + y_columns.",
+    "create_excel": (tool_create_excel, True, "Create .xlsx. Optional chart: set chart_type + x_column + y_columns.",
         {"type": "object", "properties": {
             "filepath": {"type": "string"},
-            "data": {"type": "array", "description": "List of dicts [{col: val}]"},
+            "data": {"type": "array", "description": "[{col:val}]"},
             "sheet_name": {"type": "string"},
             "chart_type": {"type": "string", "enum": ["bar", "line", "pie"]},
             "chart_title": {"type": "string"},
-            "x_column": {"type": "string", "description": "Column for X axis"},
-            "y_columns": {"type": "array", "items": {"type": "string"}, "description": "Columns for Y axis"}
+            "x_column": {"type": "string"}, "y_columns": {"type": "array", "items": {"type": "string"}}
         }, "required": ["filepath", "data"]}),
 
     "create_markdown": (tool_create_markdown, True, "Create Markdown file (.md)",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string"}}, "required": ["filepath", "content"]}),
 
-    "create_notebook": (tool_create_notebook, True, "Create Jupyter Notebook (.ipynb) with code and markdown cells",
+    "create_notebook": (tool_create_notebook, True, "Create .ipynb with code/markdown cells.",
         {"type": "object", "properties": {
-            "filepath": {"type": "string", "description": "Output path (e.g. analysis.ipynb)"},
-            "cells": {"type": "array", "description": "List of cells: {type: 'code'|'markdown', source: 'content'}",
-                "items": {"type": "object", "properties": {
-                    "type": {"type": "string", "enum": ["code", "markdown"]},
-                    "source": {"type": "string"}
-                }, "required": ["type", "source"]}}
+            "filepath": {"type": "string"},
+            "cells": {"type": "array", "items": {"type": "object", "properties": {
+                "type": {"type": "string", "enum": ["code", "markdown"]},
+                "source": {"type": "string"}
+            }, "required": ["type", "source"]}}
         }, "required": ["filepath", "cells"]}),
 
-    "create_chart": (tool_create_chart, True, "Create chart image (.png). Supports bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo. Default 300 DPI for print quality. Use /report skill for full document workflow.",
+    "create_chart": (tool_create_chart, True, "Create chart PNG. Types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo.",
         {"type": "object", "properties": {
             "chart_type": {"type": "string", "enum": ["bar", "grouped_bar", "stacked_bar", "line", "pie", "scatter", "horizontal_bar", "combo"]},
-            "title": {"type": "string", "description": "Chart title"},
-            "data": {"type": "object", "description": "Data: {labels: [...], values: [...]} or {x: [...], y: [...]}. Multi-series: {labels: [...], series: [{name: '...', values: [...]}, ...]}. Combo: {labels: [...], bar_values: [...], line_values: [...]}"},
-            "filepath": {"type": "string", "description": "Output path (default: chart.png)"},
-            "xlabel": {"type": "string"},
-            "ylabel": {"type": "string"},
+            "title": {"type": "string"},
+            "data": {"type": "object", "description": "{labels:[],values:[]} or {x:[],y:[]} or {labels:[],series:[{name,values}]}"},
+            "filepath": {"type": "string"},
+            "xlabel": {"type": "string"}, "ylabel": {"type": "string"},
             "colors": {"type": "array", "items": {"type": "string"}},
-            "dpi": {"type": "integer", "description": "Resolution (default 300, max 600). Use 150 for screen-only."},
-            "width": {"type": "number", "description": "Figure width in inches (default 10)"},
-            "height": {"type": "number", "description": "Figure height in inches (default 6)"},
-            "style": {"type": "string", "description": "Matplotlib style: default, seaborn-v0_8, ggplot, etc."}
+            "dpi": {"type": "integer"}, "width": {"type": "number"}, "height": {"type": "number"},
+            "style": {"type": "string"}
         }, "required": ["data"]}),
 
     "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with structured sections.",
@@ -5105,7 +5082,17 @@ class Agent:
 
             # Call LLM with retry logic (runs in background thread so stop button works)
             # In Plan Mode, send ONLY allowed tools (saves ~1,590 tokens/call)
+            # Lazy-load: skip doc tools unless conversation mentions docs/charts/reports
             _active_allowlist = PLAN_MODE_ALLOWED_TOOLS if getattr(self, '_plan_mode', False) else self.tool_allowlist
+            if _active_allowlist is None:
+                # Check if doc tools are needed (scan recent messages for keywords)
+                _DOC_TOOLS = {"create_word", "create_excel", "create_chart", "create_pdf", "create_notebook", "create_markdown"}
+                _DOC_KEYWORDS = {"chart", "report", "document", "docx", "word", "excel", "xlsx", "pdf", "notebook", "ipynb", "plot", "graph", "spreadsheet", "visualization"}
+                _recent_text = " ".join(str(m.get("content", ""))[:200].lower() for m in self.messages[-4:])
+                _needs_docs = any(kw in _recent_text for kw in _DOC_KEYWORDS) or any(
+                    tc_name in _recent_text for tc_name in ("create_word", "create_chart", "create_pdf", "create_excel"))
+                if not _needs_docs:
+                    _active_allowlist = set(TOOLS.keys()) - _DOC_TOOLS
             def make_request():
                 return self.client.chat(
                     self.messages,
