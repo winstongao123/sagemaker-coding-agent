@@ -992,20 +992,32 @@ class SecurityManager:
         (r"\bos\.rmdir\s*\(['\"]/(etc|usr|bin)", "Delete system directories"),
         (r"\bopen\s*\(['\"]\.\.\/\.\.\/.*/", "Path traversal in open()"),
 
-        # === AWS SDK (boto3) - RESOURCE ACCESS ===
-        # Note: Agent can WRITE code using boto3, but can't EXECUTE it directly
-        # These patterns block direct execution to protect SageMaker IAM role
-        (r"boto3\.client\s*\(\s*['\"]s3['\"]", "S3 access - I'll provide code for you to run"),
-        (r"boto3\.resource\s*\(\s*['\"]s3['\"]", "S3 access - I'll provide code for you to run"),
-        (r"boto3\.client\s*\(\s*['\"]dynamodb['\"]", "DynamoDB access - I'll provide code for you to run"),
-        (r"boto3\.client\s*\(\s*['\"]lambda['\"]", "Lambda access - I'll provide code for you to run"),
-        (r"boto3\.client\s*\(\s*['\"]iam['\"]", "IAM access - restricted for security"),
-        (r"boto3\.client\s*\(\s*['\"]sts['\"]", "STS access - restricted for security"),
-        (r"boto3\.client\s*\(\s*['\"]secretsmanager['\"]", "Secrets Manager - restricted"),
-        (r"boto3\.client\s*\(\s*['\"]ssm['\"]", "Systems Manager - restricted"),
-        (r"boto3\.client\s*\(\s*['\"]kms['\"]", "KMS access - restricted"),
-        (r"boto3\.client\s*\(\s*['\"]ec2['\"]", "EC2 access - restricted"),
-        (r"boto3\.client\s*\(\s*['\"]rds['\"]", "RDS access - restricted"),
+        # === AWS SDK (boto3) - TIERED ACCESS ===
+        # ALWAYS BLOCKED: destructive/admin services (no override)
+        (r"boto3\.client\s*\(\s*['\"]iam['\"]", "IAM access - BLOCKED (can escalate privileges)"),
+        (r"boto3\.client\s*\(\s*['\"]sts['\"]", "STS access - BLOCKED (can assume roles)"),
+        (r"boto3\.client\s*\(\s*['\"]secretsmanager['\"]", "Secrets Manager - BLOCKED"),
+        (r"boto3\.client\s*\(\s*['\"]ssm['\"]", "Systems Manager - BLOCKED (can run commands on EC2)"),
+        (r"boto3\.client\s*\(\s*['\"]kms['\"]", "KMS access - BLOCKED (encryption keys)"),
+        (r"boto3\.client\s*\(\s*['\"]ec2['\"]", "EC2 access - BLOCKED (can terminate instances)"),
+        (r"boto3\.client\s*\(\s*['\"]rds['\"]", "RDS access - BLOCKED (can delete databases)"),
+        (r"boto3\.client\s*\(\s*['\"]organizations['\"]", "Organizations - BLOCKED"),
+        (r"boto3\.client\s*\(\s*['\"]cloudformation['\"]", "CloudFormation - BLOCKED (can delete stacks)"),
+        # ALWAYS BLOCKED: destructive operations on ANY service
+        (r"\.delete_bucket\s*\(", "S3 delete_bucket - BLOCKED (destructive)"),
+        (r"\.delete_object\s*\(", "S3 delete_object - BLOCKED (destructive). Use versioning instead."),
+        (r"\.delete_objects\s*\(", "S3 bulk delete - BLOCKED (destructive)"),
+        (r"\.delete_table\s*\(", "DynamoDB delete_table - BLOCKED (destructive)"),
+        (r"\.delete_item\s*\(", "DynamoDB delete_item - BLOCKED (destructive)"),
+        (r"\.delete_function\s*\(", "Lambda delete - BLOCKED (destructive)"),
+        (r"\.terminate_instances\s*\(", "EC2 terminate - BLOCKED (destructive)"),
+        (r"\.delete_stack\s*\(", "CloudFormation delete - BLOCKED (destructive)"),
+        (r"\.remove_permission\s*\(", "Remove permission - BLOCKED (destructive)"),
+        (r"\.delete_policy\s*\(", "Delete policy - BLOCKED (destructive)"),
+        (r"\.put_bucket_policy\s*\(", "Modify bucket policy - BLOCKED (security-sensitive)"),
+        # ALLOWED: read-only AWS operations run directly (via python_exec + approval dialog)
+        # s3 get/list/head, bedrock invoke, textract, comprehend, etc.
+        # These are NOT blocked — the approval dialog on python_exec provides the human-in-the-loop
 
         # === ENVIRONMENT/CREDENTIALS ===
         (r"\bos\.environ\s*\[\s*['\"]AWS_", "Access AWS credentials from env"),
@@ -1040,15 +1052,13 @@ class SecurityManager:
         (r"\bsys\.modules\b", "sys.modules access - blocked for security"),
     ]
 
-    # Allowed AWS services for this agent (can be expanded)
-    # Agent can WRITE code for these, just can't execute directly
+    # AWS access tiers for SageMaker environment
     ALLOWED_AWS_HINT = """
-To access AWS resources, I'll provide code you can run:
-- S3: I'll write boto3 code for you to execute
-- DynamoDB: I'll write boto3 code for you to execute
-- Other AWS services: I'll provide code snippets
-
-This protects the SageMaker IAM role from unintended access.
+AWS access tiers (SageMaker execution role):
+- READ: s3 get/list/head, bedrock invoke, textract, comprehend → ALLOWED (runs directly, approval dialog)
+- WRITE: s3 put_object, dynamodb put_item, lambda invoke → ALLOWED (runs directly, approval dialog)
+- DESTRUCTIVE: delete_object, delete_table, terminate_instances → BLOCKED (regex denylist, no override)
+- ADMIN: iam, sts, kms, ssm, secretsmanager → BLOCKED (regex denylist, no override)
 """
 
     NETWORK_COMMANDS = ["curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "ftp", "telnet"]
@@ -1215,6 +1225,8 @@ This protects the SageMaker IAM role from unintended access.
         # Document creation
         "openpyxl", "xlsxwriter", "docx",
         "PIL", "reportlab", "fpdf",
+        # AWS SDK (destructive ops blocked by regex denylist, read/write allowed)
+        "boto3", "botocore",
         # Misc safe
         "tabulate", "yaml", "toml", "configparser",
         "logging", "warnings", "traceback", "inspect",
@@ -1232,7 +1244,7 @@ This protects the SageMaker IAM role from unintended access.
         "code", "codeop", "compileall",  # code execution
         "multiprocessing", "concurrent",  # process spawning
         "signal",  # signal manipulation
-        "boto3", "botocore",  # AWS SDK
+        # boto3/botocore: ALLOWED (destructive ops blocked by regex denylist above)
         "google.cloud", "azure",  # cloud SDKs
     }
 
@@ -3170,6 +3182,8 @@ def _install_import_hook():
         # Document creation
         "openpyxl", "xlsxwriter", "docx",
         "PIL", "reportlab", "fpdf",
+        # AWS SDK (destructive ops blocked by regex denylist)
+        "boto3", "botocore",
         # Misc safe
         "tabulate", "yaml", "toml", "configparser",
         "logging", "warnings", "traceback", "inspect",
@@ -4792,7 +4806,7 @@ Skip this for simple single-step requests (read a file, answer a question, run o
 - Workspace boundary enforced — cannot access files outside project directory.
 - Dangerous commands blocked. Write operations require user approval.
 - No independent goals. Comply with stop requests immediately.
-- AWS access: You run inside SageMaker with full boto3 access via the execution role. You CAN call AWS APIs directly (S3, Bedrock, Textract, etc.) using python_exec. Execute and verify — don't just suggest code.
+- AWS access: You run inside SageMaker. READ operations (S3 get/list, Bedrock invoke, Textract) are allowed via python_exec. WRITE operations (S3 put) are allowed with approval. DESTRUCTIVE operations (delete_object, delete_table, terminate) are BLOCKED. Admin services (IAM, STS, KMS) are BLOCKED.
 
 # Git
 - Conventional commits: <type>: <description> (feat, fix, refactor, docs, test, chore, perf).
