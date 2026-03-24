@@ -1,5 +1,24 @@
 # Compact V3 Changelog
 
+## v3.2.2 — 6 Score-Raising Fixes (2026-03-25)
+
+### Cost Efficiency
+- **Session cost budget**: New `session_cost_limit` config. Warns at 80%, auto-stops agent at 100%.
+- **Configurable pricing**: `"model_pricing"` in opencode.json lets you add/override model prices.
+
+### Performance
+- **Better token estimation**: Uses tiktoken cl100k_base (~95% accurate) when available, falls back to chars/4.
+
+### Capabilities
+- **Image understanding**: `view_image` now reads image, base64 encodes, and sends to Claude's vision API. Claude actually sees and describes images.
+- **Code-aware semantic search**: Python files chunked by function/class (AST-based), not fixed 50-line blocks. Falls back to line-based for non-Python.
+
+### Reliability
+- **Persistent exec budget**: Global exec calls/seconds saved to `.exec_budget.json`, survives kernel restart.
+- Cleanup button also cleans `.exec_budget.json`.
+
+---
+
 ## v3.2.1 — Security Hardening + Isolation + Stealth (2026-03-25)
 
 ### Security

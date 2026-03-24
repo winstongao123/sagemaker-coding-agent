@@ -189,9 +189,21 @@ class Compactor:
     # Protected tools - never prune these (important for agent memory)
     PROTECTED_TOOLS = {"todo_write", "todo_read", "semantic_search"}
 
+    _tokenizer = None
+    _tokenizer_checked = False
+
     @classmethod
     def estimate_tokens(cls, text: str) -> int:
-        """Estimate tokens (4 chars = 1 token)."""
+        """Estimate tokens. Uses tiktoken cl100k_base if available (~95% accurate), else 4 chars/token."""
+        if not cls._tokenizer_checked:
+            cls._tokenizer_checked = True
+            try:
+                import tiktoken
+                cls._tokenizer = tiktoken.get_encoding("cl100k_base")
+            except (ImportError, Exception):
+                pass
+        if cls._tokenizer:
+            return len(cls._tokenizer.encode(text, disallowed_special=()))
         return len(text) // 4
 
     @classmethod
@@ -699,6 +711,7 @@ class Config:
     max_user_messages_per_session: int = 150
     max_exec_calls_per_session: int = 40
     max_exec_seconds_per_session: int = 900
+    session_cost_limit: float = 0.0  # Max $ per session (0 = no limit). Warns at 80%, stops at 100%.
     audit_retention_days: int = 30
 
     # Isolation: block ALL AWS services except Bedrock (no S3, DynamoDB, Lambda, etc.)
@@ -792,7 +805,7 @@ def _apply_config_file(config: 'Config') -> None:
         "execution_mode": str, "exec_docker_image": str,
         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
         "require_auth": bool, "require_tool_approval": bool,
-        "aws_bedrock_only": bool, "disable_local_traces": bool,
+        "aws_bedrock_only": bool, "disable_local_traces": bool, "session_cost_limit": float,
         "enable_skills": bool, "skills_dir": str,
         "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
         "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
@@ -834,6 +847,10 @@ def _apply_config_file(config: 'Config') -> None:
 
     if "agents" in ext and isinstance(ext["agents"], dict):
         config.agent_overrides = ext["agents"]
+
+    # User-defined model pricing — deferred until _MODEL_PRICING exists (see _apply_pricing_overrides)
+    if "model_pricing" in ext and isinstance(ext["model_pricing"], dict):
+        config._pending_pricing = ext["model_pricing"]
 
 
 # Initialize config
@@ -2352,6 +2369,13 @@ _MODEL_PRICING = {
     "au.anthropic.claude-opus-4-6-v1":                 {"input": 0.0055,  "output": 0.0275},
 }
 
+# Apply user-defined pricing from opencode.json (deferred from config load)
+if hasattr(CONFIG, '_pending_pricing'):
+    for _mid, _prices in CONFIG._pending_pricing.items():
+        if isinstance(_prices, dict) and "input" in _prices and "output" in _prices:
+            _MODEL_PRICING[_mid] = {"input": float(_prices["input"]), "output": float(_prices["output"])}
+    del CONFIG._pending_pricing
+
 
 class TokenTracker:
     """Thread-safe tracker for API token usage, cost, and cache hits per session."""
@@ -2421,6 +2445,22 @@ class TokenTracker:
                     logging.warning(f"TokenTracker: no pricing for model '{mid}' — cost will show as $0. Add to _MODEL_PRICING dict.")
                     print(f"⚠ No pricing data for model '{mid}' — /cost will show $0. Add model to _MODEL_PRICING.")
                 self.last_cost = 0.0
+
+            # Budget check
+            limit = CONFIG.session_cost_limit
+            if limit > 0 and self.session_cost > 0:
+                pct = self.session_cost / limit
+                if pct >= 1.0 and not getattr(self, '_budget_stopped', False):
+                    self._budget_stopped = True
+                    print(f"🛑 Session cost ${self.session_cost:.4f} reached limit ${limit:.2f}. Use /cost to check.")
+                elif pct >= 0.8 and not getattr(self, '_budget_warned', False):
+                    self._budget_warned = True
+                    print(f"⚠ Session cost ${self.session_cost:.4f} is {pct:.0%} of ${limit:.2f} limit.")
+
+    def is_over_budget(self) -> bool:
+        """Check if session cost has exceeded the configured limit."""
+        limit = CONFIG.session_cost_limit
+        return limit > 0 and self.session_cost >= limit
 
     def get_last(self) -> str:
         """Get last call usage as string."""
@@ -4207,7 +4247,7 @@ def tool_create_pdf(args: Dict) -> str:
 # ============== VISION ==============
 
 def tool_view_image(args: Dict) -> str:
-    """Load and describe image for AI analysis."""
+    """Load image and send to Claude for visual understanding."""
     path = args["file_path"]
 
     if not os.path.isabs(path):
@@ -4229,7 +4269,21 @@ def tool_view_image(args: Dict) -> str:
     if size > 20 * 1024 * 1024:
         return f"Error: Image too large: {size / (1024*1024):.1f}MB (max 20MB)"
 
-    return f"Image loaded: {path} ({size:,} bytes, {ext})"
+    # Read and base64 encode the image for Claude's vision API
+    with open(path, "rb") as f:
+        image_data = base64.b64encode(f.read()).decode("utf-8")
+
+    # Store image data for injection into next API call
+    _PENDING_IMAGES.append({
+        "type": "image",
+        "source": {"type": "base64", "media_type": media_types[ext], "data": image_data}
+    })
+
+    return f"Image loaded for visual analysis: {path} ({size:,} bytes, {media_types[ext]}). I can now see and describe this image."
+
+
+# Queue for images to inject into the next API call
+_PENDING_IMAGES: List[Dict] = []
 
 
 # ============== SEMANTIC SEARCH ==============
@@ -4287,24 +4341,59 @@ class SemanticSearch:
         return len(self.chunks)
 
     def _index_file(self, filepath: str, chunk_size: int = 50):
-        """Split file into chunks and index each."""
+        """Split file into chunks and index each. Uses AST-based splitting for Python files."""
         try:
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-                lines = f.readlines()
+                source = f.read()
         except IOError:
             return
 
-        for i in range(0, len(lines), chunk_size):
-            chunk_lines = lines[i:i + chunk_size]
-            content = "".join(chunk_lines)
-            if len(content.strip()) < 50:
-                continue
+        lines = source.split("\n")
+        chunks = []
+
+        # AST-based chunking for Python files — split by function/class
+        if filepath.endswith(".py"):
+            try:
+                import ast as _ast
+                tree = _ast.parse(source)
+                boundaries = []
+                for node in _ast.walk(tree):
+                    if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                        start = node.lineno - 1  # 0-indexed
+                        end = node.end_lineno if hasattr(node, 'end_lineno') and node.end_lineno else start + 20
+                        boundaries.append((start, end))
+                if boundaries:
+                    # Sort by start line, merge overlapping
+                    boundaries.sort()
+                    merged = [boundaries[0]]
+                    for s, e in boundaries[1:]:
+                        if s <= merged[-1][1]:
+                            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+                        else:
+                            merged.append((s, e))
+                    for start, end in merged:
+                        chunk_lines = lines[start:end]
+                        content = "\n".join(chunk_lines)
+                        if len(content.strip()) >= 50:
+                            chunks.append((start + 1, end, content))
+            except SyntaxError:
+                pass  # Fall through to line-based chunking
+
+        # Fallback: fixed-size line chunks (for non-Python or if AST failed)
+        if not chunks:
+            for i in range(0, len(lines), chunk_size):
+                chunk_lines = lines[i:i + chunk_size]
+                content = "\n".join(chunk_lines)
+                if len(content.strip()) >= 50:
+                    chunks.append((i + 1, i + len(chunk_lines), content))
+
+        for start_line, end_line, content in chunks:
             try:
                 embedding = self._get_embedding(content)
                 self.chunks.append({
                     "file_path": filepath,
-                    "start_line": i + 1,
-                    "end_line": i + len(chunk_lines),
+                    "start_line": start_line,
+                    "end_line": end_line,
                     "content": content,
                     "embedding": embedding,
                 })
@@ -4874,10 +4963,38 @@ Code references: `file_path:line_number`.
 # AGENT LOOP
 # ============================================================
 
-# Global exec budget — shared across all agents and sub-agents in a session
+# Global exec budget — shared across all agents and sub-agents, persisted across kernel restarts
 _GLOBAL_EXEC_CALLS = 0
 _GLOBAL_EXEC_SECONDS = 0.0
 _GLOBAL_EXEC_LOCK = threading.Lock()
+_EXEC_BUDGET_FILE = os.path.join(CONFIG.workspace, ".exec_budget.json")
+
+
+def _load_global_exec():
+    """Load persisted exec budget from disk (survives kernel restart)."""
+    global _GLOBAL_EXEC_CALLS, _GLOBAL_EXEC_SECONDS
+    if os.path.exists(_EXEC_BUDGET_FILE):
+        try:
+            with open(_EXEC_BUDGET_FILE) as f:
+                data = json.load(f)
+            with _GLOBAL_EXEC_LOCK:
+                _GLOBAL_EXEC_CALLS = data.get("calls", 0)
+                _GLOBAL_EXEC_SECONDS = data.get("seconds", 0.0)
+        except Exception:
+            pass
+
+_load_global_exec()
+
+
+def _save_global_exec():
+    """Persist exec budget to disk."""
+    if CONFIG.disable_local_traces:
+        return
+    try:
+        with open(_EXEC_BUDGET_FILE, "w") as f:
+            json.dump({"calls": _GLOBAL_EXEC_CALLS, "seconds": _GLOBAL_EXEC_SECONDS}, f)
+    except Exception:
+        pass
 
 
 def _update_global_exec(calls: int, seconds: float):
@@ -4886,6 +5003,7 @@ def _update_global_exec(calls: int, seconds: float):
     with _GLOBAL_EXEC_LOCK:
         _GLOBAL_EXEC_CALLS += calls
         _GLOBAL_EXEC_SECONDS += seconds
+    _save_global_exec()
 
 
 def _reset_global_exec():
@@ -4894,6 +5012,7 @@ def _reset_global_exec():
     with _GLOBAL_EXEC_LOCK:
         _GLOBAL_EXEC_CALLS = 0
         _GLOBAL_EXEC_SECONDS = 0.0
+    _save_global_exec()
 
 
 class Agent:
@@ -5116,6 +5235,12 @@ class Agent:
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
 
+            # Check cost budget
+            if TOKENS.is_over_budget():
+                msg = f"[Session cost ${TOKENS.session_cost:.4f} reached limit ${CONFIG.session_cost_limit:.2f}. Stopping.]"
+                output_fn(msg)
+                return msg
+
             # Check context usage
             warning = CONTEXT.check_and_warn(self.messages)
             if warning:
@@ -5159,6 +5284,20 @@ class Agent:
                     tc_name in _recent_text for tc_name in ("create_word", "create_chart", "create_pdf", "create_excel"))
                 if not _needs_docs:
                     _active_allowlist = set(TOOLS.keys()) - _DOC_TOOLS
+            # Inject pending images into the conversation for Claude's vision
+            if _PENDING_IMAGES:
+                _imgs = list(_PENDING_IMAGES)
+                _PENDING_IMAGES.clear()
+                # Find last user or tool_result message and append image blocks
+                for _m in reversed(self.messages):
+                    if _m.get("role") in ("user",):
+                        content = _m.get("content", "")
+                        if isinstance(content, str):
+                            _m["content"] = [{"type": "text", "text": content}] + _imgs
+                        elif isinstance(content, list):
+                            _m["content"] = content + _imgs
+                        break
+
             def make_request():
                 return self.client.chat(
                     self.messages,
@@ -7219,6 +7358,13 @@ def create_chat_ui(mock_mode: bool = None):
         ]:
             if os.path.isdir(path):
                 _shutil.rmtree(path, ignore_errors=True)
+                cleaned.append(name)
+        # Also clean single files
+        for name, path in [
+            (".exec_budget.json", os.path.join(CONFIG.workspace, ".exec_budget.json")),
+        ]:
+            if os.path.isfile(path):
+                os.unlink(path)
                 cleaned.append(name)
         if cleaned:
             add_message('system', f'🧹 Cleaned: {", ".join(cleaned)} (sessions kept)')
