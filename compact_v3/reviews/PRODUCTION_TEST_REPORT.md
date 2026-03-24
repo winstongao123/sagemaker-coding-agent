@@ -1,12 +1,14 @@
 # SageAgent V3 — Production Test Report
 
-**Date**: 2026-03-24
-**Version**: v3.2.2 (commit 35c3a54)
+**Date**: 2026-03-25
+**Version**: v3.2.1 (commit 8e07695)
 **Model**: au.anthropic.claude-haiku-4-5-20251001-v1:0 (ap-southeast-2)
 
 ---
 
-## Test Results: 56/56 PASS (100%)
+## Test Results: 81/81 PASS (100%)
+
+### Production Tests: 60/60
 
 | Group | Tests | Pass | Description |
 |-------|-------|------|-------------|
@@ -18,6 +20,20 @@
 | AGENT | 3 | 3 | Simple Q&A, tool call, multi-turn cost |
 | LINT | 5 | 5 | Valid pass, error detect, non-Python skip, write/edit integration |
 | SECURITY | 4 | 4 | AWS key, GitHub token, private key, clean pass |
+| TOOL_TEST | 14 | 14 | All 14 tools direct call validation |
+| AGENT_FULL | 4 | 4 | Bash+python, grep+read, chart+word, multi-tool |
+| **v3.2.1** | **4** | **4** | **Boundary bypass, unknown-model warning, audit session_id, atomic save** |
+
+### Advanced Tests: 21/21
+
+| Group | Tests | Pass | Description |
+|-------|-------|------|-------------|
+| REASONING | 2 | 2 | Find+fix bug, multi-file analysis |
+| SCALE | 3 | 3 | Large file write, many-file batch, large output |
+| CHAIN | 3 | 3 | Read→analyze→write, glob→read→grep, create→run→report |
+| SECURITY | 7 | 7 | Path traversal, injection, os.system, eval/exec, curl, secrets, **sibling-dir bypass** |
+| HEAL | 2 | 2 | Lint self-correct, failed tool recovery |
+| COMPLEX | 3 | 3 | CSV analysis+chart, code refactoring, todo-driven workflow |
 | TOOL_TEST | 14 | 14 | All 14 tools tested directly |
 | AGENT_FULL | 4 | 4 | Write+lint, grep+read, chart+word, bash+python |
 
