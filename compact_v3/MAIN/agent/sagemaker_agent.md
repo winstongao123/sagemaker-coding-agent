@@ -777,7 +777,7 @@ def _strip_jsonc_comments(text: str) -> str:
 
 def _load_config_file(workspace: str) -> Dict:
     """Load optional agent_config.json from workspace."""
-    for name in ("agent_config.json", "agent_config.jsonc", "opencode.json"):
+    for name in ("agent_config.json", "agent_config.jsonc"):
         path = os.path.join(workspace, name)
         if os.path.exists(path):
             try:

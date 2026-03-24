@@ -4,7 +4,7 @@
 
 ### Cost Efficiency
 - **Session cost budget**: New `session_cost_limit` config. Warns at 80%, auto-stops agent at 100%.
-- **Configurable pricing**: `"model_pricing"` in opencode.json lets you add/override model prices.
+- **Configurable pricing**: `"model_pricing"` in agent_config.json lets you add/override model prices.
 
 ### Performance
 - **Better token estimation**: Uses tiktoken cl100k_base (~95% accurate) when available, falls back to chars/4.
@@ -133,11 +133,11 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ---
 
-## OpenCode vs Compact V2 vs Compact V3
+## SageAgent vs Compact V2 vs Compact V3
 
 ### Agent Types
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | Build agent | Yes | Yes | Yes |
 | Plan agent | Yes | Yes | Yes (enhanced prompt) |
@@ -149,7 +149,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ### System Prompt Rules
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | Core principles | Yes | Yes | Yes |
 | Coding conventions | Yes | Yes | Yes |
@@ -159,7 +159,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ### Skills
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | Skills system | `.claude/skills/` | `skills/` with YAML frontmatter | `skills/` with YAML frontmatter |
 | **Verification loop** | 120-line SKILL.md (6-phase) | Not included | **6-phase: build, type, lint, test, security, diff** |
@@ -169,7 +169,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ### Slash Commands
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | `/skills` | Yes | Yes | Yes |
 | `/skill use/clear` | Yes | Yes | Yes |
@@ -181,7 +181,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ### Session Persistence & Memory
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | Session save/load | Basic | Full (JSON + todos + metadata) | Full (JSON + todos + metadata + **checkpoints**) |
 | Auto-save | No | Yes (every message) | Yes (every message, **deepcopy all data**) |
@@ -194,7 +194,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ### Security
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | Bash validation | Permission rules | 3-layer (allowlist + patterns + restricted) | 3-layer (same) |
 | Python validation | None | 3-layer (AST + import hook + secrets) | 3-layer (same) |
@@ -204,7 +204,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 
 ### Error Recovery
 
-| Feature | OpenCode | V2 | V3 |
+| Feature | SageAgent | V2 | V3 |
 |---------|----------|----|----|
 | Tool name repair | Yes | Yes | Yes |
 | Arg auto-fix | No | Yes | Yes |
@@ -293,7 +293,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 | Faster stop polling | Round 5 | 0.5s → 0.1s for responsive stop button |
 | ASCII system messages | Round 6 | All emoji replaced with `[STOP]`, `[PLAN]`, `[OK]`, etc. for encoding safety |
 | Chat/input alignment | Round 6 | `width:100%;box-sizing:border-box` matches input box width |
-| Proactive skill matching | Post-review | Agent auto-loads matching skills when user request matches available skill descriptions (follows Claude Code pattern, not OpenCode manual-only approach) |
+| Proactive skill matching | Post-review | Agent auto-loads matching skills when user request matches available skill descriptions (follows Claude Code pattern, not SageAgent manual-only approach) |
 | powerbi-dashboard skill | Post-review | Added Power BI dashboard generator skill (138 lines, from AIPower) |
 
 ## Round 7 Fixes (Skill/Sub-Agent/MCP Auto-Invocation)
@@ -304,7 +304,7 @@ Full analysis: [PS_everything_claude_code/CATALOG.md](https://github.com/winston
 | 29 | HIGH | No proactive sub-agent delegation instructions — agent never auto-spawned sub-agents | Added IMPORTANT instruction with per-type guidance (explore, review, plan, build, general) |
 | 30 | MEDIUM | Multiple skills in one turn lost — `active_skill` scalar overwrote first skill | Changed to `_pending_activations: List[str]` with append + drain pattern |
 | 31 | MEDIUM | No MCP tool preference instructions — agent used bash instead of registered MCP tools | Added IMPORTANT instruction to prefer MCP tools for their domain |
-| 32 | MEDIUM | Stale docstring claimed sub-agents and MCP were "Not Implemented" | Updated to "Implemented (from OpenCode patterns)" |
+| 32 | MEDIUM | Stale docstring claimed sub-agents and MCP were "Not Implemented" | Updated to "Implemented (from SageAgent patterns)" |
 | 33 | MEDIUM (V2) | V2 `on_new()` did not clear skill state — stale skills carried over to new sessions | Added `active_skills = []`, `active_skill = None`, `_pending_activations.clear()` |
 | 34 | LOW | powerbi-dashboard SKILL.md had no YAML frontmatter — `description=""` in XML | Added proper YAML frontmatter with name and description |
 | 35 | LOW | Skill description fallback missing — skills without YAML got empty description | Added fallback: extract first `#` heading as description in `discover()` |
@@ -464,11 +464,11 @@ User testing on SageMaker with Sonnet 4.5 — agent hit max_turns=30 twice while
 
 ---
 
-## Round 12 Fixes (Doom Loop Overhaul + Security + OpenCode Review)
+## Round 12 Fixes (Doom Loop Overhaul + Security + SageAgent Review)
 
 ### Source
 
-Full code review (18 issues found) + OpenCode architecture analysis. OpenCode uses per-tool key hashing, 30-entry history, `JSON.stringify` equality for doom loop detection, and blocks `python -c` entirely.
+Full code review (18 issues found) + SageAgent architecture analysis. SageAgent uses per-tool key hashing, 30-entry history, `JSON.stringify` equality for doom loop detection, and blocks `python -c` entirely.
 
 ### Bug Fixes
 
@@ -485,7 +485,7 @@ Full code review (18 issues found) + OpenCode architecture analysis. OpenCode us
 | 53 | MEDIUM | `tool_history` maxlen=10 too short — repetitive patterns with 3+ interleaved calls escape detection | Increased to maxlen=30 |
 | 54 | MEDIUM | Fallback doom loop key (`else` branch) uses `file_path or command[:50]` — non-deterministic for tools without those fields | Changed fallback to `md5(str(input))[:16]` — deterministic hash of full input |
 
-### OpenCode Patterns Evaluated
+### SageAgent Patterns Evaluated
 
 | Pattern | Score | Decision | Reason |
 |---------|-------|----------|--------|
@@ -519,7 +519,7 @@ Full code review (18 issues found) + OpenCode architecture analysis. OpenCode us
 
 3. **`python -c` is a security hole when interpreters are allowed**: With `bash_allow_interpreters=True`, the agent can run `python -c "import boto3; ..."` which bypasses all of python_exec's 3-layer validation. Blocking `python -c` entirely forces inline code through the secure path while still allowing `python script.py` for skill generators.
 
-4. **OpenCode's architecture is more defensive**: 30-entry history, per-input hashing, and no write size limits. Our agent was designed conservatively (10-entry history, 500-line reads) which paradoxically made it less capable for legitimate workflows.
+4. **SageAgent's architecture is more defensive**: 30-entry history, per-input hashing, and no write size limits. Our agent was designed conservatively (10-entry history, 500-line reads) which paradoxically made it less capable for legitimate workflows.
 
 ### Known Issues Not Fixed (deferred from Round 12)
 

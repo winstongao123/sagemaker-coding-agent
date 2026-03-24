@@ -99,8 +99,8 @@
 **Strengths vs peers:**
 - More tools than Claude Code (22 vs ~12)
 - Document creation (Word/PDF/Excel/Charts) — unique to V3
-- Sub-agents (5 types) — matches OpenCode
-- MCP support — matches Goose/OpenCode
+- Sub-agents (5 types) — matches peers
+- MCP support — matches peers
 - Cost tracking — better than most
 - Auto-lint — matches Aider/SWE-agent
 - 8 chart types (bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo)

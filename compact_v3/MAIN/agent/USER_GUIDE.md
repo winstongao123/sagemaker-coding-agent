@@ -17,7 +17,7 @@ A single-file AI coding assistant that runs inside a Jupyter notebook on AWS Sag
 9. [Sub-Agents](#sub-agents)
 10. [Architecture Concepts](#architecture-concepts)
 11. [Custom Slash Commands](#custom-slash-commands)
-12. [Configuration File (opencode.json)](#configuration-file-opencodejson)
+12. [Configuration File (agent_config.json)](#configuration-file-agent-config-json)
 13. [Permission Rules](#permission-rules)
 14. [Security](#security)
 15. [Cost Tracking](#cost-tracking)
@@ -63,7 +63,7 @@ Upload the entire `MAIN/` folder to your SageMaker notebook's file browser. You 
 your-workspace/
 ├── sagemaker_agent.py
 ├── chat.ipynb
-├── opencode.json        (optional config)
+├── agent_config.json        (optional config)
 └── skills/
     └── review/
         └── SKILL.md     (example skill)
@@ -353,7 +353,7 @@ Slash commands are typed directly in the chat input box (not as natural language
 | `/skills` | List all discovered skills | `/skills` |
 | `/skill use <name>` | Activate a skill for the session | `/skill use code-review` |
 | `/skill clear` | Deactivate all skills | `/skill clear` |
-| `/commands` | List custom slash commands from `opencode.json` | `/commands` |
+| `/commands` | List custom slash commands from `agent_config.json` | `/commands` |
 | `/cost` | Show token usage and cost breakdown | `/cost` |
 | `/revert <file>` | Restore a file to its state before the agent edited it | `/revert app.py` |
 | `/revert all` | Restore all files the agent modified | `/revert all` |
@@ -460,8 +460,8 @@ Then: `/skill use doc-writer` and ask "Document the main.py file"
 
 The agent searches these directories for `**/SKILL.md` files:
 - `./skills/` (your workspace)
-- `.opencode/skill/`
-- `.opencode/skills/`
+- `.agent/skills/`
+- `.agent/skillss/`
 - `.claude/skills/`
 
 ---
@@ -485,7 +485,7 @@ An MCP server is a small program that exposes tools. The agent connects to it, d
 
 ### How to Set Up MCP
 
-MCP servers are configured in `opencode.json`. There are two types:
+MCP servers are configured in `agent_config.json`. There are two types:
 
 #### Type 1: Local Server (runs as a subprocess)
 
@@ -522,7 +522,7 @@ for line in sys.stdin:
     sys.stdout.flush()
 ```
 
-**Step 2:** Add to `opencode.json`:
+**Step 2:** Add to `agent_config.json`:
 ```json
 {
   "mcp": {
@@ -629,7 +629,7 @@ When Plan Mode is toggled ON in the UI:
 
 ### Customizing Sub-Agents
 
-In `opencode.json`:
+In `agent_config.json`:
 ```json
 {
   "agents": {
@@ -651,7 +651,7 @@ Sub-agents can spawn their own sub-agents, but only up to 2 levels deep (configu
 
 ## Architecture Concepts
 
-If you've seen tools like Claude Code, OpenCode, or Cursor, you may have encountered terms like "skills", "MCP", "hooks", "agents", and "plugins". Here's how they all relate and what our agent supports.
+If you've seen tools like Claude Code, SageAgent, or Cursor, you may have encountered terms like "skills", "MCP", "hooks", "agents", and "plugins". Here's how they all relate and what our agent supports.
 
 ### The 8 Concepts Explained
 
@@ -681,7 +681,7 @@ Plugins                    = PACKAGING of the above      (bundle for distributio
 | Concept | Our Equivalent | Status |
 |---------|---------------|--------|
 | **Skill** | `skills/name/SKILL.md` + SkillManager | Have it |
-| **Command** | `/skills`, `/cost`, `/revert`, `/compact`, `/save`, custom via `opencode.json` | Have it |
+| **Command** | `/skills`, `/cost`, `/revert`, `/compact`, `/save`, custom via `agent_config.json` | Have it |
 | **Rule** | System prompt hardcoded rules (security, tool usage, coding practices) | Have it |
 | **Context** | Plan Mode toggle (restricts to read-only tools) | Have it (simpler) |
 | **MCP Server** | McpManager (stdio + HTTP transports, auto tool discovery) | Have it |
@@ -711,7 +711,7 @@ Custom commands let you define reusable prompt templates. Instead of typing a lo
 
 ### How to Set Up
 
-Add to `opencode.json`:
+Add to `agent_config.json`:
 ```json
 {
   "commands": {
@@ -752,7 +752,7 @@ If `"agent"` is set (like `"plan"` in the review example), the expanded prompt i
 
 ---
 
-## Configuration File (`opencode.json`)
+## Configuration File (`agent_config.json`)
 
 Optional file. Place in your workspace root alongside `sagemaker_agent.py`. Supports JSONC (comments with `//`).
 
@@ -820,7 +820,7 @@ Control which tools require approval, which are auto-allowed, and which are bloc
 
 ### Configuration
 
-In `opencode.json` under `"permissions"`:
+In `agent_config.json` under `"permissions"`:
 
 ```json
 {
@@ -855,7 +855,7 @@ The **Require Approval** toggle in the UI is a master switch:
 - **OFF** (default): All tools auto-execute (fastest workflow)
 - **ON**: High-risk tools (bash, python_exec, write_file, edit_file) require approval
 
-Permission rules in `opencode.json` override the UI toggle for specific tools.
+Permission rules in `agent_config.json` override the UI toggle for specific tools.
 
 ---
 
@@ -943,7 +943,7 @@ MAIN/
 ├── sagemaker_agent.md    # Markdown copy of the above
 ├── chat.ipynb            # Jupyter notebook launcher
 ├── chat.md               # Markdown copy of the notebook
-├── opencode.json         # Configuration (optional, JSONC)
+├── agent_config.json         # Configuration (optional, JSONC)
 ├── USER_GUIDE.md         # This file
 └── skills/
     └── review/
@@ -983,7 +983,7 @@ Run the install cell again:
 
 - For local servers: check that the command works manually (`python my_server.py`)
 - For remote servers: check the URL is reachable from SageMaker
-- Check `opencode.json` syntax (use a JSON validator)
+- Check `agent_config.json` syntax (use a JSON validator)
 - Look for connection status in the UI status bar
 
 ### Agent is slow

@@ -196,7 +196,7 @@ def t3_2():
         max_turns=8
     )
     PERF.append({"test": "glob→read→analyze", "cost": cost, "calls": calls})
-    # Should find opencode.json and describe its contents
+    # Should find agent_config.json and describe its contents
     has_settings = "model" in result.lower() or "skills" in result.lower() or "config" in result.lower()
     return has_settings, f"found settings={'✓' if has_settings else '✗'}, cost=${cost:.4f}"
 t3_2()
