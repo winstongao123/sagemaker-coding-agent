@@ -4727,8 +4727,8 @@ You help users with software engineering, document creation, and data analysis.
 # Tool Usage
 - ALWAYS read a file before editing it. old_string in edit_file must be an EXACT match.
 - write_file supports mode='append' to add content to end of file without reading first.
-- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep).
-- Reserve bash for: git commands, pip/npm install, running scripts, system operations.
+- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep command).
+- Reserve bash for: git, pip/npm install, running scripts, system operations. Bash pipelines (e.g. `git log | head`) are OK for complex workflows.
 - Call multiple independent tools in parallel. Sequential only when one depends on another.
 - If a tool call fails, don't retry the same call — investigate the error and adapt.
 
@@ -4987,11 +4987,19 @@ class Agent:
             self.user_msg_timestamps.append(now)
             self.user_msg_count += 1
 
-        # Ensure proper role alternation - if last message was user, add placeholder assistant
+        # Ensure proper role alternation for Bedrock (must alternate user/assistant)
         if self.messages and self.messages[-1].get("role") == "user":
-            self.messages.append({"role": "assistant", "content": "[Continuing...]"})
-
-        self.messages.append({"role": "user", "content": user_message})
+            # Merge with previous user message instead of inserting fake assistant reply
+            prev = self.messages[-1]
+            prev_content = prev.get("content", "")
+            if isinstance(prev_content, str):
+                prev["content"] = prev_content + "\n\n" + user_message
+            else:
+                # Content is a list (e.g., tool_results) — append new user text block
+                self.messages.append({"role": "assistant", "content": "OK."})
+                self.messages.append({"role": "user", "content": user_message})
+        else:
+            self.messages.append({"role": "user", "content": user_message})
         AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
 
         _effective_max_turns = max_turns_override if max_turns_override is not None else CONFIG.max_turns
@@ -5086,6 +5094,9 @@ class Agent:
 
             # Check stop again after LLM returns (user may have clicked during the call)
             if self.on_stop_check and self.on_stop_check():
+                # Persist response to history before returning (prevents context loss)
+                if response and response.text:
+                    self.messages.append({"role": "assistant", "content": response.text})
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
 
@@ -5391,7 +5402,8 @@ class Agent:
                 AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, llm_result[:200])
                 tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": llm_result})
 
-            self.messages.append({"role": "user", "content": tool_results})
+            if tool_results:  # Only append if non-empty (prevents Bedrock rejection)
+                self.messages.append({"role": "user", "content": tool_results})
 
         output_fn(f"[Reached max turns ({_effective_max_turns})]")
         # Collect all assistant text outputs so sub-agents return complete findings
