@@ -1652,7 +1652,8 @@ class SessionManager:
             # Filter to known fields to handle schema changes gracefully
             known_fields = {"id", "created_at", "updated_at", "title", "messages", "metadata", "todos"}
             return Session(**{k: v for k, v in data.items() if k in known_fields})
-        except Exception:
+        except Exception as e:
+            logging.warning(f"Session load failed for {session_id}: {e}")
             return None
 
     def list_sessions(self) -> List[Dict]:
@@ -2361,8 +2362,12 @@ class TokenTracker:
                 self.session_cost += cost
                 self.last_cost = cost
             else:
-                import logging
-                logging.warning(f"TokenTracker: no pricing for model '{mid}' — cost will show as $0")
+                if not hasattr(self, '_warned_models'):
+                    self._warned_models = set()
+                if mid not in self._warned_models:
+                    self._warned_models.add(mid)
+                    logging.warning(f"TokenTracker: no pricing for model '{mid}' — cost will show as $0. Add to _MODEL_PRICING dict.")
+                    print(f"⚠ No pricing data for model '{mid}' — /cost will show $0. Add model to _MODEL_PRICING.")
                 self.last_cost = 0.0
 
     def get_last(self) -> str:
@@ -6832,9 +6837,14 @@ def create_chat_ui(mock_mode: bool = None):
                         },
                         todos=copy.deepcopy(_TODOS) if _TODOS else []
                     )
-                    # Async save (non-blocking — session data already deep-copied above)
+                    # Async save with fallback — non-blocking but logs failure
                     _session_to_save = ui_state["session"]
-                    threading.Thread(target=lambda: SESSIONS.save(_session_to_save), daemon=True).start()
+                    def _async_save(s):
+                        try:
+                            SESSIONS.save(s)
+                        except Exception as e:
+                            logging.warning(f"Async auto-save failed: {e}")
+                    threading.Thread(target=_async_save, args=(_session_to_save,), daemon=True).start()
                 except Exception as e:
                     add_message('system', f'⚠ Auto-save failed: {e}. Use Save button to retry.')
 
