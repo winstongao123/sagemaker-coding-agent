@@ -3725,6 +3725,32 @@ def tool_create_chart(args: Dict) -> str:
     if not ok:
         return f"Error: {msg}"
 
+    # Data validation (prevents cryptic matplotlib errors from mismatched data)
+    if not isinstance(data, dict):
+        return f"Error: 'data' must be a dict, got {type(data).__name__}. Expected: {{labels: [...], values: [...]}}"
+    if chart_type in ("bar", "pie", "horizontal_bar"):
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        if labels and values and len(labels) != len(values):
+            return f"Error: labels ({len(labels)}) and values ({len(values)}) must have same length"
+        if colors and isinstance(colors, list) and values and len(colors) != len(values) and len(colors) != 1:
+            return f"Error: colors ({len(colors)}) should match values ({len(values)}) or be a single color"
+    if chart_type in ("grouped_bar", "stacked_bar"):
+        series = data.get("series", [])
+        labels = data.get("labels", [])
+        for i, s in enumerate(series):
+            if not isinstance(s, dict) or "values" not in s:
+                return f"Error: series[{i}] must be {{name: '...', values: [...]}}. Got: {type(s).__name__}"
+            if labels and len(s.get("values", [])) != len(labels):
+                return f"Error: series[{i}] has {len(s['values'])} values but there are {len(labels)} labels"
+    if chart_type == "scatter":
+        x, y = data.get("x", []), data.get("y", [])
+        if x and y and len(x) != len(y):
+            return f"Error: x ({len(x)}) and y ({len(y)}) must have same length for scatter"
+    # Cap dimensions to prevent memory issues
+    width = min(max(width, 2), 30)
+    height = min(max(height, 2), 20)
+
     try:
         # Apply style if specified
         if style != "default":
@@ -4755,11 +4781,18 @@ Use todo_write to plan and track multi-step tasks. Only ONE todo in_progress at 
 - create_markdown (.md): documentation files
 - For flowcharts/architecture diagrams: use ASCII art. create_chart is for data charts only.
 
+# Plan Before Execute
+For tasks with 3+ steps or multiple file changes:
+1. Present a numbered plan (what files, what changes, in what order)
+2. Use ask_user to confirm: "Proceed with this plan?"
+3. Only execute after user confirms
+Skip this for simple single-step requests (read a file, answer a question, run one command).
+
 # Security & Safety
 - Workspace boundary enforced — cannot access files outside project directory.
 - Dangerous commands blocked. Write operations require user approval.
 - No independent goals. Comply with stop requests immediately.
-- For AWS resources: provide boto3 code for user to run, don't execute directly.
+- AWS access: You run inside SageMaker with full boto3 access via the execution role. You CAN call AWS APIs directly (S3, Bedrock, Textract, etc.) using python_exec. Execute and verify — don't just suggest code.
 
 # Git
 - Conventional commits: <type>: <description> (feat, fix, refactor, docs, test, chore, perf).
