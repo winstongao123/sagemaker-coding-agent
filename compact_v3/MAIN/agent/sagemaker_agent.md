@@ -1280,11 +1280,33 @@ AWS access tiers (SageMaker execution role):
         """Check if Python code is safe using regex denylist + AST import allowlist."""
         # Layer 0: Bedrock-only mode — block ALL boto3 clients except bedrock-runtime
         if CONFIG.aws_bedrock_only:
-            # Match boto3.client('s3'), boto3.client("dynamodb"), session.client('lambda'), etc.
+            # 0a. Regex: catch literal .client('service') calls
             boto3_client_match = re.findall(r"\.client\s*\(\s*['\"]([^'\"]+)['\"]", code)
             for svc in boto3_client_match:
                 if svc not in ("bedrock-runtime",):
                     return False, f"AWS service '{svc}' blocked (aws_bedrock_only=true). Only bedrock-runtime is allowed."
+            # 0b. Block botocore.session and getattr client evasion
+            if re.search(r"botocore\.session", code):
+                return False, "botocore.session blocked (aws_bedrock_only=true). Only bedrock-runtime via boto3 is allowed."
+            if re.search(r"getattr\s*\([^,]+,\s*['\"]client['\"]", code):
+                return False, "getattr(..., 'client') blocked (aws_bedrock_only=true). Use boto3.client('bedrock-runtime') directly."
+            # 0c. AST: catch variable-based .client(var) calls — block any .client() not using literal 'bedrock-runtime'
+            import ast as _ast
+            try:
+                _tree = _ast.parse(code)
+                for _node in _ast.walk(_tree):
+                    if isinstance(_node, _ast.Call) and isinstance(_node.func, _ast.Attribute) and _node.func.attr == "client":
+                        if _node.args:
+                            arg = _node.args[0]
+                            if isinstance(arg, _ast.Constant) and arg.value == "bedrock-runtime":
+                                continue  # Allowed
+                            elif isinstance(arg, _ast.Constant) and isinstance(arg.value, str):
+                                return False, f"AWS service '{arg.value}' blocked (aws_bedrock_only=true). Only bedrock-runtime is allowed."
+                            else:
+                                # Variable or expression — can't verify, block it
+                                return False, "Dynamic .client() call blocked (aws_bedrock_only=true). Use boto3.client('bedrock-runtime') with a literal string."
+            except SyntaxError:
+                pass  # Let it fail at runtime
 
         # Layer 1: Regex denylist (catches obfuscated patterns like __import__, exec, etc.)
         for pattern, reason in self.DANGEROUS_PYTHON:
@@ -1637,7 +1659,8 @@ class SessionManager:
 
     def __init__(self, sessions_dir: str):
         self.sessions_dir = sessions_dir
-        os.makedirs(sessions_dir, exist_ok=True)
+        if not CONFIG.disable_local_traces:
+            os.makedirs(sessions_dir, exist_ok=True)
 
     def create(self, title: str = "New Session") -> Session:
         """Create new session."""
@@ -1687,7 +1710,8 @@ class SessionManager:
     def list_sessions(self) -> List[Dict]:
         """List all sessions."""
         sessions = []
-        os.makedirs(self.sessions_dir, exist_ok=True)
+        if not os.path.isdir(self.sessions_dir):
+            return sessions
         for filename in os.listdir(self.sessions_dir):
             if filename.endswith(".json"):
                 try:
@@ -7183,23 +7207,23 @@ def create_chat_ui(mock_mode: bool = None):
         threading.Thread(target=on_compact, args=(b,), daemon=True).start()
 
     def on_cleanup(b):
-        """Delete ALL local traces: sessions, audit logs, snapshots, code index, truncated outputs."""
+        """Delete local traces (keeps sessions for conversation continuity)."""
         import shutil as _shutil
         cleaned = []
+        # Clean non-essential traces (sessions kept for continuity)
         for name, path in [
-            ("sessions", CONFIG.sessions_dir),
             ("audit_logs", CONFIG.audit_dir),
             (".snapshots", os.path.join(CONFIG.workspace, ".snapshots")),
             (".code_index", os.path.join(CONFIG.workspace, ".code_index")),
-            (".truncated", os.path.join(CONFIG.workspace, ".truncated")),
+            ("truncated_outputs", os.path.join(CONFIG.workspace, "truncated_outputs")),
         ]:
             if os.path.isdir(path):
                 _shutil.rmtree(path, ignore_errors=True)
                 cleaned.append(name)
         if cleaned:
-            add_message('system', f'🧹 Cleaned: {", ".join(cleaned)}')
+            add_message('system', f'🧹 Cleaned: {", ".join(cleaned)} (sessions kept)')
         else:
-            add_message('system', '🧹 Nothing to clean — no local traces found.')
+            add_message('system', '🧹 Nothing to clean — no traces found.')
         render_chat()
 
     send_btn.on_click(_on_send_threaded)
