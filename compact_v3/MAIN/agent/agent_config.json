@@ -8,7 +8,7 @@
   "enable_skills": true,
 
   // Sub-agent overrides: explore uses cheaper Haiku for file searching
-  // NOTE: key must be "agents" (that's what the code reads from opencode.json)
+  // NOTE: key must be "agents" (that's what the code reads from agent_config.json)
   "agents": {
     "explore": { "max_turns": 20, "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0" },
     "review": { "max_turns": 20 },

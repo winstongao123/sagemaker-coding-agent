@@ -17,10 +17,10 @@ Features Implemented:
 - UI: Dark mode toggle updates all existing messages
 - UI: Session dropdown with Load/New buttons
 - UI: Save button in Row 1 (after Name)
-- Context: Compact button (OpenCode-style 2-stage: prune + summarize)
+- Context: Compact button (2-stage 2-stage: prune + summarize)
 - Context: Auto-Compact (ON by default, triggers at 90%, keeps last 3 messages)
 - Context: Pre-send compact (auto-compacts at 80% BEFORE sending to prevent overflow)
-- Context: Auto-continue after compact (resumes automatically like OpenCode)
+- Context: Auto-continue after compact (resumes automatically)
 - Context: Plan Mode (enforced read-only - blocks write tools)
 - Context: Token display shows actual context window % (not cumulative API totals)
 - UI: Stop button (cancel LLM processing mid-stream)
@@ -54,7 +54,7 @@ Dependencies:
     pip install boto3 ipywidgets python-docx pandas openpyxl
     pip install matplotlib reportlab  # For charts and PDFs
 
-Implemented (from OpenCode patterns):
+Implemented (sub-agent architecture):
 - Sub-agents (5 types: build, plan, explore, general, review)
 - MCP server integration (stdio + HTTP transports)
 - Skills system with proactive auto-invocation
@@ -100,7 +100,7 @@ import urllib.parse
 import concurrent.futures
 
 # ============================================================
-# RETRY LOGIC (OpenCode-style)
+# RETRY LOGIC (2-stage)
 # ============================================================
 
 class RetryableError(Exception):
@@ -176,7 +176,7 @@ RETRY = RetryHandler(max_retries=5, base_delay=2.0, max_delay=60.0)
 
 
 # ============================================================
-# CONTEXT COMPACTION (OpenCode-style)
+# CONTEXT COMPACTION (2-stage)
 # ============================================================
 
 class Compactor:
@@ -397,7 +397,7 @@ COMPACTOR = Compactor()
 
 
 # ============================================================
-# SMART TRUNCATION (OpenCode-style)
+# SMART TRUNCATION (2-stage)
 # ============================================================
 
 class Truncation:
@@ -507,7 +507,7 @@ class Truncation:
 
 
 # ============================================================
-# STRUCTURED TOOL OUTPUT (OpenCode-style)
+# STRUCTURED TOOL OUTPUT (2-stage)
 # ============================================================
 
 @dataclass
@@ -691,7 +691,7 @@ class Config:
     mock_mode: bool = False  # Set True to test without Bedrock API
 
     # Security policy
-    bash_allow_interpreters: bool = False  # Block python/node via bash (use python_exec instead; enable in opencode.json if needed)
+    bash_allow_interpreters: bool = False  # Block python/node via bash (use python_exec instead; enable in agent_config.json if needed)
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
     # Runtime isolation / execution limits
@@ -776,8 +776,8 @@ def _strip_jsonc_comments(text: str) -> str:
 
 
 def _load_config_file(workspace: str) -> Dict:
-    """Load optional opencode.json / opencode.jsonc config from workspace."""
-    for name in ("opencode.json", "opencode.jsonc", ".opencode/config.json"):
+    """Load optional agent_config.json from workspace."""
+    for name in ("agent_config.json", "agent_config.jsonc", "opencode.json"):
         path = os.path.join(workspace, name)
         if os.path.exists(path):
             try:
@@ -1668,7 +1668,7 @@ class Session:
     title: str
     messages: List[Dict] = field(default_factory=list)
     metadata: Dict = field(default_factory=dict)
-    todos: List[Dict] = field(default_factory=list)  # Persistent todos (OpenCode-style)
+    todos: List[Dict] = field(default_factory=list)  # Persistent todos (2-stage)
 
 
 class SessionManager:
@@ -1766,7 +1766,7 @@ class SkillInfo:
 
 
 class SkillManager:
-    """OpenCode-compatible skill loader. Discovers **/SKILL.md with YAML frontmatter."""
+    """Multi-directory skill loader. Discovers **/SKILL.md with YAML frontmatter."""
 
     def __init__(self, workspace: str, skills_dir: str):
         self.workspace = Path(workspace).resolve()
@@ -1797,14 +1797,14 @@ class SkillManager:
         """Scan for **/SKILL.md files and legacy *.md files."""
         self._cache.clear()
         search_dirs = [self.skills_dir]
-        # Also check .opencode/skill/ and .claude/skills/ relative to workspace
-        for sub in (".opencode/skill", ".opencode/skills", ".claude/skills"):
+        # Also check additional skill directories relative to workspace
+        for sub in (".agent/skills", ".claude/skills"):
             d = self.workspace / sub
             if d.is_dir():
                 search_dirs.append(d)
 
         for search_dir in search_dirs:
-            # Glob for **/SKILL.md (OpenCode pattern)
+            # Glob for **/SKILL.md (standard pattern)
             for fp in sorted(search_dir.rglob("SKILL.md")):
                 try:
                     text = fp.read_text(encoding="utf-8", errors="ignore")
@@ -2369,7 +2369,7 @@ _MODEL_PRICING = {
     "au.anthropic.claude-opus-4-6-v1":                 {"input": 0.0055,  "output": 0.0275},
 }
 
-# Apply user-defined pricing from opencode.json (deferred from config load)
+# Apply user-defined pricing from agent_config.json (deferred from config load)
 if hasattr(CONFIG, '_pending_pricing'):
     for _mid, _prices in CONFIG._pending_pricing.items():
         if isinstance(_prices, dict) and "input" in _prices and "output" in _prices:
@@ -4678,7 +4678,7 @@ def tool_todo_read(args: Dict) -> str:
     return "\n".join(lines)
 
 
-# Plan Mode System Prompt (OpenCode-style)
+# Plan Mode System Prompt (2-stage)
 PLAN_MODE_PROMPT = """PLAN MODE — read-only. Explore code, create implementation plan, wait for approval.
 1. Restate requirements. 2. Read relevant code. 3. Write phased plan (summary, files, risks, tests). 4. Wait for user confirmation.
 No write_file, edit_file, bash, python_exec, or task. Read-only tools only.
@@ -4698,7 +4698,7 @@ PLAN_MODE_ALLOWED_TOOLS = {
 }
 
 # ============================================================
-# AGENT TYPES (OpenCode-compatible sub-agent definitions)
+# AGENT TYPES (Multi-directory sub-agent definitions)
 # ============================================================
 
 AGENT_TYPES = {
@@ -5069,7 +5069,7 @@ class Agent:
         return f"[Question displayed: {question}] (No interactive UI — sub-agent context)"
 
     def _run_task_tool(self, args: Dict, output_fn: Callable, _skip_cache_isolation: bool = False) -> str:
-        """Run a sub-agent with typed agent configuration (OpenCode-compatible).
+        """Run a sub-agent with typed agent configuration (Multi-directory).
         _skip_cache_isolation: set True when caller already handles FILE_CACHE save/restore (parallel path).
         """
         if self.subagent_depth >= CONFIG.subagent_max_depth:
@@ -5248,7 +5248,7 @@ class Agent:
             if warning:
                 output_fn(warning)
 
-            # Smart compaction when context gets high (OpenCode-style)
+            # Smart compaction when context gets high (2-stage)
             if COMPACTOR.should_compact(self.messages, CONFIG.context_max_tokens):
                 # Step 1: Try pruning old tool outputs first
                 pruned_messages, tokens_saved = COMPACTOR.prune_tool_outputs(self.messages, CONFIG.context_max_tokens)
@@ -5940,7 +5940,7 @@ def create_chat_ui(mock_mode: bool = None):
         </div>'''
 
     def render_todos():
-        """Render todos in a collapsible panel (OpenCode-style)."""
+        """Render todos in a collapsible panel (2-stage)."""
         dark = ui_state["dark_mode"]
         bg = '#2d2d2d' if dark else '#f5f5f5'
         fg = '#e0e0e0' if dark else '#333'
@@ -5994,7 +5994,7 @@ def create_chat_ui(mock_mode: bool = None):
     mode_html = widgets.HTML(value='')
     tokens_html = widgets.HTML(value='<span style="color:gray;font-size:11px;">Tokens: 0</span>')
 
-    # Plan Mode toggle (OpenCode-style)
+    # Plan Mode toggle (2-stage)
     plan_mode_toggle = widgets.ToggleButton(
         value=False,
         description='Plan Mode',
@@ -6804,7 +6804,7 @@ def create_chat_ui(mock_mode: bool = None):
             _release_lock()
             return
 
-        # Custom commands from opencode.json
+        # Custom commands from agent_config.json
         if msg.startswith("/") and not msg.startswith("/auth"):
             cmd_parts = msg[1:].split(None, 1)
             cmd_name = cmd_parts[0] if cmd_parts else ""
@@ -6816,7 +6816,7 @@ def create_chat_ui(mock_mode: bool = None):
                     lines = [f"- **/{c['name']}**: {c['description']}" for c in cmds]
                     add_message('system', "Available commands:\n" + "\n".join(lines))
                 else:
-                    add_message('system', "No custom commands configured. Add commands in opencode.json.")
+                    add_message('system', "No custom commands configured. Add commands in agent_config.json.")
                 input_box.value = ""
                 _release_lock()
                 return
@@ -7255,7 +7255,7 @@ def create_chat_ui(mock_mode: bool = None):
         session_dropdown.value = None
 
     def on_compact(b):
-        """Manually compact conversation context (OpenCode-style)."""
+        """Manually compact conversation context (2-stage)."""
         if not ui_state["agent"] or not ui_state["agent"].messages:
             add_message('system', 'No conversation to compact.')
             return
@@ -7268,7 +7268,7 @@ def create_chat_ui(mock_mode: bool = None):
             messages = ui_state["agent"].messages
             original_count = len(messages)
 
-            # Stage 1: Prune old tool outputs (OpenCode-style)
+            # Stage 1: Prune old tool outputs (2-stage)
             pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(messages, CONFIG.context_max_tokens)
             if tokens_saved > 0:
                 add_message('system', f'Stage 1: Pruned old tool outputs (~{tokens_saved:,} tokens saved)')
@@ -7428,7 +7428,7 @@ def create_chat_ui(mock_mode: bool = None):
         row2,
         _sa_panel,  # Collapsible sub-agent model overrides
         mode_html,
-        todo_display,  # Collapsible todo list (OpenCode-style)
+        todo_display,  # Collapsible todo list (2-stage)
         chat_display,  # HTML widget with internal scroll
         approval_box,
         ask_user_box,

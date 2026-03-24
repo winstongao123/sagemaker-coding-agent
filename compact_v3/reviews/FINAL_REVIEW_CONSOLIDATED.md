@@ -182,6 +182,6 @@
 | Auto-lint | py_compile | No | Yes (+ test) | No | No |
 | Browser | Fetch only | No | No | Yes | Yes |
 | MCP | Yes | Yes | No | Yes | No |
-| Configurable pricing | Yes (opencode.json) | No | No | No | No |
+| Configurable pricing | Yes (agent_config.json) | No | No | No | No |
 
 **Verdict: V3 is the most token-efficient and feature-rich agent for SageMaker notebooks, with the strongest security achievable without Docker. At 9.0/10 after 10 review rounds (Claude Opus + Codex gpt-5.3), it has reached maximum achievable within platform constraints.**
