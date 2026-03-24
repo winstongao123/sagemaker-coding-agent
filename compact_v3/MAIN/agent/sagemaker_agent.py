@@ -1602,12 +1602,25 @@ class SessionManager:
         self.save(session)
         return session
 
+    _save_lock = threading.Lock()
+
     def save(self, session: Session):
-        """Save session to disk."""
+        """Save session to disk (atomic: write to temp then rename, with lock)."""
         session.updated_at = datetime.now().isoformat()
         path = os.path.join(self.sessions_dir, f"{session.id}.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(asdict(session), f, indent=2)
+        with self._save_lock:
+            fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=self.sessions_dir)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(asdict(session), f, indent=2)
+                os.replace(tmp_path, path)  # Atomic on POSIX
+            except Exception:
+                # Clean up temp file on failure
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
     def load(self, session_id: str) -> Optional[Session]:
         """Load session from disk."""
@@ -2206,8 +2219,13 @@ class ContextManager:
         return total_chars // 4
 
     def get_usage(self, messages: List[Dict]) -> Dict:
-        """Get context usage stats."""
+        """Get context usage stats (includes fixed overhead for accurate thresholds)."""
         tokens = self.estimate_tokens(messages)
+        # Include fixed overhead (system prompt + tool schemas) for consistent threshold
+        try:
+            tokens += TOKENS.get_fixed_overhead()
+        except Exception:
+            tokens += 3350  # Fallback estimate
         percent = tokens / self.max_tokens
         return {
             "tokens": tokens,
@@ -4035,6 +4053,9 @@ class SemanticSearch:
             contentType="application/json",
         )
         result = json.loads(response["body"].read())
+        # Track embedding cost (Titan Embed: ~$0.0001/1K tokens, much cheaper than Claude)
+        input_tokens = len(text) // 4  # Estimate
+        TOKENS.add({"input_tokens": input_tokens, "output_tokens": 0}, model_id=self.model_id)
         return result["embedding"]
 
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
@@ -4995,8 +5016,11 @@ class Agent:
                 # Poll for completion, checking stop flag every 0.1s for responsive stop
                 while llm_thread.is_alive():
                     if self.on_stop_check and self.on_stop_check():
+                        # Track cost if response arrived before stop (Bedrock already billed)
+                        if _llm_result[0] and _llm_result[0].usage:
+                            TOKENS.add(_llm_result[0].usage, model_id=self.client.model_id)
                         output_fn("[Stopped by user]")
-                        return response.text if response else ""
+                        return _llm_result[0].text if _llm_result[0] else ""
                     llm_thread.join(timeout=0.1)
 
                 if _llm_result[1]:
@@ -5008,17 +5032,16 @@ class Agent:
                 AUDIT.log(self.session_id, "error", result_summary=str(e))
                 return error_msg
 
+            # Track token usage BEFORE stop check — Bedrock already billed us
+            if response and response.usage:
+                TOKENS.add(response.usage, model_id=self.client.model_id)
+                if self.on_tokens:
+                    self.on_tokens(TOKENS.get_stats())
+
             # Check stop again after LLM returns (user may have clicked during the call)
             if self.on_stop_check and self.on_stop_check():
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
-
-            # Track token usage — pass actual model_id so sub-agents using
-            # different models (e.g. Haiku) get costed at their own rate
-            if response.usage:
-                TOKENS.add(response.usage, model_id=self.client.model_id)
-                if self.on_tokens:
-                    self.on_tokens(TOKENS.get_stats())
 
             # Output thinking (if enabled)
             if response.thinking and self.on_thinking:
@@ -5736,13 +5759,16 @@ def create_chat_ui(mock_mode: bool = None):
             test_client = BedrockClient(model_id, CONFIG.region, CONFIG.mock_mode)
             if CONFIG.mock_mode:
                 return True, "Mock mode (no Bedrock call)"
-            _ = test_client.chat(
+            resp = test_client.chat(
                 messages=[{"role": "user", "content": "ping"}],
                 system="Reply with OK.",
                 tools=None,
                 max_tokens=8,
                 temperature=0.0,
             )
+            # Track ping cost (small but real Bedrock spend)
+            if resp and resp.usage:
+                TOKENS.add(resp.usage, model_id=model_id)
             return True, "Connected and available"
         except Exception as e:
             err = str(e).strip().replace("\n", " ")
@@ -6706,8 +6732,7 @@ def create_chat_ui(mock_mode: bool = None):
                     )
                     SESSIONS.save(ui_state["session"])
                 except Exception as e:
-                    import logging
-                    logging.warning(f"Auto-save error: {e}")
+                    add_message('system', f'⚠ Auto-save failed: {e}. Use Save button to retry.')
 
     def on_clear(b):
         """Clear current session."""

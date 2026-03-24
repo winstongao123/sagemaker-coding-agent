@@ -1,5 +1,42 @@
 # Compact V3 Changelog
 
+## v3.2.0 — Production Readiness Fixes (2026-03-24)
+
+### Security (from comprehensive review: Claude Opus + Codex gpt-5.3-codex)
+- **Plan Mode**: Blocklist → allowlist enforcement (MCP/new tools blocked in read-only)
+- **bash**: Layer 4 workspace path sandboxing (blocks `/etc/passwd` reads)
+- **bash_allow_interpreters**: Default `True` → `False` (prevents `python_exec` bypass)
+- **Python sandbox**: Closure-based import hook (hides `_original_import` from user code)
+- **Word image path**: `lstrip("./")` → `startswith("./")` (root cause of missing charts)
+
+### Cost Tracking (5 Codex findings fixed)
+- **Stop-path**: TOKENS.add() now runs BEFORE stop check (Bedrock already billed)
+- **SemanticSearch**: Titan embedding calls now tracked in TOKENS
+- **validate_model_connection**: Ping calls now tracked in TOKENS
+- **Threshold**: ContextManager.get_usage() includes fixed overhead for consistent 80% trigger
+
+### Session Persistence (3 fixes)
+- **Atomic writes**: temp file + `os.replace()` (POSIX atomic, no corruption on crash)
+- **Thread lock**: `_save_lock` prevents concurrent save corruption
+- **Auto-save failure**: Shows visible warning to user (not silent `logging.warning`)
+
+### Token Optimization
+- **Compaction**: Prune-first strategy — skip LLM summarize if prune alone drops to <75%
+- **File dedup**: `clear_context()` after compaction (allows re-reading needed files)
+- **Summary prompt**: Wording matches 20-message input limit (no "ALL verbatim" claim)
+
+### Document Creation
+- **create_chart**: 300 DPI default, configurable width/height/dpi/style, 3 new chart types
+- **create_word**: Configurable image width via `![caption|width=6.5](path)` syntax
+- **create_pdf**: `[Image not found]` placeholder instead of silent drop
+- **report skill**: New `/report` skill orchestrating chart-first workflow
+
+### Testing
+- **29 production tests**: All passing (100%) against real Bedrock Haiku 4.5
+- Test suite at `compact_v3/MAIN/tests/test_production.py`
+
+---
+
 ## v3.1.0 — Robust CSV Dimension Extraction (2026-02-13)
 
 ### Engine (generate_engine.py)
