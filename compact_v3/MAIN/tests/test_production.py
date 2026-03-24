@@ -371,14 +371,16 @@ def t5_4():
     return has_layer4, f"path sandboxing={'✓' if has_layer4 else '✗'}"
 t5_4()
 
-@test("tools", "Python sandbox: _original_import NOT exposed as variable")
+@test("tools", "Python sandbox: runtime closure with workspace boundary")
 def t5_5():
     from sagemaker_agent import _PYTHON_EXEC_PREAMBLE
-    # Check that _original_import is NOT a variable assignment (only in comments is OK)
     lines = _PYTHON_EXEC_PREAMBLE.split("\n")
     exposed_as_var = any("_original_import" in l and not l.strip().startswith("#") for l in lines)
-    uses_closure = "_install_import_hook" in _PYTHON_EXEC_PREAMBLE
-    return uses_closure and not exposed_as_var, f"closure={'✓' if uses_closure else '✗'}, var_exposed={'✗ BAD' if exposed_as_var else '✓'}"
+    uses_closure = "_install_sandbox" in _PYTHON_EXEC_PREAMBLE
+    has_open_sandbox = "_safe_open" in _PYTHON_EXEC_PREAMBLE
+    has_spawn_block = "posix_spawn" in _PYTHON_EXEC_PREAMBLE
+    return uses_closure and has_open_sandbox and has_spawn_block and not exposed_as_var, \
+        f"closure={'✓' if uses_closure else '✗'}, open_sandbox={'✓' if has_open_sandbox else '✗'}, spawn_block={'✓' if has_spawn_block else '✗'}"
 t5_5()
 
 @test("tools", "bash_allow_interpreters defaults to False")
