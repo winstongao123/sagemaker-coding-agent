@@ -4882,6 +4882,28 @@ Code references: `file_path:line_number`.
 # AGENT LOOP
 # ============================================================
 
+# Global exec budget — shared across all agents and sub-agents in a session
+_GLOBAL_EXEC_CALLS = 0
+_GLOBAL_EXEC_SECONDS = 0.0
+_GLOBAL_EXEC_LOCK = threading.Lock()
+
+
+def _update_global_exec(calls: int, seconds: float):
+    """Thread-safe update of global exec budget."""
+    global _GLOBAL_EXEC_CALLS, _GLOBAL_EXEC_SECONDS
+    with _GLOBAL_EXEC_LOCK:
+        _GLOBAL_EXEC_CALLS += calls
+        _GLOBAL_EXEC_SECONDS += seconds
+
+
+def _reset_global_exec():
+    """Reset global exec budget (called on new session)."""
+    global _GLOBAL_EXEC_CALLS, _GLOBAL_EXEC_SECONDS
+    with _GLOBAL_EXEC_LOCK:
+        _GLOBAL_EXEC_CALLS = 0
+        _GLOBAL_EXEC_SECONDS = 0.0
+
+
 class Agent:
     """Main agent loop with ReAct pattern, history trimming, and doom loop detection."""
 
@@ -5447,16 +5469,18 @@ class Agent:
                         result = self._run_ask_user_tool(args, output_fn)
                     else:
                         if tool_name in {"bash", "python_exec"}:
-                            if self.exec_calls >= CONFIG.max_exec_calls_per_session:
-                                result = f"Blocked: execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
-                                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
-                                AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
-                                continue
-                            if self.exec_seconds >= CONFIG.max_exec_seconds_per_session:
-                                result = f"Blocked: execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
-                                tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
-                                AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
-                                continue
+                            # Check GLOBAL budget (shared across all agents + sub-agents)
+                            with _GLOBAL_EXEC_LOCK:
+                                if _GLOBAL_EXEC_CALLS >= CONFIG.max_exec_calls_per_session:
+                                    result = f"Blocked: global execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
+                                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                                    AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                                    continue
+                                if _GLOBAL_EXEC_SECONDS >= CONFIG.max_exec_seconds_per_session:
+                                    result = f"Blocked: global execution time budget reached ({CONFIG.max_exec_seconds_per_session}s/session)"
+                                    tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
+                                    AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
+                                    continue
                             if CONFIG.execution_mode == "docker":
                                 _ensure_docker_image_ready()
                         start_ts = time.time()
@@ -5465,6 +5489,8 @@ class Agent:
                         if tool_name in {"bash", "python_exec"}:
                             self.exec_calls += 1
                             self.exec_seconds += elapsed
+                            # Update global budget (shared across sub-agents)
+                            _update_global_exec(1, elapsed)
                 except TypeError as e:
                     result = f"TypeError: {e}. Check argument types. Expected schema: {schema}"
                 except KeyError as e:
@@ -5519,6 +5545,7 @@ class Agent:
         self.tool_history.clear()
         _TODOS = []
         _FILES_READ = set()
+        _reset_global_exec()  # Reset global exec budget for new session
         CONTEXT.reset()
         TOKENS.reset()
 
@@ -6259,22 +6286,27 @@ def create_chat_ui(mock_mode: bool = None):
 
         with approval_output:
             clear_output()
-            input_str = escape_html(json.dumps(tool_input, indent=2, default=str)[:500])
+            # Show FULL payload (up to 4000 chars) so user can review all code
+            raw_input = json.dumps(tool_input, indent=2, default=str)
+            truncated = len(raw_input) > 4000
+            input_str = escape_html(raw_input[:4000])
+            if truncated:
+                input_str += f"\n\n... [{len(raw_input):,} chars total — showing first 4000]"
             safe_tool_name = escape_html(tool_name)
             risk_label = ' <span style="color:#f44336">[HIGH RISK - review carefully]</span>' if tool_name in HIGH_RISK_TOOLS else ''
             display(HTML(
                 f'<div style="padding:10px;background:{card_bg};border:1px solid {card_border};border-radius:5px;color:{card_fg};">'
                 f'<h4 style="margin:0 0 8px 0;color:{card_fg};">Approval Required{risk_label}</h4>'
                 f'<p style="margin:0 0 8px 0;color:{card_fg};"><b>Tool:</b> {safe_tool_name}</p>'
-                f'<pre style="font-size:11px;color:{card_fg};background:{pre_bg};border:1px solid {pre_border};margin:0;padding:8px;border-radius:4px;max-height:220px;overflow:auto;">{input_str}</pre>'
+                f'<pre style="font-size:11px;color:{card_fg};background:{pre_bg};border:1px solid {pre_border};margin:0;padding:8px;border-radius:4px;max-height:400px;overflow:auto;white-space:pre-wrap;">{input_str}</pre>'
                 f'</div>'
             ))
         approval_box.layout.display = 'block'
-        # Enable Send button as fallback — pressing Send = approve
-        # (fixes SageMaker Studio where dedicated Approve/Deny buttons may not fire)
-        send_btn.disabled = False
-        send_btn.layout.display = 'inline-block'
-        input_box.placeholder = 'Press Send to approve (or use Approve/Deny buttons above)...'
+        # Keep Send button DISABLED during approval — require explicit Approve/Deny click
+        # (prevents accidental approval from pressing Send/Enter out of habit)
+        send_btn.disabled = True
+        send_btn.layout.display = 'none'
+        input_box.placeholder = 'Use Approve or Deny buttons above...'
 
         # Wait with timeout (5 min max)
         max_wait = 300
@@ -7158,10 +7190,18 @@ def create_chat_ui(mock_mode: bool = None):
             pending_user_input["result"] = val
             pending_user_input["event"].set()
             return
-        # Fallback: if approval is waiting, Send = approve
+        # Fallback: if approval is waiting, user must type "approve" or "yes" explicitly
         if pending_approval.get("event") and pending_approval["result"] is None:
-            pending_approval["result"] = True
-            pending_approval["event"].set()
+            typed = input_box.value.strip().lower()
+            input_box.value = ""
+            if typed in ("approve", "yes", "y"):
+                pending_approval["result"] = True
+                pending_approval["event"].set()
+            elif typed in ("deny", "no", "n"):
+                pending_approval["result"] = False
+                pending_approval["event"].set()
+            else:
+                add_message('system', 'Type "approve" or "deny" (or use the buttons above)')
             return
         if ui_state.get("lock"):
             return  # Agent already running
