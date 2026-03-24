@@ -2623,6 +2623,43 @@ def _generate_unified_diff(filepath: str, old_content: str, new_content: str, co
     return "".join(diff)
 
 
+def _auto_lint_python(filepath: str) -> Optional[str]:
+    """Auto-lint Python files after write/edit. Returns error message or None if OK.
+    Inspired by Aider/SWE-agent: lint catches syntax errors before agent wastes turns."""
+    if not filepath.lower().endswith('.py'):
+        return None
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'py_compile', filepath],
+            capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
+        )
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout).strip()
+            # Extract just the error line (not full traceback)
+            for line in err.split('\n'):
+                if 'SyntaxError' in line or 'Error' in line:
+                    return f"⚠ SYNTAX ERROR: {line.strip()}. Fix this before proceeding."
+            return f"⚠ SYNTAX ERROR in {os.path.basename(filepath)}: {err[:200]}"
+        return None
+    except Exception:
+        return None  # Don't block on lint failure
+
+
+def _scan_output_secrets(text: str) -> Optional[str]:
+    """Scan tool output for leaked secrets. Returns warning or None."""
+    SECRET_PATTERNS = [
+        (r'(?:AKIA|ASIA)[A-Z0-9]{16}', "AWS access key"),
+        (r'(?:sk-|pk_live_|pk_test_)[a-zA-Z0-9]{20,}', "API key"),
+        (r'-----BEGIN (?:RSA |EC )?PRIVATE KEY-----', "Private key"),
+        (r'(?:ghp_|gho_|ghu_|ghs_)[a-zA-Z0-9]{36,}', "GitHub token"),
+        (r'xox[bpsar]-[a-zA-Z0-9-]{10,}', "Slack token"),
+    ]
+    for pattern, name in SECRET_PATTERNS:
+        if re.search(pattern, text):
+            return f"⚠ POTENTIAL SECRET DETECTED ({name}) — output redacted for safety"
+    return None
+
+
 def tool_write_file(args: Dict) -> str:
     """Write content to file. Supports mode='append' to add to end."""
     path = args["file_path"]
@@ -2698,6 +2735,11 @@ def tool_write_file(args: Dict) -> str:
             added = diff_text.count("\n+") - 1  # Exclude +++ header
             removed = diff_text.count("\n-") - 1
             result += f" (+{added}/-{removed} lines)"
+
+        # Auto-lint Python files (Aider/SWE-agent pattern: catch errors immediately)
+        lint_err = _auto_lint_python(abs_path)
+        if lint_err:
+            result += f"\n{lint_err}"
         return result
     except Exception as e:
         return f"Error writing file: {e}"
@@ -2770,6 +2812,10 @@ def tool_edit_file(args: Dict) -> str:
             result += f" ({count} replacements)"
         result += f"\n  Old: {repr(old_preview)}\n  New: {repr(new_preview)}"
 
+        # Auto-lint Python files (catch syntax errors immediately)
+        lint_err = _auto_lint_python(abs_path)
+        if lint_err:
+            result += f"\n{lint_err}"
         return result
     except Exception as e:
         return f"Error editing file: {e}"
@@ -5325,6 +5371,12 @@ class Agent:
 
                 # Truncate result
                 result = SECURITY.truncate_output(result)
+
+                # Scan output for leaked secrets (P1 security enhancement)
+                secret_warn = _scan_output_secrets(result)
+                if secret_warn:
+                    output_fn(f"[⚠ {tool_name}]: {secret_warn}")
+                    result = f"[Output redacted — potential secret detected. Re-read the file with caution.]"
 
                 # Show tool result to user (pass full result for inline images)
                 if '[INLINE_IMAGE:' in result:

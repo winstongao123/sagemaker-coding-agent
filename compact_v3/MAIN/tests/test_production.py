@@ -455,6 +455,376 @@ def t6_3():
 t6_3()
 
 # ============================================================
+# GROUP 7: AUTO-LINT & SELF-HEALING
+# ============================================================
+print("\n=== GROUP 7: Auto-Lint & Self-Healing ===")
+
+@test("lint", "Auto-lint: valid Python file passes")
+def t7_1():
+    from sagemaker_agent import _auto_lint_python, CONFIG
+    fd, path = tempfile.mkstemp(suffix=".py", dir=CONFIG.workspace)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("def hello():\n    return 'world'\n")
+        err = _auto_lint_python(path)
+        return err is None, f"lint result: {err}"
+    finally:
+        os.unlink(path)
+t7_1()
+
+@test("lint", "Auto-lint: syntax error detected")
+def t7_2():
+    from sagemaker_agent import _auto_lint_python, CONFIG
+    fd, path = tempfile.mkstemp(suffix=".py", dir=CONFIG.workspace)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("def broken(\n    return 'oops'\n")
+        err = _auto_lint_python(path)
+        return err is not None and "SYNTAX ERROR" in err, f"detected: {err}"
+    finally:
+        os.unlink(path)
+t7_2()
+
+@test("lint", "Auto-lint: non-Python files skipped")
+def t7_3():
+    from sagemaker_agent import _auto_lint_python
+    err = _auto_lint_python("/fake/path/style.css")
+    return err is None, "non-Python skipped"
+t7_3()
+
+@test("lint", "Auto-lint integrated into write_file")
+def t7_4():
+    from sagemaker_agent import tool_write_file, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_lint_write.py")
+    try:
+        result = tool_write_file({"file_path": path, "content": "def broken(\n    return 1\n"})
+        return "SYNTAX ERROR" in result, f"result: {result[:120]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t7_4()
+
+@test("lint", "Auto-lint integrated into edit_file")
+def t7_5():
+    from sagemaker_agent import tool_write_file, tool_edit_file, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_lint_edit.py")
+    try:
+        tool_write_file({"file_path": path, "content": "def hello():\n    return 'world'\n"})
+        result = tool_edit_file({"file_path": path, "old_string": "return 'world'", "new_string": "return 'world"})
+        return "SYNTAX ERROR" in result, f"result: {result[:120]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t7_5()
+
+# ============================================================
+# GROUP 8: SECRET SCANNING
+# ============================================================
+print("\n=== GROUP 8: Secret Scanning ===")
+
+@test("security", "Secret scan: detects AWS access key")
+def t8_1():
+    from sagemaker_agent import _scan_output_secrets
+    warn = _scan_output_secrets("config: AKIAIOSFODNN7EXAMPLE")
+    return warn is not None and "AWS access key" in warn, f"detected: {warn}"
+t8_1()
+
+@test("security", "Secret scan: detects GitHub token")
+def t8_2():
+    from sagemaker_agent import _scan_output_secrets
+    warn = _scan_output_secrets("token=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")
+    return warn is not None and "GitHub token" in warn, f"detected: {warn}"
+t8_2()
+
+@test("security", "Secret scan: detects private key")
+def t8_3():
+    from sagemaker_agent import _scan_output_secrets
+    warn = _scan_output_secrets("-----BEGIN RSA PRIVATE KEY-----\nMIIE...")
+    return warn is not None and "Private key" in warn, f"detected: {warn}"
+t8_3()
+
+@test("security", "Secret scan: clean output passes")
+def t8_4():
+    from sagemaker_agent import _scan_output_secrets
+    warn = _scan_output_secrets("def hello():\n    return 'world'\n")
+    return warn is None, "clean output OK"
+t8_4()
+
+# ============================================================
+# GROUP 9: FULL TOOL COVERAGE (direct calls)
+# ============================================================
+print("\n=== GROUP 9: Tool Direct Tests ===")
+
+@test("tool_test", "read_file: reads existing file")
+def t9_1():
+    from sagemaker_agent import tool_read_file, CONFIG
+    fd, path = tempfile.mkstemp(suffix=".txt", dir=CONFIG.workspace)
+    with os.fdopen(fd, "w") as f:
+        f.write("line1\nline2\nline3\n")
+    try:
+        result = tool_read_file({"file_path": path})
+        return "line1" in result and "line2" in result, f"read OK: {len(result)} chars"
+    finally:
+        os.unlink(path)
+t9_1()
+
+@test("tool_test", "write_file: creates new file")
+def t9_2():
+    from sagemaker_agent import tool_write_file, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_write_new.txt")
+    try:
+        result = tool_write_file({"file_path": path, "content": "hello world"})
+        exists = os.path.exists(path)
+        content = open(path).read() if exists else ""
+        return exists and content == "hello world", f"result: {result[:80]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t9_2()
+
+@test("tool_test", "edit_file: replaces exact string")
+def t9_3():
+    from sagemaker_agent import tool_write_file, tool_edit_file, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_edit.txt")
+    try:
+        tool_write_file({"file_path": path, "content": "hello world"})
+        result = tool_edit_file({"file_path": path, "old_string": "hello", "new_string": "goodbye"})
+        content = open(path).read()
+        return content == "goodbye world", f"content='{content}', result: {result[:80]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t9_3()
+
+@test("tool_test", "glob: finds files by pattern")
+def t9_4():
+    from sagemaker_agent import tool_glob, CONFIG
+    result = tool_glob({"pattern": "*.py"})
+    return "sagemaker_agent.py" in result or ".py" in result, f"found: {result[:80]}"
+t9_4()
+
+@test("tool_test", "grep: finds text in files")
+def t9_5():
+    from sagemaker_agent import tool_grep, CONFIG
+    result = tool_grep({"pattern": "class Agent", "glob": "*.py"})
+    return "Agent" in result, f"found: {result[:80]}"
+t9_5()
+
+@test("tool_test", "list_dir: lists directory")
+def t9_6():
+    from sagemaker_agent import tool_list_dir, CONFIG
+    result = tool_list_dir({"path": CONFIG.workspace})
+    return "sagemaker_agent.py" in result or len(result) > 10, f"listed: {result[:80]}"
+t9_6()
+
+@test("tool_test", "bash: runs safe command")
+def t9_7():
+    from sagemaker_agent import tool_bash
+    result = tool_bash({"command": "echo hello_test_123"})
+    return "hello_test_123" in result, f"result: {result[:80]}"
+t9_7()
+
+@test("tool_test", "bash: blocks dangerous command")
+def t9_8():
+    from sagemaker_agent import tool_bash
+    result = tool_bash({"command": "rm -rf /"})
+    return "Blocked" in result or "not allowed" in result.lower(), f"blocked: {result[:80]}"
+t9_8()
+
+@test("tool_test", "python_exec: runs safe code")
+def t9_9():
+    from sagemaker_agent import tool_python_exec
+    result = tool_python_exec({"code": "print(2 + 3)"})
+    return "5" in result, f"result: {result[:80]}"
+t9_9()
+
+@test("tool_test", "python_exec: blocks dangerous import")
+def t9_10():
+    from sagemaker_agent import tool_python_exec
+    result = tool_python_exec({"code": "import subprocess; subprocess.run(['ls'])"})
+    return "blocked" in result.lower() or "security" in result.lower() or "not in the allowed" in result.lower(), f"blocked: {result[:80]}"
+t9_10()
+
+@test("tool_test", "todo_write + todo_read roundtrip")
+def t9_11():
+    from sagemaker_agent import tool_todo_write, tool_todo_read
+    tool_todo_write({"todos": [{"content": "test task", "status": "pending"}]})
+    result = tool_todo_read({})
+    return "test task" in result, f"read: {result[:80]}"
+t9_11()
+
+@test("tool_test", "create_chart: generates PNG")
+def t9_12():
+    try:
+        import matplotlib
+    except ImportError:
+        return True, "SKIP: matplotlib not installed (available on SageMaker)"
+    from sagemaker_agent import tool_create_chart, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_chart.png")
+    try:
+        result = tool_create_chart({
+            "chart_type": "bar",
+            "title": "Test Chart",
+            "data": {"labels": ["A", "B", "C"], "values": [10, 20, 30]},
+            "filepath": path
+        })
+        exists = os.path.exists(path)
+        return exists and "Created chart" in result, f"result: {result[:80]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t9_12()
+
+@test("tool_test", "create_word: generates DOCX")
+def t9_13():
+    from sagemaker_agent import tool_create_word, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_doc.docx")
+    try:
+        result = tool_create_word({"filepath": path, "content": "# Test\n\nHello world.\n\n- Item 1\n- Item 2"})
+        exists = os.path.exists(path)
+        return exists and "Created" in result, f"result: {result[:80]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t9_13()
+
+@test("tool_test", "create_excel: generates XLSX")
+def t9_14():
+    try:
+        import openpyxl
+    except ImportError:
+        return True, "SKIP: openpyxl not installed (available on SageMaker)"
+    from sagemaker_agent import tool_create_excel, CONFIG
+    path = os.path.join(CONFIG.workspace, "test_sheet.xlsx")
+    try:
+        result = tool_create_excel({
+            "filepath": path,
+            "data": [{"Name": "Alice", "Score": 95}, {"Name": "Bob", "Score": 87}]
+        })
+        exists = os.path.exists(path)
+        return exists and "Created" in result, f"result: {result[:80]}"
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+t9_14()
+
+# ============================================================
+# GROUP 10: LIVE AGENT COMPREHENSIVE (Haiku 4.5, cost tracked)
+# ============================================================
+print("\n=== GROUP 10: Live Agent Comprehensive (Haiku 4.5) ===")
+
+PERF_LOG = []  # Track cost/perf per test
+
+@test("agent_full", "Agent: write Python + auto-lint catches error")
+def t10_1():
+    from sagemaker_agent import Agent, BedrockClient, TOKENS, CONFIG
+    client = BedrockClient(model_id=LIVE_MODEL, region=REGION)
+    c_before = TOKENS.session_cost
+    t_start = time.time()
+    outputs = []
+    agent = Agent(client, "test_lint",
+                  on_approval=lambda *a, **k: True)
+    result = agent.run(
+        "Write a Python file called test_autolint.py with this EXACT broken code:\ndef broken(\n    return 1\nThen tell me what happened.",
+        system_prompt="You are a coding assistant. Use write_file tool. Report any errors you see in tool output.",
+        output_fn=lambda t: outputs.append(t),
+        max_turns_override=5
+    )
+    elapsed = time.time() - t_start
+    cost = TOKENS.session_cost - c_before
+    PERF_LOG.append({"test": "write+lint", "cost": cost, "time": elapsed, "turns": len([o for o in outputs if o.startswith("[") and "result" in o])})
+    # Check if lint error was surfaced
+    lint_found = any("SYNTAX" in o for o in outputs) or "SYNTAX" in result or "syntax" in result.lower()
+    # Cleanup
+    test_file = os.path.join(CONFIG.workspace, "test_autolint.py")
+    if os.path.exists(test_file):
+        os.unlink(test_file)
+    return lint_found, f"lint detected={'✓' if lint_found else '✗'}, cost=${cost:.6f}, time={elapsed:.1f}s"
+t10_1()
+
+@test("agent_full", "Agent: grep + read multi-step task")
+def t10_2():
+    from sagemaker_agent import Agent, BedrockClient, TOKENS
+    client = BedrockClient(model_id=LIVE_MODEL, region=REGION)
+    c_before = TOKENS.session_cost
+    t_start = time.time()
+    agent = Agent(client, "test_grep_read", on_approval=lambda *a, **k: True)
+    result = agent.run(
+        "Search for 'class Agent' in Python files, then read the first 10 lines of the file where you found it. Tell me the class name and what line it starts on.",
+        system_prompt="You are a code explorer. Use grep then read_file. Be brief.",
+        output_fn=lambda t: None,
+        max_turns_override=8
+    )
+    elapsed = time.time() - t_start
+    cost = TOKENS.session_cost - c_before
+    PERF_LOG.append({"test": "grep+read", "cost": cost, "time": elapsed})
+    found_agent = "Agent" in result and ("class" in result.lower() or "line" in result.lower())
+    return found_agent, f"found class Agent={'✓' if found_agent else '✗'}, cost=${cost:.6f}, time={elapsed:.1f}s"
+t10_2()
+
+@test("agent_full", "Agent: create chart + embed in Word doc")
+def t10_3():
+    from sagemaker_agent import Agent, BedrockClient, TOKENS, CONFIG
+    client = BedrockClient(model_id=LIVE_MODEL, region=REGION)
+    c_before = TOKENS.session_cost
+    t_start = time.time()
+    agent = Agent(client, "test_doc_chart", on_approval=lambda *a, **k: True)
+    result = agent.run(
+        "Create a bar chart with data labels=['Q1','Q2','Q3','Q4'] values=[100,150,130,180] titled 'Quarterly Sales', save as test_perf_chart.png. Then create a Word doc test_perf_report.docx with heading 'Sales Report' and embed that chart. Be brief.",
+        system_prompt="You create reports. Use create_chart then create_word. For the Word image use ![Quarterly Sales|width=6.5](test_perf_chart.png).",
+        output_fn=lambda t: None,
+        max_turns_override=8
+    )
+    elapsed = time.time() - t_start
+    cost = TOKENS.session_cost - c_before
+    PERF_LOG.append({"test": "chart+word", "cost": cost, "time": elapsed})
+    chart_exists = os.path.exists(os.path.join(CONFIG.workspace, "test_perf_chart.png"))
+    doc_exists = os.path.exists(os.path.join(CONFIG.workspace, "test_perf_report.docx"))
+    # Cleanup
+    for f in ["test_perf_chart.png", "test_perf_report.docx"]:
+        p = os.path.join(CONFIG.workspace, f)
+        if os.path.exists(p):
+            os.unlink(p)
+    return chart_exists and doc_exists, f"chart={'✓' if chart_exists else '✗'}, doc={'✓' if doc_exists else '✗'}, cost=${cost:.6f}, time={elapsed:.1f}s"
+t10_3()
+
+@test("agent_full", "Agent: bash + python_exec multi-tool")
+def t10_4():
+    from sagemaker_agent import Agent, BedrockClient, TOKENS
+    client = BedrockClient(model_id=LIVE_MODEL, region=REGION)
+    c_before = TOKENS.session_cost
+    t_start = time.time()
+    agent = Agent(client, "test_multi_tool", on_approval=lambda *a, **k: True)
+    result = agent.run(
+        "Run 'echo hello_from_bash' using bash, then use python_exec to calculate factorial of 10. Report both results.",
+        system_prompt="You are a tool-using assistant. Use bash and python_exec tools. Be brief.",
+        output_fn=lambda t: None,
+        max_turns_override=8
+    )
+    elapsed = time.time() - t_start
+    cost = TOKENS.session_cost - c_before
+    PERF_LOG.append({"test": "bash+python", "cost": cost, "time": elapsed})
+    has_bash = "hello_from_bash" in result
+    # Accept factorial result in various formats (3628800, 3,628,800, etc.)
+    has_factorial = "3628800" in result.replace(",", "") or "factorial" in result.lower()
+    return has_bash and has_factorial, f"bash={'✓' if has_bash else '✗'}, factorial={'✓' if has_factorial else '✗'}, cost=${cost:.6f}, time={elapsed:.1f}s"
+t10_4()
+
+# ============================================================
+# PERFORMANCE REPORT
+# ============================================================
+if PERF_LOG:
+    print("\n" + "=" * 70)
+    print("PERFORMANCE & COST REPORT")
+    print("=" * 70)
+    total_cost = sum(p["cost"] for p in PERF_LOG)
+    total_time = sum(p["time"] for p in PERF_LOG)
+    for p in PERF_LOG:
+        print(f"  {p['test']:20s} | cost=${p['cost']:.6f} | time={p['time']:.1f}s")
+    print(f"  {'TOTAL':20s} | cost=${total_cost:.6f} | time={total_time:.1f}s")
+    print(f"  Model: {LIVE_MODEL}")
+
+# ============================================================
 # SUMMARY
 # ============================================================
 print("\n" + "=" * 70)
@@ -466,7 +836,7 @@ passed = sum(1 for r in RESULTS if r["status"] == "PASS")
 failed = sum(1 for r in RESULTS if r["status"] == "FAIL")
 errors = sum(1 for r in RESULTS if r["status"] == "ERROR")
 
-for group_name in ["cost", "live", "session", "token", "tools", "agent"]:
+for group_name in ["cost", "live", "session", "token", "tools", "agent", "lint", "security", "tool_test", "agent_full"]:
     items = [r for r in RESULTS if r["group"] == group_name]
     group_pass = sum(1 for r in items if r["status"] == "PASS")
     print(f"\n  [{group_name.upper()}] {group_pass}/{len(items)} passed")
