@@ -4598,7 +4598,7 @@ TOOLS = {
     "create_word": (tool_create_word, True, "Create Word doc (.docx) with markdown formatting. Supports headings, bold, italic, bullets, tables, ---PAGE--- breaks, ![alt](image.png) images. Control image width: ![caption|width=6.5](image.png). IMPORTANT: Use create_chart FIRST to generate chart PNGs, then embed them here. Use /report skill for guided workflow.",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Markdown content. Use ![caption](image.png) to embed images."}, "title": {"type": "string", "description": "Document title"}, "include_toc": {"type": "boolean", "description": "Add Table of Contents"}, "header": {"type": "string"}, "footer": {"type": "string"}}, "required": ["filepath", "content"]}),
 
-    "create_excel": (tool_create_excel, True, "Create Excel spreadsheet (.xlsx) with optional embedded chart",
+    "create_excel": (tool_create_excel, True, "Create Excel spreadsheet (.xlsx). Optional chart: set chart_type + x_column + y_columns.",
         {"type": "object", "properties": {
             "filepath": {"type": "string"},
             "data": {"type": "array", "description": "List of dicts [{col: val}]"},
@@ -4637,24 +4637,24 @@ TOOLS = {
             "style": {"type": "string", "description": "Matplotlib style: default, seaborn-v0_8, ggplot, etc."}
         }, "required": ["data"]}),
 
-    "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with text, tables, and images",
+    "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with structured sections.",
         {"type": "object", "properties": {
             "filepath": {"type": "string", "description": "Output PDF path"},
             "title": {"type": "string", "description": "Document title"},
-            "content": {"type": "array", "description": "List of sections: [{type: 'heading'|'text'|'table'|'image', data: ...}]", "items": {"type": "object"}},
-            "page_size": {"type": "string", "enum": ["letter", "a4"]}
+            "content": {"type": "array", "description": "Sections: [{type:'heading',data:'Title'}, {type:'text',data:'Body...'}, {type:'table',data:[['Col1','Col2'],['A','B']]}, {type:'image',data:'chart.png'}]", "items": {"type": "object"}},
+            "page_size": {"type": "string", "enum": ["letter", "a4"], "description": "Page size (default: letter)"}
         }, "required": ["filepath", "content"]}),
 
     "view_image": (tool_view_image, False, "View image (PNG, JPG, GIF, WebP)",
         {"type": "object", "properties": {"file_path": {"type": "string"}}, "required": ["file_path"]}),
 
-    "todo_write": (tool_todo_write, False, "Update task list for tracking multi-step work",
-        {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}, "activeForm": {"type": "string"}}}}}, "required": ["todos"]}),
+    "todo_write": (tool_todo_write, False, "Update task list for tracking multi-step work. Each todo needs content (imperative: 'Run tests'), status, and activeForm (present: 'Running tests').",
+        {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string", "description": "Task description (imperative form)"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}, "activeForm": {"type": "string", "description": "Present-continuous form (e.g. 'Running tests')"}}}}}, "required": ["todos"]}),
 
     "todo_read": (tool_todo_read, False, "Read current task list",
         {"type": "object", "properties": {}, "required": []}),
 
-    "semantic_search": (tool_semantic_search, False, "Search code by meaning, not just keywords (AI-powered). Must run action='index' on a directory first, then action='search' to find code.",
+    "semantic_search": (tool_semantic_search, False, "AI-powered code search. Two steps: 1) action='index' path='dir' to index, 2) action='search' query='...' to find. action='status' to check.",
         {"type": "object", "properties": {"action": {"type": "string", "enum": ["index", "search", "status"]}, "query": {"type": "string", "description": "Search query (for search action)"}, "path": {"type": "string", "description": "Directory to index"}, "top_k": {"type": "integer", "description": "Results count (default 5)"}}, "required": ["action"]}),
 
     "skill": (tool_skill, False,
@@ -4671,15 +4671,15 @@ TOOLS = {
             "subagent_type": {"type": "string", "enum": list(AGENT_TYPES.keys()), "description": "Agent type (default: general)"},
         }, "required": ["description", "prompt"]}),
 
-    "web_fetch": (tool_web_fetch, True, "Fetch content from a URL and convert HTML to readable text.",
+    "web_fetch": (tool_web_fetch, True, "Fetch URL and convert HTML to readable text (max 30KB output).",
         {"type": "object", "properties": {
             "url": {"type": "string", "description": "URL to fetch"},
         }, "required": ["url"]}),
 
-    "ask_user": (tool_ask_user, False, "Ask the user a question when you need clarification, a decision, or preferences.",
+    "ask_user": (tool_ask_user, False, "Ask the user a question when you need clarification or a decision.",
         {"type": "object", "properties": {
             "question": {"type": "string", "description": "The question to ask"},
-            "options": {"type": "array", "items": {"type": "string"}, "description": "Optional list of choices"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "Short choice strings (e.g. ['Yes', 'No', 'Skip'])"},
         }, "required": ["question"]}),
 }
 
@@ -4989,14 +4989,15 @@ class Agent:
 
         # Ensure proper role alternation for Bedrock (must alternate user/assistant)
         if self.messages and self.messages[-1].get("role") == "user":
-            # Merge with previous user message instead of inserting fake assistant reply
+            # Merge into previous user message (no fake assistant placeholders)
             prev = self.messages[-1]
             prev_content = prev.get("content", "")
             if isinstance(prev_content, str):
                 prev["content"] = prev_content + "\n\n" + user_message
+            elif isinstance(prev_content, list):
+                # Previous content is a list (e.g., tool_results) — append text block
+                prev_content.append({"type": "text", "text": user_message})
             else:
-                # Content is a list (e.g., tool_results) — append new user text block
-                self.messages.append({"role": "assistant", "content": "OK."})
                 self.messages.append({"role": "user", "content": user_message})
         else:
             self.messages.append({"role": "user", "content": user_message})
@@ -5396,8 +5397,7 @@ class Agent:
                     output_fn(f"[{tool_name} result]:\n{result[:1000]}{'...(truncated)' if len(result) > 1000 else ''}")
 
                 # Strip inline image data before sending to LLM (saves tokens)
-                import re as _re_strip
-                llm_result = _re_strip.sub(r'\[INLINE_IMAGE:[A-Za-z0-9+/=]+\]', '[chart image saved]', result)
+                llm_result = re.sub(r'\[INLINE_IMAGE:[A-Za-z0-9+/=]+\]', '[chart image saved]', result)
 
                 AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, llm_result[:200])
                 tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": llm_result})
@@ -5650,8 +5650,7 @@ def create_chat_ui(mock_mode: bool = None):
                 icon = TOOL_ICONS.get(tool_name, '🔧') if tool_name else '🔧'
                 tool_label = escape_html(tool_name or "Tool")
                 # Check for inline images (base64-encoded charts/images)
-                import re as _re
-                inline_match = _re.search(r'\[INLINE_IMAGE:([A-Za-z0-9+/=]+)\]', raw)
+                inline_match = re.search(r'\[INLINE_IMAGE:([A-Za-z0-9+/=]+)\]', raw)
                 if inline_match:
                     img_b64 = inline_match.group(1)
                     text_part = escape_html(raw[:inline_match.start()].strip()).replace('\n', '<br>')
@@ -6599,7 +6598,6 @@ def create_chat_ui(mock_mode: bool = None):
 
         def output_fn(text):
             """Handle agent output."""
-            import re
             # Skip "Calling..." messages - only show results
             if text.startswith('[Calling '):
                 return  # Don't display, wait for result

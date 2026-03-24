@@ -280,10 +280,10 @@ Create a detailed summary following these EXACT sections:
 
 5. **Problem Solving**: Problems solved during the session, and any ongoing issues still unresolved.
 
-6. **ALL User Messages**: List EVERY user message verbatim (this prevents intent drift):
+6. **User Messages**: List all user messages from the provided context verbatim (prevents intent drift):
    - "message 1 exact text"
    - "message 2 exact text"
-   - (continue for all messages)
+   - (for all messages in context — note: older messages may have been truncated)
 
 7. **Pending Tasks**: Tasks mentioned but not yet completed.
 
@@ -678,7 +678,7 @@ class Config:
     mock_mode: bool = False  # Set True to test without Bedrock API
 
     # Security policy
-    bash_allow_interpreters: bool = True   # Allow python/node/etc via bash tool (needed for skill generators)
+    bash_allow_interpreters: bool = False  # Block python/node via bash (use python_exec instead; enable in opencode.json if needed)
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
     # Runtime isolation / execution limits
@@ -1181,6 +1181,19 @@ This protects the SageMaker IAM role from unintended access.
                 if re.search(rf"\b{cmd}\b", command):
                     return False, f"Network command blocked: {cmd}"
 
+        # === LAYER 4: Workspace boundary check ===
+        # Block absolute paths outside workspace (prevents reading /etc/passwd etc.)
+        workspace = os.path.realpath(CONFIG.workspace)
+        # Find absolute paths in command arguments
+        for token in re.findall(r'(?:^|\s)(/[^\s;|&>]+)', command):
+            real_token = os.path.realpath(token)
+            # Allow standard tool paths and workspace paths
+            if real_token.startswith(workspace):
+                continue
+            if real_token.startswith(("/usr/bin/", "/usr/local/bin/", "/bin/", "/opt/", "/tmp/")):
+                continue
+            return False, f"Path outside workspace: '{token}'. Use relative paths within {workspace}"
+
         return True, "OK"
 
     # Modules allowed in python_exec. Anything not here is blocked at import time.
@@ -1589,12 +1602,25 @@ class SessionManager:
         self.save(session)
         return session
 
+    _save_lock = threading.Lock()
+
     def save(self, session: Session):
-        """Save session to disk."""
+        """Save session to disk (atomic: write to temp then rename, with lock)."""
         session.updated_at = datetime.now().isoformat()
         path = os.path.join(self.sessions_dir, f"{session.id}.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(asdict(session), f, indent=2)
+        with self._save_lock:
+            fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=self.sessions_dir)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(asdict(session), f, indent=2)
+                os.replace(tmp_path, path)  # Atomic on POSIX
+            except Exception:
+                # Clean up temp file on failure
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
     def load(self, session_id: str) -> Optional[Session]:
         """Load session from disk."""
@@ -2193,8 +2219,13 @@ class ContextManager:
         return total_chars // 4
 
     def get_usage(self, messages: List[Dict]) -> Dict:
-        """Get context usage stats."""
+        """Get context usage stats (includes fixed overhead for accurate thresholds)."""
         tokens = self.estimate_tokens(messages)
+        # Include fixed overhead (system prompt + tool schemas) for consistent threshold
+        try:
+            tokens += TOKENS.get_fixed_overhead()
+        except Exception:
+            tokens += 3350  # Fallback estimate
         percent = tokens / self.max_tokens
         return {
             "tokens": tokens,
@@ -2592,6 +2623,43 @@ def _generate_unified_diff(filepath: str, old_content: str, new_content: str, co
     return "".join(diff)
 
 
+def _auto_lint_python(filepath: str) -> Optional[str]:
+    """Auto-lint Python files after write/edit. Returns error message or None if OK.
+    Inspired by Aider/SWE-agent: lint catches syntax errors before agent wastes turns."""
+    if not filepath.lower().endswith('.py'):
+        return None
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'py_compile', filepath],
+            capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
+        )
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout).strip()
+            # Extract just the error line (not full traceback)
+            for line in err.split('\n'):
+                if 'SyntaxError' in line or 'Error' in line:
+                    return f"⚠ SYNTAX ERROR: {line.strip()}. Fix this before proceeding."
+            return f"⚠ SYNTAX ERROR in {os.path.basename(filepath)}: {err[:200]}"
+        return None
+    except Exception:
+        return None  # Don't block on lint failure
+
+
+def _scan_output_secrets(text: str) -> Optional[str]:
+    """Scan tool output for leaked secrets. Returns warning or None."""
+    SECRET_PATTERNS = [
+        (r'(?:AKIA|ASIA)[A-Z0-9]{16}', "AWS access key"),
+        (r'(?:sk-|pk_live_|pk_test_)[a-zA-Z0-9]{20,}', "API key"),
+        (r'-----BEGIN (?:RSA |EC )?PRIVATE KEY-----', "Private key"),
+        (r'(?:ghp_|gho_|ghu_|ghs_)[a-zA-Z0-9]{36,}', "GitHub token"),
+        (r'xox[bpsar]-[a-zA-Z0-9-]{10,}', "Slack token"),
+    ]
+    for pattern, name in SECRET_PATTERNS:
+        if re.search(pattern, text):
+            return f"⚠ POTENTIAL SECRET DETECTED ({name}) — output redacted for safety"
+    return None
+
+
 def tool_write_file(args: Dict) -> str:
     """Write content to file. Supports mode='append' to add to end."""
     path = args["file_path"]
@@ -2667,6 +2735,11 @@ def tool_write_file(args: Dict) -> str:
             added = diff_text.count("\n+") - 1  # Exclude +++ header
             removed = diff_text.count("\n-") - 1
             result += f" (+{added}/-{removed} lines)"
+
+        # Auto-lint Python files (Aider/SWE-agent pattern: catch errors immediately)
+        lint_err = _auto_lint_python(abs_path)
+        if lint_err:
+            result += f"\n{lint_err}"
         return result
     except Exception as e:
         return f"Error writing file: {e}"
@@ -2739,6 +2812,10 @@ def tool_edit_file(args: Dict) -> str:
             result += f" ({count} replacements)"
         result += f"\n  Old: {repr(old_preview)}\n  New: {repr(new_preview)}"
 
+        # Auto-lint Python files (catch syntax errors immediately)
+        lint_err = _auto_lint_python(abs_path)
+        if lint_err:
+            result += f"\n{lint_err}"
         return result
     except Exception as e:
         return f"Error editing file: {e}"
@@ -3072,53 +3149,54 @@ def tool_bash(args: Dict) -> str:
 # Runtime import hook prepended to all python_exec code.
 # Uses ALLOWLIST: only permitted modules can be imported. Everything else is blocked.
 _PYTHON_EXEC_PREAMBLE = '''
-import builtins as _builtins
-_original_import = _builtins.__import__
-_ALLOWED = {
-    # Standard library - safe data processing
-    "math", "statistics", "decimal", "fractions", "random", "string",
-    "re", "json", "csv", "collections", "itertools", "functools",
-    "datetime", "time", "calendar", "textwrap", "pprint",
-    "pathlib", "io", "struct", "base64", "hashlib", "hmac",
-    "copy", "typing", "dataclasses", "enum", "abc",
-    "operator", "bisect", "heapq", "array",
-    "difflib", "unicodedata", "html", "xml",
-    # File I/O
-    "os", "glob", "fnmatch", "shutil",
-    # Data science
-    "numpy", "pandas", "scipy", "sklearn",
-    "matplotlib", "seaborn", "plotly", "altair",
-    # Document creation
-    "openpyxl", "xlsxwriter", "docx",
-    "PIL", "reportlab", "fpdf",
-    # Misc safe
-    "tabulate", "yaml", "toml", "configparser",
-    "logging", "warnings", "traceback", "inspect",
-    "argparse", "numbers", "contextlib",
-    # Internal (needed by allowed packages)
-    "builtins", "_thread", "_io", "_collections", "_operator",
-    "encodings", "codecs", "_codecs", "_signal", "_abc",
-    "_stat", "_weakref", "_functools", "_locale",
-    "posixpath", "ntpath", "genericpath", "stat",
-    "sys", "types", "zipimport", "_frozen_importlib",
-    "_frozen_importlib_external", "_bootlocale",
-    # C-extension accelerators (imported absolutely by their parent stdlib packages)
-    "_json", "_csv", "_datetime", "_struct", "_decimal", "_random",
-    "_hashlib", "_bisect", "_heapq", "_statistics",
-    "_sre", "sre_compile", "sre_parse", "sre_constants", "_string",
-}
-def _safe_import(name, *args, **kwargs):
-    # Allow relative imports (level > 0) — they resolve within already-allowed packages
-    # e.g. json/__init__.py does "from .decoder import ..." which calls __import__("decoder", ..., level=1)
-    level = args[3] if len(args) > 3 else kwargs.get("level", 0)
-    if level > 0:
-        return _original_import(name, *args, **kwargs)
-    top = name.split(".")[0]
-    if top in _ALLOWED:
-        return _original_import(name, *args, **kwargs)
-    raise ImportError(f"Security: import '{name}' is not in the allowed modules list")
-_builtins.__import__ = _safe_import
-del _builtins  # Only delete the alias; _ALLOWED, _original_import, _safe_import must survive for the hook
+# Import hook using closure — _original_import is NOT accessible to user code
+def _install_import_hook():
+    import builtins as _b
+    _orig = _b.__import__
+    _ALLOWED = {
+        # Standard library - safe data processing
+        "math", "statistics", "decimal", "fractions", "random", "string",
+        "re", "json", "csv", "collections", "itertools", "functools",
+        "datetime", "time", "calendar", "textwrap", "pprint",
+        "pathlib", "io", "struct", "base64", "hashlib", "hmac",
+        "copy", "typing", "dataclasses", "enum", "abc",
+        "operator", "bisect", "heapq", "array",
+        "difflib", "unicodedata", "html", "xml",
+        # File I/O
+        "os", "glob", "fnmatch", "shutil",
+        # Data science
+        "numpy", "pandas", "scipy", "sklearn",
+        "matplotlib", "seaborn", "plotly", "altair",
+        # Document creation
+        "openpyxl", "xlsxwriter", "docx",
+        "PIL", "reportlab", "fpdf",
+        # Misc safe
+        "tabulate", "yaml", "toml", "configparser",
+        "logging", "warnings", "traceback", "inspect",
+        "argparse", "numbers", "contextlib",
+        # Internal (needed by allowed packages)
+        "builtins", "_thread", "_io", "_collections", "_operator",
+        "encodings", "codecs", "_codecs", "_signal", "_abc",
+        "_stat", "_weakref", "_functools", "_locale",
+        "posixpath", "ntpath", "genericpath", "stat",
+        "sys", "types", "zipimport", "_frozen_importlib",
+        "_frozen_importlib_external", "_bootlocale",
+        # C-extension accelerators
+        "_json", "_csv", "_datetime", "_struct", "_decimal", "_random",
+        "_hashlib", "_bisect", "_heapq", "_statistics",
+        "_sre", "sre_compile", "sre_parse", "sre_constants", "_string",
+    }
+    def _safe_import(name, *args, **kwargs):
+        level = args[3] if len(args) > 3 else kwargs.get("level", 0)
+        if level > 0:
+            return _orig(name, *args, **kwargs)
+        top = name.split(".")[0]
+        if top in _ALLOWED:
+            return _orig(name, *args, **kwargs)
+        raise ImportError(f"Security: import '{name}' is not in the allowed modules list")
+    _b.__import__ = _safe_import
+_install_import_hook()
+del _install_import_hook  # Clean up — closure keeps _orig and _ALLOWED private
 '''
 
 def tool_python_exec(args: Dict) -> str:
@@ -3210,11 +3288,22 @@ def _parse_word_content(doc, content: str, images: Dict = None):
             img_path = img_match.group(2)
 
         if img_path:
-            # Resolve path - strip leading ./ and normalize
-            img_path = img_path.lstrip("./").lstrip(".\\")
+            # Resolve path - strip leading ./ prefix (not lstrip which strips chars)
+            if img_path.startswith("./"):
+                img_path = img_path[2:]
+            elif img_path.startswith(".\\"):
+                img_path = img_path[2:]
             if not os.path.isabs(img_path):
                 img_path = os.path.join(CONFIG.workspace, img_path)
             img_path = os.path.normpath(img_path)
+            # Parse optional width from alt text: ![caption|width=7](path)
+            img_width = 6.5  # Default: 6.5 inches (fits A4/letter with margins)
+            if img_alt and "|" in img_alt:
+                parts = img_alt.rsplit("|", 1)
+                img_alt = parts[0].strip()
+                width_match = re.match(r'width=(\d+\.?\d*)', parts[1].strip())
+                if width_match:
+                    img_width = min(float(width_match.group(1)), 7.5)  # Max 7.5 inches
             # Validate image path is within workspace
             img_ok, img_msg = SECURITY.validate_path(img_path)
             if not img_ok:
@@ -3223,7 +3312,7 @@ def _parse_word_content(doc, content: str, images: Dict = None):
                 continue
             if os.path.exists(img_path):
                 try:
-                    doc.add_picture(img_path, width=Inches(5.5))
+                    doc.add_picture(img_path, width=Inches(img_width))
                     if img_alt:
                         caption = doc.add_paragraph(img_alt)
                         caption.alignment = 1  # Center
@@ -3614,13 +3703,18 @@ def tool_create_chart(args: Dict) -> str:
     except ImportError:
         return "Error: matplotlib not installed. Run: pip install matplotlib"
 
-    chart_type = args.get("chart_type", "bar")  # bar, line, pie, scatter
+    chart_type = args.get("chart_type", "bar")
     title = args.get("title", "Chart")
     data = args["data"]  # {"labels": [...], "values": [...]} or {"x": [...], "y": [...]}
     filepath = args.get("filepath", "chart.png")
     xlabel = args.get("xlabel", "")
     ylabel = args.get("ylabel", "")
     colors = args.get("colors", None)
+    # Configurable quality settings (defaults optimized for print-quality documents)
+    dpi = min(int(args.get("dpi", 300)), 600)  # Default 300 (print quality), max 600
+    width = float(args.get("width", 10))  # Figure width in inches
+    height = float(args.get("height", 6))  # Figure height in inches
+    style = args.get("style", "default")  # matplotlib style: default, seaborn-v0_8, ggplot, etc.
 
     if not os.path.isabs(filepath):
         filepath = os.path.join(CONFIG.workspace, filepath)
@@ -3632,64 +3726,163 @@ def tool_create_chart(args: Dict) -> str:
         return f"Error: {msg}"
 
     try:
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Apply style if specified
+        if style != "default":
+            try:
+                plt.style.use(style)
+            except Exception:
+                pass  # Fall back to default style
+
+        fig, ax = plt.subplots(figsize=(width, height))
+
+        # Scale font sizes proportionally to figure size
+        title_fontsize = max(12, int(14 * (width / 10)))
+        label_fontsize = max(8, int(11 * (width / 10)))
+        tick_fontsize = max(7, int(10 * (width / 10)))
+        value_fontsize = max(7, int(9 * (width / 10)))
 
         if chart_type == "bar":
             labels = data.get("labels", list(range(len(data.get("values", [])))))
             values = data.get("values", [])
-            bars = ax.bar(labels, values, color=colors)
-            # Add value labels on bars
+            bars = ax.bar(labels, values, color=colors, edgecolor='white', linewidth=0.5)
             for bar, val in zip(bars, values):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{val:,.0f}' if isinstance(val, (int, float)) else str(val),
-                       ha='center', va='bottom', fontsize=9)
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                       f'{val:,.0f}' if isinstance(val, (int, float)) else str(val),
+                       ha='center', va='bottom', fontsize=value_fontsize)
+
+        elif chart_type == "grouped_bar":
+            # Multi-series bar chart: data = {"labels": [...], "series": [{"name": "...", "values": [...]}, ...]}
+            labels = data.get("labels", [])
+            series_list = data.get("series", [])
+            if not series_list:
+                return "Error: grouped_bar requires data.series = [{name: '...', values: [...]}, ...]"
+            x = np.arange(len(labels))
+            n = len(series_list)
+            bar_width = 0.8 / n
+            for idx, s in enumerate(series_list):
+                offset = (idx - n/2 + 0.5) * bar_width
+                c = colors[idx] if colors and idx < len(colors) else None
+                ax.bar(x + offset, s["values"], bar_width, label=s.get("name", f"Series {idx+1}"), color=c, edgecolor='white', linewidth=0.5)
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels)
+            ax.legend(fontsize=label_fontsize)
+
+        elif chart_type == "stacked_bar":
+            # Stacked bar: data = {"labels": [...], "series": [{"name": "...", "values": [...]}, ...]}
+            labels = data.get("labels", [])
+            series_list = data.get("series", [])
+            if not series_list:
+                return "Error: stacked_bar requires data.series = [{name: '...', values: [...]}, ...]"
+            bottom = np.zeros(len(labels))
+            for idx, s in enumerate(series_list):
+                c = colors[idx] if colors and idx < len(colors) else None
+                ax.bar(labels, s["values"], bottom=bottom, label=s.get("name", f"Series {idx+1}"), color=c, edgecolor='white', linewidth=0.5)
+                bottom += np.array(s["values"])
+            ax.legend(fontsize=label_fontsize)
 
         elif chart_type == "line":
-            x = data.get("x", data.get("labels", list(range(len(data.get("y", data.get("values", [])))))))
-            y = data.get("y", data.get("values", []))
-            ax.plot(x, y, marker='o', linewidth=2, markersize=6, color=colors[0] if colors else None)
-            ax.fill_between(x, y, alpha=0.3)
+            # Support single or multi-line: data.series = [{"name": "...", "values": [...]}, ...]
+            x = data.get("x", data.get("labels", None))
+            series_list = data.get("series", None)
+            if series_list:
+                if x is None:
+                    x = list(range(len(series_list[0].get("values", []))))
+                for idx, s in enumerate(series_list):
+                    c = colors[idx] if colors and idx < len(colors) else None
+                    ax.plot(x, s["values"], marker='o', linewidth=2, markersize=5,
+                           color=c, label=s.get("name", f"Series {idx+1}"))
+                ax.legend(fontsize=label_fontsize)
+            else:
+                y = data.get("y", data.get("values", []))
+                if x is None:
+                    x = list(range(len(y)))
+                ax.plot(x, y, marker='o', linewidth=2, markersize=6, color=colors[0] if colors else None)
+                ax.fill_between(x, y, alpha=0.15)
 
         elif chart_type == "pie":
             labels = data.get("labels", [])
             values = data.get("values", [])
-            ax.pie(values, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
+            wedges, texts, autotexts = ax.pie(values, labels=labels, autopct='%1.1f%%',
+                                               colors=colors, startangle=90,
+                                               textprops={'fontsize': label_fontsize})
+            for t in autotexts:
+                t.set_fontsize(value_fontsize)
             ax.axis('equal')
 
         elif chart_type == "scatter":
             x = data.get("x", [])
             y = data.get("y", [])
-            ax.scatter(x, y, c=colors, alpha=0.7, s=50)
+            ax.scatter(x, y, c=colors, alpha=0.7, s=50, edgecolors='white', linewidth=0.5)
 
         elif chart_type == "horizontal_bar":
             labels = data.get("labels", [])
             values = data.get("values", [])
-            ax.barh(labels, values, color=colors)
+            ax.barh(labels, values, color=colors, edgecolor='white', linewidth=0.5)
+            for idx, val in enumerate(values):
+                ax.text(val, idx, f' {val:,.0f}' if isinstance(val, (int, float)) else f' {val}',
+                       va='center', fontsize=value_fontsize)
+
+        elif chart_type == "combo":
+            # Bars + line overlay: data = {"labels": [...], "bar_values": [...], "line_values": [...], "bar_label": "...", "line_label": "..."}
+            labels = data.get("labels", [])
+            bar_values = data.get("bar_values", data.get("values", []))
+            line_values = data.get("line_values", [])
+            x = np.arange(len(labels))
+            ax.bar(x, bar_values, color=colors[0] if colors else '#4a9eff', edgecolor='white',
+                   linewidth=0.5, label=data.get("bar_label", "Values"), alpha=0.8)
+            if line_values:
+                ax2 = ax.twinx()
+                ax2.plot(x, line_values, marker='o', linewidth=2.5, markersize=7,
+                        color=colors[1] if colors and len(colors) > 1 else '#ff6b35',
+                        label=data.get("line_label", "Trend"))
+                ax2.set_ylabel(data.get("line_ylabel", ""), fontsize=label_fontsize)
+                ax2.tick_params(labelsize=tick_fontsize)
+                # Combined legend
+                lines1, labels1 = ax.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax.legend(lines1 + lines2, labels1 + labels2, fontsize=label_fontsize)
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels)
 
         else:
-            return f"Error: Unknown chart type '{chart_type}'. Supported: bar, line, pie, scatter, horizontal_bar"
+            return f"Error: Unknown chart type '{chart_type}'. Supported: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo"
 
-        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_title(title, fontsize=title_fontsize, fontweight='bold', pad=12)
         if xlabel:
-            ax.set_xlabel(xlabel)
+            ax.set_xlabel(xlabel, fontsize=label_fontsize)
         if ylabel:
-            ax.set_ylabel(ylabel)
+            ax.set_ylabel(ylabel, fontsize=label_fontsize)
+        ax.tick_params(labelsize=tick_fontsize)
+
+        # Rotate x labels if many items to avoid overlap
+        if chart_type not in ("pie",):
+            xlabels = ax.get_xticklabels()
+            if len(xlabels) > 6:
+                plt.setp(xlabels, rotation=45, ha='right')
 
         plt.tight_layout()
         dir_path = os.path.dirname(filepath)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
-        plt.savefig(filepath, dpi=150, bbox_inches='tight')
+        plt.savefig(filepath, dpi=dpi, bbox_inches='tight', facecolor='white')
         plt.close()
+        if style != "default":
+            plt.style.use('default')  # Reset style
 
         # Embed chart as base64 for inline display in chat widget
         try:
             with open(filepath, "rb") as img_f:
                 img_b64 = base64.b64encode(img_f.read()).decode()
-            return f"Created chart: {filepath}\n[INLINE_IMAGE:{img_b64}]"
+            return f"Created chart: {filepath} ({dpi} DPI, {width}x{height} inches)\n[INLINE_IMAGE:{img_b64}]"
         except Exception:
-            return f"Created chart: {filepath}"
+            return f"Created chart: {filepath} ({dpi} DPI, {width}x{height} inches)"
     except Exception as e:
         plt.close()
+        if style != "default":
+            try:
+                plt.style.use('default')
+            except Exception:
+                pass
         return f"Error creating chart: {e}"
 
 
@@ -3841,6 +4034,8 @@ def tool_create_pdf(args: Dict) -> str:
                     img.drawHeight = orig_height * (img.drawWidth / orig_width)
                     story.append(img)
                     story.append(Spacer(1, 12))
+                else:
+                    story.append(Paragraph(f"[Image not found: {data}]", styles["Normal"]))
 
             story.append(Spacer(1, 6))
 
@@ -3904,6 +4099,9 @@ class SemanticSearch:
             contentType="application/json",
         )
         result = json.loads(response["body"].read())
+        # Track embedding cost (Titan Embed: ~$0.0001/1K tokens, much cheaper than Claude)
+        input_tokens = len(text) // 4  # Estimate
+        TOKENS.add({"input_tokens": input_tokens, "output_tokens": 0}, model_id=self.model_id)
         return result["embedding"]
 
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
@@ -4397,10 +4595,10 @@ TOOLS = {
     "python_exec": (tool_python_exec, True, "Execute Python code for data processing, calculations, scripting.",
         {"type": "object", "properties": {"code": {"type": "string"}, "timeout": {"type": "integer", "description": "Seconds (max 300)"}}, "required": ["code"]}),
 
-    "create_word": (tool_create_word, True, "Create Word doc (.docx) with markdown formatting. Supports headings, bold, italic, bullets, tables, ---PAGE--- breaks, ![alt](image.png) images. Images must be actual image files (.png/.jpg), NOT Excel files. Use create_chart first for chart images.",
+    "create_word": (tool_create_word, True, "Create Word doc (.docx) with markdown formatting. Supports headings, bold, italic, bullets, tables, ---PAGE--- breaks, ![alt](image.png) images. Control image width: ![caption|width=6.5](image.png). IMPORTANT: Use create_chart FIRST to generate chart PNGs, then embed them here. Use /report skill for guided workflow.",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Markdown content. Use ![caption](image.png) to embed images."}, "title": {"type": "string", "description": "Document title"}, "include_toc": {"type": "boolean", "description": "Add Table of Contents"}, "header": {"type": "string"}, "footer": {"type": "string"}}, "required": ["filepath", "content"]}),
 
-    "create_excel": (tool_create_excel, True, "Create Excel spreadsheet (.xlsx) with optional embedded chart",
+    "create_excel": (tool_create_excel, True, "Create Excel spreadsheet (.xlsx). Optional chart: set chart_type + x_column + y_columns.",
         {"type": "object", "properties": {
             "filepath": {"type": "string"},
             "data": {"type": "array", "description": "List of dicts [{col: val}]"},
@@ -4424,35 +4622,39 @@ TOOLS = {
                 }, "required": ["type", "source"]}}
         }, "required": ["filepath", "cells"]}),
 
-    "create_chart": (tool_create_chart, True, "Create chart image (.png). Supports bar, line, pie, scatter, horizontal_bar.",
+    "create_chart": (tool_create_chart, True, "Create chart image (.png). Supports bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo. Default 300 DPI for print quality. Use /report skill for full document workflow.",
         {"type": "object", "properties": {
-            "chart_type": {"type": "string", "enum": ["bar", "line", "pie", "scatter", "horizontal_bar"]},
+            "chart_type": {"type": "string", "enum": ["bar", "grouped_bar", "stacked_bar", "line", "pie", "scatter", "horizontal_bar", "combo"]},
             "title": {"type": "string", "description": "Chart title"},
-            "data": {"type": "object", "description": "Data: {labels: [...], values: [...]} or {x: [...], y: [...]}"},
+            "data": {"type": "object", "description": "Data: {labels: [...], values: [...]} or {x: [...], y: [...]}. Multi-series: {labels: [...], series: [{name: '...', values: [...]}, ...]}. Combo: {labels: [...], bar_values: [...], line_values: [...]}"},
             "filepath": {"type": "string", "description": "Output path (default: chart.png)"},
             "xlabel": {"type": "string"},
             "ylabel": {"type": "string"},
-            "colors": {"type": "array", "items": {"type": "string"}}
+            "colors": {"type": "array", "items": {"type": "string"}},
+            "dpi": {"type": "integer", "description": "Resolution (default 300, max 600). Use 150 for screen-only."},
+            "width": {"type": "number", "description": "Figure width in inches (default 10)"},
+            "height": {"type": "number", "description": "Figure height in inches (default 6)"},
+            "style": {"type": "string", "description": "Matplotlib style: default, seaborn-v0_8, ggplot, etc."}
         }, "required": ["data"]}),
 
-    "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with text, tables, and images",
+    "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with structured sections.",
         {"type": "object", "properties": {
             "filepath": {"type": "string", "description": "Output PDF path"},
             "title": {"type": "string", "description": "Document title"},
-            "content": {"type": "array", "description": "List of sections: [{type: 'heading'|'text'|'table'|'image', data: ...}]", "items": {"type": "object"}},
-            "page_size": {"type": "string", "enum": ["letter", "a4"]}
+            "content": {"type": "array", "description": "Sections: [{type:'heading',data:'Title'}, {type:'text',data:'Body...'}, {type:'table',data:[['Col1','Col2'],['A','B']]}, {type:'image',data:'chart.png'}]", "items": {"type": "object"}},
+            "page_size": {"type": "string", "enum": ["letter", "a4"], "description": "Page size (default: letter)"}
         }, "required": ["filepath", "content"]}),
 
     "view_image": (tool_view_image, False, "View image (PNG, JPG, GIF, WebP)",
         {"type": "object", "properties": {"file_path": {"type": "string"}}, "required": ["file_path"]}),
 
-    "todo_write": (tool_todo_write, False, "Update task list for tracking multi-step work",
-        {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}, "activeForm": {"type": "string"}}}}}, "required": ["todos"]}),
+    "todo_write": (tool_todo_write, False, "Update task list for tracking multi-step work. Each todo needs content (imperative: 'Run tests'), status, and activeForm (present: 'Running tests').",
+        {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string", "description": "Task description (imperative form)"}, "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}, "activeForm": {"type": "string", "description": "Present-continuous form (e.g. 'Running tests')"}}}}}, "required": ["todos"]}),
 
     "todo_read": (tool_todo_read, False, "Read current task list",
         {"type": "object", "properties": {}, "required": []}),
 
-    "semantic_search": (tool_semantic_search, False, "Search code by meaning, not just keywords (AI-powered). Must run action='index' on a directory first, then action='search' to find code.",
+    "semantic_search": (tool_semantic_search, False, "AI-powered code search. Two steps: 1) action='index' path='dir' to index, 2) action='search' query='...' to find. action='status' to check.",
         {"type": "object", "properties": {"action": {"type": "string", "enum": ["index", "search", "status"]}, "query": {"type": "string", "description": "Search query (for search action)"}, "path": {"type": "string", "description": "Directory to index"}, "top_k": {"type": "integer", "description": "Results count (default 5)"}}, "required": ["action"]}),
 
     "skill": (tool_skill, False,
@@ -4469,15 +4671,15 @@ TOOLS = {
             "subagent_type": {"type": "string", "enum": list(AGENT_TYPES.keys()), "description": "Agent type (default: general)"},
         }, "required": ["description", "prompt"]}),
 
-    "web_fetch": (tool_web_fetch, True, "Fetch content from a URL and convert HTML to readable text.",
+    "web_fetch": (tool_web_fetch, True, "Fetch URL and convert HTML to readable text (max 30KB output).",
         {"type": "object", "properties": {
             "url": {"type": "string", "description": "URL to fetch"},
         }, "required": ["url"]}),
 
-    "ask_user": (tool_ask_user, False, "Ask the user a question when you need clarification, a decision, or preferences.",
+    "ask_user": (tool_ask_user, False, "Ask the user a question when you need clarification or a decision.",
         {"type": "object", "properties": {
             "question": {"type": "string", "description": "The question to ask"},
-            "options": {"type": "array", "items": {"type": "string"}, "description": "Optional list of choices"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "Short choice strings (e.g. ['Yes', 'No', 'Skip'])"},
         }, "required": ["question"]}),
 }
 
@@ -4525,8 +4727,8 @@ You help users with software engineering, document creation, and data analysis.
 # Tool Usage
 - ALWAYS read a file before editing it. old_string in edit_file must be an EXACT match.
 - write_file supports mode='append' to add content to end of file without reading first.
-- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep).
-- Reserve bash for: git commands, pip/npm install, running scripts, system operations.
+- Use specialized tools over bash: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep command).
+- Reserve bash for: git, pip/npm install, running scripts, system operations. Bash pipelines (e.g. `git log | head`) are OK for complex workflows.
 - Call multiple independent tools in parallel. Sequential only when one depends on another.
 - If a tool call fails, don't retry the same call — investigate the error and adapt.
 
@@ -4785,11 +4987,20 @@ class Agent:
             self.user_msg_timestamps.append(now)
             self.user_msg_count += 1
 
-        # Ensure proper role alternation - if last message was user, add placeholder assistant
+        # Ensure proper role alternation for Bedrock (must alternate user/assistant)
         if self.messages and self.messages[-1].get("role") == "user":
-            self.messages.append({"role": "assistant", "content": "[Continuing...]"})
-
-        self.messages.append({"role": "user", "content": user_message})
+            # Merge into previous user message (no fake assistant placeholders)
+            prev = self.messages[-1]
+            prev_content = prev.get("content", "")
+            if isinstance(prev_content, str):
+                prev["content"] = prev_content + "\n\n" + user_message
+            elif isinstance(prev_content, list):
+                # Previous content is a list (e.g., tool_results) — append text block
+                prev_content.append({"type": "text", "text": user_message})
+            else:
+                self.messages.append({"role": "user", "content": user_message})
+        else:
+            self.messages.append({"role": "user", "content": user_message})
         AUDIT.log(self.session_id, "user_message", parameters={"message": user_message[:200]})
 
         _effective_max_turns = max_turns_override if max_turns_override is not None else CONFIG.max_turns
@@ -4860,8 +5071,11 @@ class Agent:
                 # Poll for completion, checking stop flag every 0.1s for responsive stop
                 while llm_thread.is_alive():
                     if self.on_stop_check and self.on_stop_check():
+                        # Track cost if response arrived before stop (Bedrock already billed)
+                        if _llm_result[0] and _llm_result[0].usage:
+                            TOKENS.add(_llm_result[0].usage, model_id=self.client.model_id)
                         output_fn("[Stopped by user]")
-                        return response.text if response else ""
+                        return _llm_result[0].text if _llm_result[0] else ""
                     llm_thread.join(timeout=0.1)
 
                 if _llm_result[1]:
@@ -4873,17 +5087,19 @@ class Agent:
                 AUDIT.log(self.session_id, "error", result_summary=str(e))
                 return error_msg
 
-            # Check stop again after LLM returns (user may have clicked during the call)
-            if self.on_stop_check and self.on_stop_check():
-                output_fn("[Stopped by user]")
-                return response.text if response else ""
-
-            # Track token usage — pass actual model_id so sub-agents using
-            # different models (e.g. Haiku) get costed at their own rate
-            if response.usage:
+            # Track token usage BEFORE stop check — Bedrock already billed us
+            if response and response.usage:
                 TOKENS.add(response.usage, model_id=self.client.model_id)
                 if self.on_tokens:
                     self.on_tokens(TOKENS.get_stats())
+
+            # Check stop again after LLM returns (user may have clicked during the call)
+            if self.on_stop_check and self.on_stop_check():
+                # Persist response to history before returning (prevents context loss)
+                if response and response.text:
+                    self.messages.append({"role": "assistant", "content": response.text})
+                output_fn("[Stopped by user]")
+                return response.text if response else ""
 
             # Output thinking (if enabled)
             if response.thinking and self.on_thinking:
@@ -5068,8 +5284,8 @@ class Agent:
                     continue
 
                 # === PLAN MODE ENFORCEMENT ===
-                # Block write tools when in Plan Mode
-                if getattr(self, '_plan_mode', False) and tool_name in PLAN_MODE_BLOCKED_TOOLS:
+                # Allowlist: only permitted tools can run in Plan Mode (blocks MCP/new tools too)
+                if getattr(self, '_plan_mode', False) and tool_name not in PLAN_MODE_ALLOWED_TOOLS:
                     output_fn(f"[⛔ PLAN MODE: {tool_name} blocked - read-only mode]")
                     tool_results.append({"type": "tool_result", "tool_use_id": tc.id,
                         "content": f"⛔ PLAN MODE ACTIVE: '{tool_name}' is blocked. In Plan Mode, only read-only tools are allowed: {', '.join(sorted(PLAN_MODE_ALLOWED_TOOLS))}. Turn off Plan Mode to execute write operations."})
@@ -5168,6 +5384,12 @@ class Agent:
                 # Truncate result
                 result = SECURITY.truncate_output(result)
 
+                # Scan output for leaked secrets (P1 security enhancement)
+                secret_warn = _scan_output_secrets(result)
+                if secret_warn:
+                    output_fn(f"[⚠ {tool_name}]: {secret_warn}")
+                    result = f"[Output redacted — potential secret detected. Re-read the file with caution.]"
+
                 # Show tool result to user (pass full result for inline images)
                 if '[INLINE_IMAGE:' in result:
                     output_fn(f"[{tool_name} result]:\n{result}")  # Full result with base64 for image display
@@ -5175,13 +5397,13 @@ class Agent:
                     output_fn(f"[{tool_name} result]:\n{result[:1000]}{'...(truncated)' if len(result) > 1000 else ''}")
 
                 # Strip inline image data before sending to LLM (saves tokens)
-                import re as _re_strip
-                llm_result = _re_strip.sub(r'\[INLINE_IMAGE:[A-Za-z0-9+/=]+\]', '[chart image saved]', result)
+                llm_result = re.sub(r'\[INLINE_IMAGE:[A-Za-z0-9+/=]+\]', '[chart image saved]', result)
 
                 AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, llm_result[:200])
                 tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": llm_result})
 
-            self.messages.append({"role": "user", "content": tool_results})
+            if tool_results:  # Only append if non-empty (prevents Bedrock rejection)
+                self.messages.append({"role": "user", "content": tool_results})
 
         output_fn(f"[Reached max turns ({_effective_max_turns})]")
         # Collect all assistant text outputs so sub-agents return complete findings
@@ -5428,8 +5650,7 @@ def create_chat_ui(mock_mode: bool = None):
                 icon = TOOL_ICONS.get(tool_name, '🔧') if tool_name else '🔧'
                 tool_label = escape_html(tool_name or "Tool")
                 # Check for inline images (base64-encoded charts/images)
-                import re as _re
-                inline_match = _re.search(r'\[INLINE_IMAGE:([A-Za-z0-9+/=]+)\]', raw)
+                inline_match = re.search(r'\[INLINE_IMAGE:([A-Za-z0-9+/=]+)\]', raw)
                 if inline_match:
                     img_b64 = inline_match.group(1)
                     text_part = escape_html(raw[:inline_match.start()].strip()).replace('\n', '<br>')
@@ -5601,13 +5822,16 @@ def create_chat_ui(mock_mode: bool = None):
             test_client = BedrockClient(model_id, CONFIG.region, CONFIG.mock_mode)
             if CONFIG.mock_mode:
                 return True, "Mock mode (no Bedrock call)"
-            _ = test_client.chat(
+            resp = test_client.chat(
                 messages=[{"role": "user", "content": "ping"}],
                 system="Reply with OK.",
                 tools=None,
                 max_tokens=8,
                 temperature=0.0,
             )
+            # Track ping cost (small but real Bedrock spend)
+            if resp and resp.usage:
+                TOKENS.add(resp.usage, model_id=model_id)
             return True, "Connected and available"
         except Exception as e:
             err = str(e).strip().replace("\n", " ")
@@ -6117,18 +6341,25 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', f'[...] Pre-send compact (context at {pct:.0f}%)...')
             try:
                 messages = ui_state["agent"].messages
-                # Stage 1: Prune
+                # Stage 1: Prune old tool outputs first (cheap, no LLM call)
                 pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(messages, CONFIG.context_max_tokens)
                 if tokens_saved > 0:
                     ui_state["agent"].messages = pruned_msgs
                     messages = pruned_msgs
-                # Stage 2: LLM-generated summary (high-quality, same as manual compact)
+                    FILE_CACHE.clear_context()
+                    # Re-check — prune alone may be sufficient
+                    usage = CONTEXT.get_usage(messages)
+                    new_pct = usage["percent"] * 100
+                    if new_pct < 75:
+                        add_message('system', f'[OK] Pruned only. Context: {pct:.0f}% -> {new_pct:.0f}%')
+                        return True
+                # Stage 2: LLM summary only if still above threshold
                 summary = COMPACTOR.create_llm_summary(ui_state["client"], messages)
                 if not summary:
-                    # Fallback: basic summary if LLM call fails
                     summary = "Conversation compacted (summary unavailable). Continue from recent context."
                 compacted = COMPACTOR.compact(messages, summary)
                 ui_state["agent"].messages = compacted
+                FILE_CACHE.clear_context()
                 usage = CONTEXT.get_usage(compacted)
                 new_pct = usage["percent"] * 100
                 add_message('system', f'[OK] Pre-compacted. Context: {pct:.0f}% -> {new_pct:.0f}%')
@@ -6139,8 +6370,16 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_send(b):
         # Lock is set by _on_send_threaded wrapper before spawning this thread.
+        # All paths must release lock — use _release_lock() helper for early returns.
+        def _release_lock():
+            ui_state["lock"] = False
+            send_btn.disabled = False
+            send_btn.layout.display = 'inline-block'
+            stop_btn.layout.display = 'none'
+
         msg = input_box.value.strip()
         if not msg:
+            _release_lock()
             return
 
         # Optional auth gate for multi-user/shared notebook setups.
@@ -6154,9 +6393,11 @@ def create_chat_ui(mock_mode: bool = None):
                     add_message('system', 'Authentication successful.')
                 else:
                     add_message('system', 'Authentication failed. Use /auth <token>.')
+                _release_lock()
                 return
             add_message('system', f'Authentication required. Send /auth <token> (env: {CONFIG.auth_token_env}).')
             input_box.value = ""
+            _release_lock()
             return
 
         # Local skill commands (v4)
@@ -6167,6 +6408,7 @@ def create_chat_ui(mock_mode: bool = None):
             else:
                 add_message('system', "Available skills:\n" + "\n".join([f"- **{s['name']}**: {s['description']}" for s in skills]))
             input_box.value = ""
+            _release_lock()
             return
         if msg.startswith("/skill use "):
             name = msg[len("/skill use "):].strip()
@@ -6183,6 +6425,7 @@ def create_chat_ui(mock_mode: bool = None):
                 add_message('system', f'Enabled skill: {name}')
                 update_mode_display()
             input_box.value = ""
+            _release_lock()
             return
         if msg == "/skill clear":
             ui_state["active_skills"] = []
@@ -6192,6 +6435,7 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', 'Cleared active skills')
             update_mode_display()
             input_box.value = ""
+            _release_lock()
             return
         if msg == "/revert" or msg.startswith("/revert "):
             target = msg[len("/revert"):].strip()
@@ -6209,6 +6453,7 @@ def create_chat_ui(mock_mode: bool = None):
                     result += "\n\nUse `/revert <file>` or `/revert all`"
             add_message('system', result)
             input_box.value = ""
+            _release_lock()
             return
         if msg == "/cost":
             stats = TOKENS.get_stats()
@@ -6229,6 +6474,7 @@ def create_chat_ui(mock_mode: bool = None):
                 f"- Model: {CONFIG.model_id}{rate_str}\n"
                 f"- Fixed overhead/call: ~{overhead:,} tokens (system prompt + tool schemas + Bedrock)")
             input_box.value = ""
+            _release_lock()
             return
         # /verify command - auto-loads verify skill and runs verification
         if msg == "/verify" or msg.startswith("/verify "):
@@ -6247,6 +6493,7 @@ def create_chat_ui(mock_mode: bool = None):
             else:
                 add_message('system', 'Verify skill not found. Create skills/verify/SKILL.md')
                 input_box.value = ""
+                _release_lock()
                 return
         # /checkpoint command - save/list named checkpoints
         if msg == "/checkpoint" or msg.startswith("/checkpoint "):
@@ -6285,6 +6532,7 @@ def create_chat_ui(mock_mode: bool = None):
                     ui_state["checkpoints"] = cps[-50:]
                 add_message('system', f'Checkpoint saved: {cp_name} ({len(snapshot_files)} files modified, {len(_TODOS) if _TODOS else 0} todos)')
             input_box.value = ""
+            _release_lock()
             return
 
         # Custom commands from opencode.json
@@ -6301,6 +6549,7 @@ def create_chat_ui(mock_mode: bool = None):
                 else:
                     add_message('system', "No custom commands configured. Add commands in opencode.json.")
                 input_box.value = ""
+                _release_lock()
                 return
 
             expanded = COMMANDS.expand(cmd_name, cmd_args)
@@ -6349,7 +6598,6 @@ def create_chat_ui(mock_mode: bool = None):
 
         def output_fn(text):
             """Handle agent output."""
-            import re
             # Skip "Calling..." messages - only show results
             if text.startswith('[Calling '):
                 return  # Don't display, wait for result
@@ -6546,8 +6794,7 @@ def create_chat_ui(mock_mode: bool = None):
                     )
                     SESSIONS.save(ui_state["session"])
                 except Exception as e:
-                    import logging
-                    logging.warning(f"Auto-save error: {e}")
+                    add_message('system', f'⚠ Auto-save failed: {e}. Use Save button to retry.')
 
     def on_clear(b):
         """Clear current session."""
@@ -6782,6 +7029,9 @@ def create_chat_ui(mock_mode: bool = None):
             # Compact: keep summary + last 5 messages
             compacted = COMPACTOR.compact(messages, summary)
             ui_state["agent"].messages = compacted
+
+            # Clear file dedup cache — compacted context no longer has old file reads
+            FILE_CACHE.clear_context()
 
             add_message('system', f'Compacted: {original_count} → {len(compacted)} messages')
 
