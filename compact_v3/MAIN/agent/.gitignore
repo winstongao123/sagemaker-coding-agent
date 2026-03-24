@@ -1,0 +1,7 @@
+.snapshots/
+.code_index/
+.exec_budget.json
+truncated_outputs/
+audit_logs/
+sessions/
+__pycache__/
