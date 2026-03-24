@@ -391,8 +391,8 @@ COMPACTOR = Compactor()
 class Truncation:
     """Smart truncation for large outputs - saves full content, returns preview."""
 
-    MAX_LINES = 2000
-    MAX_BYTES = 50 * 1024  # 50 KB
+    MAX_LINES = 1500
+    MAX_BYTES = 30 * 1024  # 30 KB (~7.5K tokens — reduced from 50KB to save context)
     MAX_LINE_LENGTH = 2000
     TRUNCATED_DIR = "./truncated_outputs"
 
@@ -5155,11 +5155,13 @@ class Agent:
                 self.messages = trimmed
 
             # Call LLM with retry logic (runs in background thread so stop button works)
+            # In Plan Mode, send ONLY allowed tools (saves ~1,590 tokens/call)
+            _active_allowlist = PLAN_MODE_ALLOWED_TOOLS if getattr(self, '_plan_mode', False) else self.tool_allowlist
             def make_request():
                 return self.client.chat(
                     self.messages,
-                    self._system_prompt,  # Use custom or default system prompt
-                    get_tool_definitions(self.tool_allowlist),
+                    self._system_prompt,
+                    get_tool_definitions(_active_allowlist),
                     CONFIG.max_tokens,
                     CONFIG.temperature,
                     CONFIG.thinking_enabled,
@@ -6828,41 +6830,20 @@ def create_chat_ui(mock_mode: bool = None):
             usage = CONTEXT.get_usage(ui_state["agent"].messages)
             pct = usage["percent"] * 100
 
-            # Auto-compact if enabled and context is high (with auto-continue)
+            # Post-send: prune-only if context still high (no LLM call — pre-send already handles full compact)
             if auto_compact_checkbox.value and pct >= 90 and not ui_state["stop_requested"]:
-                add_message('system', '[...] Auto-compact triggered (context at {:.0f}%)...'.format(pct))
                 try:
-                    messages = ui_state["agent"].messages
-                    # Stage 1: Prune
-                    pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(messages, CONFIG.context_max_tokens)
+                    pruned_msgs, tokens_saved = COMPACTOR.prune_tool_outputs(ui_state["agent"].messages, CONFIG.context_max_tokens)
                     if tokens_saved > 0:
                         ui_state["agent"].messages = pruned_msgs
-                        messages = pruned_msgs
-                    # Stage 2: LLM-generated summary (high-quality, same as manual compact)
-                    summary = COMPACTOR.create_llm_summary(ui_state["client"], messages)
-                    if not summary:
-                        summary = "Conversation compacted (summary unavailable). Continue from recent context."
-                    compacted = COMPACTOR.compact(messages, summary)
-                    ui_state["agent"].messages = compacted
-                    usage = CONTEXT.get_usage(compacted)
-                    pct = usage["percent"] * 100
-                    add_message('system', f'[OK] Auto-compacted. Context now at {pct:.0f}%')
-
-                    # Auto-continue after compact (OpenCode-style)
-                    if not ui_state["stop_requested"]:
-                        add_message('system', '[>] Auto-continuing...')
-                        ui_state["agent"].run(
-                            "Continue from where we left off.",
-                            output_fn,
-                            system_prompt=system_prompt,
-                            plan_mode=plan_mode_toggle.value,
-                            count_towards_limits=False,
-                        )
-                        usage = CONTEXT.get_usage(ui_state["agent"].messages)
+                        FILE_CACHE.clear_context()
+                        usage = CONTEXT.get_usage(pruned_msgs)
                         pct = usage["percent"] * 100
-
+                        add_message('system', f'[OK] Post-send prune: ~{tokens_saved:,} tokens freed. Context now {pct:.0f}%')
+                    if pct >= 90:
+                        add_message('system', f'⚠ Context still at {pct:.0f}%. Click Compact for full summarization.')
                 except Exception as e:
-                    add_message('system', f'Auto-compact failed: {e}')
+                    add_message('system', f'Post-send prune failed: {e}')
 
             # Update status
             if pct >= 90:
@@ -6915,7 +6896,9 @@ def create_chat_ui(mock_mode: bool = None):
                         },
                         todos=copy.deepcopy(_TODOS) if _TODOS else []
                     )
-                    SESSIONS.save(ui_state["session"])
+                    # Async save (non-blocking — session data already deep-copied above)
+                    _session_to_save = ui_state["session"]
+                    threading.Thread(target=lambda: SESSIONS.save(_session_to_save), daemon=True).start()
                 except Exception as e:
                     add_message('system', f'⚠ Auto-save failed: {e}. Use Save button to retry.')
 
