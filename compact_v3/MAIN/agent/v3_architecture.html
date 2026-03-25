@@ -572,7 +572,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
                     <div class="svc-box purple"><div class="svc-title">File Ops (6)</div><div class="svc-desc">read, write, edit, glob, grep, ls</div></div>
                     <div class="svc-box purple"><div class="svc-title">Execution (2)</div><div class="svc-desc">bash, python_exec</div></div>
                     <div class="svc-box purple"><div class="svc-title">Documents (6)</div><div class="svc-desc">Word, Excel, Chart, PDF, MD, Notebook</div></div>
-                    <div class="svc-box purple"><div class="svc-title">Intelligence (8)</div><div class="svc-desc">vision, search, web, skills, agents, todos</div></div>
+                    <div class="svc-box purple"><div class="svc-title">Intelligence (8)</div><div class="svc-desc">vision, code search, URL fetch, skills, agents, todos</div></div>
                 </div>
             </div>
             <div class="connector">&darr;</div>
@@ -656,7 +656,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
             <!-- Intelligence -->
             <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">view_image</div><div class="card-desc">Load an image and send to Claude's vision API. The agent actually sees and understands photos, charts, screenshots.</div><div class="card-tags"><span class="tag tag-green">Vision</span></div></div>
             <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">semantic_search</div><div class="card-desc">Search your codebase by meaning (not just keywords). Uses Titan embeddings + AST-aware chunking for Python.</div><div class="card-tags"><span class="tag tag-green">Search</span></div></div>
-            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">web_fetch</div><div class="card-desc">Fetch a URL and convert HTML to readable text. SSRF-hardened with private IP blocking.</div><div class="card-tags"><span class="tag tag-green">Web</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">web_fetch</div><div class="card-desc">Fetch a specific URL you provide and convert HTML to readable text. NOT web search &mdash; you must give the URL. SSRF-hardened.</div><div class="card-tags"><span class="tag tag-green">URL Fetch</span></div></div>
             <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">skill</div><div class="card-desc">Load skill files (review checklists, coding standards) into the system prompt. Extends agent behavior.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
             <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">task</div><div class="card-desc">Spawn a sub-agent (build, plan, explore, general, review) for complex multi-step work.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
             <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">ask_user</div><div class="card-desc">Ask the human a question mid-task. Pauses and waits for your response before continuing.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
@@ -883,7 +883,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 
 <dialog id="modal-intel" class="modal" onclick="if(event.target===this)this.close()">
     <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
-    <h3>Intelligence Tools &mdash; Vision, Search, Web</h3>
+    <h3>Intelligence Tools &mdash; Vision, Code Search, URL Fetch</h3>
     <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
         <strong>view_image</strong> &mdash; Loads an image file (PNG, JPG, GIF, WebP), converts it to base64, and sends it to Claude's vision API. The AI actually <em>sees</em> the image and can describe what's in it, find UI bugs in screenshots, analyze chart data, or read text from photos. Max 20MB per image.<br><br>
         <strong>semantic_search</strong> &mdash; Searches your codebase by <em>meaning</em>, not just keywords. If you search "authentication logic", it finds code related to login/auth even if those exact words aren't used. Uses AWS Titan embeddings to convert code into vectors, then finds the most similar chunks. Python files are split by function/class (AST-aware), so results are more meaningful than line-based search.<br><br>
