@@ -31,7 +31,7 @@
     --shadow: 0 1px 3px rgba(0,0,0,0.3); --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
     --shadow-lg: 0 10px 15px rgba(0,0,0,0.4);
     --blue-light: #1e3a5f; --blue-bg: #172554; --green-light: #134e3a; --green-bg: #052e16;
-    --purple-light: #3b1f7a; --amber-light: #78350f; --red-light: #7f1d1d;
+    --purple-light: #3b1f7a; --purple-bg: #2e1065; --amber-light: #78350f; --amber-bg: #451a03; --red-light: #7f1d1d;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; scroll-padding-top: 80px; }
@@ -82,19 +82,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); line
 .card-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
 .card-tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
 .tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
-.tag-blue { background: var(--blue-light); color: var(--blue); }
-.tag-green { background: var(--green-light); color: #065f46; }
-.tag-amber { background: var(--amber-light); color: #92400e; }
-.tag-purple { background: var(--purple-light); color: #6b21a8; }
-.tag-red { background: var(--red-light); color: #991b1b; }
+.tag-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue); }
+.tag-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+.tag-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+.tag-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple); }
+.tag-red { background: var(--red-light); color: var(--red); border: 1px solid var(--red); }
 
 /* Insight boxes */
 .insight { display: flex; gap: 12px; padding: 16px 20px; border-radius: var(--radius); margin-top: 20px; font-size: 13px; line-height: 1.6; }
 .insight-icon { font-size: 20px; flex-shrink: 0; }
-.insight.blue { background: var(--blue-light); color: #1e40af; }
-.insight.green { background: var(--green-light); color: #065f46; }
-.insight.amber { background: var(--amber-light); color: #92400e; }
-.insight.purple { background: var(--purple-light); color: #6b21a8; }
+.insight.blue { background: var(--blue-bg); border: 1px solid var(--blue); color: var(--text); }
+.insight.green { background: var(--green-bg); border: 1px solid var(--green); color: var(--text); }
+.insight.amber { background: var(--amber-bg); border: 1px solid var(--amber); color: var(--text); }
+.insight.purple { background: var(--purple-bg); border: 1px solid var(--purple); color: var(--text); }
 
 /* Architecture diagram */
 .arch-diagram { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 20px 0; }
@@ -107,7 +107,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); line
 .svc-box.green { border-color: var(--green); border-top: 4px solid var(--green); }
 .svc-box.amber { border-color: var(--amber); border-top: 4px solid var(--amber); }
 .svc-box.purple { border-color: var(--purple); border-top: 4px solid var(--purple); }
-.svc-box.navy { background: var(--navy); border-color: var(--navy); color: white; }
+.svc-box.navy { background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%); border-color: var(--blue); border-top: 4px solid var(--blue); color: white; }
+.svc-box.navy .svc-desc { color: #93c5fd; }
 .svc-box.red { border-color: var(--red); border-top: 4px solid var(--red); }
 .svc-title { font-size: 12px; font-weight: 700; }
 .svc-desc { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
@@ -139,7 +140,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 .modal-close:hover { background: var(--border); }
 
 /* Beginner explanation */
-.explain { background: var(--blue-bg); border: 1px solid var(--blue-light); border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.explain { background: var(--bg); border: 1px solid var(--border-strong); border-left: 3px solid var(--blue); border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
 .explain strong { color: var(--text); }
 .explain::before { content: ""; }
 
