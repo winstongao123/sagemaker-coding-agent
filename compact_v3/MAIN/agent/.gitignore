@@ -5,3 +5,11 @@ truncated_outputs/
 audit_logs/
 sessions/
 __pycache__/
+# Competition-generated artifacts (V3 creates these during tasks)
+comp_task*/
+r2_codebase/
+taskr*.py
+test_taskr*.py
+*.docx
+# Don't ignore specific tracked docs
+!USER_GUIDE.md
