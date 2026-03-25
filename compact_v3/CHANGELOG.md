@@ -1,5 +1,17 @@
 # Compact V3 Changelog
 
+## v3.2.3 — Final Fixes from 3-Agent Competition (2026-03-25)
+
+### Fixes (from Round 3 codebase analysis — Claude Opus + Codex + V3)
+- **CRITICAL: Sandbox path injection** — `"{workspace}"` → `repr(workspace)` in Python preamble
+- **HIGH: `_FILES_READ` race condition** — all 4 sites now use lock + `.clear()`
+- **Dead code removed**: `PLAN_MODE_BLOCKED_TOOLS`, `get_theme_colors()`
+- **Stealth fix**: truncated output no longer shows "saved: None"
+- **Cleanup lock guard**: 🧹 Clean button blocked while agent is running
+- **Version header synced**
+
+---
+
 ## v3.2.2 — 6 Score-Raising Fixes (2026-03-25)
 
 ### Cost Efficiency

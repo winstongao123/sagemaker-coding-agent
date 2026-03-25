@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 3.2.1 (March 2026)
+Version: 3.2.3 (March 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "3.2.2"
+__version__ = "3.2.3"
 
 # ============================================================
 # IMPORTS
@@ -500,7 +500,8 @@ class Truncation:
         truncated_count = total_lines - len(output_lines)
         result = '\n'.join(output_lines)
         result += f"\n\n...{truncated_count} lines truncated ({total_bytes:,} bytes total)..."
-        result += f"\n[Full output saved: {saved_path}]"
+        if saved_path:
+            result += f"\n[Full output saved: {saved_path}]"
         result += f"\n[TIP: Use grep to search, or read_file with offset parameter for specific sections.]"
 
         return result, True, saved_path
@@ -3314,7 +3315,7 @@ def _install_sandbox():
     _b.__import__ = _safe_import
 
     # --- 2. Workspace boundary for open() (runtime, not regex) ---
-    _WORKSPACE = "{workspace}"
+    _WORKSPACE = {repr(workspace)}
     _WORKSPACE_SEP = _WORKSPACE + _os.sep  # Prevent sibling-dir bypass
     _orig_open = _b.open
     _SAFE_READ_PREFIXES = (_WORKSPACE_SEP, "/tmp/")
@@ -4684,13 +4685,6 @@ PLAN_MODE_PROMPT = """PLAN MODE — read-only. Explore code, create implementati
 No write_file, edit_file, bash, python_exec, or task. Read-only tools only.
 """
 
-# Plan Mode - Tools that are BLOCKED (write operations)
-PLAN_MODE_BLOCKED_TOOLS = {
-    "write_file", "edit_file", "bash", "python_exec",
-    "create_word", "create_excel", "create_markdown",
-    "create_chart", "create_pdf", "task"
-}
-
 # Plan Mode - Tools that are ALLOWED (read-only operations)
 PLAN_MODE_ALLOWED_TOOLS = {
     "read_file", "glob", "grep", "list_dir", "semantic_search",
@@ -5689,7 +5683,8 @@ class Agent:
         self.messages = []
         self.tool_history.clear()
         _TODOS = []
-        _FILES_READ = set()
+        with _FILES_READ_LOCK:
+            _FILES_READ.clear()
         _reset_global_exec()  # Reset global exec budget for new session
         CONTEXT.reset()
         TOKENS.reset()
@@ -6351,13 +6346,6 @@ def create_chat_ui(mock_mode: bool = None):
             </div>
         </div>
         '''
-
-    def get_theme_colors():
-        """Get colors based on current theme."""
-        if ui_state["dark_mode"]:
-            return {"text": "#e0e0e0", "muted": "#aaa"}
-        else:
-            return {"text": "#333", "muted": "#666"}
 
     def add_message(role: str, content: str, tool_name: str = None):
         """Add message and re-render chat."""
@@ -7063,7 +7051,8 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["session"] = None
         _PENDING_IMAGES.clear()  # Clear any queued images
         _TODOS = []
-        _FILES_READ = set()
+        with _FILES_READ_LOCK:
+            _FILES_READ.clear()
         TOKENS.reset()
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
@@ -7113,7 +7102,8 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', 'Agent is running. Stop it first.')
             return
         global _TODOS, _FILES_READ
-        _FILES_READ = set()
+        with _FILES_READ_LOCK:
+            _FILES_READ.clear()
         session_id = session_dropdown.value
         if not session_id:
             # New session - just clear
@@ -7238,7 +7228,8 @@ def create_chat_ui(mock_mode: bool = None):
         _PENDING_IMAGES.clear()  # Clear any queued images
         ui_state["session"] = None
         _TODOS = []
-        _FILES_READ = set()
+        with _FILES_READ_LOCK:
+            _FILES_READ.clear()
         TOKENS.reset()
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
@@ -7351,6 +7342,9 @@ def create_chat_ui(mock_mode: bool = None):
 
     def on_cleanup(b):
         """Delete local traces (keeps sessions for conversation continuity)."""
+        if ui_state.get("lock"):
+            add_message('system', 'Agent is running. Stop it first.')
+            return
         import shutil as _shutil
         cleaned = []
         # Clean non-essential traces (sessions kept for continuity)
