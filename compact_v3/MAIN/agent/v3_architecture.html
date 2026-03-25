@@ -141,7 +141,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 /* Beginner explanation */
 .explain { background: var(--blue-bg); border: 1px solid var(--blue-light); border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
 .explain strong { color: var(--text); }
-.explain::before { content: "For beginners: "; font-weight: 700; color: var(--blue); }
+.explain::before { content: ""; }
 
 /* Interactive Flowchart */
 .flow-container { display: flex; flex-direction: column; align-items: center; max-width: 900px; margin: 0 auto; }
@@ -248,7 +248,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            Think of a coding agent like a junior developer sitting next to you. You tell them what you want ("fix the login bug"), and they go read the code, figure out the problem, write a fix, and test it. They use tools (editor, terminal, browser) just like a human would. The difference is they're powered by an AI model (like Claude) instead of a human brain.
+            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 22 tools covering file operations, code execution, document generation, and codebase intelligence.
         </div>
 
         <div class="insight blue" style="margin-top:20px">
@@ -390,7 +390,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         &bull; <strong>Cost budget check</strong> &mdash; stops if session cost exceeds your configured limit<br>
         &bull; <strong>Parallel sub-agents</strong> &mdash; can run multiple task tools simultaneously via ThreadPoolExecutor
     </p>
-    <div class="explain">Think of the agent loop like a chef following a recipe. The chef reads the next step (Reason), does it (Act), checks if it worked (Observe), then moves to the next step. If something goes wrong (burned the sauce), they recover and try again. The loop continues until the dish is done.</div>
+    <div class="explain">The ReAct pattern (Reason + Act) is the standard approach used by Claude Code, OpenCode, and SWE-agent. V3's implementation adds doom loop detection (stops after 3 identical calls), 5-layer error recovery, cost budget enforcement, and parallel sub-agent support via ThreadPoolExecutor.</div>
 </dialog>
 
 <dialog id="fd-context" class="modal" onclick="if(event.target===this)this.close()">
@@ -406,7 +406,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         &bull; <strong>File Cache</strong> &mdash; LRU cache (100 entries) with mtime validation. Skips re-reading files already in context.<br>
         &bull; <strong>Token estimation</strong> &mdash; uses tiktoken (95% accurate) when available, falls back to chars/4.
     </p>
-    <div class="explain">Imagine you have a desk that can hold 100 papers. As you work, you pile up more papers. When the desk is 80% full, the Context Manager files away old papers (prune). If still full, it writes a summary of everything and throws away the originals (summarize). You never lose important info — it's just compressed.</div>
+    <div class="explain">The Compactor implements a two-stage strategy borrowed from OpenCode: first prune old tool outputs (cheap, no API call), then if still over threshold, generate an LLM summary (costs one API call). Protected tools (todo, semantic_search) are never pruned. The File Cache uses LRU eviction with mtime validation to prevent stale reads.</div>
 </dialog>
 
 <dialog id="fd-files" class="modal" onclick="if(event.target===this)this.close()">
@@ -435,7 +435,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         &bull; <strong>python_exec</strong> &mdash; runs Python code in a fresh subprocess. 63 regex denylist patterns + AST import validation (67 allowed modules) + runtime sandbox (wraps open, os.open, os.remove at the interpreter level).<br><br>
         <strong style="color:var(--amber)">HOW:</strong> Both tools require your approval before executing. You see the exact command/code in an Approve/Deny dialog. Execution has a timeout (600s for bash, 300s for Python) and a global budget (40 calls, 900 seconds per session). Auto-lint checks Python files after writing for syntax errors.
     </p>
-    <div class="explain">These tools are like giving someone keys to your workshop. Powerful but dangerous. That's why there are 3 locks on the door (allowlist, denylist, path boundary), a supervisor watching (approval dialog), and a timer (execution budget). The agent CAN'T run anything you don't approve.</div>
+    <div class="explain">Execution tools are the highest-privilege operations. V3 enforces: command allowlist (70 safe binaries) &rarr; denylist (75 dangerous patterns) &rarr; workspace path boundary &rarr; approval dialog &rarr; global budget (40 calls / 900s). Python additionally gets: 63 regex patterns &rarr; AST import validation (67 allowed modules) &rarr; runtime sandbox (closure-based builtins wrapping).</div>
 </dialog>
 
 <dialog id="fd-docs2" class="modal" onclick="if(event.target===this)this.close()">
@@ -494,7 +494,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         16. Prompt injection trust boundary (never follows instructions in tool output)<br><br>
         <strong style="color:var(--amber)">HOW:</strong> Every tool call passes through the relevant security layers before executing. Bash goes through layers 4-6. Python goes through layers 7-9. Both go through layers 10-16. The agent cannot bypass these — they're enforced at the code level, not just by prompting.
     </p>
-    <div class="explain">Think of 16 security layers like a building with 16 doors, each with a different lock. To do anything harmful, an attacker would need to pick ALL 16 locks — which is practically impossible. Even if one layer fails, the others catch it. This is called "defense in depth."</div>
+    <div class="explain">This is defense-in-depth: static analysis (regex + AST) catches known patterns, runtime sandboxing (closure-based wrappers on builtins.open, os.open, os.remove) catches what static analysis misses, and the approval dialog provides human-in-the-loop verification. Realistic risk: ~0.02% per session for material harm (Codex estimate).</div>
 </dialog>
 
 <dialog id="fd-bedrock" class="modal" onclick="if(event.target===this)this.close()">
@@ -508,7 +508,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         &bull; <strong>200K token context window</strong> &mdash; ~150,000 words of conversation history<br><br>
         <strong style="color:var(--amber)">HOW:</strong> V3 calls <code>bedrock-runtime:InvokeModel</code> with the conversation history + system prompt + tool definitions. Each call costs money based on input/output tokens. V3 tracks costs with 6-decimal precision and shows them in the UI. A configurable session cost limit (default: $1.00) prevents runaway spending. Model pricing is configurable in <code>agent_config.json</code>.
     </p>
-    <div class="explain">Bedrock is like a phone line to a very smart assistant. You send your question (plus the conversation so far), the assistant thinks, and sends back an answer. You pay per minute of the call. V3 keeps a running tab of how much each call costs so you don't get surprised.</div>
+    <div class="explain">V3 calls <code>bedrock-runtime:InvokeModel</code> with the Messages API format: system prompt + tool definitions + conversation history. Each call is billed by Bedrock based on input/output token counts. V3's TokenTracker intercepts every response, extracts usage metrics, and applies the correct pricing tier including cache read/write adjustments.</div>
 </dialog>
 
 <dialog id="fd-response" class="modal" onclick="if(event.target===this)this.close()">
@@ -596,7 +596,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            <strong>Reading the diagram top to bottom:</strong> You type in the Chat UI (top). Your message goes to the Agent Loop, which decides what to do. It checks Context (how much conversation history fits). Then it picks a Tool to use. Every tool call passes through Security checks. Finally, the LLM (Claude) at the bottom does the actual thinking. The result flows back up to you.
+            <strong>Data flow (top &rarr; bottom):</strong> User message enters the Agent Loop, which selects tools based on intent. Context Manager tracks token usage and compacts when needed. Tool calls pass through the Security Gate before execution. Bedrock (Claude) handles reasoning and tool selection. Results flow back through the loop until the task is complete.
         </div>
     </div>
 </div>
@@ -712,7 +712,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            Imagine you hire a contractor to paint your house. You wouldn't give them keys to every room, your car, and your safe. You'd give them access to the rooms being painted and nothing else. That's what V3's security does &mdash; the AI can use tools inside your workspace, but it's locked out of everything else: your system files, your AWS resources, your network, your secrets.
+            V3's security follows the principle of least privilege: the agent has access to tools within your workspace only. System files, AWS resources beyond Bedrock, network access, and credentials are all blocked by separate enforcement layers. Each tool call is validated before execution, and destructive operations require explicit user approval.
         </div>
     </div>
 </div>
@@ -761,7 +761,188 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     </div>
 </div>
 
-<!-- ========== SECTION 6: Competition Results ========== -->
+<!-- ========== SECTION 6: How The Agent Decides ========== -->
+<div class="section" id="decides">
+    <div class="section-header">
+        <h2><span style="color:var(--sky)">06</span> How The Agent Decides Which Tool To Use</h2>
+        <p>The most common question: "How does it know what to do?" Here's the actual mechanism.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-2">
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-title">Step 1: Tool Definitions Sent to Claude</div>
+                <div class="card-desc">
+                    Every API call sends the full list of tool names + descriptions + parameter schemas to Claude. Claude reads these like a menu and picks the right tool for the job.<br><br>
+                    <strong>Example:</strong> You say "read app.py". Claude sees <code>read_file: "Read file contents with line numbers"</code> in the tool list and calls it with <code>{"file_path": "app.py"}</code>.
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-title">Step 2: Lazy Loading (Smart Optimization)</div>
+                <div class="card-desc">
+                    V3 doesn't always send all 22 tools. Document creation tools (Word, Excel, Chart, PDF, Markdown, Notebook) are <strong>excluded</strong> unless your recent messages mention doc-related keywords.<br><br>
+                    <strong>Why:</strong> 22 tool definitions = ~2,336 tokens. Without doc tools = ~1,627 tokens. This saves 30% on every API call for coding tasks.
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-title">Step 3: Approval Gate</div>
+                <div class="card-desc">
+                    12 tools are "safe" (read-only) &mdash; they run without asking you.<br>
+                    10 tools need your approval &mdash; you see the exact parameters in an Approve/Deny dialog.<br><br>
+                    <strong>Safe (auto):</strong> read_file, glob, grep, list_dir, view_image, semantic_search, skill, ask_user, todo_write, todo_read<br>
+                    <strong>Needs approval:</strong> bash, python_exec, write_file, edit_file, task, web_fetch, create_word/excel/chart/pdf/markdown/notebook
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--purple)">
+                <div class="card-title">Step 4: Error Recovery (5 Layers)</div>
+                <div class="card-desc">
+                    If Claude calls a tool wrong, V3 auto-fixes before failing:<br><br>
+                    1. <strong>Name repair</strong> &mdash; "readfile" &rarr; "read_file" (fuzzy match)<br>
+                    2. <strong>Arg fix</strong> &mdash; "path" &rarr; "file_path" (common mistakes)<br>
+                    3. <strong>Type convert</strong> &mdash; string "5" &rarr; int 5<br>
+                    4. <strong>Permission check</strong> &mdash; explains what went wrong<br>
+                    5. <strong>Exception handling</strong> &mdash; returns error message, agent retries
+                </div>
+            </div>
+        </div>
+
+        <div class="explain">
+            Tool selection happens entirely within Claude's reasoning. V3 sends all tool definitions (name + description + JSON schema) with each API call. Claude maps your intent to the appropriate tool and constructs valid arguments. The 5-layer error recovery handles common LLM mistakes (wrong tool name, mismatched types, missing required params) without re-prompting. Lazy loading of doc tools saves ~700 tokens per non-document API call.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 7: Sub-Agents ========== -->
+<div class="section" id="subagents">
+    <div class="section-header">
+        <h2><span style="color:var(--purple)">07</span> Sub-Agents &mdash; Delegation System</h2>
+        <p>V3 can spawn specialist agents for complex work. Each has its own tools, turn limit, and focus.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid">
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">&#128296;</div>
+                <div class="card-title">build</div>
+                <div class="card-desc">Full access to ALL tools. For building, compiling, fixing errors, running tests. The most powerful sub-agent.</div>
+                <div class="card-tags"><span class="tag tag-blue">All tools</span><span class="tag tag-amber">25 turns max</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-icon">&#128203;</div>
+                <div class="card-title">plan</div>
+                <div class="card-desc">Read-only + web_fetch + ask_user. For architecture analysis, planning, and research. Cannot modify files.</div>
+                <div class="card-tags"><span class="tag tag-green">11 tools</span><span class="tag tag-amber">15 turns</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--teal)">
+                <div class="card-icon">&#128269;</div>
+                <div class="card-title">explore</div>
+                <div class="card-desc">Fast file search only. For quickly finding files, reading code, grepping patterns. Minimal and fast.</div>
+                <div class="card-tags"><span class="tag tag-green">5 tools</span><span class="tag tag-amber">10 turns</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-icon">&#9881;</div>
+                <div class="card-title">general</div>
+                <div class="card-desc">All tools except doc creation. For general-purpose coding tasks that don't need Word/Excel/PDF output.</div>
+                <div class="card-tags"><span class="tag tag-blue">11 tools</span><span class="tag tag-amber">15 turns</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">&#128270;</div>
+                <div class="card-title">review</div>
+                <div class="card-desc">Read-only + view_image. Runs security, quality, performance, architecture, and testing checklists on your code.</div>
+                <div class="card-tags"><span class="tag tag-green">6 tools</span><span class="tag tag-amber">10 turns</span></div>
+            </div>
+        </div>
+
+        <div class="explain">
+            Sub-agents run as child Agent instances in separate threads via ThreadPoolExecutor (max 4 workers). Each gets its own message history, tool access scoped by agent type, and thread-local FILE_CACHE isolation. The parent agent receives the sub-agent's final output as a tool result. Parallel execution: multiple <code>task</code> calls in one response run concurrently.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 8: Context & Cost ========== -->
+<div class="section" id="context-cost">
+    <div class="section-header">
+        <h2><span style="color:var(--teal)">08</span> Context Management &amp; Cost Tracking</h2>
+        <p>How V3 handles long conversations and tracks spending</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-2">
+            <div class="card" style="border-top:4px solid var(--teal)">
+                <div class="card-title">Context Compaction (2-Stage)</div>
+                <div class="card-desc">
+                    <strong style="color:var(--blue)">WHY:</strong> Claude's memory is 200K tokens. Long conversations fill it up.<br><br>
+                    <strong style="color:var(--green)">WHAT:</strong> When context hits 80%, V3 auto-compacts:<br>
+                    1. <strong>Prune</strong> &mdash; removes old tool outputs (protects last 40K tokens, needs 10K savings minimum)<br>
+                    2. <strong>Summarize</strong> &mdash; if pruning isn't enough, asks Claude to compress the history into a summary<br><br>
+                    <strong style="color:var(--amber)">HOW:</strong> The Compactor class (200 lines) handles this. File Cache (LRU, 100 entries) prevents re-reading files. Smart Truncation caps tool output at 1,500 lines / 30KB with head+tail split.
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-title">Cost Tracking (6-Decimal Precision)</div>
+                <div class="card-desc">
+                    <strong style="color:var(--blue)">WHY:</strong> Every API call costs money. Without tracking, you could spend $50 on a long session without knowing.<br><br>
+                    <strong style="color:var(--green)">WHAT:</strong> V3 tracks every call:<br>
+                    &bull; Input/output tokens per call and per session<br>
+                    &bull; Cache read (90% discount) and cache write (25% premium)<br>
+                    &bull; Cost to 6 decimal places ($0.001234)<br>
+                    &bull; 10 model pricing tiers built-in + configurable via agent_config.json<br><br>
+                    <strong style="color:var(--amber)">HOW:</strong> Session cost limit (configurable): warns at 80%, auto-stops at 100%. UI shows cost per call + session total + model rate.
+                </div>
+            </div>
+        </div>
+
+        <div style="overflow-x:auto;margin-top:20px">
+        <table class="comparison-table">
+            <thead><tr><th>Model</th><th>Input (per 1M tokens)</th><th>Output (per 1M tokens)</th><th>Notes</th></tr></thead>
+            <tbody>
+                <tr><td>Claude 3 Haiku</td><td>$0.25</td><td>$1.25</td><td>Cheapest, legacy</td></tr>
+                <tr><td>Claude 3.5 Haiku</td><td>$0.80</td><td>$4.00</td><td>Legacy</td></tr>
+                <tr><td><strong>Claude Haiku 4.5 (AU)</strong></td><td><strong>$1.10</strong></td><td><strong>$5.50</strong></td><td><strong>Default V3 model</strong></td></tr>
+                <tr><td>Claude Sonnet 4.5 (AU)</td><td>$3.30</td><td>$16.50</td><td>Recommended upgrade</td></tr>
+                <tr><td>Claude Opus 4.5</td><td>$5.00</td><td>$25.00</td><td>Strongest reasoning</td></tr>
+                <tr><td>Claude Opus 4.6 (AU)</td><td>$5.50</td><td>$27.50</td><td>Latest, AU premium</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="explain">
+            TokenTracker intercepts every Bedrock response, extracts <code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_input_tokens</code>, and <code>cache_creation_input_tokens</code>, then applies the correct pricing formula: regular input at full rate, cache reads at 10% (90% discount), cache writes at 125% (25% premium). The session_cost_limit config provides a hard stop &mdash; the agent loop checks <code>is_over_budget()</code> every turn.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 9: Configuration ========== -->
+<div class="section" id="config">
+    <div class="section-header">
+        <h2><span style="color:var(--amber)">09</span> Configuration &mdash; What You Can Control</h2>
+        <p>Everything configurable via agent_config.json (no code changes needed)</p>
+    </div>
+    <div class="section-body">
+        <div style="overflow-x:auto">
+        <table class="comparison-table">
+            <thead><tr><th>Setting</th><th>Default</th><th>What It Controls</th></tr></thead>
+            <tbody>
+                <tr><td><strong>model_id</strong></td><td>Haiku 4.5 AU</td><td>Which Claude model to use (affects quality + cost)</td></tr>
+                <tr><td><strong>region</strong></td><td>ap-southeast-2</td><td>AWS region for Bedrock API calls</td></tr>
+                <tr><td><strong>aws_bedrock_only</strong></td><td>false</td><td>Block ALL AWS services except Bedrock (security isolation)</td></tr>
+                <tr><td><strong>session_cost_limit</strong></td><td>0 (no limit)</td><td>Max $ per session. Warns at 80%, stops at 100%.</td></tr>
+                <tr><td><strong>require_tool_approval</strong></td><td>true</td><td>Show Approve/Deny dialog before executing tools</td></tr>
+                <tr><td><strong>max_turns</strong></td><td>60</td><td>Max agent loop iterations per message</td></tr>
+                <tr><td><strong>max_exec_calls_per_session</strong></td><td>40</td><td>Max bash/python_exec calls per session (safety budget)</td></tr>
+                <tr><td><strong>temperature</strong></td><td>0.0</td><td>Creativity (0=deterministic, 1=creative)</td></tr>
+                <tr><td><strong>thinking_enabled</strong></td><td>false</td><td>Extended thinking mode (uses more tokens, better reasoning)</td></tr>
+                <tr><td><strong>model_pricing</strong></td><td>{}</td><td>Add custom model prices (merged into built-in table)</td></tr>
+                <tr><td><strong>commands</strong></td><td>{}</td><td>Custom slash commands (e.g., /review, /test)</td></tr>
+                <tr><td><strong>disable_local_traces</strong></td><td>false</td><td>Stealth mode: no audit/session/snapshot files written</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="explain">
+            All config is loaded at module import from <code>agent_config.json</code> (JSONC with comments supported). Scalar fields are type-validated. Structured fields (commands, agents, permissions, mcp, model_pricing) are deep-merged. Config is applied once at startup &mdash; runtime changes via the UI (model dropdown, temperature slider) modify the CONFIG object directly.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 10: Competition Results ========== -->
 <div class="section" id="results">
     <div class="section-header">
         <h2><span style="color:var(--teal)">06</span> Competition Results</h2>
@@ -889,7 +1070,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         <strong>semantic_search</strong> &mdash; Searches your codebase by <em>meaning</em>, not just keywords. If you search "authentication logic", it finds code related to login/auth even if those exact words aren't used. Uses AWS Titan embeddings to convert code into vectors, then finds the most similar chunks. Python files are split by function/class (AST-aware), so results are more meaningful than line-based search.<br><br>
         <strong>web_fetch</strong> &mdash; Fetches a URL and converts the HTML to readable text. Protected against SSRF attacks: blocks requests to private IPs (10.x, 192.168.x, 127.0.0.1), blocks redirects to internal servers, limits response to 2MB. Useful for reading documentation or API specs from the web.
     </p>
-    <div class="explain"><strong>semantic_search</strong> is like Google for your code &mdash; you describe what you're looking for in plain English, and it finds the most relevant code, even if the variable names are different. <strong>view_image</strong> is like showing a photo to a colleague and asking "what do you see?" The AI can read charts, spot UI issues, and describe screenshots.</div>
+    <div class="explain"><strong>semantic_search</strong> uses Titan Embed v2 to vectorize code chunks, then cosine similarity to find matches by meaning rather than exact text. Requires an explicit <code>action="index"</code> call first (costs ~$0.01). In practice, <code>grep</code> handles 95% of search needs &mdash; semantic search is for cases where keyword matching fails. <strong>view_image</strong> base64-encodes the image and injects it as a content block into the next Claude API call for multimodal analysis.</div>
 </dialog>
 
 <dialog id="modal-agents" class="modal" onclick="if(event.target===this)this.close()">
@@ -906,7 +1087,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         Sub-agents run independently with their own context, tool access, and turn limits. Results are returned to the parent agent.<br><br>
         <strong>ask_user</strong> &mdash; Pauses the agent and asks you a question. Shows a text input with Submit/Skip buttons. The agent waits up to 5 minutes for your response, then continues based on your answer. Used when the agent needs clarification before proceeding.
     </p>
-    <div class="explain">Think of <strong>skills</strong> as instruction manuals you give the agent. Think of <strong>sub-agents</strong> as delegating to a specialist: "Hey plan agent, analyze this architecture while I keep working." And <strong>ask_user</strong> is the agent raising its hand to ask you a question before making a decision.</div>
+    <div class="explain"><strong>Skills</strong> are injected into the system prompt at runtime, extending the agent's behavior without code changes. <strong>Sub-agents</strong> run as child sessions with scoped tool access and independent context, enabling parallel delegation. <strong>ask_user</strong> implements a blocking prompt with a 5-minute timeout, using threading.Event for synchronization between the agent thread and the UI thread.</div>
 </dialog>
 
 <dialog id="modal-state" class="modal" onclick="if(event.target===this)this.close()">
@@ -917,7 +1098,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         <strong>todo_read</strong> &mdash; Reads the current task list to check what's been done and what's remaining. The agent uses this to maintain awareness of its progress on complex tasks.<br><br>
         Together, these tools give the agent <strong>working memory</strong> across a conversation. Without them, the agent might forget what it was doing after context compaction. With them, it can always check its todo list and continue from where it left off.
     </p>
-    <div class="explain">Imagine you're working on a big project and you keep a checklist on a sticky note. The todo tools are that sticky note for the AI. It writes down "1. Read file, 2. Find bug, 3. Fix bug, 4. Test" and checks items off as it goes. Without this, the AI could lose track of what it was doing in a long conversation.</div>
+    <div class="explain">Todo tools provide working memory across context compaction. Without them, multi-step plans would be lost when the Compactor prunes old messages. Todos persist with the session JSON, so they survive kernel restarts. The agent uses them proactively for any task requiring 3+ steps.</div>
 </dialog>
 
 <script>
