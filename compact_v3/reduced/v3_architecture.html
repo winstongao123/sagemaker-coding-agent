@@ -143,6 +143,39 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 .explain strong { color: var(--text); }
 .explain::before { content: "For beginners: "; font-weight: 700; color: var(--blue); }
 
+/* Interactive Flowchart */
+.flow-container { display: flex; flex-direction: column; align-items: center; max-width: 900px; margin: 0 auto; }
+.flow-row { display: flex; justify-content: center; gap: 16px; width: 100%; }
+.flow-row-wide { gap: 12px; flex-wrap: wrap; }
+.flow-box { background: var(--bg-card); border: 2px solid var(--border); border-radius: 16px; padding: 20px 24px; text-align: center; cursor: pointer; transition: all 0.3s; min-width: 180px; max-width: 560px; width: 100%; position: relative; }
+.flow-row-wide .flow-box { min-width: 140px; max-width: 200px; flex: 1; padding: 16px 12px; }
+.flow-box:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.flow-box::after { content: "click for details"; position: absolute; bottom: 6px; right: 12px; font-size: 9px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s; }
+.flow-box:hover::after { opacity: 1; }
+.flow-emoji { font-size: 32px; margin-bottom: 6px; }
+.flow-row-wide .flow-emoji { font-size: 24px; }
+.flow-name { font-size: 16px; font-weight: 700; }
+.flow-row-wide .flow-name { font-size: 13px; }
+.flow-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+.flow-stat { font-size: 11px; color: var(--text-muted); margin-top: 8px; font-weight: 600; }
+.flow-user { border-color: var(--blue); border-top: 4px solid var(--blue); }
+.flow-user:hover { border-color: var(--blue-hover); }
+.flow-loop { border-color: var(--amber); border-top: 4px solid var(--amber); }
+.flow-loop:hover { border-color: #d97706; }
+.flow-context { border-color: var(--teal); border-top: 4px solid var(--teal); }
+.flow-context:hover { border-color: #0f766e; }
+.flow-tool { border-color: var(--purple); border-top: 4px solid var(--purple); }
+.flow-tool:hover { border-color: #7c3aed; }
+.flow-security { border-color: var(--red); border-top: 4px solid var(--red); }
+.flow-security:hover { border-color: #dc2626; }
+.flow-bedrock { border-color: var(--navy); border-top: 4px solid var(--navy); background: linear-gradient(135deg, var(--bg-card) 0%, var(--blue-bg) 100%); }
+.flow-response { border-color: var(--green); border-top: 4px solid var(--green); }
+.flow-response:hover { border-color: #059669; }
+.flow-arrow { display: flex; flex-direction: column; align-items: center; padding: 4px 0; }
+.flow-arrow-line { width: 3px; height: 24px; background: linear-gradient(to bottom, var(--border-strong), var(--text-muted)); border-radius: 2px; position: relative; }
+.flow-arrow-line::after { content: "▼"; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); color: var(--text-muted); font-size: 10px; }
+.flow-arrow-label { font-size: 10px; color: var(--text-muted); font-weight: 500; margin-top: 6px; }
+
 /* Responsive */
 @media (max-width: 1024px) { .card-grid-3, .verdict-grid { grid-template-columns: 1fr; } .stats-row { grid-template-columns: repeat(3, 1fr); } .main { padding: 20px; } }
 @media (max-width: 768px) { .topnav { padding: 0 16px; } .stats-row { grid-template-columns: repeat(2, 1fr); } .card-grid-2 { grid-template-columns: 1fr; } .tier-row { gap: 8px; } .svc-box { min-width: 80px; padding: 10px 8px; } }
@@ -156,7 +189,8 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     <div class="topnav-brand">SageAgent V3 — Architecture Guide</div>
     <div class="topnav-links">
         <a href="#what" class="active"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
-        <a href="#architecture"><span class="nav-dot" style="background:var(--amber)"></span> Architecture</a>
+        <a href="#flowchart"><span class="nav-dot" style="background:var(--sky)"></span> How It Works</a>
+        <a href="#architecture"><span class="nav-dot" style="background:var(--amber)"></span> Layers</a>
         <a href="#tools"><span class="nav-dot" style="background:var(--green)"></span> 22 Tools</a>
         <a href="#security"><span class="nav-dot" style="background:var(--red)"></span> Security</a>
         <a href="#comparison"><span class="nav-dot" style="background:var(--purple)"></span> Comparison</a>
@@ -223,6 +257,274 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
     </div>
 </div>
+
+<!-- ========== INTERACTIVE FLOWCHART ========== -->
+<div class="section" id="flowchart">
+    <div class="section-header">
+        <h2><span style="color:var(--sky)">&#9654;</span> How It Works &mdash; Interactive Flow</h2>
+        <p>Click any box to learn WHY it exists, WHAT it does, and HOW it works. Follow the arrows top to bottom.</p>
+    </div>
+    <div class="section-body" style="padding:32px 20px">
+
+        <div class="flow-container">
+            <!-- Row 1: User Input -->
+            <div class="flow-row">
+                <div class="flow-box flow-user" onclick="document.getElementById('fd-input').showModal()">
+                    <div class="flow-emoji">&#128172;</div>
+                    <div class="flow-name">You Type a Message</div>
+                    <div class="flow-hint">"Read app.py and fix the login bug"</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Your message enters the agent</div></div>
+
+            <!-- Row 2: Agent Loop -->
+            <div class="flow-row">
+                <div class="flow-box flow-loop" onclick="document.getElementById('fd-loop').showModal()">
+                    <div class="flow-emoji">&#128260;</div>
+                    <div class="flow-name">Agent Loop (ReAct)</div>
+                    <div class="flow-hint">Think &rarr; Pick Tool &rarr; Run &rarr; Observe &rarr; Repeat</div>
+                    <div class="flow-stat">Max 60 turns per message</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Agent decides which tool to use</div></div>
+
+            <!-- Row 3: Context Check -->
+            <div class="flow-row">
+                <div class="flow-box flow-context" onclick="document.getElementById('fd-context').showModal()">
+                    <div class="flow-emoji">&#128202;</div>
+                    <div class="flow-name">Context Manager</div>
+                    <div class="flow-hint">Tracks token usage, compacts when conversation gets long</div>
+                    <div class="flow-stat">200K token window &bull; Auto-compact at 80%</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Selects and calls tools</div></div>
+
+            <!-- Row 4: Tools (branching) -->
+            <div class="flow-row flow-row-wide">
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-files').showModal()">
+                    <div class="flow-emoji">&#128193;</div>
+                    <div class="flow-name">File Tools</div>
+                    <div class="flow-stat">6 tools</div>
+                </div>
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-exec2').showModal()">
+                    <div class="flow-emoji">&#9881;</div>
+                    <div class="flow-name">Execution</div>
+                    <div class="flow-stat">2 tools</div>
+                </div>
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-docs2').showModal()">
+                    <div class="flow-emoji">&#128196;</div>
+                    <div class="flow-name">Documents</div>
+                    <div class="flow-stat">6 tools</div>
+                </div>
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-intel2').showModal()">
+                    <div class="flow-emoji">&#129504;</div>
+                    <div class="flow-name">Intelligence</div>
+                    <div class="flow-stat">8 tools</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Every tool call passes through security</div></div>
+
+            <!-- Row 5: Security Gate -->
+            <div class="flow-row">
+                <div class="flow-box flow-security" onclick="document.getElementById('fd-security').showModal()">
+                    <div class="flow-emoji">&#128274;</div>
+                    <div class="flow-name">Security Gate (16 Layers)</div>
+                    <div class="flow-hint">Bash: 70 allowlist + 75 denylist &bull; Python: 63 regex + AST + runtime sandbox</div>
+                    <div class="flow-stat">Approval dialog shown before execution</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">If approved, calls the LLM</div></div>
+
+            <!-- Row 6: Bedrock -->
+            <div class="flow-row">
+                <div class="flow-box flow-bedrock" onclick="document.getElementById('fd-bedrock').showModal()">
+                    <div class="flow-emoji">&#9729;&#65039;</div>
+                    <div class="flow-name">AWS Bedrock &mdash; Claude</div>
+                    <div class="flow-hint">Claude processes, decides next action or gives final answer</div>
+                    <div class="flow-stat">10 model pricing tiers &bull; Cost tracked per call</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Result flows back to you</div></div>
+
+            <!-- Row 7: Response -->
+            <div class="flow-row">
+                <div class="flow-box flow-response" onclick="document.getElementById('fd-response').showModal()">
+                    <div class="flow-emoji">&#9989;</div>
+                    <div class="flow-name">Response Displayed</div>
+                    <div class="flow-hint">Answer shown in chat &bull; Session auto-saved &bull; Cost updated</div>
+                </div>
+            </div>
+
+            <!-- Loop-back arrow -->
+            <div style="text-align:center;margin-top:12px">
+                <div style="display:inline-block;background:var(--amber-light);color:var(--amber);padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600">
+                    &#8635; If more work needed, loops back to Agent Loop (up to 60 turns)
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Flowchart Detail Modals -->
+<dialog id="fd-input" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128172; User Input</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> The agent needs instructions from you. Unlike a script that runs automatically, V3 waits for you to describe what you want done.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> You type in plain English: "Read app.py and fix the login bug" or "Create an Excel report from sales.csv". The agent interprets your request and breaks it into steps.<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Your message is added to the conversation history, sent to the Agent Loop, and then to Claude (the AI). Claude reads your message plus all previous messages to understand context. The input box supports multi-line text and the Send button (or Enter) submits it.
+    </p>
+</dialog>
+
+<dialog id="fd-loop" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128260; Agent Loop (ReAct Pattern)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Complex tasks need multiple steps. "Fix the login bug" requires: read the file, understand the code, find the bug, write a fix, test it. The agent loop handles this automatically.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> ReAct = <strong>Re</strong>ason + <strong>Act</strong>. Each turn: (1) Claude thinks about what to do next, (2) picks a tool and calls it, (3) observes the result, (4) decides if done or needs another step. This repeats up to <strong>60 turns</strong> per message.<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> The <code>Agent.run()</code> method (515 lines) orchestrates this. It includes:<br>
+        &bull; <strong>Retry handler</strong> &mdash; 5 retries with exponential backoff if Bedrock fails<br>
+        &bull; <strong>Doom loop detection</strong> &mdash; stops after 3 identical tool calls (prevents infinite loops)<br>
+        &bull; <strong>5-layer error recovery</strong> &mdash; auto-fixes tool name typos, wrong argument types, missing parameters<br>
+        &bull; <strong>Cost budget check</strong> &mdash; stops if session cost exceeds your configured limit<br>
+        &bull; <strong>Parallel sub-agents</strong> &mdash; can run multiple task tools simultaneously via ThreadPoolExecutor
+    </p>
+    <div class="explain">Think of the agent loop like a chef following a recipe. The chef reads the next step (Reason), does it (Act), checks if it worked (Observe), then moves to the next step. If something goes wrong (burned the sauce), they recover and try again. The loop continues until the dish is done.</div>
+</dialog>
+
+<dialog id="fd-context" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128202; Context Manager</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Claude has a limited memory window (200,000 tokens ~= 150,000 words). Long conversations eventually fill it up. Without management, the agent would crash or lose old context.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> The Context Manager tracks how much of the window is used and automatically compresses old conversation when it gets too full. It also caches files to avoid re-reading them.<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Three-stage system:<br>
+        &bull; <strong>Warning at 80%</strong> &mdash; tells you context is getting high<br>
+        &bull; <strong>Prune first</strong> &mdash; removes old tool outputs (keeps last 3 messages untouched, protects 40,000 tokens). Saves min 10,000 tokens to be worth it.<br>
+        &bull; <strong>LLM summarize</strong> &mdash; if pruning isn't enough, asks Claude to compress the entire conversation into a summary<br>
+        &bull; <strong>File Cache</strong> &mdash; LRU cache (100 entries) with mtime validation. Skips re-reading files already in context.<br>
+        &bull; <strong>Token estimation</strong> &mdash; uses tiktoken (95% accurate) when available, falls back to chars/4.
+    </p>
+    <div class="explain">Imagine you have a desk that can hold 100 papers. As you work, you pile up more papers. When the desk is 80% full, the Context Manager files away old papers (prune). If still full, it writes a summary of everything and throws away the originals (summarize). You never lose important info — it's just compressed.</div>
+</dialog>
+
+<dialog id="fd-files" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128193; File Tools (6)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> A coding agent needs to read and modify files — that's its primary job. These 6 tools let it navigate your codebase like a human developer would.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>read_file</strong> &mdash; reads file contents (supports offset/limit for large files, max 500 lines default)<br>
+        &bull; <strong>write_file</strong> &mdash; creates new files (must read first if file exists — safety check)<br>
+        &bull; <strong>edit_file</strong> &mdash; find-and-replace in files (shows diff of what changed)<br>
+        &bull; <strong>glob</strong> &mdash; find files by pattern (e.g., **/*.py finds all Python files)<br>
+        &bull; <strong>grep</strong> &mdash; search inside files by regex (like Ctrl+F across entire codebase, max 50 results)<br>
+        &bull; <strong>list_dir</strong> &mdash; list directory contents with sizes<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> All file operations are restricted to your workspace directory. The Security Gate validates every path before any file is touched. File reads are cached (LRU, 100 entries) so repeated reads don't waste tokens. Edits create snapshots for undo support.
+    </p>
+</dialog>
+
+<dialog id="fd-exec2" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#9881; Execution Tools (2)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Reading and writing files isn't enough — the agent needs to run code, install packages, run tests, and execute commands. These are the most powerful (and most guarded) tools.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>bash</strong> &mdash; runs shell commands (ls, git, pip, make, grep, etc.). 70 allowed base commands. 75 dangerous patterns blocked. Workspace path boundary enforced.<br>
+        &bull; <strong>python_exec</strong> &mdash; runs Python code in a fresh subprocess. 63 regex denylist patterns + AST import validation (67 allowed modules) + runtime sandbox (wraps open, os.open, os.remove at the interpreter level).<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Both tools require your approval before executing. You see the exact command/code in an Approve/Deny dialog. Execution has a timeout (600s for bash, 300s for Python) and a global budget (40 calls, 900 seconds per session). Auto-lint checks Python files after writing for syntax errors.
+    </p>
+    <div class="explain">These tools are like giving someone keys to your workshop. Powerful but dangerous. That's why there are 3 locks on the door (allowlist, denylist, path boundary), a supervisor watching (approval dialog), and a timer (execution budget). The agent CAN'T run anything you don't approve.</div>
+</dialog>
+
+<dialog id="fd-docs2" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128196; Document Creation Tools (6)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Data scientists and analysts don't just write code — they create reports, charts, and spreadsheets. V3 is the only coding agent that can create these natively. Claude Code, Codex, and Aider cannot.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>create_word</strong> &mdash; .docx with headings, tables, embedded images (python-docx)<br>
+        &bull; <strong>create_excel</strong> &mdash; .xlsx with formatted data, multiple sheets, charts (openpyxl)<br>
+        &bull; <strong>create_chart</strong> &mdash; 8 chart types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo. Configurable DPI/size/style (matplotlib)<br>
+        &bull; <strong>create_pdf</strong> &mdash; reports with styled tables and images (reportlab)<br>
+        &bull; <strong>create_markdown</strong> &mdash; .md files with full formatting<br>
+        &bull; <strong>create_notebook</strong> &mdash; .ipynb Jupyter notebooks with code + markdown cells<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> The agent decides what content to put in each document based on your request. For charts, it analyzes data and picks the appropriate chart type. Charts are rendered at 300 DPI by default and displayed inline in the chat.
+    </p>
+</dialog>
+
+<dialog id="fd-intel2" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#129504; Intelligence Tools (8)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> A smart agent needs more than file access — it needs to see images, search semantically, fetch web content, delegate to specialists, ask the human questions, and track its own work.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>view_image</strong> &mdash; sends images to Claude's vision API for understanding (photos, charts, screenshots)<br>
+        &bull; <strong>semantic_search</strong> &mdash; searches codebase by meaning using Titan embeddings. Python files chunked by function/class (AST-aware).<br>
+        &bull; <strong>web_fetch</strong> &mdash; fetches URLs, converts HTML to text. SSRF-hardened (blocks private IPs, blocks redirects, 2MB limit).<br>
+        &bull; <strong>skill</strong> &mdash; loads instruction files that teach the agent new behaviors (4 skills: review, verify, coding-standards, report)<br>
+        &bull; <strong>task</strong> &mdash; spawns sub-agents (5 types: build, plan, explore, general, review) for parallel work<br>
+        &bull; <strong>ask_user</strong> &mdash; pauses and asks you a question mid-task (5-minute timeout)<br>
+        &bull; <strong>todo_write / todo_read</strong> &mdash; task list management for multi-step work<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Sub-agents run in separate threads with their own context and tool access. Skills are Markdown files in the <code>skills/</code> folder. Semantic search uses AWS Titan Embed v2 for vector embeddings.
+    </p>
+</dialog>
+
+<dialog id="fd-security" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128274; Security Gate (16 Layers)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> The AI can make mistakes or be tricked by malicious prompts. Without security, it could delete files, read secrets, call AWS services, or exfiltrate data. The Security Gate prevents all of this.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> 16 layers of defense-in-depth:<br>
+        1-2. AWS IAM + Bedrock model access (platform level)<br>
+        3. Workspace boundary with os.sep fix (blocks sibling dirs)<br>
+        4. Bash: 70 allowed commands allowlist<br>
+        5. Bash: 75 dangerous pattern denylist<br>
+        6. Bash: workspace path boundary check<br>
+        7. Python: 63 regex denylist patterns<br>
+        8. Python: AST import validation (67 allowed modules)<br>
+        9. Python: runtime sandbox (wraps builtins.open, os.open, io.open, os.remove, os.posix_spawn)<br>
+        10. AWS Bedrock-only mode (blocks all boto3 except bedrock-runtime — regex + AST + getattr)<br>
+        11. SSRF protection (private IP blocking + redirect blocking)<br>
+        12. Secret scanning (13 patterns for API keys, passwords)<br>
+        13. Audit trail (JSONL with integrity hash per entry)<br>
+        14. Tool approval dialog (shows exact payload, Approve/Deny)<br>
+        15. Global execution budget (40 calls / 900 seconds)<br>
+        16. Prompt injection trust boundary (never follows instructions in tool output)<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Every tool call passes through the relevant security layers before executing. Bash goes through layers 4-6. Python goes through layers 7-9. Both go through layers 10-16. The agent cannot bypass these — they're enforced at the code level, not just by prompting.
+    </p>
+    <div class="explain">Think of 16 security layers like a building with 16 doors, each with a different lock. To do anything harmful, an attacker would need to pick ALL 16 locks — which is practically impossible. Even if one layer fails, the others catch it. This is called "defense in depth."</div>
+</dialog>
+
+<dialog id="fd-bedrock" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#9729;&#65039; AWS Bedrock &mdash; The AI Brain</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> The agent needs an AI model to understand your requests and generate responses. V3 uses AWS Bedrock, which hosts Claude models from Anthropic. This means your data stays within AWS — it doesn't go to external APIs.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> Bedrock provides:<br>
+        &bull; <strong>Claude models</strong> &mdash; 10 models supported (Haiku 3/4.5, Sonnet 3.5/4.5, Opus 4.5/4.6). Default: Haiku 4.5 AU region.<br>
+        &bull; <strong>Titan Embeddings</strong> &mdash; used for semantic search (converts text to vectors for similarity matching)<br>
+        &bull; <strong>200K token context window</strong> &mdash; ~150,000 words of conversation history<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> V3 calls <code>bedrock-runtime:InvokeModel</code> with the conversation history + system prompt + tool definitions. Each call costs money based on input/output tokens. V3 tracks costs with 6-decimal precision and shows them in the UI. A configurable session cost limit (default: $1.00) prevents runaway spending. Model pricing is configurable in <code>agent_config.json</code>.
+    </p>
+    <div class="explain">Bedrock is like a phone line to a very smart assistant. You send your question (plus the conversation so far), the assistant thinks, and sends back an answer. You pay per minute of the call. V3 keeps a running tab of how much each call costs so you don't get surprised.</div>
+</dialog>
+
+<dialog id="fd-response" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#9989; Response &amp; Session Management</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> After the agent finishes, you need to see the result, and the system needs to save state so you can continue later.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; Response displayed in the chat with Markdown formatting (code blocks, tables, headers)<br>
+        &bull; Token usage updated (input/output/cost per call + session total)<br>
+        &bull; Session auto-saved (messages, todos, metadata) to JSON file<br>
+        &bull; Audit entry written (tool name, parameters, result, timestamp, integrity hash)<br>
+        &bull; Context window % updated in the UI<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Session saves use atomic writes (temp file + os.replace) with thread locking to prevent corruption. If the agent used tools, their results are truncated to max 1,500 lines / 30KB to fit in context. A cleanup button (&#129529; Clean) removes audit logs, snapshots, and index files while keeping sessions.
+    </p>
+</dialog>
 
 <!-- ========== SECTION 2: Architecture ========== -->
 <div class="section" id="architecture">
