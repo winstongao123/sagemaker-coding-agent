@@ -1,6 +1,8 @@
 # SageAgent V3 — Notebook Content
 
-> Markdown version of chat.ipynb. Copy cells into a Jupyter notebook to run.
+> Markdown version of chat.ipynb
+
+<style>table { margin-left: 0 !important; } td, th { text-align: left !important; }</style>
 
 # SageAgent V3
 
