@@ -145,9 +145,73 @@ CONFIG.session_cost_limit = 1.0         # Max $1.00 per session (warns at 80%, s
 
 # Custom slash commands: /review, /explain, /test
 CONFIG.custom_commands = {
-    "review": {"template": "Review the following code for bugs, security issues, and improvements:\n$ARGUMENTS", "description": "Code review", "agent": "plan"},
-    "explain": {"template": "Explain this code in detail, including what it does and how it works:\n$ARGUMENTS", "description": "Explain code"},
-    "test": {"template": "Write comprehensive tests for:\n$ARGUMENTS", "description": "Generate tests"},
+    "review": {
+        "template": (
+            "Read $ARGUMENTS and perform a thorough code review using this checklist:\n"
+            "\n## 1. Security (CRITICAL)\n"
+            "Check: hardcoded secrets, SQL injection, command injection, XSS, path traversal, input validation, auth checks, sensitive data in logs\n"
+            "\n## 2. Code Quality (HIGH)\n"
+            "Check: functions <50 lines, nesting <4 levels, specific error handling, clear naming, no dead code, no debug statements, DRY, consistent style\n"
+            "\n## 3. Performance (MEDIUM)\n"
+            "Check: N+1 queries, O(n^2) algorithms, missing caching, unnecessary allocations, lazy processing for large collections\n"
+            "\n## 4. Architecture (MEDIUM)\n"
+            "Check: separation of concerns, follows existing patterns, no circular deps, config externalized\n"
+            "\n## 5. Testing (MEDIUM)\n"
+            "Check: critical paths covered, edge cases handled, tests independent, error paths tested\n"
+            "\n## Output: Summary, Issues (CRITICAL/HIGH/MEDIUM/LOW with file:line), Positive observations, Suggestions, Rating X/10"
+        ),
+        "description": "Full code review with 5-category checklist (security, quality, performance, architecture, testing)",
+        "agent": "plan"
+    },
+    "explain": {
+        "template": (
+            "Read $ARGUMENTS and explain thoroughly:\n"
+            "1. PURPOSE: What does this code do? What problem does it solve?\n"
+            "2. ARCHITECTURE: How is it structured? What are the main components/classes/functions?\n"
+            "3. DATA FLOW: How does data move through the code? Trace a typical request/call.\n"
+            "4. KEY DECISIONS: What design patterns are used? Why were they chosen?\n"
+            "5. DEPENDENCIES: What does it depend on? What depends on it?\n"
+            "6. EDGE CASES: What error handling exists? What could go wrong?\n"
+            "Use concrete examples from the actual code. Reference specific line numbers."
+        ),
+        "description": "Deep code explanation (purpose, architecture, data flow, patterns, dependencies, edge cases)"
+    },
+    "test": {
+        "template": (
+            "Read $ARGUMENTS and write comprehensive tests:\n"
+            "1. Happy path: normal expected behavior\n"
+            "2. Edge cases: empty input, None, boundaries, duplicates, max values\n"
+            "3. Error cases: invalid input, missing data, permission errors, timeouts\n"
+            "4. Integration: how components work together\n"
+            "Use pytest style. Each test: Arrange, Act, Assert. Test names describe what is tested.\n"
+            "Target: minimum 8 test functions with good coverage of all branches."
+        ),
+        "description": "Generate comprehensive test suite (happy path, edge cases, error cases, integration)"
+    },
+    "verify": {
+        "template": (
+            "Run 6-phase verification on the current workspace:\n"
+            "Phase 1 BUILD: run build/compile if applicable (pip install -e . / npm run build)\n"
+            "Phase 2 TYPES: run type checker (mypy/pyright/tsc) if available\n"
+            "Phase 3 LINT: run linter (ruff/flake8/eslint) if available\n"
+            "Phase 4 TESTS: run test suite (pytest/npm test) with coverage if available\n"
+            "Phase 5 SECURITY: grep for hardcoded secrets, .env files, debug statements\n"
+            "Phase 6 DIFF: git diff to review all changes\n"
+            "\nOutput a VERIFICATION REPORT: each phase PASS/FAIL/SKIP, issues found, ready for PR: YES/NO"
+        ),
+        "description": "6-phase verification: build, types, lint, tests, security scan, diff review"
+    },
+    "standards": {
+        "template": (
+            "Review $ARGUMENTS against these coding standards:\n"
+            "NAMING: descriptive vars, verb-noun functions, PascalCase classes, UPPER_SNAKE constants\n"
+            "FUNCTIONS: single responsibility, <50 lines, <4 params, <4 nesting, early returns\n"
+            "ERRORS: specific exceptions (not bare except), no swallowed errors, user-friendly messages\n"
+            "PRINCIPLES: KISS, DRY, YAGNI\n"
+            "Fix any violations found. Show before/after for each fix."
+        ),
+        "description": "Apply coding standards (naming, functions, errors, KISS/DRY/YAGNI)"
+    },
 }
 
 # Apply configuration from widgets above
