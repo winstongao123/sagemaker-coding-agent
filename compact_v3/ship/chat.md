@@ -279,18 +279,57 @@ create_chat_ui()
 | **File** | read_file, write_file, edit_file, glob, grep, list_dir | write/edit need approval |
 | **Exec** | bash, python_exec | Both need approval |
 | **Docs** | create_word, create_excel, create_chart, create_pdf, create_markdown, create_notebook | Need approval |
-| **Intelligence** | view_image (vision), semantic_search (code search), web_fetch (URL fetch, NOT web search) | web_fetch needs approval |
+| **Intelligence** | view_image (vision), semantic_search (code search), web_fetch (URL fetch only) | web_fetch needs approval |
 | **Agents** | skill (load checklist), task (spawn sub-agent), ask_user (ask you a question) | task needs approval |
 | **State** | todo_write, todo_read | Auto |
 
+## Sub-Agents (via `/task` or the agent decides automatically)
+
+| Type | What it does | Tools | Max turns |
+|------|-------------|-------|-----------|
+| **build** | Build, compile, fix errors, run tests | All 22 | 25 |
+| **plan** | Architecture analysis, planning (read-only) | 11 (read + web + ask) | 15 |
+| **explore** | Fast file search, codebase navigation | 5 (read + grep + glob) | 10 |
+| **general** | General coding tasks | 11 (no doc tools) | 15 |
+| **review** | Security, quality, performance review | 6 (read + search + vision) | 10 |
+
+## Security (16 layers)
+
+The agent runs inside a security sandbox. Key protections:
+- **Bash**: 70 allowed commands only. 75 dangerous patterns blocked. Files restricted to workspace.
+- **Python**: 63 regex patterns + AST import validation (67 allowed modules) + runtime sandbox on open/remove.
+- **AWS**: `aws_bedrock_only` blocks ALL AWS services except Bedrock (regex + AST + getattr enforcement).
+- **Approval dialog**: You see exact command/code and Approve or Deny before execution.
+- **Cost limit**: Stops agent if session cost exceeds your configured limit.
+- **Audit trail**: Every tool call logged with timestamp and integrity hash.
+
+## Model Pricing (Bedrock, Sydney region)
+
+| Model | Input / 1M tokens | Output / 1M tokens |
+|-------|-------------------|-------------------|
+| Claude 3 Haiku | $0.25 | $1.25 |
+| Claude 3.5 Haiku | $0.80 | $4.00 |
+| **Claude 4.5 Haiku (AU)** | **$1.10** | **$5.50** |
+| Claude 4.5 Sonnet (AU) | $3.30 | $16.50 |
+| Claude 4.5 Opus | $5.00 | $25.00 |
+| Claude 4.6 Opus (AU) | $5.50 | $27.50 |
+
+## How It Works
+
+1. You type a message → sent to Claude via Bedrock API
+2. Claude decides which tool to use → calls it (with your approval if needed)
+3. Tool runs, result sent back to Claude → Claude decides next step or gives final answer
+4. Repeats up to 60 turns per message (configurable)
+5. Context auto-compacts at 80% usage (prune old tool outputs, then LLM summarize if needed)
+
 ## Token Overhead Per API Call
 
-| Component | Tokens | Notes |
-|-----------|--------|-------|
-| System prompt | ~1,200 | Compressed from ~2,100 |
-| Tool schemas (22 tools) | ~1,800 | Lazy-load skips doc tools (~1,200) |
-| Bedrock overhead | ~346 | Added automatically when tools present |
-| **Total fixed overhead** | **~3,350** | **Sent every API call** |
+| Component | Tokens |
+|-----------|--------|
+| System prompt | ~1,200 |
+| Tool schemas | ~1,800 (lazy-load: ~1,200 for coding tasks) |
+| Bedrock overhead | ~346 |
+| **Total per call** | **~3,350** |
 
 ## Session Management
 
@@ -303,7 +342,7 @@ create_chat_ui()
 
 ## Config
 
-Default config is set in Cell 3 (before launch). You can change model, temperature, thinking mode anytime in the chatbot UI during use.
+Default config is set in Cell 3 (before launch). Change model, temperature, thinking mode anytime in the chatbot UI during use.
 
 Key security settings (Cell 3):
 - `aws_bedrock_only = True` — blocks all AWS except Bedrock
