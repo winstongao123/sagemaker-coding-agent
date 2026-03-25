@@ -323,9 +323,9 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
                 <div class="card-desc">Find-and-replace inside a file. Shows a diff of what changed. Supports replace_all for bulk renames.</div>
                 <div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-amber">Approval</span></div>
             </div>
-            <div class="card"><div class="card-title">glob</div><div class="card-desc">Find files by pattern. Example: **/*.py finds all Python files in all subdirectories.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
-            <div class="card"><div class="card-title">grep</div><div class="card-desc">Search inside files by text or regex pattern. Like Ctrl+F but across your entire codebase.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
-            <div class="card"><div class="card-title">list_dir</div><div class="card-desc">List files and folders in a directory. Shows sizes and types.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">glob</div><div class="card-desc">Find files by pattern. Example: **/*.py finds all Python files in all subdirectories.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">grep</div><div class="card-desc">Search inside files by text or regex pattern. Like Ctrl+F but across your entire codebase.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">list_dir</div><div class="card-desc">List files and folders in a directory. Shows sizes and types.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
 
             <!-- Execution -->
             <div class="card" onclick="document.getElementById('modal-exec').showModal()">
@@ -345,21 +345,21 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
                 <div class="card-desc">Generate Word documents (.docx) with headings, tables, and embedded images.</div>
                 <div class="card-tags"><span class="tag tag-amber">Docs</span></div>
             </div>
-            <div class="card"><div class="card-title">create_excel</div><div class="card-desc">Generate Excel spreadsheets (.xlsx) with formatted data and optional charts.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
-            <div class="card"><div class="card-title">create_chart</div><div class="card-desc">Generate charts (bar, line, pie, scatter + 4 more). Displayed inline in the chat.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
-            <div class="card"><div class="card-title">create_pdf</div><div class="card-desc">Generate PDF reports with text, tables, and images. Professional formatting.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
-            <div class="card"><div class="card-title">create_markdown</div><div class="card-desc">Generate Markdown (.md) files with full formatting support.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
-            <div class="card"><div class="card-title">create_notebook</div><div class="card-desc">Generate Jupyter notebooks (.ipynb) with code and markdown cells.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_excel</div><div class="card-desc">Generate Excel spreadsheets (.xlsx) with formatted data and optional charts.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_chart</div><div class="card-desc">Generate charts (bar, line, pie, scatter + 4 more). Displayed inline in the chat.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_pdf</div><div class="card-desc">Generate PDF reports with text, tables, and images. Professional formatting.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_markdown</div><div class="card-desc">Generate Markdown (.md) files with full formatting support.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_notebook</div><div class="card-desc">Generate Jupyter notebooks (.ipynb) with code and markdown cells.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
 
             <!-- Intelligence -->
-            <div class="card"><div class="card-title">view_image</div><div class="card-desc">Load an image and send to Claude's vision API. The agent actually sees and understands photos, charts, screenshots.</div><div class="card-tags"><span class="tag tag-green">Vision</span></div></div>
-            <div class="card"><div class="card-title">semantic_search</div><div class="card-desc">Search your codebase by meaning (not just keywords). Uses Titan embeddings + AST-aware chunking for Python.</div><div class="card-tags"><span class="tag tag-green">Search</span></div></div>
-            <div class="card"><div class="card-title">web_fetch</div><div class="card-desc">Fetch a URL and convert HTML to readable text. SSRF-hardened with private IP blocking.</div><div class="card-tags"><span class="tag tag-green">Web</span></div></div>
-            <div class="card"><div class="card-title">skill</div><div class="card-desc">Load skill files (review checklists, coding standards) into the system prompt. Extends agent behavior.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
-            <div class="card"><div class="card-title">task</div><div class="card-desc">Spawn a sub-agent (build, plan, explore, general, review) for complex multi-step work.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
-            <div class="card"><div class="card-title">ask_user</div><div class="card-desc">Ask the human a question mid-task. Pauses and waits for your response before continuing.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
-            <div class="card"><div class="card-title">todo_write</div><div class="card-desc">Create and manage a task list. Helps the agent track multi-step work.</div><div class="card-tags"><span class="tag tag-blue">State</span></div></div>
-            <div class="card"><div class="card-title">todo_read</div><div class="card-desc">Read the current task list to check progress on multi-step work.</div><div class="card-tags"><span class="tag tag-blue">State</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">view_image</div><div class="card-desc">Load an image and send to Claude's vision API. The agent actually sees and understands photos, charts, screenshots.</div><div class="card-tags"><span class="tag tag-green">Vision</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">semantic_search</div><div class="card-desc">Search your codebase by meaning (not just keywords). Uses Titan embeddings + AST-aware chunking for Python.</div><div class="card-tags"><span class="tag tag-green">Search</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">web_fetch</div><div class="card-desc">Fetch a URL and convert HTML to readable text. SSRF-hardened with private IP blocking.</div><div class="card-tags"><span class="tag tag-green">Web</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">skill</div><div class="card-desc">Load skill files (review checklists, coding standards) into the system prompt. Extends agent behavior.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">task</div><div class="card-desc">Spawn a sub-agent (build, plan, explore, general, review) for complex multi-step work.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">ask_user</div><div class="card-desc">Ask the human a question mid-task. Pauses and waits for your response before continuing.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-state').showModal()"><div class="card-title">todo_write</div><div class="card-desc">Create and manage a task list. Helps the agent track multi-step work.</div><div class="card-tags"><span class="tag tag-blue">State</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-state').showModal()"><div class="card-title">todo_read</div><div class="card-desc">Read the current task list to check progress on multi-step work.</div><div class="card-tags"><span class="tag tag-blue">State</span></div></div>
         </div>
 
         <div class="explain">
@@ -577,6 +577,45 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         <strong>Markdown (.md)</strong> &mdash; Formatted text files.
     </p>
     <div class="explain">No other coding agent (Claude Code, Codex, Aider, Cline) can natively create Word docs or Excel spreadsheets. They can only create text files. V3 was built for data scientists and analysts who need to generate reports, not just code.</div>
+</dialog>
+
+<dialog id="modal-intel" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>Intelligence Tools &mdash; Vision, Search, Web</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>view_image</strong> &mdash; Loads an image file (PNG, JPG, GIF, WebP), converts it to base64, and sends it to Claude's vision API. The AI actually <em>sees</em> the image and can describe what's in it, find UI bugs in screenshots, analyze chart data, or read text from photos. Max 20MB per image.<br><br>
+        <strong>semantic_search</strong> &mdash; Searches your codebase by <em>meaning</em>, not just keywords. If you search "authentication logic", it finds code related to login/auth even if those exact words aren't used. Uses AWS Titan embeddings to convert code into vectors, then finds the most similar chunks. Python files are split by function/class (AST-aware), so results are more meaningful than line-based search.<br><br>
+        <strong>web_fetch</strong> &mdash; Fetches a URL and converts the HTML to readable text. Protected against SSRF attacks: blocks requests to private IPs (10.x, 192.168.x, 127.0.0.1), blocks redirects to internal servers, limits response to 2MB. Useful for reading documentation or API specs from the web.
+    </p>
+    <div class="explain"><strong>semantic_search</strong> is like Google for your code &mdash; you describe what you're looking for in plain English, and it finds the most relevant code, even if the variable names are different. <strong>view_image</strong> is like showing a photo to a colleague and asking "what do you see?" The AI can read charts, spot UI issues, and describe screenshots.</div>
+</dialog>
+
+<dialog id="modal-agents" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>Agent Coordination Tools &mdash; Skills, Sub-Agents, Ask User</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>skill</strong> &mdash; Loads a skill file (Markdown with instructions) into the agent's system prompt. Skills teach the agent new behaviors: "review" makes it do code reviews, "verify" makes it run 6-phase verification, "coding-standards" enforces style rules. Skills are stored in the <code>skills/</code> folder as SKILL.md files.<br><br>
+        <strong>task</strong> &mdash; Spawns a sub-agent to handle a specific job. 5 types available:<br>
+        &bull; <strong>build</strong> &mdash; Full access, for building/compiling/testing<br>
+        &bull; <strong>plan</strong> &mdash; Read-only, for architecture analysis<br>
+        &bull; <strong>explore</strong> &mdash; Fast search, for codebase exploration<br>
+        &bull; <strong>general</strong> &mdash; Multi-step coding tasks<br>
+        &bull; <strong>review</strong> &mdash; Security/quality/performance checklists<br><br>
+        Sub-agents run independently with their own context, tool access, and turn limits. Results are returned to the parent agent.<br><br>
+        <strong>ask_user</strong> &mdash; Pauses the agent and asks you a question. Shows a text input with Submit/Skip buttons. The agent waits up to 5 minutes for your response, then continues based on your answer. Used when the agent needs clarification before proceeding.
+    </p>
+    <div class="explain">Think of <strong>skills</strong> as instruction manuals you give the agent. Think of <strong>sub-agents</strong> as delegating to a specialist: "Hey plan agent, analyze this architecture while I keep working." And <strong>ask_user</strong> is the agent raising its hand to ask you a question before making a decision.</div>
+</dialog>
+
+<dialog id="modal-state" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>State Tools &mdash; Todo List Management</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>todo_write</strong> &mdash; Creates or updates a task list. Each task has a name, status (pending/in_progress/completed), and an active description. The agent uses this to plan multi-step work and track progress. The todo list persists with the session, so it survives across messages.<br><br>
+        <strong>todo_read</strong> &mdash; Reads the current task list to check what's been done and what's remaining. The agent uses this to maintain awareness of its progress on complex tasks.<br><br>
+        Together, these tools give the agent <strong>working memory</strong> across a conversation. Without them, the agent might forget what it was doing after context compaction. With them, it can always check its todo list and continue from where it left off.
+    </p>
+    <div class="explain">Imagine you're working on a big project and you keep a checklist on a sticky note. The todo tools are that sticky note for the AI. It writes down "1. Read file, 2. Find bug, 3. Fix bug, 4. Test" and checks items off as it goes. Without this, the AI could lose track of what it was doing in a long conversation.</div>
 </dialog>
 
 <script>
