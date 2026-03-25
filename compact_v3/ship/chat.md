@@ -58,7 +58,7 @@ display(HTML("<h3>Agent Configuration</h3>"))
 
 model_dropdown = widgets.Dropdown(
     options=list(AVAILABLE_MODELS.keys()),
-    value="Claude 3 Haiku",
+    value="Claude 4.5 Haiku (AU)",
     description='Model:',
     style={'description_width': '120px'},
     layout=widgets.Layout(width='450px')
@@ -244,24 +244,47 @@ create_chat_ui()
 
 | Action | How |
 |--------|-----|
-| **Send message** | Type in the input box, press Send |
+| **Send message** | Type in input box, press Send |
 | **Stop agent** | Click Stop button |
 | **Check cost** | Type `/cost` |
 | **Code review** | Type `/review filename.py` |
+| **Explain code** | Type `/explain filename.py` |
+| **Generate tests** | Type `/test filename.py` |
+| **Verify project** | Type `/verify` |
+| **Apply standards** | Type `/standards filename.py` |
 | **Revert file** | Type `/revert filename.py` or `/revert all` |
 | **Compact context** | Click Compact button (or auto at 80%) |
 | **Clean traces** | Click Clean button (removes audit/snapshots, keeps sessions) |
-| **Save session** | Click Save button (auto-saves after each message) |
-| **Load session** | Use Session dropdown + Load button |
+| **Save/Load** | Save button (auto-saves each message) / Session dropdown + Load |
+
+## Token Overhead Per API Call
+
+| Component | Tokens | Notes |
+|-----------|--------|-------|
+| System prompt | ~1,200 | Compressed from ~2,100 |
+| Tool schemas (22 tools) | ~1,800 | Lazy-load skips doc tools when not needed (~1,200) |
+| Bedrock overhead | ~346 | Added automatically when tools present |
+| **Total fixed overhead** | **~3,350** | **Sent every API call** |
+
+## Session Management
+
+| Feature | How |
+|---------|-----|
+| **Auto-save** | Every message auto-saves (messages, todos, metadata) |
+| **Manual save** | Save button or `/save` |
+| **Load session** | Session dropdown + Load button |
+| **New session** | New button (clears all state) |
+| **Checkpoints** | `/checkpoint name` (saves snapshot, max 50) |
+| **Session ID** | Timestamp + random suffix (no collisions) |
 
 ## Config (Cell 3)
 
-All settings are in the launch cell. Key ones:
+All settings in the launch cell:
 - `aws_bedrock_only = True` — blocks all AWS except Bedrock
-- `session_cost_limit = 1.0` — max $1 per session
-- `require_tool_approval = True` — approve/deny dialog before execution
+- `session_cost_limit = 1.0` — max $1 per session (warns 80%, stops 100%)
+- `require_tool_approval = True` — approve/deny before execution
 
-Change the model in Cell 2 dropdown. Default: Claude 3 Haiku (cheapest).
+Model: change in Cell 2 dropdown. Default: Claude 4.5 Haiku AU.
 
-For full docs: `USER_GUIDE.md` | Architecture: `v3_architecture.html`
+**Full docs:** `USER_GUIDE.md` | **Architecture:** `v3_architecture.html` | **Reviews:** `reviews/`
 
