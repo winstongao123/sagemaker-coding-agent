@@ -471,8 +471,9 @@ def check_t3(result, outputs):
 score_task(3, "Security audit (find 6 OWASP vulnerabilities)",
     "Read comp_task3_vulnerable.py and perform a thorough security audit. "
     "Find ALL security vulnerabilities. For each one: name the vulnerability type (OWASP category), "
-    "explain the risk, show the vulnerable line, and suggest a fix. There are at least 6 issues.",
-    check_t3)
+    "explain the risk, show the vulnerable line, and suggest a fix. There are at least 6 issues. "
+    "IMPORTANT: Report all findings in a single response. Do NOT try to edit the file — just analyze and report.",
+    check_t3, max_turns=20)
 
 
 # ============================================================
