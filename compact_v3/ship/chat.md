@@ -257,12 +257,36 @@ create_chat_ui()
 | **Clean traces** | Click Clean button (removes audit/snapshots, keeps sessions) |
 | **Save/Load** | Save button (auto-saves each message) / Session dropdown + Load |
 
+## Quick Start Examples
+
+| Task | What to type |
+|------|-------------|
+| Read a file | "Read app.py" |
+| Find files | "Find all Python files in this project" |
+| Fix a bug | "Read app.py, find the bug, and fix it" |
+| Create chart | "Create a bar chart from sales.csv showing revenue by product" |
+| Create report | "Create a Word report summarizing the data in results.csv" |
+| Run command | "Run git status" |
+| Analyze image | "Look at screenshot.png and describe what you see" |
+| Search code | "Find where authentication is handled in this codebase" |
+
+## 22 Tools
+
+| Category | Tools | Approval? |
+|----------|-------|-----------|
+| **File** | read_file, write_file, edit_file, glob, grep, list_dir | write/edit need approval |
+| **Exec** | bash, python_exec | Both need approval |
+| **Docs** | create_word, create_excel, create_chart, create_pdf, create_markdown, create_notebook | Need approval |
+| **Intelligence** | view_image (vision), semantic_search (code search), web_fetch (URL fetch, NOT web search) | web_fetch needs approval |
+| **Agents** | skill (load checklist), task (spawn sub-agent), ask_user (ask you a question) | task needs approval |
+| **State** | todo_write, todo_read | Auto |
+
 ## Token Overhead Per API Call
 
 | Component | Tokens | Notes |
 |-----------|--------|-------|
 | System prompt | ~1,200 | Compressed from ~2,100 |
-| Tool schemas (22 tools) | ~1,800 | Lazy-load skips doc tools when not needed (~1,200) |
+| Tool schemas (22 tools) | ~1,800 | Lazy-load skips doc tools (~1,200) |
 | Bedrock overhead | ~346 | Added automatically when tools present |
 | **Total fixed overhead** | **~3,350** | **Sent every API call** |
 
@@ -271,20 +295,16 @@ create_chat_ui()
 | Feature | How |
 |---------|-----|
 | **Auto-save** | Every message auto-saves (messages, todos, metadata) |
-| **Manual save** | Save button or `/save` |
 | **Load session** | Session dropdown + Load button |
 | **New session** | New button (clears all state) |
 | **Checkpoints** | `/checkpoint name` (saves snapshot, max 50) |
-| **Session ID** | Timestamp + random suffix (no collisions) |
 
-## Config (Cell 3)
+## Config
 
-All settings in the launch cell:
+Default config is set in Cell 3 (before launch). You can change model, temperature, thinking mode anytime in the chatbot UI during use.
+
+Key security settings (Cell 3):
 - `aws_bedrock_only = True` — blocks all AWS except Bedrock
-- `session_cost_limit = 1.0` — max $1 per session (warns 80%, stops 100%)
+- `session_cost_limit = 1.0` — max $1 per session
 - `require_tool_approval = True` — approve/deny before execution
-
-Model: change in Cell 2 dropdown. Default: Claude 4.5 Haiku AU.
-
-**Full docs:** `USER_GUIDE.md` | **Architecture:** `v3_architecture.html` | **Reviews:** `reviews/`
 
