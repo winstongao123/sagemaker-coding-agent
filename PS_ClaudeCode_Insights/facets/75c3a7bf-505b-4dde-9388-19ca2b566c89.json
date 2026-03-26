@@ -1,0 +1,17 @@
+{
+  "underlying_goal": "User attempted to compact a conversation that was too long, but the session itself had no substantive task",
+  "goal_categories": {
+    "warmup_minimal": 1
+  },
+  "outcome": "not_achieved",
+  "user_satisfaction_counts": {},
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {
+    "tool_error": 1
+  },
+  "friction_detail": "Conversation was too long for Claude to process, and compaction also failed due to length.",
+  "primary_success": "none",
+  "brief_summary": "User hit a conversation length limit and failed to compact it; no substantive work was accomplished.",
+  "session_id": "75c3a7bf-505b-4dde-9388-19ca2b566c89"
+}

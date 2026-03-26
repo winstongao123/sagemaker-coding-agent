@@ -1,0 +1,21 @@
+{
+  "underlying_goal": "Get strategic advice and draft a message to book a meeting with manager Ben, while navigating workplace dynamics around role perception and a colleague (Afaz)",
+  "goal_categories": {
+    "message_drafting": 1,
+    "strategic_career_advice": 5,
+    "documentation": 2
+  },
+  "outcome": "fully_achieved",
+  "user_satisfaction_counts": {
+    "likely_satisfied": 6
+  },
+  "claude_helpfulness": "very_helpful",
+  "session_type": "iterative_refinement",
+  "friction_counts": {
+    "missing_context": 1
+  },
+  "friction_detail": "Claude couldn't find notes about Ben's trip details and had to ask the user.",
+  "primary_success": "good_explanations",
+  "brief_summary": "User iteratively refined a message to their manager Ben and got strategic advice on meeting framing and workplace dynamics, resulting in a documented plan.",
+  "session_id": "511f3f68-e4f9-4805-a6b3-286ab514c170"
+}

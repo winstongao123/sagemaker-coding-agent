@@ -1,0 +1,15 @@
+{
+  "underlying_goal": "Unknown - session was too short to determine user intent",
+  "goal_categories": {
+    "warmup_minimal": 1
+  },
+  "outcome": "unclear_from_transcript",
+  "user_satisfaction_counts": {},
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "none",
+  "brief_summary": "Session lasted 0 minutes with only a single Glob tool call and no user interaction.",
+  "session_id": "8dd55082-ef85-4d40-94ec-a584eaff84ae"
+}

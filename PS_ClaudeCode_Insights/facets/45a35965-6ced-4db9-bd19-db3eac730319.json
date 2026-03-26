@@ -1,0 +1,17 @@
+{
+  "underlying_goal": "Unknown - session failed before any user input could be processed",
+  "goal_categories": {
+    "warmup_minimal": 1
+  },
+  "outcome": "not_achieved",
+  "user_satisfaction_counts": {},
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {
+    "context_limit": 1
+  },
+  "friction_detail": "Session failed immediately with 'Prompt is too long' error before any work could be done.",
+  "primary_success": "none",
+  "brief_summary": "Session failed instantly due to prompt length limit with no user interaction occurring.",
+  "session_id": "45a35965-6ced-4db9-bd19-db3eac730319"
+}

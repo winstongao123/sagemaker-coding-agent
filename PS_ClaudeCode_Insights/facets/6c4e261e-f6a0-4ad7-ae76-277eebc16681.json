@@ -1,0 +1,15 @@
+{
+  "underlying_goal": "Diagnose and fix an n8n workflow bug where Gmail dot-insensitive email addresses are treated as different clients",
+  "goal_categories": {
+    "bug_diagnosis": 1
+  },
+  "outcome": "not_achieved",
+  "user_satisfaction_counts": {},
+  "claude_helpfulness": "slightly_helpful",
+  "session_type": "quick_question",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "good_explanations",
+  "brief_summary": "User reported an n8n email matching bug with Gmail dot-insensitive addresses; Claude identified the issue but the session was interrupted before any fix.",
+  "session_id": "6c4e261e-f6a0-4ad7-ae76-277eebc16681"
+}

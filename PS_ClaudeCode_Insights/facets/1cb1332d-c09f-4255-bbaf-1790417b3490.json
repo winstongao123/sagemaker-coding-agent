@@ -1,0 +1,23 @@
+{
+  "underlying_goal": "Learn how to create a short recruitment video for a school using Seedance AI tool, plan a storyboard using available photos, and document the workflow",
+  "goal_categories": {
+    "research_and_learning": 1,
+    "file_management": 1,
+    "documentation": 1,
+    "creative_planning": 1
+  },
+  "outcome": "partially_achieved",
+  "user_satisfaction_counts": {
+    "likely_satisfied": 2,
+    "neutral": 1
+  },
+  "claude_helpfulness": "moderately_helpful",
+  "session_type": "exploration",
+  "friction_counts": {
+    "api_error": 2
+  },
+  "friction_detail": "Image too large caused API errors preventing Claude from viewing the user's storyboard screenshot.",
+  "primary_success": "good_explanations",
+  "brief_summary": "User wanted help planning a school recruitment video using Seedance AI with their photos; Claude provided research, documentation, and storyboard guidance but hit image size errors near the end.",
+  "session_id": "1cb1332d-c09f-4255-bbaf-1790417b3490"
+}

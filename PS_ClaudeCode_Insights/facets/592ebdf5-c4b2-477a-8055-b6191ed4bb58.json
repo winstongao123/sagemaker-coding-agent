@@ -1,0 +1,20 @@
+{
+  "underlying_goal": "Make a GitHub repo public and run it locally",
+  "goal_categories": {
+    "deploy_or_publish": 1,
+    "run_locally": 1
+  },
+  "outcome": "mostly_achieved",
+  "user_satisfaction_counts": {
+    "likely_satisfied": 1
+  },
+  "claude_helpfulness": "very_helpful",
+  "session_type": "single_task",
+  "friction_counts": {
+    "misunderstood_request": 1
+  },
+  "friction_detail": "Claude initially made the wrong repo (workflow-lab) public instead of Number-Five, user had to correct.",
+  "primary_success": "proactive_help",
+  "brief_summary": "User wanted to make Number-Five repo public and run it locally; Claude initially targeted the wrong repo but corrected after user feedback and completed the task.",
+  "session_id": "592ebdf5-c4b2-477a-8055-b6191ed4bb58"
+}

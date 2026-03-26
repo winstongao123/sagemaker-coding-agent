@@ -1,0 +1,15 @@
+{
+  "underlying_goal": "No user goal expressed - session was just initialized",
+  "goal_categories": {
+    "warmup_minimal": 1
+  },
+  "outcome": "unclear_from_transcript",
+  "user_satisfaction_counts": {},
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "none",
+  "brief_summary": "Session initialized with no user input; Claude wrote a ready message but no work was requested.",
+  "session_id": "fd2a4b94-93ad-4f59-b9cf-6f80394af64d"
+}

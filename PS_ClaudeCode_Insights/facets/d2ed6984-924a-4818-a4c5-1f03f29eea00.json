@@ -1,0 +1,15 @@
+{
+  "underlying_goal": "No goal expressed - session was just initialized",
+  "goal_categories": {
+    "warmup_minimal": 1
+  },
+  "outcome": "unclear_from_transcript",
+  "user_satisfaction_counts": {},
+  "claude_helpfulness": "unhelpful",
+  "session_type": "single_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "none",
+  "brief_summary": "Session initialized with no user request; Claude performed a glob and stood ready but no interaction occurred.",
+  "session_id": "d2ed6984-924a-4818-a4c5-1f03f29eea00"
+}

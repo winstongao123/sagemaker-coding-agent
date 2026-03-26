@@ -1,0 +1,19 @@
+{
+  "underlying_goal": "Organize a rubric documentation file into the correct project folder and rename the parent folder, then push changes to git",
+  "goal_categories": {
+    "file_organization": 1,
+    "rename_and_refactor": 1,
+    "git_operations": 1
+  },
+  "outcome": "fully_achieved",
+  "user_satisfaction_counts": {
+    "likely_satisfied": 1
+  },
+  "claude_helpfulness": "essential",
+  "session_type": "multi_task",
+  "friction_counts": {},
+  "friction_detail": "",
+  "primary_success": "multi_file_changes",
+  "brief_summary": "User asked to move a file to the right place, rename a folder, update all references, and push — Claude completed all steps successfully.",
+  "session_id": "35c52ebf-1a46-40f8-bf2f-e779e1872eab"
+}
