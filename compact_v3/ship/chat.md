@@ -340,6 +340,45 @@ The agent runs inside a security sandbox. Key protections:
 | **New session** | New button (clears all state) |
 | **Checkpoints** | `/checkpoint name` (saves snapshot, max 50) |
 
+## Commands vs Skills
+
+| Method | How | Depth | Persists? |
+|--------|-----|-------|-----------|
+| `/review app.py` | Inline command — sends condensed checklist once | ~15 lines | No (one-shot) |
+| `/skill use review` then "review app.py" | Loads full skill file into system prompt | ~83 lines | Yes (all messages until `/skill clear`) |
+| "Read clara_prompts.py then review app.py" | Your own custom prompt file | Unlimited | No (one-shot) |
+
+**Commands** = quick one-shot shortcuts (good enough for most tasks).
+**Skills** = persistent behavior change (full checklists, stays active across messages).
+**Custom prompts** = your own files (deepest, most flexible).
+
+### Using Skills (if skills/ folder is present)
+
+```
+/skill use review            ← load review checklist (active until cleared)
+review app.py                ← agent follows full 83-line checklist
+review utils.py              ← still following same checklist
+/skill clear                 ← deactivate
+
+/skill use verify            ← load 6-phase verification
+verify this project          ← runs build, types, lint, tests, security, diff
+
+/skill use coding-standards  ← load KISS/DRY/YAGNI rules
+fix app.py                   ← agent applies standards while fixing
+/skill clear                 ← deactivate
+```
+
+### Available Skills
+
+| Skill | Lines | What it does |
+|-------|-------|-------------|
+| `review` | 83 | 5-category code review (security/quality/performance/architecture/testing) with severity ratings |
+| `verify` | 147 | 6-phase verification with actual shell commands per language + structured report |
+| `coding-standards` | 153 | KISS, DRY, YAGNI, naming conventions, function design, error handling |
+| `report` | 45 | Report generation workflow (chart-first, then Word/PDF) |
+
+Skills are optional — the agent works without them. Commands cover the same categories with less detail.
+
 ## Config
 
 Default config is set in Cell 3 (before launch). Change model, temperature, thinking mode anytime in the chatbot UI during use.
