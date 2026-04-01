@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.2.0 (April 2026)
+Version: 4.2.1 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.2.0"
+__version__ = "4.2.1"
 
 # ============================================================
 # IMPORTS
@@ -310,77 +310,103 @@ Create a detailed summary following these EXACT sections:
 Format as a comprehensive summary that preserves all context needed to continue seamlessly."""
 
     MAX_SUMMARY_INPUT_MESSAGES = 20  # Truncate conversation for summarization (cost + context limit)
+    MAX_PTL_RETRIES = 3
+    PTL_RETRY_MARKER = "[Earlier conversation truncated for summary retry]"
+
+    @classmethod
+    def _build_summary_input(cls, messages: List[Dict]) -> List[Dict]:
+        """Select a summary-safe slice of the conversation while preserving recent context."""
+        if len(messages) > cls.MAX_SUMMARY_INPUT_MESSAGES:
+            head = messages[:3]  # Keep original user request context
+            tail = messages[-(cls.MAX_SUMMARY_INPUT_MESSAGES - 3):]
+            if head and tail and head[-1].get("role") == tail[0].get("role"):
+                tail = tail[1:]
+            return head + tail
+        return list(messages)
+
+    @classmethod
+    def _truncate_head_for_ptl_retry(cls, messages: List[Dict]) -> Optional[List[Dict]]:
+        """Drop the oldest slice of the summary input while keeping a Bedrock-safe user start."""
+        if not messages:
+            return None
+
+        working = list(messages)
+        if (
+            working
+            and working[0].get("role") == "user"
+            and working[0].get("content") == cls.PTL_RETRY_MARKER
+        ):
+            working = working[1:]
+
+        if len(working) < 4:
+            return None
+
+        drop_count = max(1, len(working) // 4)
+        truncated = working[drop_count:]
+        if len(truncated) < 2:
+            return None
+
+        if truncated[0].get("role") != "user":
+            truncated.insert(0, {"role": "user", "content": cls.PTL_RETRY_MARKER})
+
+        return truncated
 
     @classmethod
     def create_llm_summary(cls, client, messages: List[Dict]) -> Optional[str]:
         """Create LLM-generated summary via Bedrock. Returns None on failure.
         Used by both manual and auto compact for high-quality summaries.
         Truncates long conversations to ~20 messages to avoid sending 160K+ tokens."""
-        try:
-            # Truncate to avoid sending full conversation (which may be at 80-90% context)
-            if len(messages) > cls.MAX_SUMMARY_INPUT_MESSAGES:
-                head = messages[:3]  # Keep original user request context
-                tail = messages[-(cls.MAX_SUMMARY_INPUT_MESSAGES - 3):]
-                # Ensure proper role alternation at junction
-                if head and tail and head[-1].get("role") == tail[0].get("role"):
-                    tail = tail[1:]
-                summary_input = head + tail
-            else:
-                summary_input = messages
+        summary_input = cls._build_summary_input(messages)
+        attempts = 0
+        while True:
+            try:
+                summary_prompt = cls.create_summary_prompt(summary_input)
+                summary_messages = list(summary_input)
+                # Ensure proper role alternation: Bedrock requires user/assistant alternation
+                if summary_messages and summary_messages[-1].get("role") == "user":
+                    summary_messages.append({"role": "assistant", "content": "[Preparing summary...]"})
+                summary_messages.append({"role": "user", "content": summary_prompt})
 
-            summary_prompt = cls.create_summary_prompt(summary_input)
-            summary_messages = list(summary_input)
-            # Ensure proper role alternation: Bedrock requires user/assistant alternation
-            if summary_messages and summary_messages[-1].get("role") == "user":
-                summary_messages.append({"role": "assistant", "content": "[Preparing summary...]"})
-            summary_messages.append({"role": "user", "content": summary_prompt})
+                response = client.chat(
+                    messages=summary_messages,
+                    system=("You are summarizing a coding conversation. Be concise but preserve:\n"
+                            "1. Current task and goal\n2. Key files modified or read\n"
+                            "3. Important decisions made\n4. Where we left off\n"
+                            "5. What needs to happen next"),
+                    tools=None,
+                    max_tokens=2000,
+                    temperature=0.0
+                )
+                if response and response.usage:
+                    TOKENS.add(response.usage, model_id=client.model_id)
+                if response and response.text:
+                    return response.text
+                return None
+            except Exception as e:
+                err_str = str(e).lower()
+                is_ptl = ("prompt" in err_str and "long" in err_str) or "too many tokens" in err_str
+                if not is_ptl:
+                    logging.warning(f"LLM summary failed: {e}")
+                    return None
 
-            response = client.chat(
-                messages=summary_messages,
-                system=("You are summarizing a coding conversation. Be concise but preserve:\n"
-                        "1. Current task and goal\n2. Key files modified or read\n"
-                        "3. Important decisions made\n4. Where we left off\n"
-                        "5. What needs to happen next"),
-                tools=None,
-                max_tokens=2000,
-                temperature=0.0
-            )
-            if response and response.usage:
-                TOKENS.add(response.usage, model_id=client.model_id)
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            import logging
-            err_str = str(e).lower()
-            # V4.2 V2-J: PTL recovery — if prompt-too-long, halve input and retry once
-            if ("prompt" in err_str and "long" in err_str) or "too many tokens" in err_str:
-                logging.warning(f"LLM summary PTL — halving input and retrying: {e}")
-                try:
-                    halved = cls.MAX_SUMMARY_INPUT_MESSAGES // 2
-                    if len(messages) > halved and halved >= 4:
-                        tail = messages[-halved:]
-                        summary_prompt = cls.create_summary_prompt(tail)
-                        retry_msgs = list(tail)
-                        if retry_msgs and retry_msgs[-1].get("role") == "user":
-                            retry_msgs.append({"role": "assistant", "content": "[Preparing summary...]"})
-                        retry_msgs.append({"role": "user", "content": summary_prompt})
-                        response = client.chat(
-                            messages=retry_msgs,
-                            system=("You are summarizing a coding conversation. Be concise but preserve:\n"
-                                    "1. Current task and goal\n2. Key files modified or read\n"
-                                    "3. Important decisions made\n4. Where we left off\n"
-                                    "5. What needs to happen next"),
-                            tools=None, max_tokens=2000, temperature=0.0
-                        )
-                        if response and response.usage:
-                            TOKENS.add(response.usage, model_id=client.model_id)
-                        if response and response.text:
-                            return response.text
-                except Exception as retry_e:
-                    logging.warning(f"LLM summary PTL retry also failed: {retry_e}")
-            else:
-                logging.warning(f"LLM summary failed: {e}")
-        return None
+                attempts += 1
+                if attempts > cls.MAX_PTL_RETRIES:
+                    logging.warning(f"LLM summary PTL exceeded retry budget ({cls.MAX_PTL_RETRIES}): {e}")
+                    return None
+
+                truncated = cls._truncate_head_for_ptl_retry(summary_input)
+                if not truncated:
+                    logging.warning(f"LLM summary PTL could not shrink input further: {e}")
+                    return None
+
+                logging.warning(
+                    "LLM summary PTL on attempt %s/%s - retrying with %s messages instead of %s",
+                    attempts,
+                    cls.MAX_PTL_RETRIES,
+                    len(truncated),
+                    len(summary_input),
+                )
+                summary_input = truncated
 
     # Fallback fixed overhead estimate; actual is computed dynamically by TOKENS.get_fixed_overhead()
     FIXED_OVERHEAD_TOKENS = 6000
@@ -2774,6 +2800,7 @@ _FILES_READ = set()
 _FILES_READ_LOCK = threading.Lock()  # Protects _FILES_READ, _FILE_READ_TIMES, and _FILE_PARTIAL_READS
 _FILE_READ_TIMES: Dict[str, float] = {}  # V4: abs_path -> mtime when last read/written (under _FILES_READ_LOCK)
 _FILE_PARTIAL_READS: Dict[str, Tuple[int, int]] = {}  # V4.1 #10: abs_path -> (start_line, end_line) if partial read
+FILE_UNCHANGED_STUB = "File unchanged since last read."
 
 
 def _offload_large_result(result: str, tool_name: str, tool_id: str) -> str:
@@ -2952,8 +2979,7 @@ def tool_read_file(args: Dict) -> str:
     abs_path = os.path.abspath(path)
 
     # DEDUP: If file already in context and no offset specified, return hint
-    if FILE_CACHE.is_in_context(abs_path) and offset == 0:
-        return f"[File already in context: {os.path.basename(path)}]\n[Use offset parameter to read specific sections, or grep to search.]"
+    in_context = FILE_CACHE.is_in_context(abs_path) and offset == 0
 
     # V4.2 V2-H: FILE_UNCHANGED_STUB — if file unchanged since last read, return stub
     # Saves context tokens when LLM re-reads files that haven't been modified.
@@ -2963,10 +2989,13 @@ def tool_read_file(args: Dict) -> str:
         try:
             current_mtime = os.path.getmtime(abs_path)
             if abs(current_mtime - last_read_mtime) < 0.5:  # Same mtime = unchanged
-                return (f"[File unchanged since last read: {os.path.basename(path)}]\n"
-                        f"[{abs_path} — mtime unchanged. Use offset to read specific lines, or edit_file to modify.]")
+                return (f"[{FILE_UNCHANGED_STUB} {os.path.basename(path)}]\n"
+                        f"[{abs_path} - mtime unchanged. Refer to the earlier read, use offset for a specific range, or edit_file to modify.]")
         except OSError:
             pass
+
+    if in_context:
+        return f"[File already in context: {os.path.basename(path)}]\n[Use offset parameter to read specific sections, or grep to search.]"
 
     # Enforce max file size
     try:
@@ -6014,6 +6043,7 @@ class Agent:
             system_prompt: Custom system prompt (default: SYSTEM_PROMPT, use PLAN_MODE_PROMPT for plan mode)
             plan_mode: If True, block write operations and only allow read-only tools
         """
+        global _auto_compact_paused
         # Use provided system prompt or default.
         # NOTE: Skill injection is handled ONLY by the UI send flow (on_send),
         # which appends active skill content before calling agent.run().
@@ -6107,7 +6137,6 @@ class Agent:
                         if summary is None:
                             self._compact_failure_count += 1
                             if self._compact_failure_count >= MAX_COMPACT_FAILURES:
-                                global _auto_compact_paused
                                 _auto_compact_paused = True
                                 output_fn(f"[!] Compact failed {MAX_COMPACT_FAILURES} times. "
                                           f"Auto-compact paused for this session.")
@@ -7559,6 +7588,7 @@ def create_chat_ui(mock_mode: bool = None):
 
     def do_pre_send_compact():
         """Compact before sending if context >= 80% (prevents mid-response overflow)."""
+        global _auto_compact_paused
         if not ui_state["agent"] or not ui_state["agent"].messages:
             return False
 
@@ -7590,7 +7620,6 @@ def create_chat_ui(mock_mode: bool = None):
                     agent = ui_state["agent"]
                     agent._compact_failure_count += 1
                     if agent._compact_failure_count >= MAX_COMPACT_FAILURES:
-                        global _auto_compact_paused
                         _auto_compact_paused = True
                         add_message('system', f'[!] Compact failed {MAX_COMPACT_FAILURES} times. Auto-compact paused.')
                     summary = "Conversation compacted (summary unavailable). Continue from recent context."

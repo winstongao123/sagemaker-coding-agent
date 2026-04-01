@@ -21,6 +21,8 @@ Base: compact_v4 v4.2.0
   instead of re-reading the full file content into context
 - Saves significant context tokens when LLM re-reads files that weren't modified
 - Mirrors runnable's `FILE_UNCHANGED_STUB` from `FileReadTool/prompt.ts`
+- Follow-up audit fix: the stub path now runs before the generic "already in context"
+  hint, so repeated unchanged reads take the low-token path in real use
 
 #### V2-I — Parallel Read-Only Tool Execution
 - Consecutive read-only tools (read_file, glob, grep, list_dir, semantic_search, bash RO)
@@ -31,9 +33,16 @@ Base: compact_v4 v4.2.0
 - Mirrors runnable's `partitionToolCalls()` from `services/tools/toolOrchestration.ts`
 
 #### V2-J — PTL (Prompt-Too-Long) Recovery
-- If `create_llm_summary()` fails with a prompt-too-long error, halves input and retries once
+- If `create_llm_summary()` fails with a prompt-too-long error, trims the oldest
+  summary context and retries up to 3 times
 - Catches both "prompt too long" and "too many tokens" error strings
 - Mirrors runnable's `truncateHeadForPTLRetry()` from `services/compact/compact.ts`
+
+### Verification
+- Added targeted regression tests for:
+  - unchanged file reads returning the stub instead of the generic in-context hint
+  - prompt-too-long summary recovery retrying with smaller context
+  - consecutive read-only tool calls running concurrently
 
 ### Documentation
 - PS_FLOWCHART_RUNNABLE.html completely rebuilt as multi-page reference document

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Code Runnable — Complete Architecture Reference</title>
+<title>Claude Code Runnable Ã¢â‚¬â€ Complete Architecture Reference</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -57,7 +57,7 @@
 </style>
 </head>
 <body>
-<h1>Claude Code Runnable — Complete Architecture Reference</h1>
+<h1>Claude Code Runnable Ã¢â‚¬â€ Complete Architecture Reference</h1>
 <p style="color:#8b949e;">Source-verified analysis of the Claude Code CLI v2.1.87 TypeScript codebase (1,438 files, ~75K lines).<br>
 Click any flowchart node for implementation details. Cross-referenced with 3 independent Chinese-language deep-dive analyses.</p>
 
@@ -97,7 +97,7 @@ Click any flowchart node for implementation details. Cross-referenced with 3 ind
 </nav>
 
 <h2 id="r-entry">1. Entry Point Flow</h2>
-<p class="desc"><span class="badge badge-file">QueryEngine.ts</span> CLI entry to agent loop. No DAG — pure while(true) async generator.</p>
+<p class="desc"><span class="badge badge-file">QueryEngine.ts</span> CLI entry to agent loop. No DAG Ã¢â‚¬â€ pure while(true) async generator.</p>
 <div class="mermaid">
 flowchart TD
     A([User types message]) --> B[CLI captures input]
@@ -124,13 +124,13 @@ flowchart TD
     click M "nodeClick('streaming_executor')"
 </div>
 
-<h2 id="r-mainloop">2. Main Loop — 7-Step Cycle</h2>
-<p class="desc"><span class="badge badge-file">query.ts</span> The core async generator. Each iteration = one LLM turn. Not a DAG, not a graph — a while loop.</p>
+<h2 id="r-mainloop">2. Main Loop Ã¢â‚¬â€ 7-Step Cycle</h2>
+<p class="desc"><span class="badge badge-file">query.ts</span> The core async generator. Each iteration = one LLM turn. Not a DAG, not a graph Ã¢â‚¬â€ a while loop.</p>
 <div class="mermaid">
 flowchart TD
     S([Turn Start]) --> S1["Step 1: Check State\nstop requested? budget exceeded?"]
     S1 --> S2["Step 2: stream_request_start\nBuild system prompt\nAttach tools + cache headers"]
-    S2 --> S3["Step 3: Context Back-Pressure\nSnip → Micro → Collapse → AutoCompact\n(4-tier cascade)"]
+    S2 --> S3["Step 3: Context Back-Pressure\nSnip Ã¢â€ â€™ Micro Ã¢â€ â€™ Collapse Ã¢â€ â€™ AutoCompact\n(4-tier cascade)"]
     S3 --> S4["Step 4: Call Claude API\nStreaming via Anthropic SDK\nPrompt cache: byte-level matching"]
     S4 --> S5["Step 5: Parse Response\nyield text blocks\nyield thinking blocks\ncollect tool_use blocks"]
     S5 --> S6["Step 6: Execute Tools\npartitionToolCalls()\nSafe=parallel, Unsafe=serial\nStreamingToolExecutor"]
@@ -142,7 +142,7 @@ flowchart TD
     click S6 "nodeClick('tool_dispatch_detail')"
 </div>
 
-<h2 id="r-tools">3. Tool Dispatch — Parallel Partitioning</h2>
+<h2 id="r-tools">3. Tool Dispatch Ã¢â‚¬â€ Parallel Partitioning</h2>
 <p class="desc"><span class="badge badge-file">services/tools/toolOrchestration.ts:91</span> Safe tools run concurrently (up to 10). Unsafe run serially. Streaming starts tools BEFORE full response is received.</p>
 <div class="mermaid">
 flowchart TD
@@ -163,12 +163,12 @@ flowchart TD
     click J "nodeClick('abort_controller')"
 </div>
 
-<h2 id="r-compact">4. Compaction — 4-Tier System</h2>
-<p class="desc">Cheapest first: Cached MC (free) → Time-Based MC (no LLM) → Snip (no LLM) → Full AutoCompact (LLM call). Each tier only fires if cheaper tiers insufficient.</p>
+<h2 id="r-compact">4. Compaction Ã¢â‚¬â€ 4-Tier System</h2>
+<p class="desc">Cheapest first: Cached MC (free) Ã¢â€ â€™ Time-Based MC (no LLM) Ã¢â€ â€™ Snip (no LLM) Ã¢â€ â€™ Full AutoCompact (LLM call). Each tier only fires if cheaper tiers insufficient.</p>
 <div class="mermaid">
 flowchart TD
     A([Context growing]) --> B{Tier 1:\nCached Microcompact}
-    B -->|"cache_edits API\nDelete tool results from\nserver cache — zero cost\nMessage content UNCHANGED"| C{Sufficient?}
+    B -->|"cache_edits API\nDelete tool results from\nserver cache Ã¢â‚¬â€ zero cost\nMessage content UNCHANGED"| C{Sufficient?}
     C -->|Yes| D([Continue])
     C -->|No| E{Tier 2:\nTime-Based MC}
     E -->|"Gap > threshold?\nServer cache is cold\nContent-clear old results\nReset cached MC state"| F{Sufficient?}
@@ -184,7 +184,7 @@ flowchart TD
     click I "nodeClick('full_compact')"
 </div>
 
-<h2 id="r-memory">5. Memory System — Per-File Storage</h2>
+<h2 id="r-memory">5. Memory System Ã¢â‚¬â€ Per-File Storage</h2>
 <p class="desc"><span class="badge badge-file">memdir/memoryTypes.ts</span> Individual .md files with YAML frontmatter. MEMORY.md is an index (&lt;200 lines), not content.</p>
 <div class="mermaid">
 flowchart TD
@@ -204,7 +204,7 @@ flowchart TD
     click J "nodeClick('memory_drift')"
 </div>
 
-<h2 id="r-permissions">6. Permission System — 4 Sources</h2>
+<h2 id="r-permissions">6. Permission System Ã¢â‚¬â€ 4 Sources</h2>
 <p class="desc"><span class="badge badge-file">hooks/toolPermission/PermissionContext.ts</span> Race between hook, classifier, and user input. First to claim wins.</p>
 <div class="mermaid">
 flowchart TD
@@ -293,14 +293,14 @@ flowchart TD
 <div id="tab-v4has" class="tab-content">
 
 <h2>Runnable Features That V4 Has Implemented</h2>
-<p class="desc">Everything below exists in V4 v4.2.0 — matching or exceeding the runnable.</p>
+<p class="desc">Everything below exists in V4 v4.2.0 Ã¢â‚¬â€ matching or exceeding the runnable.</p>
 
 <table>
 <tr><th>Feature</th><th>Runnable</th><th>V4 Implementation</th><th>Version</th></tr>
 <tr>
   <td><b>Prompt Cache Boundary</b></td>
   <td>Static/dynamic split with <code>cache_control: ephemeral</code></td>
-  <td>Same — split at <code># === DYNAMIC ===</code>, Bedrock <code>anthropic_beta</code> header, graceful fallback</td>
+  <td>Same Ã¢â‚¬â€ split at <code># === DYNAMIC ===</code>, Bedrock <code>anthropic_beta</code> header, graceful fallback</td>
   <td><span class="badge badge-yes">V4.1 #14</span></td>
 </tr>
 <tr>
@@ -312,7 +312,7 @@ flowchart TD
 <tr>
   <td><b>Read-Only Auto-Approve</b></td>
   <td>Classifier + permission system</td>
-  <td><code>_classify_bash_ro()</code> — frozenset of RO commands, pipeline detection, sed/git edge cases</td>
+  <td><code>_classify_bash_ro()</code> Ã¢â‚¬â€ frozenset of RO commands, pipeline detection, sed/git edge cases</td>
   <td><span class="badge badge-yes">V4.1 #11</span></td>
 </tr>
 <tr>
@@ -335,20 +335,20 @@ flowchart TD
 </tr>
 <tr>
   <td><b>Partial View Guard</b></td>
-  <td>No direct equivalent — runnable trusts LLM to re-read</td>
+  <td>No direct equivalent Ã¢â‚¬â€ runnable trusts LLM to re-read</td>
   <td>Tracks partial reads, warns on edit. <b>V4 exclusive feature.</b></td>
   <td><span class="badge badge-yes">V4.1 #10</span></td>
 </tr>
 <tr>
   <td><b>CLAUDE.md Auto-Load</b></td>
-  <td>Walks workspace → parents → home</td>
-  <td>Same — walks dirs, dedup via realpath, 8K per-file cap</td>
+  <td>Walks workspace Ã¢â€ â€™ parents Ã¢â€ â€™ home</td>
+  <td>Same Ã¢â‚¬â€ walks dirs, dedup via realpath, 8K per-file cap</td>
   <td><span class="badge badge-yes">V4.0</span></td>
 </tr>
 <tr>
   <td><b>Tool Result Disk Offload</b></td>
-  <td><code>DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000</code> → disk</td>
-  <td><code>_offload_large_result()</code> → <code>.tool_cache/</code>, preview (2000+500 chars), fail-open</td>
+  <td><code>DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000</code> Ã¢â€ â€™ disk</td>
+  <td><code>_offload_large_result()</code> Ã¢â€ â€™ <code>.tool_cache/</code>, preview (2000+500 chars), fail-open</td>
   <td><span class="badge badge-yes">V4.2 V2-A</span></td>
 </tr>
 <tr>
@@ -365,7 +365,7 @@ flowchart TD
 </tr>
 <tr>
   <td><b>Time-Based Microcompact</b></td>
-  <td>Gap > threshold → clear cold-cache results</td>
+  <td>Gap > threshold Ã¢â€ â€™ clear cold-cache results</td>
   <td><code>COLD_CACHE_THRESHOLD_SECONDS = 30*60</code>, proactive microcompact before LLM call</td>
   <td><span class="badge badge-yes">V4.2 V2-E</span></td>
 </tr>
@@ -420,7 +420,7 @@ flowchart TD
 <tr>
   <td><b>Parallel Safe Tool Execution</b></td>
   <td><code>partitionToolCalls()</code> groups consecutive read-only tools. Up to 10 run in parallel. <code>StreamingToolExecutor.addTool()</code> starts execution AS blocks stream in.</td>
-  <td><span class="badge badge-no">HIGH</span> V4 runs all non-task tools sequentially. Adding <code>IS_READ_ONLY</code> per tool + ThreadPoolExecutor for read batches would cut multi-read latency ~40%.</td>
+  <td><span class="badge badge-yes">V4.2.1</span> Closed. V4 now batches consecutive read-only tools and runs them concurrently via <code>ThreadPoolExecutor</code>. Remaining gap is only true streaming execution while the model is still emitting tool blocks.</td>
 </tr>
 <tr>
   <td><b>Cached Microcompact (cache_edits)</b></td>
@@ -435,12 +435,12 @@ flowchart TD
 <tr>
   <td><b>FILE_UNCHANGED_STUB</b></td>
   <td>If file not changed since last read, return short stub instead of full content. Saves context.</td>
-  <td><span class="badge badge-no">HIGH</span> V4 has <code>FILE_CACHE.is_in_context()</code> but doesn't return a stub — still returns full content.</td>
+  <td><span class="badge badge-yes">V4.2.1</span> Closed. V4 now returns an unchanged-file stub before the generic in-context hint, so repeated unchanged reads stay cheap.</td>
 </tr>
 <tr>
   <td><b>PTL (Prompt-Too-Long) Recovery</b></td>
-  <td><code>truncateHeadForPTLRetry()</code> — if compact itself hits prompt-too-long, iteratively drops oldest rounds. Up to 3 retries.</td>
-  <td><span class="badge badge-partial">MEDIUM</span> V4 returns None on compact failure → circuit breaker counts it. No recovery attempt.</td>
+  <td><code>truncateHeadForPTLRetry()</code> Ã¢â‚¬â€ if compact itself hits prompt-too-long, iteratively drops oldest rounds. Up to 3 retries.</td>
+  <td><span class="badge badge-yes">V4.2.1</span> Closed at practical parity. V4 now trims the oldest summary context and retries compaction up to 3 times when Bedrock returns prompt-too-long.</td>
 </tr>
 <tr>
   <td><b>Streaming Tool Execution</b></td>
@@ -469,7 +469,7 @@ flowchart TD
 </tr>
 <tr>
   <td><b>Worktree Isolation</b></td>
-  <td>Sub-agents run in git worktree — isolated repo copy, no interference, auto-cleanup.</td>
+  <td>Sub-agents run in git worktree Ã¢â‚¬â€ isolated repo copy, no interference, auto-cleanup.</td>
   <td><span class="badge badge-partial">LOW</span> V4 sub-agents share workspace. Not critical for SageMaker single-user.</td>
 </tr>
 <tr>
@@ -484,7 +484,7 @@ flowchart TD
 </tr>
 <tr>
   <td><b>Feature Flags</b></td>
-  <td>PRIMETIME, CONSULTANT_MODE, TOOL_SNAPSHOT, HIDDEN, TEAMWORK — runtime feature toggles.</td>
+  <td>PRIMETIME, CONSULTANT_MODE, TOOL_SNAPSHOT, HIDDEN, TEAMWORK Ã¢â‚¬â€ runtime feature toggles.</td>
   <td><span class="badge badge-partial">N/A</span> V4 uses config file. Feature flags are for multi-user SaaS deployment.</td>
 </tr>
 <tr>
@@ -515,7 +515,7 @@ flowchart TD
 <div id="tab-v4better" class="tab-content">
 
 <h2>Features Where V4 Exceeds the Runnable</h2>
-<p class="desc">V4 isn't just a copy — it has features the runnable doesn't have, specifically optimized for SageMaker/Bedrock.</p>
+<p class="desc">V4 isn't just a copy Ã¢â‚¬â€ it has features the runnable doesn't have, specifically optimized for SageMaker/Bedrock.</p>
 
 <table>
 <tr><th>Feature</th><th>V4</th><th>Runnable</th></tr>
@@ -536,7 +536,7 @@ flowchart TD
 </tr>
 <tr>
   <td><b>Tool Auto-Repair (5 layers)</b></td>
-  <td>Case-insensitive lookup, fuzzy prefix match, argument auto-fix (path→file_path, text→content), type coercion. Reduces wasted turns.</td>
+  <td>Case-insensitive lookup, fuzzy prefix match, argument auto-fix (pathÃ¢â€ â€™file_path, textÃ¢â€ â€™content), type coercion. Reduces wasted turns.</td>
   <td>Basic error messages. No auto-repair.</td>
 </tr>
 <tr>
@@ -598,7 +598,7 @@ flowchart TD
 <code>DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000</code> (per tool)<br>
 <code>MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200,000</code> (per batch)<br>
 <code>MAX_TOOL_RESULT_TOKENS = 100,000</code><br>
-Token estimation: <code>Math.ceil(totalTokens * (4/3))</code> — 33% safety pad
+Token estimation: <code>Math.ceil(totalTokens * (4/3))</code> Ã¢â‚¬â€ 33% safety pad
 </div>
 
 <h3>Post-Compact Cleanup (Runnable)</h3>
@@ -606,7 +606,7 @@ Token estimation: <code>Math.ceil(totalTokens * (4/3))</code> — 33% safety pad
 <b>Clears:</b> microcompact state, context collapse store (main thread only), getUserContext memoize cache,
 CLAUDE.md/memory file cache, system prompt sections, classifier approvals, speculative checks,
 beta tracing state, session messages cache.<br><br>
-<b>Does NOT clear:</b> invoked skill names (skills survive compaction — avoids 4K token cache_creation on re-inject).
+<b>Does NOT clear:</b> invoked skill names (skills survive compaction Ã¢â‚¬â€ avoids 4K token cache_creation on re-inject).
 </div>
 
 <h3>Retry Logic (Runnable)</h3>
@@ -634,11 +634,11 @@ Session scan interval: 10 minutes. Disk lock prevents concurrent consolidation.
 <h3>Token Estimation Breakdown (Runnable)</h3>
 <div class="info-box">
 <code>estimateMessageTokens()</code> counts by block type:<br>
-- text → <code>roughTokenCountEstimation(text)</code><br>
-- thinking → <code>roughTokenCountEstimation(thinking)</code><br>
-- tool_result → sum of content items<br>
-- image/document → 2000 tokens flat<br>
-- tool_use → name + JSON(input)<br>
+- text Ã¢â€ â€™ <code>roughTokenCountEstimation(text)</code><br>
+- thinking Ã¢â€ â€™ <code>roughTokenCountEstimation(thinking)</code><br>
+- tool_result Ã¢â€ â€™ sum of content items<br>
+- image/document Ã¢â€ â€™ 2000 tokens flat<br>
+- tool_use Ã¢â€ â€™ name + JSON(input)<br>
 - Final: <code>Math.ceil(totalTokens * (4/3))</code>
 </div>
 
@@ -663,7 +663,7 @@ Token estimation: <code>chars // 3</code> (V4.2 V2-F)
 <b>LAYER 1:</b> Tool allowlist<br>
 <b>LAYER 2:</b> Argument validation + auto-fix (5 repair strategies)<br>
 <b>LAYER 3:</b> Path validation (workspace boundary, symlink resolution)<br>
-<b>LAYER 4:</b> Permission gate (<code>_classify_bash_ro</code> → auto-approve or <code>on_approval</code> dialog)<br>
+<b>LAYER 4:</b> Permission gate (<code>_classify_bash_ro</code> Ã¢â€ â€™ auto-approve or <code>on_approval</code> dialog)<br>
 <b>LAYER 5:</b> Execute + error recovery
 </div>
 
@@ -671,15 +671,15 @@ Token estimation: <code>chars // 3</code> (V4.2 V2-F)
 <table>
 <tr><th>PDF</th><th>Title</th><th>Accuracy</th><th>Best For</th></tr>
 <tr><td>1.pdf</td><td>13 Agent Design Insights (Chinese)</td><td><span class="badge badge-partial">85%</span></td><td>High-level design patterns</td></tr>
-<tr><td>2.pdf</td><td>Deep Dive — Why Claude Code is Strong (Chinese)</td><td><span class="badge badge-yes">90%</span></td><td>Detailed technical analysis</td></tr>
+<tr><td>2.pdf</td><td>Deep Dive Ã¢â‚¬â€ Why Claude Code is Strong (Chinese)</td><td><span class="badge badge-yes">90%</span></td><td>Detailed technical analysis</td></tr>
 <tr><td>3.pdf</td><td>Framework Design Analysis (Chinese)</td><td><span class="badge badge-partial">75%</span></td><td>Broad overview, mixed opinions</td></tr>
 </table>
 <div class="info-box warn">
 <b>PDF inaccuracies found:</b><br>
-- PDF 1: "Capybara" described as separate model tier — it's actually an internal routing label<br>
-- PDF 1: "Subscription-tiered parallelism" — not confirmed in source code<br>
-- PDF 3: "1900 files, 810K lines" — our copy has 1,438 files, ~75K lines (may be different version)<br>
-- PDF 3: "全是套路" (all routine) — editorial opinion, not architectural fact
+- PDF 1: "Capybara" described as separate model tier Ã¢â‚¬â€ it's actually an internal routing label<br>
+- PDF 1: "Subscription-tiered parallelism" Ã¢â‚¬â€ not confirmed in source code<br>
+- PDF 3: "1900 files, 810K lines" Ã¢â‚¬â€ our copy has 1,438 files, ~75K lines (may be different version)<br>
+- PDF 3: "Ã¥â€¦Â¨Ã¦ËœÂ¯Ã¥Â¥â€”Ã¨Â·Â¯" (all routine) Ã¢â‚¬â€ editorial opinion, not architectural fact
 </div>
 
 </div><!-- end tab-details -->
@@ -687,7 +687,7 @@ Token estimation: <code>chars // 3</code> (V4.2 V2-F)
 <!-- Modal overlay -->
 <div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal">
-    <button class="modal-close" onclick="closeModal()">✕</button>
+    <button class="modal-close" onclick="closeModal()">Ã¢Å“â€¢</button>
     <h3 id="modal-title"></h3>
     <div class="modal-body" id="modal-body"></div>
   </div>
@@ -696,7 +696,7 @@ Token estimation: <code>chars // 3</code> (V4.2 V2-F)
 <script>
 const NODE_DETAILS = {
   query_engine: {
-    title: "QueryEngine — Entry Point",
+    title: "QueryEngine Ã¢â‚¬â€ Entry Point",
     body: `<b>File:</b> <code>QueryEngine.ts</code><br><br>
     The central orchestrator. Receives user messages, manages the query lifecycle.<br>
     <code>submitMessage()</code> validates input, attaches files, then enters the async generator loop.<br><br>
@@ -704,7 +704,7 @@ const NODE_DETAILS = {
     This is simpler than LangGraph/CrewAI/etc. and more maintainable.`
   },
   query_loop: {
-    title: "Main Query Loop — Async Generator",
+    title: "Main Query Loop Ã¢â‚¬â€ Async Generator",
     body: `<b>File:</b> <code>query.ts</code><br><br>
     The loop is an <code>async generator { }</code> function. Each iteration = one LLM turn.<br><br>
     7 steps per iteration:<br>
@@ -720,23 +720,23 @@ const NODE_DETAILS = {
     PDF 2 accurately documents this as the core design.`
   },
   back_pressure: {
-    title: "Context Back-Pressure — 4-Tier Cascade",
+    title: "Context Back-Pressure Ã¢â‚¬â€ 4-Tier Cascade",
     body: `Before each API call, the system checks if context needs reduction.<br>
     Tiers fire cheapest-first:<br><br>
-    <b>Tier 1 — Cached Microcompact:</b> Uses <code>cache_edits</code> API to delete tool results from server cache.
+    <b>Tier 1 Ã¢â‚¬â€ Cached Microcompact:</b> Uses <code>cache_edits</code> API to delete tool results from server cache.
     Messages stay unchanged. Zero cache invalidation cost. Feature-flagged.<br><br>
-    <b>Tier 2 — Time-Based MC:</b> If gap since last message > threshold, server cache is cold anyway.
+    <b>Tier 2 Ã¢â‚¬â€ Time-Based MC:</b> If gap since last message > threshold, server cache is cold anyway.
     Content-clear old results directly. Reset cached MC state.<br><br>
-    <b>Tier 3 — Snip:</b> Feature-flagged (<code>HISTORY_SNIP</code>). Remove oldest conversation boundary. No LLM call.<br><br>
-    <b>Tier 4 — Full AutoCompact:</b> Fork agent with compact prompt. Summarize + truncate.
+    <b>Tier 3 Ã¢â‚¬â€ Snip:</b> Feature-flagged (<code>HISTORY_SNIP</code>). Remove oldest conversation boundary. No LLM call.<br><br>
+    <b>Tier 4 Ã¢â‚¬â€ Full AutoCompact:</b> Fork agent with compact prompt. Summarize + truncate.
     Post-compact cleanup clears 10+ caches. PTL retry if needed.`
   },
   api_call: {
-    title: "Claude API Call — Streaming + Prompt Cache",
+    title: "Claude API Call Ã¢â‚¬â€ Streaming + Prompt Cache",
     body: `Streaming response via Anthropic SDK. Key optimization: <b>byte-level prompt cache matching</b>.<br><br>
     Messages are kept <b>immutable</b> after creation. Any mutation (even clearing a tool result)
     would change the byte sequence and invalidate the cached prefix for ALL subsequent turns.<br><br>
-    This is why Cached Microcompact (Tier 1) uses <code>cache_edits</code> instead of modifying messages —
+    This is why Cached Microcompact (Tier 1) uses <code>cache_edits</code> instead of modifying messages Ã¢â‚¬â€
     it deletes from server cache without touching the local message array.`
   },
   cache_byte: {
@@ -753,18 +753,18 @@ const NODE_DETAILS = {
     Each long conversation could have tens of thousands of cached input tokens. Cache misses cost money.`
   },
   partition: {
-    title: "partitionToolCalls() — Safe/Unsafe Split",
+    title: "partitionToolCalls() Ã¢â‚¬â€ Safe/Unsafe Split",
     body: `<b>File:</b> <code>services/tools/toolOrchestration.ts:91</code><br><br>
     Each tool declares <code>isConcurrencySafe()</code> based on its parsed input.<br><br>
-    <b>Safe (parallel):</b> read_file, grep, glob, list_dir — up to 10 concurrent<br>
-    <b>Unsafe (serial):</b> bash with write ops, write_file, edit_file — own batch<br><br>
+    <b>Safe (parallel):</b> read_file, grep, glob, list_dir Ã¢â‚¬â€ up to 10 concurrent<br>
+    <b>Unsafe (serial):</b> bash with write ops, write_file, edit_file Ã¢â‚¬â€ own batch<br><br>
     Consecutive safe tools merge into one parallel batch:<br>
-    <pre>Batch 1: [read, grep, glob] → parallel (3 at once)
-Batch 2: [write_file]       → serial (alone)
-Batch 3: [read, grep]       → parallel (2 at once)</pre>`
+    <pre>Batch 1: [read, grep, glob] Ã¢â€ â€™ parallel (3 at once)
+Batch 2: [write_file]       Ã¢â€ â€™ serial (alone)
+Batch 3: [read, grep]       Ã¢â€ â€™ parallel (2 at once)</pre>`
   },
   partition_detail: {
-    title: "Tool Partitioning — Detailed Logic",
+    title: "Tool Partitioning Ã¢â‚¬â€ Detailed Logic",
     body: `<code>partitionToolCalls(toolCalls)</code> reduces the tool list into batches:<br><br>
     <ol>
     <li>For each tool call, check <code>isConcurrencySafe(parsedInput)</code></li>
@@ -773,19 +773,19 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     <li>If unsafe: always start new single-item batch</li>
     </ol>
     Max concurrency: <code>CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY</code> env var, default <b>10</b>.<br><br>
-    This is a key performance optimization. V4 runs all tools serially — adding this would cut
+    This is a key performance optimization. V4 runs all tools serially Ã¢â‚¬â€ adding this would cut
     multi-read latency by ~40%.`
   },
   streaming_executor: {
     title: "StreamingToolExecutor",
     body: `<b>File:</b> <code>services/tools/StreamingToolExecutor.ts</code><br><br>
-    Starts tool execution <b>as each tool_use block streams in</b> — doesn't wait for full response.<br><br>
+    Starts tool execution <b>as each tool_use block streams in</b> Ã¢â‚¬â€ doesn't wait for full response.<br><br>
     <code>addTool(toolBlock)</code>: If tool is concurrency-safe and no unsafe tool is running, starts immediately.
     Results buffered in original order for correct message construction.<br><br>
     This means: while the LLM is still generating its 3rd tool call, the 1st and 2nd might already be running.`
   },
   streaming_exec_detail: {
-    title: "StreamingToolExecutor — Abort & Buffering",
+    title: "StreamingToolExecutor Ã¢â‚¬â€ Abort & Buffering",
     body: `Key mechanisms:<br><br>
     <b>siblingAbortController:</b> Child of main AbortController. When one Bash tool errors,
     <code>siblingAbortController.abort()</code> kills ALL sibling processes immediately.
@@ -796,14 +796,14 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     it waits for all safe tools to complete before starting.`
   },
   abort_controller: {
-    title: "AbortController — Tool Cancellation",
+    title: "AbortController Ã¢â‚¬â€ Tool Cancellation",
     body: `Hierarchical abort structure:<br><br>
     <ul>
-    <li><b>Main AbortController</b> — owned by the query loop. Abort = cancel everything.</li>
-    <li><b>siblingAbortController</b> — child of main. Abort = cancel sibling tools only (e.g., one bash fails → kill others).</li>
-    <li><b>Per-tool AbortSignal</b> — passed to each tool execution. Tool checks signal periodically.</li>
+    <li><b>Main AbortController</b> Ã¢â‚¬â€ owned by the query loop. Abort = cancel everything.</li>
+    <li><b>siblingAbortController</b> Ã¢â‚¬â€ child of main. Abort = cancel sibling tools only (e.g., one bash fails Ã¢â€ â€™ kill others).</li>
+    <li><b>Per-tool AbortSignal</b> Ã¢â‚¬â€ passed to each tool execution. Tool checks signal periodically.</li>
     </ul>
-    When user presses Ctrl+C or stop button, main controller aborts → cascades to all children.`
+    When user presses Ctrl+C or stop button, main controller aborts Ã¢â€ â€™ cascades to all children.`
   },
   cached_mc: {
     title: "Tier 1: Cached Microcompact",
@@ -811,7 +811,7 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     The cheapest compaction. Uses Anthropic's <code>cache_edits</code> API blocks.<br><br>
     Instead of modifying local messages (which would break prompt cache), it sends a
     <code>cache_reference</code> + <code>cache_edits</code> block telling the server to delete specific tool results
-    from its cache. The local message array stays byte-identical → cache hit preserved.<br><br>
+    from its cache. The local message array stays byte-identical Ã¢â€ â€™ cache hit preserved.<br><br>
     <b>Constraints:</b><br>
     <ul>
     <li>Only available for main thread (not sub-agents)</li>
@@ -827,14 +827,14 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     Since server cache is cold anyway (cache has TTL), it's safe to content-clear old results directly.<br><br>
     <code>TIME_BASED_MC_CLEARED_MESSAGE = '[Old tool result content cleared]'</code><br><br>
     Resets cached MC state (because content changed and cache is invalid anyway).<br><br>
-    <b>V4 equivalent:</b> V4.2 V2-E — <code>COLD_CACHE_THRESHOLD_SECONDS = 30*60</code>. Same concept.`
+    <b>V4 equivalent:</b> V4.2 V2-E Ã¢â‚¬â€ <code>COLD_CACHE_THRESHOLD_SECONDS = 30*60</code>. Same concept.`
   },
   snip: {
     title: "Tier 3: Snip Compaction",
     body: `Feature-flagged: <code>HISTORY_SNIP</code><br><br>
     A "snip projection" that removes the oldest conversation boundary without an LLM call.
-    Lighter than full compact — just drops old turns.<br><br>
-    <code>snipCompact.ts</code> exports empty <code>{}</code> — actual logic in <code>snipProjection.ts</code>.<br><br>
+    Lighter than full compact Ã¢â‚¬â€ just drops old turns.<br><br>
+    <code>snipCompact.ts</code> exports empty <code>{}</code> Ã¢â‚¬â€ actual logic in <code>snipProjection.ts</code>.<br><br>
     <b>V4 gap:</b> V4 has no equivalent. Goes straight from microcompact (70%) to full compact (80%).
     Snip would be a useful middle-ground at ~75%.`
   },
@@ -845,20 +845,20 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     <ul>
     <li>Fork a sub-agent with the compact prompt</li>
     <li>Strip images from messages before sending</li>
-    <li>PTL retry: <code>truncateHeadForPTLRetry()</code> — if prompt too long, drop oldest rounds iteratively</li>
+    <li>PTL retry: <code>truncateHeadForPTLRetry()</code> Ã¢â‚¬â€ if prompt too long, drop oldest rounds iteratively</li>
     <li>Post-compact: restore up to 5 recently-read files (50K token budget, 5K per file)</li>
     <li>Post-compact: restore up to 25K tokens of skills</li>
     <li><code>runPostCompactCleanup()</code>: clear 10+ caches</li>
     </ul>
     <b>V4 equivalent:</b> V4.0 full compact with circuit breaker. Similar but V4 restores 3 files (32K total)
-    vs runnable's 5 files (50K total). V4 lacks PTL retry.`
+    vs runnable's 5 files (50K total). V4.2.1 now adds PTL-safe retry by shrinking the oldest summary context and retrying up to 3 times.`
   },
   memory_types: {
     title: "4 Memory Types",
     body: `<b>File:</b> <code>memdir/memoryTypes.ts</code><br><br>
     Each type has structured guidance:<br><br>
     <b>USER:</b> Role, goals, preferences. <i>when_to_save:</i> learn any user details. <i>how_to_use:</i> tailor behavior.<br>
-    <b>FEEDBACK:</b> Corrections AND confirmations. <i>body:</i> rule → <b>Why:</b> → <b>How to apply:</b><br>
+    <b>FEEDBACK:</b> Corrections AND confirmations. <i>body:</i> rule Ã¢â€ â€™ <b>Why:</b> Ã¢â€ â€™ <b>How to apply:</b><br>
     <b>PROJECT:</b> Ongoing work, deadlines, decisions. Convert relative dates to absolute.<br>
     <b>REFERENCE:</b> Pointers to external systems and their purpose.<br><br>
     V4.1 #7 implements the same 4 types. V4 uses <code>## SECTION</code> headings in a single file
@@ -872,7 +872,7 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     <li>Same message prefix (full conversation context)</li>
     <li>Restricted tool set (read-only bash + memory dir writes)</li>
     <li>Strict turn budget</li>
-    <li>Parallel read strategy: Turn 1 = all reads parallel → Turn 2 = all writes parallel</li>
+    <li>Parallel read strategy: Turn 1 = all reads parallel Ã¢â€ â€™ Turn 2 = all writes parallel</li>
     </ul>
     <b>V4:</b> Single LLM call. Simpler but less context-aware.`
   },
@@ -915,18 +915,18 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     First resolver to call <code>claim()</code> wins. Others are ignored.`
   },
   resolve_once: {
-    title: "createResolveOnce() — Atomic Resolution",
-    body: `Factory function that ensures exactly ONE permission source resolves — even in async races.<br><br>
+    title: "createResolveOnce() Ã¢â‚¬â€ Atomic Resolution",
+    body: `Factory function that ensures exactly ONE permission source resolves Ã¢â‚¬â€ even in async races.<br><br>
     <code>claim()</code>: Atomic check-and-mark. Returns true if this caller is the first to claim.<br><br>
-    This prevents: hook says "allow" + classifier says "deny" → both try to resolve → race condition.
+    This prevents: hook says "allow" + classifier says "deny" Ã¢â€ â€™ both try to resolve Ã¢â€ â€™ race condition.
     Only the first to claim() actually resolves the permission.`
   },
   persist_perm: {
     title: "Permission Persistence",
     body: `<code>persistPermissions()</code> calls:<br>
     <ul>
-    <li><code>persistPermissionUpdates()</code> — writes to disk (survives restart)</li>
-    <li><code>applyPermissionUpdates()</code> — updates in-memory AppState</li>
+    <li><code>persistPermissionUpdates()</code> Ã¢â‚¬â€ writes to disk (survives restart)</li>
+    <li><code>applyPermissionUpdates()</code> Ã¢â‚¬â€ updates in-memory AppState</li>
     </ul>
     "Always Allow" decisions are persisted to disk. "Allow once" is session-only.<br><br>
     <b>Important:</b> <code>clearClassifierApprovals()</code> is called post-compact.
@@ -936,25 +936,25 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     title: "Speculative Pre-Check",
     body: `While the PREVIOUS tool is still executing, the permission system pre-checks the NEXT tool call.<br><br>
     This means: by the time the next tool needs approval, the classifier has already computed its verdict.
-    If it says "safe", the approval dialog is skipped entirely — zero latency.<br><br>
-    <code>clearSpeculativeChecks()</code> in postCompactCleanup — speculative decisions don't carry over
+    If it says "safe", the approval dialog is skipped entirely Ã¢â‚¬â€ zero latency.<br><br>
+    <code>clearSpeculativeChecks()</code> in postCompactCleanup Ã¢â‚¬â€ speculative decisions don't carry over
     across compaction.`
   },
   classifier: {
     title: "ML Bash Classifier",
-    body: `An ML model that predicts bash command danger level. Not a regex denylist — learns from patterns.<br><br>
+    body: `An ML model that predicts bash command danger level. Not a regex denylist Ã¢â‚¬â€ learns from patterns.<br><br>
     Runs in background while previous tool executes (speculative). If confident "safe", auto-approves.<br><br>
     Telemetry feeds back into model training: tracks which tools users approve/deny to improve future predictions.<br><br>
     <b>V4 equivalent:</b> Regex denylist + <code>_classify_bash_ro()</code>. Simpler but adequate for SageMaker single-user.`
   },
   cache_boundary: {
-    title: "Prompt Cache Boundary — Static/Dynamic Split",
+    title: "Prompt Cache Boundary Ã¢â‚¬â€ Static/Dynamic Split",
     body: `System prompt is split into:<br>
     <ul>
-    <li><b>Static:</b> Agent persona, tool docs, security rules — marked with <code>cache_control: ephemeral</code></li>
-    <li><b>Dynamic:</b> Workspace, date, memory, CLAUDE.md, active skills — changes per turn</li>
+    <li><b>Static:</b> Agent persona, tool docs, security rules Ã¢â‚¬â€ marked with <code>cache_control: ephemeral</code></li>
+    <li><b>Dynamic:</b> Workspace, date, memory, CLAUDE.md, active skills Ã¢â‚¬â€ changes per turn</li>
     </ul>
-    Static section is byte-stable → cache hit on every turn. ~90% token savings.<br><br>
+    Static section is byte-stable Ã¢â€ â€™ cache hit on every turn. ~90% token savings.<br><br>
     <b>V4.1 #14:</b> Same pattern, split at <code># === DYNAMIC ===</code> marker.`
   },
   tool_stability: {
@@ -964,8 +964,8 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     <li><b>Static base tools:</b> Always present in system prompt. Byte-stable.</li>
     <li><b>Dynamic tools:</b> Added per-turn when invoked. Changes break cache.</li>
     </ul>
-    Skills are NOT reset after compact (intentional). Resetting would change tool list →
-    break cache → cost 4K tokens of cache_creation to re-cache.<br><br>
+    Skills are NOT reset after compact (intentional). Resetting would change tool list Ã¢â€ â€™
+    break cache Ã¢â€ â€™ cost 4K tokens of cache_creation to re-cache.<br><br>
     <b>V4:</b> Re-injects skills after compact. Wastes cache_creation cost.`
   },
   cache_break: {
@@ -980,21 +980,21 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
   },
   four_tier: {
     title: "4-Tier Context Back-Pressure",
-    body: `Cheapest first — each tier fires only if cheaper tiers are insufficient:<br><br>
-    <b>Tier 1 — Cached MC:</b> Free. Server-side cache edit. No message mutation.<br>
-    <b>Tier 2 — Time MC:</b> Free. Content-clear cold results. Cache is already cold.<br>
-    <b>Tier 3 — Snip:</b> Free. Drop oldest turn. No LLM call. Feature-flagged.<br>
-    <b>Tier 4 — Full Compact:</b> Expensive. LLM summarize + truncate + restore files.<br><br>
+    body: `Cheapest first Ã¢â‚¬â€ each tier fires only if cheaper tiers are insufficient:<br><br>
+    <b>Tier 1 Ã¢â‚¬â€ Cached MC:</b> Free. Server-side cache edit. No message mutation.<br>
+    <b>Tier 2 Ã¢â‚¬â€ Time MC:</b> Free. Content-clear cold results. Cache is already cold.<br>
+    <b>Tier 3 Ã¢â‚¬â€ Snip:</b> Free. Drop oldest turn. No LLM call. Feature-flagged.<br>
+    <b>Tier 4 Ã¢â‚¬â€ Full Compact:</b> Expensive. LLM summarize + truncate + restore files.<br><br>
     V4 has only Tier 2 equivalent (V2-E) and Tier 4 equivalent (full compact).
     Missing Tier 1 (cache_edits not on Bedrock) and Tier 3 (snip).`
   },
   tool_dispatch_detail: {
-    title: "Tool Dispatch — Full Detail",
+    title: "Tool Dispatch Ã¢â‚¬â€ Full Detail",
     body: `After LLM response is parsed, tool_use blocks are dispatched:<br>
     <ol>
-    <li><code>partitionToolCalls()</code> — split into safe/unsafe batches</li>
-    <li>For each batch: if safe → run all in parallel via StreamingToolExecutor</li>
-    <li>If unsafe → run alone, serially</li>
+    <li><code>partitionToolCalls()</code> Ã¢â‚¬â€ split into safe/unsafe batches</li>
+    <li>For each batch: if safe Ã¢â€ â€™ run all in parallel via StreamingToolExecutor</li>
+    <li>If unsafe Ã¢â€ â€™ run alone, serially</li>
     <li>Results buffered in original order</li>
     <li>If any tool errors: <code>siblingAbortController.abort()</code> kills siblings</li>
     <li>Results appended to messages as tool_result blocks</li>
@@ -1002,16 +1002,16 @@ Batch 3: [read, grep]       → parallel (2 at once)</pre>`
     Max 10 concurrent tools. Env var: <code>CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY</code>.`
   },
   cache_safe: {
-    title: "createCacheSafeParams — Sub-Agent Cache Sharing",
+    title: "createCacheSafeParams Ã¢â‚¬â€ Sub-Agent Cache Sharing",
     body: `Sub-agents share the parent's cached system prompt prefix.<br><br>
     <code>createCacheSafeParams()</code> constructs the sub-agent's request to reuse the same
-    static prefix → avoids 4K tokens of cache_creation cost per sub-agent spawn.<br><br>
-    This is why skills are NOT reset after compact — resetting would change the static prefix
+    static prefix Ã¢â€ â€™ avoids 4K tokens of cache_creation cost per sub-agent spawn.<br><br>
+    This is why skills are NOT reset after compact Ã¢â‚¬â€ resetting would change the static prefix
     and invalidate the shared cache.`
   },
   worktree: {
     title: "Worktree Isolation for Sub-Agents",
-    body: `Sub-agents can run in a <b>git worktree</b> — an isolated copy of the repository.<br><br>
+    body: `Sub-agents can run in a <b>git worktree</b> Ã¢â‚¬â€ an isolated copy of the repository.<br><br>
     <code>isolation: "worktree"</code> creates a temporary worktree via <code>git worktree add</code>.<br>
     The sub-agent operates on this copy, can't interfere with parent's working directory.<br>
     Auto-cleanup on finish (if no changes) or returns worktree path + branch (if changes made).<br><br>
@@ -1055,7 +1055,7 @@ mermaid.initialize({
   Claude Code Runnable v2.1.87 | 1,438 TypeScript files | ~40 tools | 4-tier compaction |
   Source-verified from gg-claude-code-runnable/src/ |
   Cross-referenced with 3 Chinese deep-dive PDFs (accuracy: 85%/90%/75%) |
-  PS_DEEP_ANALYSIS_V2.md — 583 lines of verified analysis |
+  PS_DEEP_ANALYSIS_V2.md Ã¢â‚¬â€ 583 lines of verified analysis |
   Generated 2026-04-01
 </p>
 </body>
