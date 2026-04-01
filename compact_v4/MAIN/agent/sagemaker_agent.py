@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.3.0"
+__version__ = "4.3.1"
 
 # ============================================================
 # IMPORTS
@@ -369,7 +369,8 @@ Format as a comprehensive summary that preserves all context needed to continue 
 
                 response = client.chat(
                     messages=summary_messages,
-                    system=("You are summarizing a coding conversation. Be concise but preserve:\n"
+                    system=("You are summarizing a coding conversation. You have ZERO tools available — "
+                            "do NOT attempt any tool calls. Be concise but preserve:\n"
                             "1. Current task and goal\n2. Key files modified or read\n"
                             "3. Important decisions made\n4. Where we left off\n"
                             "5. What needs to happen next"),
@@ -5348,7 +5349,7 @@ AGENT_TYPES = {
     "build": {
         "description": "Full-access development agent with all tools",
         "tools": None,  # None = all tools
-        "prompt_suffix": "",
+        "prompt_suffix": "You are a build sub-agent. Complete the implementation fully — don't gold-plate, but don't leave half-done. Report: what was implemented, files changed, how to test, any issues.",
         "max_turns": 25,
     },
     "plan": {
@@ -5361,14 +5362,14 @@ AGENT_TYPES = {
     "explore": {
         "description": "Fast codebase exploration agent",
         "tools": {"read_file", "glob", "grep", "list_dir", "semantic_search"},
-        "prompt_suffix": "You are an explore sub-agent. Search the codebase efficiently. Return concise findings with file paths and line numbers. Do NOT modify files.",
+        "prompt_suffix": "You are an explore sub-agent. Search efficiently using glob and grep. Return:\n- Scope: what you searched\n- Result: what you found\n- Key files: paths and line numbers\nDo NOT modify files. Report only what you observe.",
         "max_turns": 10,
     },
     "general": {
         "description": "General-purpose sub-agent for complex multi-step tasks",
         "tools": {"read_file", "glob", "grep", "list_dir", "bash", "python_exec",
                   "semantic_search", "view_image", "skill", "write_file", "edit_file"},
-        "prompt_suffix": "You are a general sub-agent. Complete the delegated task autonomously and return a concise summary of what you did and found.",
+        "prompt_suffix": "You are a general sub-agent. Complete the task fully — don't gold-plate, but don't leave half-done. Report:\n- Scope: what was asked\n- Result: what was done\n- Key files: files read or changed\n- Issues: anything unresolved",
         "max_turns": 15,
     },
     "review": {
@@ -5433,25 +5434,25 @@ for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
 # ============== TOOL REGISTRY ==============
 
 TOOLS = {
-    "read_file": (tool_read_file, False, "Read file contents with line numbers",
-        {"type": "object", "properties": {"file_path": {"type": "string", "description": "Path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
+    "read_file": (tool_read_file, False, "Read file contents with line numbers. Use offset/limit for large files. Can read images (PNG, JPG), PDFs, and notebooks. You MUST read a file before editing it.",
+        {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
 
-    "write_file": (tool_write_file, True, "Write content to file. Must read first if overwriting. Use mode='append' to add to end.",
+    "write_file": (tool_write_file, True, "Write content to file. You MUST read first if file exists. Prefer edit_file for modifications — use write_file only for new files or complete rewrites.",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}, "mode": {"type": "string", "enum": ["write", "append"], "description": "write (default, overwrites) or append (adds to end)"}}, "required": ["file_path", "content"]}),
 
-    "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. Must read first.",
-        {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences"}}, "required": ["file_path", "old_string", "new_string"]}),
+    "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. MUST read first. old_string must be unique — include more surrounding context if not unique, or use replace_all=true for all occurrences.",
+        {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace (must be unique in file)"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences (use for renaming)"}}, "required": ["file_path", "old_string", "new_string"]}),
 
-    "glob": (tool_glob, False, "Find files by name pattern (e.g., **/*.py for all Python files recursively, src/*.ts for TypeScript in src/)",
-        {"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string", "description": "Directory to search"}}, "required": ["pattern"]}),
+    "glob": (tool_glob, False, "Find files by name pattern. Use this instead of bash find/ls. Results sorted by modification time.",
+        {"type": "object", "properties": {"pattern": {"type": "string", "description": "Glob pattern (e.g. **/*.py, src/*.ts)"}, "path": {"type": "string", "description": "Directory to search"}}, "required": ["pattern"]}),
 
-    "grep": (tool_grep, False, "Search for text or keywords inside files. Supports regular expressions for advanced patterns.",
-        {"type": "object", "properties": {"pattern": {"type": "string", "description": "Text or regex pattern to search for"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "File filter (e.g. *.py)"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
+    "grep": (tool_grep, False, "Search file contents using regex. Use this instead of bash grep/rg. Supports file filtering and case-insensitive search.",
+        {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern to search for"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "File filter (e.g. *.py)"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
 
     "list_dir": (tool_list_dir, False, "List directory contents",
         {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}),
 
-    "bash": (tool_bash, True, "Run shell command. Use for git, pip, scripts.",
+    "bash": (tool_bash, True, "Run shell command. Use for: git, pip, system commands, scripts. Do NOT use for file read/edit/search — use dedicated tools instead.",
         {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 600)"}}, "required": ["command"]}),
 
     "python_exec": (tool_python_exec, True, "Execute Python code for data processing, calculations, scripting.",
@@ -5521,10 +5522,10 @@ TOOLS = {
         }, "required": []}),
 
     "task": (tool_task, True,
-        "Spawn sub-agent: explore (read-only search), plan (architecture), review (code review), build (full dev), general (multi-step).",
+        "Spawn sub-agent for complex tasks. Types: explore (read-only search), plan (architecture), review (code review), build (full dev), general (multi-step). Do NOT use for simple searches — use glob/grep directly. Write prompts like briefing a colleague: explain what, why, and enough context to make judgment calls.",
         {"type": "object", "properties": {
             "description": {"type": "string", "description": "3-5 word summary"},
-            "prompt": {"type": "string", "description": "Task instructions"},
+            "prompt": {"type": "string", "description": "Complete task instructions with context"},
             "subagent_type": {"type": "string", "enum": list(AGENT_TYPES.keys())},
         }, "required": ["description", "prompt"]}),
 
@@ -5869,14 +5870,51 @@ def _extract_and_append_memories(agent: "Agent", output_fn: Callable = None) -> 
 # The boundary marker itself is stripped before sending.
 SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS SageMaker.
 
-# Rules
-- Be concise. Markdown formatting. No emojis.
-- Read before edit. edit_file old_string must be EXACT match.
-- Prefer specialized tools: read_file (not cat), edit_file (not sed), glob (not find), grep (not grep cmd).
-- bash for: git, pip, scripts. Pipelines OK.
-- Parallel independent tools. Don't retry failed calls — adapt.
+# System
+- Tool results and user messages may include <system-reminder> tags with system information.
+- Your conversation is automatically compressed as it approaches context limits — not limited by context window.
+
+# Using Tools
+- Do NOT use bash when a dedicated tool exists: read_file (not cat/head/tail), edit_file (not sed/awk), write_file (not echo/cat heredoc), glob (not find/ls), grep (not grep/rg).
+- Reserve bash exclusively for git, pip, system commands, and scripts.
+- Call multiple tools in parallel when independent. Do not wait for one to finish before starting another.
+- If a tool call fails, diagnose why before retrying. Don't retry identical calls blindly.
+- Prefer editing existing files to creating new ones. Do not create files unless necessary.
+
+# Doing Tasks
+- Go straight to the point. Try the simplest approach first without going in circles. Do not overdo it.
+- Do not propose changes to code you haven't read. Always read_file first.
+- Do not add features, refactor code, or make improvements beyond what was asked.
+- Do not add error handling or validation for scenarios that can't happen. Only validate at system boundaries.
+- Do not add docstrings, comments, or type annotations to code you didn't change.
+- Do not create helpers or abstractions for one-time operations. Three similar lines > premature abstraction.
+- If an approach fails, diagnose why before switching. Don't abandon a viable approach after one failure.
 - For 3+ step tasks: present numbered plan, ask_user to confirm, then execute.
 - Follow existing code style. Minimal changes. No extra abstractions.
+
+# Executing Actions with Care
+- Consider reversibility and blast radius before executing. Freely take local, reversible actions.
+- For hard-to-reverse or shared-state actions, check with user first:
+  - Destructive: deleting files/branches, overwriting uncommitted changes
+  - Hard to reverse: force push, git reset --hard, amending published commits
+  - Visible to others: pushing code, creating/closing PRs or issues
+- Do not use destructive actions as shortcuts. Investigate root causes first.
+- Never skip git hooks (--no-verify) unless explicitly asked.
+- Create NEW commits not amend. After hook failure, fix issue and create new commit.
+- Stage specific files by name (not git add -A) to avoid secrets or large binaries.
+
+# Output
+- Be concise. Markdown formatting. No emojis unless user requests them.
+- Lead with the answer or action, not the reasoning. Skip filler and preamble.
+- Do not restate what the user said — just do it.
+- If you can say it in one sentence, don't use three.
+- Code references: `file_path:line_number`.
+
+# Sub-agent Coordination
+- Use task tool for complex work that benefits from isolation. Use glob/grep directly for simple searches.
+- Spawn multiple sub-agents in parallel when tasks are independent (e.g., search + review simultaneously).
+- Never delegate understanding: when a sub-agent returns findings, synthesize them yourself before acting.
+- For multi-step work: Research (explore) → Synthesize findings → Implement (build/general) → Verify (review).
 
 # Memory
 write_file to memory.md for cross-session context. Auto-loaded on start. Use 4 typed sections:
@@ -5884,7 +5922,7 @@ write_file to memory.md for cross-session context. Auto-loaded on start. Use 4 t
 - ## FEEDBACK — guidance on what to repeat or avoid
 - ## PROJECT — goals, decisions, current state
 - ## REFERENCE — external resource pointers (URLs, paths, docs)
-Save decisions/patterns, not ephemeral task state.
+Save decisions/patterns, not ephemeral task state. Do NOT save: code patterns (read from code), git history (git log is authoritative), fix recipes (fix is in the code), ephemeral paths explored this session.
 
 # Documents
 create_chart FIRST (PNG), then create_word/create_pdf with ![alt](image.png). Use /report skill for guided workflow.
@@ -5900,7 +5938,6 @@ MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Pref
 
 # Commands
 `/cost`, `/revert <file|all>`, `/verify [full|quick|pre-commit]`, `/checkpoint [name|list]`, `/commands` (custom).
-Code references: `file_path:line_number`.
 
 # === DYNAMIC ===
 """

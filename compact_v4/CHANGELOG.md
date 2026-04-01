@@ -1,5 +1,43 @@
 # Compact V4 Changelog
 
+## v4.3.1 — Prompt Engineering Upgrade from Runnable (2026-04-01)
+
+Base: compact_v4 v4.3.0
+
+Source: Full prompt extraction and comparison between Runnable Claude Code and V4 — see PS_PROMPT_COMPARISON.md
+
+### P-1 — SYSTEM_PROMPT Expansion (Runnable Parity)
+- Added "Doing Tasks" section: don't gold-plate, simplest approach first, read before edit, no unnecessary abstractions
+- Added "Executing Actions with Care" section: reversibility awareness, blast radius, confirm risky actions
+- Added "Output Efficiency" section: lead with answer, skip filler, concise
+- Added "Git Safety" section: never --no-verify, new commits not amend, stage specific files
+- Added "Sub-agent Coordination" section: never delegate understanding, parallel spawn, Research→Synthesize→Implement→Verify
+- Enhanced Memory section: inline WHAT_NOT_TO_SAVE exclusions
+- Net effect: system prompt ~35 lines → ~72 lines. Estimated to push past Haiku 4.5's 4,096 token cache threshold
+
+### P-2 — Tool Description Upgrade
+- read_file: added offset/limit guidance, image/PDF support note, "MUST read before edit"
+- write_file: added "prefer edit_file for modifications", "MUST read first if exists"
+- edit_file: added "old_string must be unique — include more context", replace_all for renaming
+- glob: added "use instead of bash find/ls", sorted by mtime
+- grep: added "use instead of bash grep/rg", regex support
+- bash: added "do NOT use for file read/edit/search — use dedicated tools"
+- task: added "do NOT use for simple searches — use glob/grep directly", prompt-writing guidance
+
+### P-3 — Sub-agent Prompt Upgrade
+- build: added structured output format (what implemented, files changed, how to test, issues)
+- explore: added structured output (Scope, Result, Key files), "report only what you observe"
+- general: added structured output (Scope, Result, Key files, Issues), "don't leave half-done"
+- All follow Runnable's worker output format pattern
+
+### P-4 — Compact/Summary NO_TOOLS Preamble
+- Summary system prompt now includes "You have ZERO tools available — do NOT attempt tool calls"
+- Prevents hallucinated tool calls during context compaction (mirrors Runnable's NO_TOOLS_PREAMBLE)
+
+### Bug Fixes (from v4.3.0 testing)
+- TokenTracker.add() now saves _model_id when model_id arg provided → accurate cache savings pricing
+- get_cache_savings_usd() uses self._model_id (not CONFIG.model_id) for per-session model accuracy
+
 ## v4.3.0 — Fresh Runnable Audit Gap Closure (2026-04-01)
 
 Base: compact_v4 v4.2.1

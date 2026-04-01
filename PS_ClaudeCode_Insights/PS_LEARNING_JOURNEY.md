@@ -162,11 +162,13 @@ Based on studying Runnable, these are prompt-level improvements V4 should make:
 
 | # | Improvement | Priority | Status |
 |---|-------------|----------|--------|
-| P1 | Add explicit parallelism section to SYSTEM_PROMPT with mental model + examples | HIGH | TODO |
-| P2 | Add structured output format to subagent `prompt_suffix` (Scope/Result/Files/Issues) | HIGH | TODO |
-| P3 | Review all 22 tool descriptions for precision (WHEN to use, not just WHAT) | MEDIUM | TODO |
-| P4 | Add dynamic prompt sections that activate conditionally (MCP section only if MCP present) | MEDIUM | TODO |
-| P5 | Add coordinator mode prompt (complete role swap) for orchestration tasks | FUTURE (V4.4) | TODO |
+| P1 | Add explicit parallelism + sub-agent coordination to SYSTEM_PROMPT | HIGH | ✅ DONE (v4.3.1) |
+| P2 | Add structured output format to subagent `prompt_suffix` (Scope/Result/Files/Issues) | HIGH | ✅ DONE (v4.3.1) |
+| P3 | Upgrade all tool descriptions for precision (WHEN to use, not just WHAT) | MEDIUM | ✅ DONE (v4.3.1) |
+| P4 | Add "Doing Tasks", "Actions with Care", "Output Efficiency", "Git Safety" sections | HIGH | ✅ DONE (v4.3.1) |
+| P5 | Add NO_TOOLS preamble to compact/summary LLM call | MEDIUM | ✅ DONE (v4.3.1) |
+| P6 | Add coordinator mode prompt (complete role swap) for orchestration tasks | FUTURE (V4.4) | TODO |
+| P7 | Add conditional dynamic prompt sections (MCP section only if MCP present) | LOW | TODO |
 
 ---
 
@@ -198,15 +200,20 @@ Haiku 4.5 requires 4,096 token minimum for prompt caching. Current system+tools 
 
 ## 8. What Remains Unlearned from Runnable
 
-Based on `PS_DEEP_ANALYSIS_V3.md`, these patterns are identified but not yet studied in depth or implemented:
+**v4.3.1 UPDATE**: All prompt patterns have now been extracted and studied. See `PS_PROMPT_COMPARISON.md` for the full side-by-side analysis.
 
-- **Coordinator Mode prompt text** (exact wording not extracted — Task B will capture this)
-- **Tool description patterns** from Runnable's 22+ tool files (not compared to V4)
-- **yolo-classifier prompts** from `src/yolo-classifier-prompts/` (not read)
-- **Compact/summary LLM prompt** (what exactly does Runnable tell the LLM when summarizing?)
-- **Subagent prompt_suffix patterns** in Runnable's agent types
+**Resolved in v4.3.1:**
+- ✅ Tool description patterns — all 7 key tools upgraded
+- ✅ Compact/summary LLM prompt — NO_TOOLS preamble added
+- ✅ Subagent prompt_suffix patterns — structured output format added to explore/general/build
+- ✅ Coordinator principles — "never delegate understanding", Research→Synthesize→Implement→Verify added to SYSTEM_PROMPT
+- ✅ yolo-classifier prompts — confirmed empty placeholder files in Runnable (nothing to learn)
 
-These are the focus of Task B.
+**Still deferred (architectural, not prompt):**
+- **Coordinator Mode** — requires two-prompt system + mode switching. Deferred to V4.4.
+- **SendMessage** — requires async message queue. Not applicable to sync subagents.
+- **Fork Subagent** — requires byte-identical API prefix. Very high complexity.
+- **Conditional dynamic sections** — MCP-only section, feature flags. Low priority for single-file agent.
 
 ---
 
@@ -216,8 +223,16 @@ These are the focus of Task B.
 |---------|------|---------|---------|
 | V4.2.0 | 2026-04-01 | 6/10 SSE issues | All fixed |
 | V4.3.0 initial | 2026-04-01 | False positive (on_compact_fn stale line number) | N/A |
-| V4.3.0 final | 2026-04-01 | Pending | TBD |
+| V4.3.0 final | 2026-04-01 | Background job started, output empty | Inconclusive |
+| V4.3.1 prompt upgrade | 2026-04-01 | Pending | TBD |
+
+### V4.3.1 — Prompt Engineering Upgrade
+Implemented after full prompt extraction from Runnable. See `PS_PROMPT_COMPARISON.md` for details.
+- SYSTEM_PROMPT: 35 → 72 lines (6 new sections from Runnable)
+- Tool descriptions: 7 tools upgraded to Runnable-quality (WHEN not just WHAT)
+- Sub-agent prompts: 3 types upgraded with structured output format
+- Compact prompt: NO_TOOLS preamble added
 
 ---
 
-*Last updated: 2026-04-01. Next update: after Task B completion.*
+*Last updated: 2026-04-01.*

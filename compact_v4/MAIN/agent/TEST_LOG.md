@@ -111,3 +111,35 @@
 ### Haiku 4.5 Caching — Final Note
 
 Haiku 4.5 cannot activate prompt caching for this agent's system+tools size (~3,565 tokens < 4,096 minimum). This is a model constraint, not a bug. The `[Cache: INACTIVE]` indicator is shown once to inform the user. Use Sonnet 4.5 if caching is needed.
+
+---
+
+## V4.3.1 — Prompt Engineering Upgrade Tests (2026-04-01)
+**Version**: 4.3.1
+**Primary model**: `au.anthropic.claude-haiku-4-5-20251001-v1:0` (Haiku 4.5)
+**Secondary model**: `au.anthropic.claude-sonnet-4-5-20250929-v1:0` (Sonnet 4.5)
+
+### Cache Threshold Test (after prompt expansion)
+
+| Model | System+Tools Tokens | Cache Write | Cache Read | Result |
+|-------|-------------------|-------------|------------|--------|
+| Haiku 4.5 | ~3,257 (test) | 0 | 0 | Still below 4,096 threshold |
+| Sonnet 4.5 (turn 1) | 325 + 2,932 cached | 2,932 | 0 | WRITE confirmed |
+| Sonnet 4.5 (turn 2) | 325 + 2,932 cached | 0 | 2,932 | HIT confirmed |
+
+**Note**: Test used simplified tool schemas. Real agent with full schemas may be ~3,800+ tokens (still below Haiku threshold). Sonnet caching remains fully functional.
+
+### Behavioral Tests (Prompt Quality Verification)
+
+| ID | Test | Model | Expected | Actual | Status |
+|----|------|-------|----------|--------|--------|
+| T11 | Tool preference: glob vs bash for file finding | Haiku 4.5 | Use `glob`, not `bash find` | `glob` with `{"pattern": "*.py"}` | **PASS** |
+| T12 | Tool preference: grep vs bash for text search | Haiku 4.5 | Use `grep`, not `bash grep` | `grep` with `{"pattern": "TODO"}` | **PASS** |
+| T13 | No unnecessary sub-agent for simple search | Haiku 4.5 | Use `glob` directly, not `task` | `glob` with `{"pattern": "config.py"}` | **PASS** |
+
+**Pass rate: 3/3**
+
+These tests verify that the V4.3.1 prompt engineering upgrade (from Runnable patterns) correctly steers the model to:
+1. Prefer dedicated tools (read_file, glob, grep) over bash equivalents
+2. Use direct tools for simple operations instead of spawning sub-agents
+3. Follow the "Using Tools" and "Sub-agent Coordination" system prompt sections
