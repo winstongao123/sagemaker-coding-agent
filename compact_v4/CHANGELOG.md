@@ -28,10 +28,11 @@ Base: compact_v4 v4.0.0
 
 #### #11 — Command Auto-Classifier
 - Read-only bash commands skip the approval dialog automatically
-- `_classify_bash_ro()` checks base command against `_RO_BASE_COMMANDS` frozenset; handles `sed -i`, `git branch/tag/remote` with flag inspection, `pip list/show/freeze`
-- Tee-in-pipeline detection: `| tee` forces `return False` (write op regardless of left side)
-- Uses `shlex.split()` for correct tokenization of quoted args (was `str.split()`)
-- `git branch/tag/remote` now inspected for write flags (`-d`, `-D`, `--delete`, etc.) before classifying as read-only
+- `_classify_bash_ro()` checks base command against `_RO_BASE_COMMANDS` frozenset; handles `sed -i/-ni/--in-place`, git read subcommands, `pip list/show/freeze`
+- Pipeline detection: any `;`, `&&`, `||`, `>`, `>>` forces `return False`
+- `diff` removed from `_RO_BASE_COMMANDS` (`diff --output=file` can write)
+- `git stash apply/pop/drop` excluded — "stash" removed from `_RO_GIT_SUBCOMMANDS`
+- `sed -ni` now caught (short option group containing 'i' = in-place)
 - Wired at LAYER 4 in Agent run loop; `_is_ro_bash` skips `on_approval` call
 
 #### #7 — 4-Type Memory Structure
@@ -39,23 +40,25 @@ Base: compact_v4 v4.0.0
 - Legacy flat-format files loaded under `## Notes` with upgrade prompt
 - Each section presented with descriptive label in system prompt
 - SYSTEM_PROMPT updated to document 4-type format for agent's own writes
+- `_load_persistent_memory()` exception now logged via `logging.warning()` (was silently swallowed)
 
 #### #8 — Memory Auto-Extraction (opt-in)
-- At session end (Clear or New Session button), if `>= 10 turns` and `enable_memory_extraction=True`, runs one LLM call to extract learnings
+- At session end (Clear or New Session button), if `>= 4 user turns` and `enable_memory_extraction=True`, runs one LLM call to extract learnings
 - Extracts per-type facts in `[TYPE] key | one-sentence fact` format
-- Appends to `memory.md` under timestamped comment block
+- Appends to `memory.md` under timestamped comment block as a single atomic write
 - Off by default (`enable_memory_extraction: bool = False`) — opt in via agent_config.json
 - Existing memory injected into extraction prompt to avoid re-extracting known facts
+- `SECURITY.validate_path()` guard added before write
 
 ### Review Process
 - All 6 features: self-review + Codex review each
 - Issues found and fixed per feature:
-  - #14: 5 issues (missing anthropic_beta header, no session-level disable flag, broad exception filter, redundant import, list branch bypasses config gate)
-  - #12: 5 issues (rm flag variants, dd order-independence, missing shutdown/init 0, IGNORECASE inappropriate, fail-open on regex error)
-  - #10: 0 issues (Codex: clean)
-  - #11: 3 issues (tee bypass, git flag inspection, shlex.split)
-  - #7: already implemented
-  - #8: 1 issue (agent.llm → agent.client)
+  - #14: 5 issues (missing `anthropic_beta` body field, no session-level `prompt_cache_supported` flag, broad exception filter, redundant `import logging`, list branch bypasses config gate)
+  - #12: 5 issues (rm flag variants, dd order-independence, missing shutdown/init 0, IGNORECASE removed, precompile patterns for fail-closed)
+  - #10: 3 issues (empty selection inverted range, `write_file` not clearing partial flag, partial flag not removed in `on_clear`/`on_new` → all fixed)
+  - #11: 3 issues (`git stash apply` bypass, `sed -ni` bypass, `diff --output` write capability)
+  - #7: 1 issue (silent exception swallow → now logged)
+  - #8: 4 issues (`agent.llm` → `agent.client`, `max_tokens=512` too small → 1024, no path security guard, non-atomic write → single `f.write()` call, min_turns 10 → 4)
 
 ### No Breaking Changes
 

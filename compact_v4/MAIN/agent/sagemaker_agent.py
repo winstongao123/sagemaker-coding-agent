@@ -5492,7 +5492,7 @@ def _load_persistent_memory() -> str:
 # to extract useful learnings and appends them to memory.md.
 # Off by default — user opts in via agent_config.json.
 
-MEMORY_EXTRACT_MIN_TURNS: int = 10  # Minimum conversation turns to trigger extraction
+MEMORY_EXTRACT_MIN_TURNS: int = 4  # Minimum user turns to trigger extraction (lowered from 10 — most sessions are short)
 
 _MEMORY_EXTRACT_PROMPT = """Review the conversation above and identify what (if anything) is worth saving to long-term memory.
 
@@ -5576,7 +5576,7 @@ def _extract_and_append_memories(agent: "Agent", output_fn: Callable = None) -> 
         response = agent.client.chat(
             messages=extract_messages,
             system="You are a memory extraction assistant. Extract only the most valuable, durable facts from this session.",
-            max_tokens=512,
+            max_tokens=1024,  # 512 was too tight for up to 12 entries across 4 types
             temperature=0.0,
         )
         raw = (response.text or "").strip()
@@ -5608,10 +5608,20 @@ def _extract_and_append_memories(agent: "Agent", output_fn: Callable = None) -> 
         append_text = "\n".join(append_lines) + "\n"
 
         # Append to memory.md (create if missing)
+        # Security: validate path before write (defense-in-depth; path is workspace-relative)
+        path_ok, path_msg = SECURITY.validate_path(memory_path)
+        if not path_ok:
+            logging.warning(f"Memory extraction: path rejected: {path_msg}")
+            return None
         try:
+            # Atomic-ish append: build full block as single string before opening file
+            # so a runtime exception cannot corrupt memory.md with a partial entry
+            full_block = (
+                f"\n<!-- Auto-extracted {datetime.now().strftime('%Y-%m-%d %H:%M')} -->\n"
+                + append_text
+            )
             with open(memory_path, 'a', encoding='utf-8') as f:
-                f.write(f"\n<!-- Auto-extracted {datetime.now().strftime('%Y-%m-%d %H:%M')} -->\n")
-                f.write(append_text)
+                f.write(full_block)
             count = sum(len(v) for v in new_entries.values())
             summary = f"[Memory extraction: saved {count} item(s) to memory.md]"
             if output_fn:
