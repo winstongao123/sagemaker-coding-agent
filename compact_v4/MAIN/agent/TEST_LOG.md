@@ -150,6 +150,49 @@ Haiku 4.5 cannot activate prompt caching for this agent's system+tools size (~3,
 
 **Token efficiency**: T14 used 1,922 input + 107 output. T15 used 1,907 input + 100 output. Minimal cost.
 
+---
+
+## V4.3.1 — End-to-End Agent Loop Tests (2026-04-01)
+**Version**: 4.3.1
+**Test harness**: `test_e2e_bedrock.py` — runs actual `Agent.run()` loop on Bedrock
+**Auto-approval**: All tool calls auto-approved (no interactive UI)
+
+### Results
+
+| ID | Test | Model | Tools Used | Turns | Time | Status |
+|----|------|-------|------------|-------|------|--------|
+| T18 | Multi-turn read workflow (glob->read->answer) | Haiku 4.5 | `glob`, `read_file` | 3 | 4.8s | **PASS** |
+| T19 | Edit workflow (read->edit->verify on disk) | Haiku 4.5 | `read_file`, `edit_file`, `read_file`, `bash` | 5 | 7.9s | **PASS** |
+| T20 | Complex security search (19 functions found) | Haiku 4.5 | `semantic_search`x2, `grep`x2, `read_file`x12, `python_exec` | 7 | 63.8s | **PASS** |
+| T21 | Parallel multi-tool (count .py + search "security") | Sonnet 4.5 | `glob`, `grep` (parallel, 1 turn) | 2 | 7.0s | **PASS** |
+| T22 | Skill awareness (list available skills) | Haiku 4.5 | `skill` | 2 | 3.6s | **PASS** |
+
+**Pass rate: 5/5**
+
+### Key Findings
+
+- **T18**: Agent correctly chains glob -> read_file -> text answer. Found version "4.3.1" at line 70. No unnecessary tool calls.
+- **T19**: Agent reads before editing (as SYSTEM_PROMPT requires), applies edit via exact string match, then verifies change on disk. Edit actually persisted to file.
+- **T20**: Most complex test — 7 agent turns, 18 tool calls. Used semantic_search for initial discovery, then grep + read_file for detailed extraction. Found 19 security functions with file:line references. No sub-agent spawn (correct — direct tools sufficient for single-file search).
+- **T21**: Sonnet called glob + grep in parallel (2 tools, 1 turn). Most token-efficient test. Confirms parallel tool dispatch works end-to-end.
+- **T22**: Agent correctly called `skill` tool (without args) to list available skills. Returned all 6 skills with descriptions.
+
+### Token Usage
+
+| Metric | Value |
+|--------|-------|
+| Total input tokens | 321,891 |
+| Total output tokens | 4,996 |
+| Total cost | $0.2312 |
+| API calls | 286 |
+| Total time | 87.0s |
+
+**Note**: High input token count is expected — 286 API calls across 5 multi-turn tests, each sending system prompt + tools + full message history. T20 alone used 7 turns with 18 tool calls (most of the cost).
+
+---
+
+### V4.3.1 Prompt Quality Tests (single API call)
+
 These tests verify that the V4.3.1 prompt engineering upgrade (from Runnable patterns) correctly steers the model to:
 1. Prefer dedicated tools (read_file, glob, grep) over bash equivalents
 2. Use direct tools for simple operations instead of spawning sub-agents
