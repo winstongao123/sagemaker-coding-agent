@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.1.0 (April 2026)
+Version: 4.2.0 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.1.0"
+__version__ = "4.2.0"
 
 # ============================================================
 # IMPORTS
@@ -194,7 +194,8 @@ class Compactor:
 
     @classmethod
     def estimate_tokens(cls, text: str) -> int:
-        """Estimate tokens. Uses tiktoken cl100k_base if available (~95% accurate), else 4 chars/token."""
+        """Estimate tokens. Uses tiktoken cl100k_base if available (~95% accurate),
+        else conservative 4/3 multiplier (V4.2 V2-F): chars/3 = chars/4 * 4/3."""
         if not cls._tokenizer_checked:
             cls._tokenizer_checked = True
             try:
@@ -204,7 +205,7 @@ class Compactor:
                 pass
         if cls._tokenizer:
             return len(cls._tokenizer.encode(text, disallowed_special=()))
-        return len(text) // 4
+        return len(text) // 3  # conservative: 4/3 × (chars/4) = chars/3
 
     @classmethod
     def prune_tool_outputs(cls, messages: List[Dict], max_context: int) -> Tuple[List[Dict], int]:
@@ -423,6 +424,11 @@ COMPACTOR = Compactor()
 POST_COMPACT_MAX_FILES: int = 3
 POST_COMPACT_MAX_CHARS_PER_FILE: int = 12000   # ~3K tokens per file
 POST_COMPACT_TOTAL_BUDGET: int = 32000          # ~8K tokens total
+
+# V4.2 V2-A: Per-tool-result size cap — results larger than this are offloaded to disk
+# and replaced with a preview + file pointer. Prevents large bash/read outputs from
+# flooding the context window (mirrors runnable's 50K char / 200K batch caps).
+MAX_TOOL_RESULT_CHARS: int = 50_000
 
 
 def get_recently_read_files(messages: List[Dict], n: int = POST_COMPACT_MAX_FILES) -> List[str]:
@@ -2491,7 +2497,9 @@ class ContextManager:
         self.last_warning_level = 0
 
     def estimate_tokens(self, messages: List[Dict]) -> int:
-        """Estimate tokens (4 chars = 1 token)."""
+        """Estimate tokens using conservative 4/3 multiplier (V4.2 V2-F).
+        Formula: chars/3 = chars/4 * 4/3 — accounts for non-ASCII and JSON structural overhead.
+        Mirrors runnable's conservative approach so compact triggers earlier rather than too late."""
         total_chars = 0
         for m in messages:
             content = m.get("content", "")
@@ -2506,7 +2514,7 @@ class ContextManager:
                         total_chars += len(str(block))
             else:
                 total_chars += len(str(content))
-        return total_chars // 4
+        return total_chars // 3  # conservative: 4/3 × (chars/4) = chars/3
 
     def get_usage(self, messages: List[Dict]) -> Dict:
         """Get context usage stats (includes fixed overhead for accurate thresholds)."""
@@ -2689,8 +2697,8 @@ class TokenTracker:
         """Get fixed token overhead per API call (system prompt + tool schemas + Bedrock). Cached."""
         if self._fixed_overhead is None:
             try:
-                sys_tokens = len(SYSTEM_PROMPT) // 4
-                tools_tokens = len(str(get_tool_definitions())) // 4
+                sys_tokens = len(SYSTEM_PROMPT) // 3  # V4.2 V2-F: conservative 4/3 multiplier
+                tools_tokens = len(str(get_tool_definitions())) // 3
                 self._fixed_overhead = sys_tokens + tools_tokens + 346  # 346 = Bedrock tool use prompt
             except Exception:
                 self._fixed_overhead = 3350  # Fallback estimate
@@ -2740,6 +2748,49 @@ _FILE_READ_TIMES: Dict[str, float] = {}  # V4: abs_path -> mtime when last read/
 _FILE_PARTIAL_READS: Dict[str, Tuple[int, int]] = {}  # V4.1 #10: abs_path -> (start_line, end_line) if partial read
 
 
+def _offload_large_result(result: str, tool_name: str, tool_id: str) -> str:
+    """V4.2 V2-A: If result exceeds MAX_TOOL_RESULT_CHARS, write full content to
+    .tool_cache/<tool_id>_<tool_name>.txt under workspace and return a compact
+    preview + file pointer instead.  This prevents a single large bash/read output
+    from consuming tens of thousands of context tokens.
+
+    Design notes:
+    - Preview = first 2000 + last 500 chars so the LLM sees both start and end.
+    - Cache dir is .tool_cache/ inside CONFIG.workspace (created on demand).
+    - Security: path is constructed from CONFIG.workspace + sanitised filename only;
+      no user-supplied data reaches the directory path.
+    - If the write fails (permissions, disk full) the original result is returned
+      unchanged so the agent never silently loses tool output.
+    """
+    if len(result) <= MAX_TOOL_RESULT_CHARS:
+        return result
+
+    # Build a safe filename — only alphanum + underscore from tool_name/tool_id
+    safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", f"{tool_id}_{tool_name}")[:80]
+    cache_dir = os.path.join(CONFIG.workspace, ".tool_cache")
+    cache_path = os.path.join(cache_dir, f"{safe_name}.txt")
+
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as fh:
+            fh.write(result)
+    except OSError:
+        # Fail open: return original result unchanged rather than losing data
+        return result
+
+    total = len(result)
+    head = result[:2000]
+    tail = result[-500:] if total > 2500 else ""
+    tail_section = f"\n...\n[last 500 chars]\n{tail}" if tail else ""
+    return (
+        f"[Output offloaded — {total:,} chars exceeds {MAX_TOOL_RESULT_CHARS:,} char limit]\n"
+        f"[Full output saved to: {cache_path}]\n"
+        f"[Use read_file on that path to retrieve specific sections]\n"
+        f"\n[Preview — first 2000 chars]\n{head}"
+        f"{tail_section}"
+    )
+
+
 # ============================================================
 # V4: MICROCOMPACT
 # ============================================================
@@ -2749,6 +2800,10 @@ _FILE_PARTIAL_READS: Dict[str, Tuple[int, int]] = {}  # V4.1 #10: abs_path -> (s
 # Triggers BEFORE the 80% full compact threshold.
 
 MICROCOMPACT_TRIGGER_PERCENT: float = 0.70
+# V4.2 V2-E: If gap between API calls exceeds this, Bedrock's prompt cache has likely expired.
+# Proactively run microcompact before the next call to avoid re-uploading stale large tool results.
+# 30 minutes matches Bedrock's documented 5-minute minimum TTL with significant margin.
+COLD_CACHE_THRESHOLD_SECONDS: float = 30 * 60
 MICROCOMPACT_TOOLS: Set[str] = {
     "read_file", "bash", "grep", "glob", "list_dir",
     "web_fetch", "python_exec", "create_chart"
@@ -4781,7 +4836,7 @@ class SemanticSearch:
         )
         result = json.loads(response["body"].read())
         # Track embedding cost (Titan Embed: ~$0.0001/1K tokens, much cheaper than Claude)
-        input_tokens = len(text) // 4  # Estimate
+        input_tokens = len(text) // 3  # V4.2 V2-F: conservative 4/3 multiplier
         TOKENS.add({"input_tokens": input_tokens, "output_tokens": 0}, model_id=self.model_id)
         return result["embedding"]
 
@@ -5510,6 +5565,18 @@ Rules:
 - If nothing is worth saving for a type, omit that type entirely
 - If nothing is worth saving at all, output only: NOTHING
 
+WHAT NOT TO SAVE (V4.2 V2-C: mirrors runnable's exclusion list):
+- Code patterns, conventions, or internal architecture snapshots — these can be re-read from code
+- Ephemeral file paths: lists of files read/written this session, transient code-navigation paths
+  (Exception: stable canonical project locations like "source is at /path/x" belong in [REFERENCE])
+- Git history, recent changes, or commit details — git log/blame are authoritative
+- Debugging solutions or fix recipes — the fix is in the code; the commit message has context
+- Project-level structural facts like repo layout and team ownership (these belong in project docs)
+- Ephemeral task details: in-progress work, temporary state, current conversation steps
+- Activity logs: lists of files read, tools called, or actions taken this session
+If a memory names a specific function, file path, or flag, add a parenthetical note "(verify still
+exists — may have been renamed or removed)" so the reader checks before acting on it.
+
 Example output:
 [USER] language | User works primarily in Python, not R
 [FEEDBACK] confirm_before_delete | Always ask before deleting files — user had bad experience
@@ -5746,6 +5813,7 @@ class Agent:
         on_tokens: Callable = None,
         on_thinking: Callable = None,
         on_stop_check: Callable = None,
+        on_compact_fn: Callable = None,
         tool_allowlist: Optional[Set[str]] = None,
         subagent_depth: int = 0,
     ):
@@ -5757,6 +5825,7 @@ class Agent:
         self.on_tokens = on_tokens  # Callback for token updates
         self.on_thinking = on_thinking  # Callback for thinking output
         self.on_stop_check = on_stop_check  # Callback to check if stop was requested
+        self.on_compact_fn = on_compact_fn  # V4.2 V2-D: called after auto-compact to expire stale approvals
         self.tool_allowlist = set(tool_allowlist) if tool_allowlist else None
         self.subagent_depth = subagent_depth
         self.tool_history = deque(maxlen=30)
@@ -5765,6 +5834,7 @@ class Agent:
         self.user_msg_timestamps = deque()
         self.user_msg_count = 0
         self._compact_failure_count = 0  # V4: circuit breaker counter
+        self._last_api_call_time: float = 0.0  # V4.2 V2-E: timestamp of last successful API call
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
         """Ask the user a question and wait for response via text input widget."""
@@ -5860,6 +5930,7 @@ class Agent:
             on_tokens=self.on_tokens,
             on_thinking=None,
             on_stop_check=_sub_stop_check,
+            on_compact_fn=self.on_compact_fn,  # V4.2 V2-D: propagate to sub-agents
             tool_allowlist=allow,
             subagent_depth=self.subagent_depth + 1,
         )
@@ -6007,6 +6078,9 @@ class Agent:
                             self._compact_failure_count = 0  # Reset counter on success
                         self.messages = COMPACTOR.compact(self.messages, summary)
                         output_fn("[i] Conversation compacted to preserve context")
+                        # V4.2 V2-D: Expire stale "always approve" decisions — old context is gone
+                        if self.on_compact_fn:
+                            self.on_compact_fn()
 
             # Fallback: simple trim if still too long (preserve role alternation)
             if len(self.messages) > CONFIG.max_history * 2:
@@ -6042,6 +6116,19 @@ class Agent:
                         elif isinstance(content, list):
                             _m["content"] = content + _imgs
                         break
+
+            # V4.2 V2-E: Time-based microcompact — if gap since last API call exceeds threshold,
+            # Bedrock's server-side prompt cache has likely expired. Proactively clear old tool
+            # results so we don't re-upload a large context the server will re-tokenise anyway.
+            _now = time.time()
+            if (self._last_api_call_time > 0 and
+                    _now - self._last_api_call_time > COLD_CACHE_THRESHOLD_SECONDS):
+                _gap_min = (_now - self._last_api_call_time) / 60
+                _mc_msgs, _mc_saved = microcompact(self.messages)
+                if _mc_saved > MICROCOMPACT_MIN_SAVINGS:
+                    self.messages = _mc_msgs
+                    output_fn(f"[i] Cold cache detected ({_gap_min:.0f}min gap) — "
+                              f"proactive microcompact freed ~{_mc_saved:,} tokens")
 
             def make_request():
                 return self.client.chat(
@@ -6093,6 +6180,7 @@ class Agent:
                 TOKENS.add(response.usage, model_id=self.client.model_id)
                 if self.on_tokens:
                     self.on_tokens(TOKENS.get_stats())
+                self._last_api_call_time = time.time()  # V4.2 V2-E: update cold-cache timestamp
 
             # Check stop again after LLM returns (user may have clicked during the call)
             if self.on_stop_check and self.on_stop_check():
@@ -6392,6 +6480,11 @@ class Agent:
                 except Exception as e:
                     result = f"Error executing {tool_name}: {e}"
 
+                # V4.2 V2-A: Offload oversized results to disk BEFORE truncation.
+                # Must run first so the full content is saved; truncate_output then
+                # applies its line/char cap to the (now-short) preview string.
+                result = _offload_large_result(result, tool_name, tc.id)
+
                 # Truncate result
                 result = SECURITY.truncate_output(result)
 
@@ -6412,6 +6505,34 @@ class Agent:
 
                 AUDIT.log(self.session_id, "tool_call", tc.name, tc.input, llm_result[:200])
                 tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": llm_result})
+
+            # V4.2 V2-G: Per-batch aggregate cap — if total tool result chars exceed
+            # 200K, truncate the largest results first (skipping protected tools) until
+            # under budget. Mirrors runnable's 200K batch limit.
+            # Protected tools (todo, semantic_search) are never truncated.
+            _BATCH_CAP = 200_000
+            _PROTECTED = {"todo_write", "todo_read", "semantic_search", "edit_file", "write_file"}
+            if tool_results:
+                _batch_total = sum(len(r.get("content", "")) for r in tool_results)
+                if _batch_total > _BATCH_CAP:
+                    # Build list of (index, size) for non-protected, non-already-short results
+                    _trimmable = [
+                        (i, len(r.get("content", "")))
+                        for i, r in enumerate(tool_results)
+                        if (len(r.get("content", "")) > 1000 and
+                            _find_tool_name(self.messages, r.get("tool_use_id", "")) not in _PROTECTED)
+                    ]
+                    # Trim largest first until under budget
+                    _trimmable.sort(key=lambda x: x[1], reverse=True)
+                    for _idx, _size in _trimmable:
+                        if _batch_total <= _BATCH_CAP:
+                            break
+                        _old = tool_results[_idx].get("content", "")
+                        _preview = _old[:1000] + f"\n[...{len(_old):,} chars — batch cap reached, use read_file for full content...]"
+                        tool_results[_idx] = {**tool_results[_idx], "content": _preview}
+                        _batch_total -= _size - len(_preview)
+                    if _batch_total > _BATCH_CAP:
+                        output_fn(f"[!] Batch still {_batch_total:,} chars after trimming — consider compacting")
 
             if tool_results:  # Only append if non-empty (prevents Bedrock rejection)
                 self.messages.append({"role": "user", "content": tool_results})
@@ -6443,6 +6564,7 @@ class Agent:
             _FILE_READ_TIMES.clear()  # V4: clear staleness tracking on session reset
             _FILE_PARTIAL_READS.clear()  # V4.1 #10: clear partial view tracking
         _reset_global_exec()  # Reset global exec budget for new session
+        self._last_api_call_time = 0.0  # V4.2 V2-E: reset cold-cache timer on session reset
         CONTEXT.reset()
         TOKENS.reset()
 
@@ -7366,6 +7488,8 @@ def create_chat_ui(mock_mode: bool = None):
                     new_pct = usage["percent"] * 100
                     if new_pct < 75:
                         add_message('system', f'[OK] Pruned only. Context: {pct:.0f}% -> {new_pct:.0f}%')
+                        if "always_allow" in ui_state:  # V4.2 V2-D: expire approvals on prune-only too
+                            ui_state["always_allow"].clear()
                         return True
                 # Stage 2: LLM summary only if still above threshold
                 summary = COMPACTOR.create_llm_summary(ui_state["client"], messages)
@@ -7383,6 +7507,7 @@ def create_chat_ui(mock_mode: bool = None):
                 compacted = COMPACTOR.compact(messages, summary)
                 ui_state["agent"].messages = compacted
                 FILE_CACHE.clear_context()
+                ui_state.get("always_allow", set()).clear()  # V4.2 V2-D: expire stale approvals
                 usage = CONTEXT.get_usage(compacted)
                 new_pct = usage["percent"] * 100
                 add_message('system', f'[OK] Pre-compacted. Context: {pct:.0f}% -> {new_pct:.0f}%')
@@ -7614,7 +7739,8 @@ def create_chat_ui(mock_mode: bool = None):
                 on_ask_user=request_user_input,
                 on_tokens=lambda stats: update_tokens_display(),
                 on_thinking=lambda t: add_message('thinking', t) if t else None,
-                on_stop_check=lambda: ui_state.get("stop_requested", False)
+                on_stop_check=lambda: ui_state.get("stop_requested", False),
+                on_compact_fn=lambda: ui_state["always_allow"].clear() if "always_allow" in ui_state else None,  # V4.2 V2-D
             )
             session_name_input.value = ''  # Clear for next session
 
@@ -7936,7 +8062,8 @@ def create_chat_ui(mock_mode: bool = None):
             on_ask_user=request_user_input,
             on_tokens=lambda stats: update_tokens_display(),
             on_thinking=lambda t: add_message('thinking', t) if t else None,
-            on_stop_check=lambda: ui_state.get("stop_requested", False)
+            on_stop_check=lambda: ui_state.get("stop_requested", False),
+            on_compact_fn=lambda: ui_state.get("always_allow", set()).clear(),  # V4.2 V2-D
         )
         ui_state["agent"].messages = copy.deepcopy(session.messages)
         if isinstance(session.metadata, dict):
@@ -8066,6 +8193,8 @@ def create_chat_ui(mock_mode: bool = None):
 
             # Clear file dedup cache — compacted context no longer has old file reads
             FILE_CACHE.clear_context()
+            # V4.2 V2-D: Expire stale "always approve" decisions — context was reset
+            ui_state.get("always_allow", set()).clear()
 
             add_message('system', f'Compacted: {original_count} → {len(compacted)} messages')
 

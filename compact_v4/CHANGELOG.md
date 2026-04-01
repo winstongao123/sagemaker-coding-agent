@@ -1,5 +1,69 @@
 # Compact V4 Changelog
 
+## v4.2.0 — Runnable Gap Closure (2026-04-01)
+
+Base: compact_v4 v4.1.0
+
+### New Features (learned from deep dive: runnable vs V4 gap analysis)
+
+#### V2-A — Tool Result Size Cap + Disk Offload
+- Results > 50K chars are written to `.tool_cache/<id>_<tool>.txt` in workspace
+- Preview (first 2000 + last 500 chars) + file pointer returned to LLM instead
+- Runs BEFORE `SECURITY.truncate_output` so full content is always saved
+- Fail-open: if disk write fails, original result returned unchanged
+- `MAX_TOOL_RESULT_CHARS = 50_000` constant; mirrors runnable's 50K per-tool cap
+
+#### V2-C — Enhanced Memory Extraction Prompt
+- Added `WHAT NOT TO SAVE` exclusion section to `_MEMORY_EXTRACT_PROMPT`
+- Excludes: code patterns, ephemeral file paths, git history, fix recipes, activity logs, project structural facts
+- Exception carved out for canonical project locations (valid `[REFERENCE]` entries)
+- Staleness note: function/path/flag memories get "(verify still exists)" annotation
+- Mirrors runnable's `WHAT_NOT_TO_SAVE_SECTION` from `src/services/extractMemories/prompts.ts`
+
+#### V2-D — Clear always_allow on Compact
+- `always_allow` set cleared on every compact (manual, pre-send, auto, prune-only)
+- Added `on_compact_fn: Callable` callback to Agent; propagated to sub-agents
+- 3 clear locations: manual `on_compact()`, pre-send `do_pre_send_compact()`, `Agent.run()` auto-compact
+- Prune-only path (Stage 1 early return) also clears to cover all code paths
+
+#### V2-E — Time-Based Microcompact (Cold Cache Detection)
+- `COLD_CACHE_THRESHOLD_SECONDS = 30 * 60` (30 min)
+- If gap since last successful API call exceeds threshold, proactively runs microcompact before next LLM call
+- `self._last_api_call_time` tracked on Agent, updated after every successful response
+- Reset in `Agent.reset()` so loaded sessions don't inherit stale timestamps
+- Only applies if savings >= `MICROCOMPACT_MIN_SAVINGS` (5K tokens)
+- Mirrors runnable's `src/services/compact/microCompact.ts` time-based detection
+
+#### V2-F — Conservative 4/3 Token Estimation Padding
+- All char-based token estimates updated: `len // 4` → `len // 3` (= chars/4 × 4/3)
+- Updated: `ContextManager.estimate_tokens`, `Compactor.estimate_tokens`, `TokenTracker.get_fixed_overhead`, embedding cost estimate
+- Only affects non-tiktoken fallback path; tiktoken path remains accurate
+- Mirrors runnable's conservative multiplier from `src/query/tokenBudget.ts`
+- Effect: compact triggers slightly earlier, preventing context overflow at boundary
+
+#### V2-G — Per-Batch Aggregate Tool Result Cap
+- If total chars across all tool results in a batch exceeds 200K, largest results trimmed first
+- Protected tools never truncated: `todo_write`, `todo_read`, `semantic_search`, `edit_file`, `write_file`
+- Preview: first 1000 chars + pointer to use `read_file` for full content
+- Warning emitted if batch still over cap after trimming all trimmable results
+- Mirrors runnable's `src/constants/toolLimits.ts` 200K batch cap
+
+### Review Process
+- All features reviewed with gpt-5.3-codex (Codex CLI, read-only sandbox)
+- Issues found and fixed per feature:
+  - V2-A: 1 issue (offload ran AFTER truncation → dead code; fixed ordering)
+  - V2-C: 2 issues (file path exclusion contradicted [REFERENCE] type; CLAUDE.md exclusion unactionable)
+  - V2-D: 3 issues (sub-agents missing on_compact_fn; lambda get() no-op; prune-only path skipped clear)
+  - V2-E: 1 issue (reset() didn't clear _last_api_call_time)
+  - V2-F: 1 issue (missed embedding estimate at line ~4839)
+  - V2-G: pending Codex final pass
+
+### No Breaking Changes
+- All v4.1 API signatures unchanged
+- New Agent kwarg `on_compact_fn` is optional (default None)
+
+---
+
 ## v4.1.0 — Claude Code Feature Parity (2026-04-01)
 
 Base: compact_v4 v4.0.0
