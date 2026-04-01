@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Runnable — Architecture Flowchart</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; max-width: 1300px; margin: 0 auto; padding: 20px; }
+  h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; font-size: 24px; }
+  h2 { color: #79c0ff; margin-top: 40px; font-size: 18px; }
+  .mermaid { background: #161b22; border-radius: 8px; padding: 20px; margin: 15px 0; overflow-x: auto; }
+  .desc { color: #8b949e; font-size: 13px; margin-bottom: 10px; line-height: 1.5; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 18px; }
+  .stat-num { font-size: 26px; font-weight: bold; color: #58a6ff; }
+  .stat-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  nav { background: #161b22; padding: 15px 20px; border-radius: 8px; margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 8px; }
+  nav a { color: #58a6ff; text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 4px; background: #1f2937; }
+  nav a:hover { background: #2d3748; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 24px; max-width: 520px; width: 90%; max-height: 80vh; overflow-y: auto; }
+  .modal h3 { color: #58a6ff; margin-bottom: 12px; font-size: 16px; }
+  .modal p { color: #c9d1d9; font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+  .modal code { background: #0d1117; border-radius: 4px; padding: 2px 6px; font-size: 12px; color: #79c0ff; font-family: monospace; }
+  .modal .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin: 2px; }
+  .tag-blue { background: #1f3a5f; color: #58a6ff; }
+  .tag-green { background: #1a3a1f; color: #56d364; }
+  .tag-orange { background: #3a2a1f; color: #f0883e; }
+  .tag-red { background: #3a1f1f; color: #f85149; }
+  .modal .close-btn { float: right; cursor: pointer; color: #8b949e; font-size: 18px; line-height: 1; }
+  .modal .close-btn:hover { color: #c9d1d9; }
+  .modal ul { color: #c9d1d9; font-size: 13px; padding-left: 18px; line-height: 1.8; }
+  .section-label { display: inline-block; background: #1f3a5f; color: #58a6ff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 4px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Claude Code Runnable — Architecture Flowchart</h1>
+<p style="color:#8b949e; margin-bottom:16px;">Deep dive: TypeScript source analysis · 1438 files · Sections ①–⑥ match V4 flowchart for side-by-side comparison</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">1,438</div><div class="stat-label">TS Files</div></div>
+  <div class="stat"><div class="stat-num">10</div><div class="stat-label">Max Parallel Tools</div></div>
+  <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compact Tiers</div></div>
+  <div class="stat"><div class="stat-num">200K</div><div class="stat-label">Context Window</div></div>
+  <div class="stat"><div class="stat-num">50K / 200K</div><div class="stat-label">Tool / Batch Cap (chars)</div></div>
+  <div class="stat"><div class="stat-num">4/3×</div><div class="stat-label">Token Padding</div></div>
+  <div class="stat"><div class="stat-num">4-type</div><div class="stat-label">Memory Taxonomy</div></div>
+</div>
+
+<nav>
+  <a href="#phase1">① Token Budget</a>
+  <a href="#phase2">② System Prompt</a>
+  <a href="#phase3">③ Tool Dispatch</a>
+  <a href="#phase4">④ Compaction</a>
+  <a href="#phase5">⑤ Memory</a>
+  <a href="#phase6">⑥ Security</a>
+</nav>
+
+<!-- PHASE 1 -->
+<h2 id="phase1">① Token Budget &amp; Pre-Flight</h2>
+<p class="desc">Source: <code>src/query/tokenBudget.ts</code>, <code>src/utils/api.ts</code> · Conservative 4/3 multiplier on all estimates · Diminishing-returns gate prevents redundant checks</p>
+<div class="mermaid">
+flowchart TD
+    A([User Message Received]) --> B[Build token estimate<br/><b>chars × 4/3</b> conservative padding]
+    B --> C{Context &gt; 80%?}
+    C -->|Yes| D[Trigger pre-flight compact<br/>before sending to LLM]
+    C -->|No| E{Context &gt; 70%?}
+    E -->|Yes| F[Run microcompact<br/>replace old tool results]
+    E -->|No| G[Token budget check:<br/>diminishing returns gate]
+    F --> G
+    D --> G
+    G --> H{Delta &lt; 500 tokens<br/>3+ consecutive checks?}
+    H -->|Yes: stop checking| I[Skip budget re-check<br/>proceed to LLM call]
+    H -->|No| J[Apply remaining budget<br/>to tool result limits]
+    I --> K([Proceed to System Prompt])
+    J --> K
+
+    click A nodeClick "User message entry point"
+    click B nodeClick "tokenBudget"
+    click C nodeClick "80pct"
+    click E nodeClick "70pct"
+    click G nodeClick "diminishing"
+    click H nodeClick "delta500"
+</div>
+
+<!-- PHASE 2 -->
+<h2 id="phase2">② System Prompt Assembly</h2>
+<p class="desc">Source: <code>src/context/systemPrompt.ts</code>, <code>src/memdir/</code>, <code>src/services/claudeMd.ts</code> · Static section cached via prompt cache boundary · Dynamic section rebuilt each turn</p>
+<div class="mermaid">
+flowchart TD
+    A([Build System Prompt]) --> B[Static Section<br/><b>marked with cache boundary</b><br/>identity + core rules + tools]
+    B --> C[Dynamic Section<br/>rebuilt every turn]
+    C --> D[Inject CLAUDE.md<br/>workspace → parent → home<br/>realpath dedup]
+    D --> E[Inject 4-type Memory<br/>USER / FEEDBACK / PROJECT / REFERENCE<br/>from MEMORY.md index]
+    E --> F[Inject Active Skill<br/>SKILL.md + base_dir context]
+    F --> G[Inject Todo List<br/>current session tasks]
+    G --> H{Prompt cache<br/>supported?}
+    H -->|Yes| I[Add cache_control block<br/>at static/dynamic boundary<br/>~90% token savings per turn]
+    H -->|No| J[Plain string system prompt<br/>no cache blocks]
+    I --> K([Send to LLM])
+    J --> K
+
+    click B nodeClick "staticSection"
+    click D nodeClick "claudeMd"
+    click E nodeClick "memoryTypes"
+    click F nodeClick "skill"
+    click I nodeClick "cacheControl"
+</div>
+
+<!-- PHASE 3 -->
+<h2 id="phase3">③ Tool Dispatch &amp; Concurrency</h2>
+<p class="desc">Source: <code>src/services/tools/toolOrchestration.ts</code>, <code>src/constants/toolLimits.ts</code> · 4-tier concurrency — read-only batch (up to 10 parallel) · Write tools always serial · siblingAbortController cancels parallel siblings on failure</p>
+<div class="mermaid">
+flowchart TD
+    A([LLM returns tool_calls]) --> B{Multiple tool calls<br/>in response?}
+    B -->|Yes| C{All read-only?<br/>isConcurrencySafe per tool}
+    B -->|No: single call| D[Single tool execute<br/>sequential]
+    C -->|All safe| E[Batch parallel execution<br/><b>up to 10 concurrent</b><br/>ThreadPoolExecutor]
+    C -->|Mix: some write| F[Split: read-only batch first<br/>then serial writes]
+    E --> G{Any tool fails?}
+    G -->|Yes| H[siblingAbortController<br/>cancel remaining parallel]
+    G -->|No| I[Collect all results]
+    F --> I
+    D --> I
+    H --> I
+    I --> J{Per-tool result<br/>&gt; 50K chars?}
+    J -->|Yes| K[Truncate to 50K<br/>save full to disk<br/>return pointer]
+    J -->|No| L[Keep result as-is]
+    K --> M{Batch total<br/>&gt; 200K chars?}
+    L --> M
+    M -->|Yes| N[Trim largest first<br/>until under 200K]
+    M -->|No| O[Append tool_results<br/>to message history]
+    N --> O
+    O --> P([Next LLM turn])
+
+    click C nodeClick "concurrencySafe"
+    click E nodeClick "parallel10"
+    click H nodeClick "siblingAbort"
+    click J nodeClick "50kCap"
+    click M nodeClick "200kCap"
+    click N nodeClick "batchTrim"
+</div>
+
+<!-- PHASE 4 -->
+<h2 id="phase4">④ Compaction Tiers</h2>
+<p class="desc">Source: <code>src/services/compact/microCompact.ts</code>, <code>src/services/compact/postCompactCleanup.ts</code> · 4 tiers: Time-based MC → Cached MC → Snip → Full LLM · Circuit breaker prevents infinite compact loops</p>
+<div class="mermaid">
+flowchart TD
+    A([Check context %]) --> B{Gap since last call<br/>&gt; cold-cache threshold?}
+    B -->|Yes: cache cold| C[Time-based Microcompact<br/>proactively clear old tool results<br/>before server evicts cache]
+    B -->|No| D{Context &gt; 70%?}
+    C --> D
+    D -->|Yes| E{Cached microcompact<br/>available?<br/><b>cache_edits API</b>}
+    D -->|No: context fine| Z([Proceed to LLM])
+    E -->|Yes| F[Cached Microcompact<br/>delete old tool results server-side<br/><b>NO cache invalidation</b>]
+    E -->|No| G[Standard Microcompact<br/>replace results with markers<br/>keep last 3 per tool type]
+    F --> H{Context &gt; 80%?}
+    G --> H
+    H -->|Yes| I{Snip available?<br/>truncate middle messages}
+    H -->|No| Z
+    I -->|Yes| J[Snip: keep head + tail<br/>remove middle messages]
+    I -->|No| K{Context &gt; threshold?}
+    J --> K
+    K -->|Yes| L[Full LLM Compact<br/>9-section summary<br/>keep last 3 messages]
+    K -->|No| Z
+    L --> M[postCompactCleanup:<br/>clear 7 state structures<br/><b>keep skill names</b> saves 4K tokens]
+    M --> Z
+
+    click C nodeClick "timeMC"
+    click F nodeClick "cachedMC"
+    click G nodeClick "stdMC"
+    click J nodeClick "snip"
+    click L nodeClick "fullCompact"
+    click M nodeClick "postCleanup"
+</div>
+
+<!-- PHASE 5 -->
+<h2 id="phase5">⑤ Memory System</h2>
+<p class="desc">Source: <code>src/memdir/memoryTypes.ts</code>, <code>src/services/extractMemories/</code> · 4-type taxonomy · Individual .md files per memory + MEMORY.md index · Extraction is a perfect-fork sub-agent</p>
+<div class="mermaid">
+flowchart TD
+    A([Session end / Clear]) --> B{Minimum turns met?<br/>opt-in enabled?}
+    B -->|No| Z([No extraction])
+    B -->|Yes| C[Fork extraction sub-agent<br/>isolated context<br/>parallel read strategy]
+    C --> D[Read existing MEMORY.md index<br/>avoid re-extracting known facts]
+    D --> E[Apply WHAT_NOT_TO_SAVE filter:<br/>no code patterns · no git history<br/>no fix recipes · no file paths<br/>no ephemeral task details]
+    E --> F[Extract per-type:<br/><b>USER</b> — role, preferences<br/><b>FEEDBACK</b> — what to repeat/avoid<br/><b>PROJECT</b> — goals, decisions, deadlines<br/><b>REFERENCE</b> — external pointers]
+    F --> G{Any new facts<br/>worth saving?}
+    G -->|No| Z
+    G -->|Yes| H[Write individual .md files<br/>with frontmatter:<br/>name · description · type]
+    H --> I[Update MEMORY.md index<br/>one-line pointer per file<br/>max 200 lines total]
+    I --> J[On next session start:<br/>load index into system prompt<br/>dynamic section]
+    J --> K([Memory available to LLM])
+
+    click C nodeClick "extractSubagent"
+    click E nodeClick "whatNotSave"
+    click F nodeClick "fourTypes"
+    click H nodeClick "memFiles"
+    click I nodeClick "memIndex"
+</div>
+
+<!-- PHASE 6 -->
+<h2 id="phase6">⑥ Security &amp; Approval</h2>
+<p class="desc">Source: <code>src/security/</code>, <code>src/services/approval/</code> · Multi-layer defense · Path validation on every file op · Env var scanning · Per-tool approval dialogs</p>
+<div class="mermaid">
+flowchart TD
+    A([Tool call received]) --> B[LAYER 0: Path validation<br/>resolve symlinks<br/>check workspace bounds]
+    B --> C{Path traversal<br/>detected?}
+    C -->|Yes| BLOCK1[Hard block<br/>error returned to LLM]
+    C -->|No| D[LAYER 1: Env var scan<br/>detect AWS_* / credential patterns<br/>in args]
+    D --> E{Credential in<br/>command/args?}
+    E -->|Yes| BLOCK2[Block + warn user]
+    E -->|No| F[LAYER 2: Tool allowlist<br/>plan mode enforcement<br/>subagent tool restrictions]
+    F --> G{Tool allowed<br/>in this context?}
+    G -->|No| BLOCK3[Return policy block message]
+    G -->|Yes| H[LAYER 3: Approval dialog<br/>per-tool risk rating<br/>Approve / Deny / Always]
+    H --> I{User decision}
+    I -->|Deny| BLOCK4[User denied — skip tool]
+    I -->|Always| J[Add to always_allow set<br/><b>cleared on compact</b>]
+    I -->|Approve| K[Execute tool]
+    J --> K
+    K --> L([Return result])
+
+    click B nodeClick "pathVal"
+    click D nodeClick "envScan"
+    click H nodeClick "approvalDialog"
+    click J nodeClick "alwaysAllow"
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modalContent">
+    <span class="close-btn" onclick="document.getElementById('modalOverlay').classList.remove('active')">×</span>
+    <h3 id="modalTitle">Detail</h3>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  securityLevel: 'loose',
+  themeVariables: {
+    background: '#0d1117',
+    primaryColor: '#1f6feb',
+    primaryTextColor: '#c9d1d9',
+    primaryBorderColor: '#388bfd',
+    lineColor: '#8b949e',
+    secondaryColor: '#161b22',
+    tertiaryColor: '#21262d',
+    edgeLabelBackground: '#161b22',
+    clusterBkg: '#161b22',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+  }
+});
+
+const details = {
+  tokenBudget: {
+    title: 'Token Budget (tokenBudget.ts)',
+    body: `<p>Conservative estimation: <code>tokens = chars × 4/3</code> (= chars/3). Accounts for non-ASCII and JSON structural overhead. V4 mirrors this in V2-F.</p>
+    <ul>
+      <li>Tiktoken cl100k_base used when available (~95% accurate)</li>
+      <li>Fallback: chars ÷ 3 (conservative 4/3 multiplier)</li>
+      <li>Fixed overhead: system prompt + tool schemas + 346 Bedrock tokens</li>
+    </ul>
+    <span class="tag tag-blue">tokenBudget.ts</span>`
+  },
+  '80pct': {
+    title: 'Context > 80% — Pre-flight Compact',
+    body: `<p>When context exceeds 80%, compact is triggered BEFORE sending the user message to the LLM. Prevents overflow mid-response.</p>
+    <ul>
+      <li>Stage 1: Prune old tool outputs (cheap, no LLM)</li>
+      <li>Stage 2: LLM summary if still > threshold</li>
+      <li>Circuit breaker: pauses after 3 consecutive failures</li>
+    </ul>
+    <span class="tag tag-orange">Threshold: 80%</span>`
+  },
+  '70pct': {
+    title: 'Context > 70% — Microcompact Zone',
+    body: `<p>Between 70–80%, microcompact replaces old tool results with markers. No LLM call needed. Keeps last 3 results per tool type.</p>
+    <ul>
+      <li>Only applied if savings >= 5000 tokens</li>
+      <li>Protected tools: todo_write, todo_read, semantic_search</li>
+      <li>read_file clears cleared if any file results discarded</li>
+    </ul>
+    <span class="tag tag-orange">Threshold: 70%</span>`
+  },
+  diminishing: {
+    title: 'Diminishing Returns Gate',
+    body: `<p>Stops re-checking token budget if delta < 500 tokens across 3+ consecutive checks. Prevents wasted CPU on near-stable context.</p>
+    <p>Source: <code>tokenBudget.ts</code> — after 3 checks with < 500 token delta, sets <code>skipBudgetCheck = true</code></p>`
+  },
+  delta500: {
+    title: 'Delta < 500 Tokens Condition',
+    body: `<p>If 3 consecutive budget checks all show < 500 token change, stop checking for this turn. Resume on next user message.</p>
+    <p>Avoids tight-loop re-checks when context is stable near a threshold.</p>`
+  },
+  staticSection: {
+    title: 'Static System Prompt Section',
+    body: `<p>The system prompt is split at a cache boundary marker. The static section (identity, core rules, tool schemas) never changes between turns — ideal for Bedrock's prompt caching.</p>
+    <ul>
+      <li>Cached with <code>cache_control: {type: "ephemeral"}</code></li>
+      <li>Saves ~90% input tokens per turn once cached</li>
+      <li>5-minute minimum TTL on Bedrock</li>
+    </ul>
+    <span class="tag tag-green">~90% token savings</span>`
+  },
+  claudeMd: {
+    title: 'CLAUDE.md Auto-Load',
+    body: `<p>On every send, walks workspace → parent dirs → home dir looking for CLAUDE.md files. Injects into system prompt dynamic section.</p>
+    <ul>
+      <li>Deduplicates via realpath (handles symlinks)</li>
+      <li>Parent CLAUDE.md loaded first (workspace wins)</li>
+      <li>Cap: 8000 chars per file</li>
+      <li>Disabled via <code>load_claude_md: false</code></li>
+    </ul>`
+  },
+  memoryTypes: {
+    title: '4-Type Memory Taxonomy (memoryTypes.ts)',
+    body: `<p>Four distinct memory types with structured guidance on what to save and how to use each:</p>
+    <ul>
+      <li><b>USER</b>: role, goals, knowledge level, preferences</li>
+      <li><b>FEEDBACK</b>: corrections + confirmations (both directions)</li>
+      <li><b>PROJECT</b>: decisions, goals, deadlines, motivations</li>
+      <li><b>REFERENCE</b>: pointers to external systems (Linear, Grafana, etc.)</li>
+    </ul>
+    <p>Each has: when_to_save, how_to_use, body_structure (rule + Why: + How to apply:)</p>`
+  },
+  skill: {
+    title: 'Active Skill Injection',
+    body: `<p>If a skill is active, SKILL.md content + base_dir are injected into the system prompt. Agent knows which tools and workflows the skill provides.</p>
+    <p>Skill list shown as compact token-efficient format: <code>"Available: skill1, skill2"</code></p>`
+  },
+  cacheControl: {
+    title: 'Prompt Cache Boundary',
+    body: `<p>The static/dynamic split enables Bedrock's prompt caching:</p>
+    <ul>
+      <li>Static: identity, core rules, tool schemas — never changes</li>
+      <li>Dynamic: memory, CLAUDE.md, skills, todos — rebuilt each turn</li>
+      <li>Cache boundary: <code>cache_control: {type: "ephemeral"}</code></li>
+      <li>Fallback: set <code>prompt_cache_supported = False</code> on ValidationException</li>
+    </ul>
+    <p>Note: Haiku 4.5 / Sonnet 4.5 on Bedrock return "invalid beta flag" — fallback disables caching for session.</p>
+    <span class="tag tag-green">~90% token savings</span>`
+  },
+  concurrencySafe: {
+    title: 'isConcurrencySafe() Per Tool',
+    body: `<p>Each tool is classified as concurrency-safe (read-only, no side effects) or not. Read-only tools can run in parallel batches.</p>
+    <p>Concurrency-safe: read_file, glob, grep, bash (read-only), web_fetch, list_dir, semantic_search</p>
+    <p>Not safe (serial): write_file, edit_file, bash (write), task, ask_user</p>
+    <span class="tag tag-blue">toolOrchestration.ts</span>`
+  },
+  parallel10: {
+    title: 'Up to 10 Parallel Tool Calls',
+    body: `<p>When multiple read-only tools are called in the same response, they run in a ThreadPoolExecutor with up to 10 workers.</p>
+    <ul>
+      <li>Each tool gets a copy of the context (thread-local FILE_CACHE)</li>
+      <li>Results merged in call order (not completion order)</li>
+      <li>siblingAbortController cancels remaining on first failure</li>
+    </ul>
+    <span class="tag tag-blue">max_workers=10</span>`
+  },
+  siblingAbort: {
+    title: 'siblingAbortController',
+    body: `<p>When parallel tools run and one fails, the remaining siblings are cancelled via an AbortController. Prevents wasted work and avoids partial state corruption.</p>
+    <p>Pattern: <code>siblingAbortController.abort()</code> on first error in the batch.</p>`
+  },
+  '50kCap': {
+    title: '50K Char Per-Tool Cap',
+    body: `<p>Source: <code>src/constants/toolLimits.ts</code></p>
+    <p>Tool results larger than 50,000 chars are truncated. In V4, the full content is saved to <code>.tool_cache/</code> and a preview + file pointer is returned.</p>
+    <ul>
+      <li>Bedrock limit: ~100K tokens max per call</li>
+      <li>Single large result could consume entire context</li>
+      <li>LLM can use read_file to retrieve full content</li>
+    </ul>
+    <span class="tag tag-orange">50,000 chars/tool</span>`
+  },
+  '200kCap': {
+    title: '200K Char Batch Cap',
+    body: `<p>Source: <code>src/constants/toolLimits.ts</code></p>
+    <p>If parallel tools collectively produce > 200,000 chars of results, the batch is over budget.</p>
+    <ul>
+      <li>Largest results trimmed first</li>
+      <li>Protected tools (todo, semantic_search) never trimmed</li>
+      <li>Prevents a single parallel batch from saturating context</li>
+    </ul>
+    <span class="tag tag-orange">200,000 chars/batch</span>`
+  },
+  batchTrim: {
+    title: 'Largest-First Batch Trim',
+    body: `<p>When the batch exceeds 200K chars, results are sorted by size descending and trimmed until under budget.</p>
+    <p>Each trimmed result gets a preview (first 1000 chars) + pointer: "use read_file for full content"</p>
+    <p>Protected tools are always excluded from trimming.</p>`
+  },
+  timeMC: {
+    title: 'Time-Based Microcompact (V4.2 V2-E)',
+    body: `<p>If the gap since the last API call exceeds 30 minutes, Bedrock's prompt cache has likely expired. Proactively run microcompact before the next call.</p>
+    <ul>
+      <li>Threshold: 30 min (conservative — actual TTL is 5 min)</li>
+      <li>Only runs if savings >= 5K tokens</li>
+      <li>Clears FILE_CACHE if any read_file results cleared</li>
+    </ul>
+    <span class="tag tag-orange">Threshold: 30 min gap</span>`
+  },
+  cachedMC: {
+    title: 'Cached Microcompact (cache_edits API)',
+    body: `<p>Uses Bedrock's cache_edits API to delete old tool results server-side WITHOUT invalidating the cached prompt prefix.</p>
+    <ul>
+      <li>Unique to runnable — not yet in V4</li>
+      <li>Keeps the cached system prompt intact</li>
+      <li>Old tool results deleted from server's cached representation</li>
+      <li>No new cache write needed — existing prefix still valid</li>
+    </ul>
+    <span class="tag tag-green">No cache invalidation</span>
+    <span class="tag tag-blue">cache_edits API</span>`
+  },
+  stdMC: {
+    title: 'Standard Microcompact',
+    body: `<p>Replaces old tool result contents with a marker string. Keeps the last N results per tool type (newest preserved).</p>
+    <ul>
+      <li>Protected tools never cleared: todo_write, todo_read, semantic_search, edit_file, write_file</li>
+      <li>Compactable: read_file, bash, grep, glob, list_dir, web_fetch, python_exec, create_chart</li>
+      <li>Keep last 3 per tool type</li>
+      <li>Min savings threshold: 5000 tokens</li>
+    </ul>`
+  },
+  snip: {
+    title: 'Snip: Truncate Middle Messages',
+    body: `<p>Between full microcompact and full LLM compact, "snip" removes middle messages while keeping head and tail of conversation.</p>
+    <p>Preserves most recent context (tail) and original instructions (head). Loses middle context but cheaper than LLM summarization.</p>`
+  },
+  fullCompact: {
+    title: 'Full LLM Compact (9-Section Summary)',
+    body: `<p>Summarizes entire conversation into a structured 9-section summary using a Claude LLM call:</p>
+    <ol style="color:#c9d1d9; font-size:13px; padding-left:18px; line-height:1.8">
+      <li>Primary Request and Intent</li>
+      <li>Key Technical Concepts</li>
+      <li>Files and Code Sections</li>
+      <li>Errors and Fixes</li>
+      <li>Problem Solving</li>
+      <li>User Messages (verbatim)</li>
+      <li>Pending Tasks</li>
+      <li>Current Work</li>
+      <li>Next Step</li>
+    </ol>
+    <p>Keeps summary + last 3 messages.</p>`
+  },
+  postCleanup: {
+    title: 'postCompactCleanup — 7 State Structures Cleared',
+    body: `<p>Source: <code>src/services/compact/postCompactCleanup.ts</code></p>
+    <p>After full compact, 7 state structures are cleared to avoid stale references:</p>
+    <ul>
+      <li>FILE_CACHE context markers</li>
+      <li>Microcompact state</li>
+      <li>Memory cache</li>
+      <li>Classifier approvals (always_allow)</li>
+      <li>Tool result refs</li>
+      <li>Partial read tracking</li>
+      <li>Pending images</li>
+    </ul>
+    <p><b>Intentionally NOT cleared: skill names</b> — saves 4K token cache_creation cost per call.</p>
+    <span class="tag tag-green">Saves 4K tokens (skill names preserved)</span>`
+  },
+  extractSubagent: {
+    title: 'Memory Extraction Sub-Agent',
+    body: `<p>Extraction runs as a "perfect fork" — isolated sub-agent with its own context. Parallel read strategy: reads conversation AND existing memory simultaneously.</p>
+    <ul>
+      <li>Triggered at session end if opt-in enabled</li>
+      <li>Minimum 4 user turns required</li>
+      <li>Reads existing MEMORY.md to avoid re-extracting</li>
+      <li>Off by default: <code>enable_memory_extraction: false</code></li>
+    </ul>`
+  },
+  whatNotSave: {
+    title: 'WHAT_NOT_TO_SAVE Filter',
+    body: `<p>Source: <code>src/services/extractMemories/prompts.ts</code></p>
+    <p>Exclusion list applied before writing any memory:</p>
+    <ul>
+      <li>Code patterns, conventions, architecture</li>
+      <li>Ephemeral file paths (except stable canonical locations)</li>
+      <li>Git history, recent changes, commit details</li>
+      <li>Debugging solutions / fix recipes</li>
+      <li>Project structural facts (belong in project docs)</li>
+      <li>Activity logs: files read, tools called this session</li>
+    </ul>
+    <p>Named functions/paths get staleness note: "(verify still exists)"</p>`
+  },
+  fourTypes: {
+    title: '4-Type Memory Extraction Format',
+    body: `<p>Each line output by the extraction LLM:</p>
+    <code>[USER] key | one-sentence fact</code><br/>
+    <code>[FEEDBACK] key | one-sentence guidance</code><br/>
+    <code>[PROJECT] key | one-sentence decision</code><br/>
+    <code>[REFERENCE] key | one-sentence pointer</code>
+    <p style="margin-top:8px">Max 3 items per type. Output NOTHING if nothing worth saving.</p>`
+  },
+  memFiles: {
+    title: 'Individual Memory .md Files',
+    body: `<p>Each memory saved as its own .md file with frontmatter:</p>
+    <pre style="background:#0d1117; padding:8px; border-radius:4px; font-size:12px; color:#79c0ff;">---
+name: memory name
+description: one-line hook
+type: user|feedback|project|reference
+---
+
+[content with Why: and How to apply: lines]</pre>
+    <p>Organized semantically by topic, not chronologically.</p>`
+  },
+  memIndex: {
+    title: 'MEMORY.md Index',
+    body: `<p>Loaded on every conversation start. One line per memory file:</p>
+    <code>- [Title](file.md) — one-line hook</code>
+    <p>Max 200 lines (truncated after). Never write memory content directly here.</p>
+    <p>Stale memories updated/removed rather than accumulated.</p>`
+  },
+  pathVal: {
+    title: 'Path Validation',
+    body: `<p>Every file operation resolves symlinks and checks workspace bounds before executing.</p>
+    <ul>
+      <li>../../ traversal patterns blocked</li>
+      <li>Absolute paths outside workspace blocked</li>
+      <li>Symlink resolution prevents escape via links</li>
+    </ul>`
+  },
+  envScan: {
+    title: 'Environment Variable / Credential Scan',
+    body: `<p>Command args scanned for credential patterns before execution:</p>
+    <ul>
+      <li>AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY</li>
+      <li>AKIA... key patterns</li>
+      <li>printenv, env commands blocked</li>
+      <li>Output scanned for secrets after execution</li>
+    </ul>`
+  },
+  approvalDialog: {
+    title: 'Per-Tool Approval Dialog',
+    body: `<p>High-risk tools require explicit user approval per call:</p>
+    <ul>
+      <li><b>Approve</b>: run once</li>
+      <li><b>Always</b>: add to always_allow set (cleared on compact)</li>
+      <li><b>Deny</b>: skip tool, return "User denied" to LLM</li>
+    </ul>
+    <p>Read-only bash commands skip approval via auto-classifier.</p>`
+  },
+  alwaysAllow: {
+    title: 'always_allow Set (V4.2 V2-D)',
+    body: `<p>Tools approved with "Always" are stored in ui_state["always_allow"]. NOT high-risk tools (bash, python_exec always require per-call approval).</p>
+    <p><b>Cleared on every compact</b> (manual, pre-send, auto, prune-only). Old approval decisions are stale after context is reset.</p>
+    <span class="tag tag-orange">Cleared on compact (V4.2 V2-D)</span>`
+  }
+};
+
+function nodeClick(id) {
+  const d = details[id];
+  if (!d) return;
+  document.getElementById('modalTitle').textContent = d.title;
+  document.getElementById('modalBody').innerHTML = d.body;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal(event) {
+  if (event.target === document.getElementById('modalOverlay')) {
+    document.getElementById('modalOverlay').classList.remove('active');
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('active');
+});
+</script>
+
+<p style="color:#484f58; font-size:12px; margin-top:40px; border-top:1px solid #21262d; padding-top:16px;">
+  Click any node to see implementation details · PS_FLOWCHART_RUNNABLE.html · v4.2 analysis · Open alongside PS_FLOWCHART_V4.html for side-by-side comparison
+</p>
+</body>
+</html>

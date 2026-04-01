@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SageMaker Coding Agent V4.2 — Architecture Flowcharts</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; max-width: 1200px; margin: 0 auto; padding: 20px; }
+  h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+  h2 { color: #79c0ff; margin-top: 40px; }
+  .mermaid { background: #161b22; border-radius: 8px; padding: 20px; margin: 15px 0; }
+  .desc { color: #8b949e; font-size: 14px; margin-bottom: 10px; }
+  .stats { display: flex; gap: 20px; flex-wrap: wrap; margin: 20px 0; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px 20px; }
+  .stat-num { font-size: 28px; font-weight: bold; color: #58a6ff; }
+  .stat-label { font-size: 12px; color: #8b949e; }
+  nav { background: #161b22; padding: 15px; border-radius: 8px; margin-bottom: 30px; }
+  nav a { color: #58a6ff; text-decoration: none; margin-right: 15px; font-size: 14px; }
+  nav a:hover { text-decoration: underline; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 20px 0; font-size: 13px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-v42 { background: #3fb950; }
+  .dot-v41 { background: #58a6ff; }
+  .dot-gap { background: #f0883e; }
+  .dot-base { background: #6e7681; }
+  /* Modal */
+  .modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; }
+  .modal-overlay.active { display:flex; align-items:center; justify-content:center; }
+  .modal { background:#161b22; border:1px solid #30363d; border-radius:12px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; padding:24px; position:relative; }
+  .modal h3 { color:#58a6ff; margin-bottom:12px; font-size:18px; }
+  .modal-body { color:#c9d1d9; font-size:14px; line-height:1.7; }
+  .modal-body code { background:#0d1117; border:1px solid #30363d; border-radius:4px; padding:2px 6px; font-family:monospace; font-size:12px; color:#79c0ff; }
+  .modal-body ul { padding-left:20px; margin: 8px 0; }
+  .modal-body li { margin: 4px 0; }
+  .modal-close { position:absolute; top:12px; right:16px; background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer; }
+  .modal-close:hover { color:#c9d1d9; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; margin-right:4px; }
+  .badge-v42 { background:#238636; color:#3fb950; }
+  .badge-v41 { background:#0d419d; color:#58a6ff; }
+  .badge-gap { background:#9e4400; color:#f0883e; }
+</style>
+</head>
+<body>
+<h1>SageMaker Coding Agent V4.2 — Architecture Flowcharts</h1>
+<p style="color:#8b949e;">Click any node to see implementation details. V4.2 closes remaining gaps vs Claude Code runnable.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">4.2.0</div><div class="stat-label">Version</div></div>
+  <div class="stat"><div class="stat-num">22</div><div class="stat-label">Tools</div></div>
+  <div class="stat"><div class="stat-num">50K / 200K</div><div class="stat-label">Per-tool / Batch Cap</div></div>
+  <div class="stat"><div class="stat-num">13</div><div class="stat-label">Catastrophic Patterns</div></div>
+  <div class="stat"><div class="stat-num">5</div><div class="stat-label">Security Layers</div></div>
+  <div class="stat"><div class="stat-num">4/3×</div><div class="stat-label">Token Padding</div></div>
+  <div class="stat"><div class="stat-num">deque(30)</div><div class="stat-label">Memory Window</div></div>
+</div>
+
+<nav>
+  <a href="#budget">① Token Budget</a>
+  <a href="#sysprompt">② System Prompt</a>
+  <a href="#dispatch">③ Tool Dispatch</a>
+  <a href="#compact">④ Compaction</a>
+  <a href="#memory">⑤ Memory</a>
+  <a href="#security">⑥ Security</a>
+</nav>
+
+<div class="legend">
+  <div class="legend-item"><div class="dot dot-v42"></div> V4.2 new (runnable gap)</div>
+  <div class="legend-item"><div class="dot dot-v41"></div> V4.1 new (CC feature parity)</div>
+  <div class="legend-item"><div class="dot dot-gap"></div> Still a gap vs runnable</div>
+  <div class="legend-item"><div class="dot dot-base"></div> V4.0 base</div>
+</div>
+
+<!-- Modal overlay -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modal-title"></h3>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<h2 id="budget">① Token Budget & Context Management</h2>
+<p class="desc">How the agent tracks context usage and decides when to compact. <span class="badge badge-v42">V2-F</span> Conservative 4/3× padding added in V4.2.</p>
+<div class="mermaid">
+flowchart TD
+    A([Request Received]) --> B[ContextManager.estimate_tokens]
+    B --> C{Usage %}
+    C -->|< 70%| D[Normal — proceed]
+    C -->|70–80%| E[Microcompact\nOldest tool results cleared\nkeep last 3 per type]
+    C -->|>= 80%| F[Full Compact\nsummarize + truncate]
+    E --> G{Savings\n>= 5K tokens?}
+    G -->|No| D
+    G -->|Yes| H[Apply microcompact\nlog savings]
+    H --> D
+    F --> I[create_llm_summary\nBedrock LLM call]
+    I --> J{Summary\nreturned?}
+    J -->|None — failure| K[failure_count++]
+    K --> L{failures\n>= 3?}
+    L -->|Yes| M[Circuit Breaker\n_auto_compact_paused=True]
+    L -->|No| D
+    J -->|OK| N[Replace messages\nwith summary]
+    N --> O[Post-Compact\nFile Restoration\nlast 3 files re-injected]
+    O --> P[Clear always_allow\nV2-D on_compact_fn]
+    P --> D
+    B --> Q[estimate_tokens\nchars // 3 — V2-F]
+    click A "nodeClick('budget_entry')"
+    click B "nodeClick('ctx_estimate')"
+    click E "nodeClick('microcompact')"
+    click F "nodeClick('full_compact')"
+    click I "nodeClick('llm_summary')"
+    click M "nodeClick('circuit_breaker')"
+    click O "nodeClick('file_restore')"
+    click P "nodeClick('clear_allow')"
+    click Q "nodeClick('token_padding')"
+</div>
+
+<h2 id="sysprompt">② System Prompt & Prompt Cache</h2>
+<p class="desc">Static/dynamic split for Bedrock prompt caching. <span class="badge badge-v41">#14</span> Cache boundary added in V4.1.</p>
+<div class="mermaid">
+flowchart TD
+    A([Build System Prompt]) --> B[Static section\nCore instructions,\ntool docs, security rules]
+    B --> C[Dynamic section\nWorkspace, date, memory,\nCLAUDE.md content]
+    C --> D{enable_prompt_cache?}
+    D -->|No| E[Single prompt block\nno cache headers]
+    D -->|Yes| F[Static block gets\ncache_control: ephemeral\nanthropic_beta header]
+    F --> G[Send to Bedrock]
+    G --> H{ValidationException?}
+    H -->|cache_control / beta error\nor invalid beta flag| I[Set prompt_cache_supported=False\nRetry without cache headers]
+    H -->|Other error| J[Raise exception]
+    I --> K[~90% token savings\non repeated turns]
+    E --> K
+    A --> L[CLAUDE.md Auto-Load\nwalk workspace → parents → home]
+    L --> M[Inject before active skills\n8000 char per-file cap\ndedup via realpath]
+    M --> C
+    click A "nodeClick('sysprompt_build')"
+    click B "nodeClick('static_section')"
+    click C "nodeClick('dynamic_section')"
+    click F "nodeClick('cache_control')"
+    click I "nodeClick('cache_fallback')"
+    click L "nodeClick('claude_md')"
+</div>
+
+<h2 id="dispatch">③ Tool Dispatch Pipeline</h2>
+<p class="desc">Full lifecycle of a tool call from LLM request to result return. Multiple V4.x guards applied in order.</p>
+<div class="mermaid">
+flowchart TD
+    A([LLM returns tool_use block]) --> B[Extract tool_name\ntool_id, input args]
+    B --> C[LAYER -1\nCatastrophic Patterns\n13 regex, hard block]
+    C -->|BLOCKED| D[Return error\nnever reaches user]
+    C -->|OK| E[LAYER 0\nAllowlist check\ntool in allowed_tools?]
+    E -->|Not allowed| F[Return not-allowed error]
+    E -->|Allowed| G{_classify_bash_ro?\nread-only auto-approve}
+    G -->|RO bash| H[Skip on_approval\nrun immediately]
+    G -->|Not RO| I{In always_allow?}
+    I -->|Yes| H
+    I -->|No| J[on_approval callback\nuser approves / denies]
+    J -->|Denied| K[Return denied error]
+    J -->|Approved| H
+    H --> L[Partial View Guard\n#10 — edit_file warning\nif file partially read]
+    L --> M[Execute tool\nActual function call]
+    M --> N[V2-A: _offload_large_result\nif > 50K chars → disk\npreview returned to LLM]
+    N --> O[SECURITY.truncate_output\n30K hard cap after offload]
+    O --> P[V2-G: Batch Aggregate Cap\nif batch > 200K\ntrim largest first]
+    P --> Q[Append to messages\nAdd to tool_results]
+    click A "nodeClick('tool_use_block')"
+    click C "nodeClick('catastrophic')"
+    click G "nodeClick('ro_classifier')"
+    click L "nodeClick('partial_guard')"
+    click N "nodeClick('offload')"
+    click O "nodeClick('truncate')"
+    click P "nodeClick('batch_cap')"
+</div>
+
+<h2 id="compact">④ Compaction & Cold Cache</h2>
+<p class="desc">All paths that trigger compaction. <span class="badge badge-v42">V2-D</span> always_allow cleared on every path. <span class="badge badge-v42">V2-E</span> Cold cache detection added.</p>
+<div class="mermaid">
+flowchart TD
+    A([Before LLM call]) --> B{Cold cache?\n_last_api_call_time > 0\nAND gap > 30 min}
+    B -->|Yes| C[Proactive microcompact\nif savings >= 5K tokens]
+    B -->|No| D[Normal flow]
+    C --> D
+    D --> E[make_request\nBedrock API call]
+    E --> F[Update _last_api_call_time\ntime.time after success]
+    E --> G{Context >= 80%?}
+    G -->|Yes, auto| H[Auto-compact\nin Agent.run loop]
+    G -->|No| I[Continue]
+    H --> J[on_compact_fn callback\nclears always_allow]
+    I --> K{Pre-send check\n> 75%?}
+    K -->|Yes| L[do_pre_send_compact\nStage 1: prune only]
+    L --> M{After prune\n< 75%?}
+    M -->|Yes — prune only| N[Early return\nclears always_allow\nV2-D fix]
+    M -->|No| O[Stage 2: full compact\n+ clears always_allow]
+    K -->|No| P[Pass through]
+    Q([Manual Compact button]) --> R[on_compact\ncreate_llm_summary\nclears always_allow]
+    click A "nodeClick('before_llm')"
+    click B "nodeClick('cold_cache')"
+    click C "nodeClick('cold_microcompact')"
+    click E "nodeClick('bedrock_call')"
+    click H "nodeClick('auto_compact')"
+    click J "nodeClick('on_compact_fn')"
+    click L "nodeClick('pre_send_compact')"
+    click N "nodeClick('prune_only')"
+    click Q "nodeClick('manual_compact')"
+</div>
+
+<h2 id="memory">⑤ Memory System</h2>
+<p class="desc">Persistent memory load, 4-type structure, auto-extraction. <span class="badge badge-v41">#7 #8</span> in V4.1, <span class="badge badge-v42">V2-C</span> extraction filter in V4.2.</p>
+<div class="mermaid">
+flowchart TD
+    A([Session Start]) --> B[_load_persistent_memory\nRead memory.md]
+    B --> C{File format?}
+    C -->|Legacy flat| D[Load under ## Notes\nupgrade prompt shown]
+    C -->|4-type format| E[_parse_memory_sections\n## USER / FEEDBACK\n## PROJECT / REFERENCE]
+    E --> F[Inject per-section\ninto system prompt\nwith descriptive labels]
+    D --> F
+    F --> G([Session Active])
+    G --> H{Session end?\nClear / New Session\n>= 4 user turns?}
+    H -->|No| G
+    H -->|Yes + extraction enabled| I[Memory Auto-Extraction\nenable_memory_extraction=True]
+    I --> J[LLM call\nExtract per-type facts\nformat: TYPE key | fact]
+    J --> K[WHAT NOT TO SAVE filter\nV2-C: no ephemeral paths,\nno git history, no fix recipes,\nno structural facts, no activity logs]
+    K --> L[Staleness annotation\npath/function memories get\nverify still exists note]
+    L --> M[Append to memory.md\ntimestamped block\natomic single write]
+    M --> N[SECURITY.validate_path\nbefore write]
+    click A "nodeClick('session_start')"
+    click B "nodeClick('load_memory')"
+    click E "nodeClick('parse_sections')"
+    click F "nodeClick('inject_memory')"
+    click I "nodeClick('auto_extract')"
+    click K "nodeClick('what_not_save')"
+    click L "nodeClick('staleness')"
+    click M "nodeClick('memory_write')"
+</div>
+
+<h2 id="security">⑥ Security Pipeline</h2>
+<p class="desc">5-layer security model. Layer -1 is catastrophic hard block, cannot be bypassed.</p>
+<div class="mermaid">
+flowchart TD
+    A([Tool call attempt]) --> B[LAYER -1\nCATASTROPHIC_PATTERNS\n13 precompiled regex\nrm -rf / · dd wipe · fork bomb\nchmod 777 / · fdisk · mkfs\nshutdown · init 0]
+    B -->|Match| C[HARD BLOCK\nNo config bypass possible\nNo user override\nReturn error immediately]
+    B -->|No match| D[LAYER 0\nAllowlist\nallowed_tools set]
+    D -->|Not in set| E[Return not-allowed]
+    D -->|In set| F[LAYER 1\nPath Validation\nSECURITY.validate_path\nworkspace boundary check]
+    F -->|Outside workspace| G[Return path error]
+    F -->|OK| H[LAYER 2\nCommand Injection\nshell metachar scan\nfor bash tools]
+    H -->|Suspicious| I[Return injection error]
+    H -->|OK| J[LAYER 3\nOutput Truncation\n30K hard cap\ntruncate_output]
+    J --> K[LAYER 4\nRead-Only Classifier\n_classify_bash_ro\nskip approval if RO]
+    K -->|RO| L[Auto-approve\nno dialog]
+    K -->|Not RO| M[on_approval callback\nuser dialog]
+    M -->|Denied| N[Skip execution]
+    L --> O[Execute]
+    M -->|Approved| O
+    click B "nodeClick('sec_catastrophic')"
+    click D "nodeClick('sec_allowlist')"
+    click F "nodeClick('sec_path')"
+    click H "nodeClick('sec_injection')"
+    click J "nodeClick('sec_truncate')"
+    click K "nodeClick('sec_ro')"
+</div>
+
+<script>
+const NODE_DETAILS = {
+  // Token Budget
+  budget_entry: {
+    title: "Request Entry Point",
+    body: `Every user message triggers a context usage check before any LLM call.<br><br>
+    <ul>
+    <li>Thresholds: 70% = microcompact, 80% = full compact</li>
+    <li>Usage calculated via <code>ContextManager.estimate_tokens()</code></li>
+    <li>Context window size read from model config (e.g., 200K for Claude 3.x)</li>
+    </ul>`
+  },
+  ctx_estimate: {
+    title: "ContextManager.estimate_tokens()",
+    body: `Estimates total token usage across all messages.<br><br>
+    <ul>
+    <li>Iterates all messages and tool results</li>
+    <li>Character count divided by 3 (conservative 4/3× padding — V2-F)</li>
+    <li>Fallback when tiktoken not available (Bedrock path)</li>
+    <li>Returns percentage of max context window</li>
+    </ul>
+    <code>return total_chars // 3  # was // 4 before V4.2</code>`
+  },
+  microcompact: {
+    title: "Microcompact (70% Threshold)",
+    body: `Light compaction that clears old tool results without summarizing.<br><br>
+    <ul>
+    <li>Clears results from: <code>read_file, bash, grep, glob, list_dir, web_fetch, python_exec, create_chart</code></li>
+    <li>Protected (never cleared): <code>todo_write, todo_read, semantic_search, edit_file, write_file</code></li>
+    <li>Keeps last 3 results per tool type (newest preserved)</li>
+    <li>Only applies if savings >= 5,000 tokens (<code>MICROCOMPACT_MIN_SAVINGS</code>)</li>
+    <li>Clears FILE_CACHE in-context markers if read_file results discarded</li>
+    </ul>`
+  },
+  full_compact: {
+    title: "Full Compact (80% Threshold)",
+    body: `Heavy compaction: summarizes history + truncates messages.<br><br>
+    <ul>
+    <li>Calls <code>create_llm_summary()</code> — Bedrock LLM call to summarize conversation</li>
+    <li>Replaces old messages with summary + recent tail</li>
+    <li>Post-compact: re-injects last 3 recently-read files (up to 12K each, 32K total)</li>
+    <li>On success: clears always_allow set (V2-D)</li>
+    <li>On failure: increments circuit breaker counter</li>
+    </ul>`
+  },
+  token_padding: {
+    title: "V2-F: Conservative 4/3× Token Padding",
+    body: `<span class="badge badge-v42">V4.2 — V2-F</span><br><br>
+    All character-based token estimates updated from <code>chars // 4</code> to <code>chars // 3</code>.<br><br>
+    <b>Locations updated:</b>
+    <ul>
+    <li><code>ContextManager.estimate_tokens()</code></li>
+    <li><code>Compactor.estimate_tokens()</code></li>
+    <li><code>TokenTracker.get_fixed_overhead()</code> — sys prompt + tools tokens</li>
+    <li>Embedding cost estimate in semantic search</li>
+    </ul>
+    <b>Effect:</b> compact triggers slightly earlier, preventing context overflow at boundary.<br>
+    Mirrors runnable's conservative multiplier from <code>src/query/tokenBudget.ts</code>.`
+  },
+  circuit_breaker: {
+    title: "Compact Circuit Breaker",
+    body: `Prevents infinite compact retry loops when summarization fails.<br><br>
+    <ul>
+    <li>Tracks consecutive <code>create_llm_summary()</code> failures</li>
+    <li>After 3 failures: <code>_auto_compact_paused = True</code></li>
+    <li>Auto-compact disabled in: Agent.run, pre-send, post-send</li>
+    <li>Manual Compact button is NOT gated — user override always works</li>
+    <li>Pre-send path also increments/resets the shared failure counter</li>
+    </ul>`
+  },
+  file_restore: {
+    title: "Post-Compact File Restoration",
+    body: `After full compact, re-injects recently-read file contents so agent doesn't lose context.<br><br>
+    <ul>
+    <li>Re-injects last 3 recently-read files</li>
+    <li>Resolves relative paths via <code>CONFIG.workspace</code></li>
+    <li>Runs <code>SECURITY.validate_path()</code> before re-opening</li>
+    <li>Budget: 12,000 chars per file, 32,000 chars total</li>
+    <li>Respects Bedrock role alternation (appends/merges correctly)</li>
+    </ul>`
+  },
+  clear_allow: {
+    title: "V2-D: Clear always_allow on Compact",
+    body: `<span class="badge badge-v42">V4.2 — V2-D</span><br><br>
+    The <code>always_allow</code> set is cleared on every compaction path to prevent stale approvals persisting across context resets.<br><br>
+    <b>4 clear locations:</b>
+    <ul>
+    <li>Manual compact: <code>on_compact()</code></li>
+    <li>Pre-send prune-only early return (V4.2 fix — was missing)</li>
+    <li>Pre-send full compact: <code>do_pre_send_compact()</code></li>
+    <li>Auto-compact in <code>Agent.run()</code> via <code>on_compact_fn</code> callback</li>
+    </ul>
+    <code>on_compact_fn: Callable = None</code> added to Agent.__init__, propagated to sub-agents.`
+  },
+  // System Prompt
+  sysprompt_build: {
+    title: "System Prompt Construction",
+    body: `Built fresh on every send from static + dynamic sections.<br><br>
+    Order of injection:
+    <ul>
+    <li>Static core (cacheable via prompt cache)</li>
+    <li>CLAUDE.md files (workspace → parents → home)</li>
+    <li>Active skills content</li>
+    <li>Dynamic: workspace path, current date, persistent memory</li>
+    </ul>`
+  },
+  static_section: {
+    title: "Static System Prompt Section",
+    body: `Contains everything that doesn't change between turns:<br><br>
+    <ul>
+    <li>Core agent instructions and persona</li>
+    <li>All 22 tool documentation blocks</li>
+    <li>Security rules and CATASTROPHIC_PATTERNS description</li>
+    <li>Memory format instructions (4-type structure)</li>
+    </ul>
+    Split at <code># === DYNAMIC ===</code> marker for cache boundary.`
+  },
+  dynamic_section: {
+    title: "Dynamic System Prompt Section",
+    body: `Changes each turn — cannot be cached:<br><br>
+    <ul>
+    <li>Current workspace path</li>
+    <li>Current date/time</li>
+    <li>Persistent memory content (if loaded)</li>
+    <li>CLAUDE.md file contents (may change on disk)</li>
+    <li>Active skills (may be toggled)</li>
+    </ul>`
+  },
+  cache_control: {
+    title: "#14: Prompt Cache Boundary",
+    body: `<span class="badge badge-v41">V4.1 — #14</span><br><br>
+    Static section sent with Bedrock prompt cache headers for ~90% token savings on repeated turns.<br><br>
+    <ul>
+    <li>Header: <code>anthropic_beta: ["prompt-caching-2024-07-31"]</code></li>
+    <li>Block: <code>cache_control: {"type": "ephemeral"}</code></li>
+    <li>Graceful fallback: <code>prompt_cache_supported = False</code> on error</li>
+    <li>Session-level flag prevents retry storms</li>
+    </ul>`
+  },
+  cache_fallback: {
+    title: "Prompt Cache Fallback Logic",
+    body: `Falls back to no-cache on cache-specific errors only (not all ValidationExceptions).<br><br>
+    <b>Triggers fallback if error contains:</b>
+    <ul>
+    <li><code>"cache_control"</code></li>
+    <li><code>"prompt-caching"</code></li>
+    <li><code>ValidationException</code> + <code>"anthropic_beta"</code></li>
+    <li><code>ValidationException</code> + <code>"invalid beta flag"</code> (Haiku/Sonnet 4.5 on Bedrock)</li>
+    </ul>
+    The last condition was added after Bedrock testing showed Haiku 4.5 rejects the beta header entirely.`
+  },
+  claude_md: {
+    title: "CLAUDE.md Auto-Load",
+    body: `On every send, discovers and injects CLAUDE.md files from workspace upward.<br><br>
+    <ul>
+    <li>Walk order: workspace → parent dirs → home dir</li>
+    <li>Parent files injected first (workspace file wins on conflict)</li>
+    <li>Deduplicates via <code>os.path.realpath()</code> to handle symlinks</li>
+    <li>8,000 char per-file cap to prevent prompt bloat</li>
+    <li>Config: <code>"load_claude_md": true</code> (disable in agent_config.json)</li>
+    </ul>`
+  },
+  // Tool Dispatch
+  tool_use_block: {
+    title: "LLM Tool Use Block",
+    body: `Claude returns a <code>tool_use</code> block in its response when it wants to call a tool.<br><br>
+    Contains:
+    <ul>
+    <li><code>id</code> — unique tool call ID (used for disk offload filename)</li>
+    <li><code>name</code> — tool name (must be in allowed_tools)</li>
+    <li><code>input</code> — dict of arguments</li>
+    </ul>
+    Multiple tool uses can appear in a single response (parallel tool calls).`
+  },
+  catastrophic: {
+    title: "#12: Catastrophic Pattern Hard Block (LAYER -1)",
+    body: `<span class="badge badge-v41">V4.1 — #12</span><br><br>
+    13 precompiled regex patterns. Checked BEFORE allowlist. Cannot be bypassed by any config.<br><br>
+    <b>Patterns cover:</b>
+    <ul>
+    <li><code>rm -rf /</code> and all flag variants (<code>-fr</code>, <code>-r -f</code>, <code>--recursive --force</code>)</li>
+    <li><code>dd</code> disk wipe (any argument order)</li>
+    <li><code>mkfs</code>, <code>fdisk</code></li>
+    <li><code>:(){ :|:& };:</code> fork bomb</li>
+    <li><code>chmod 777 /</code></li>
+    <li>Direct device writes (<code>/dev/sd*</code>, <code>/dev/hd*</code>)</li>
+    <li><code>shutdown</code>, <code>init 0</code>, <code>halt</code>, <code>poweroff</code></li>
+    </ul>
+    Patterns precompiled at class load — bad regex fails at import (fail-closed).`
+  },
+  ro_classifier: {
+    title: "#11: Read-Only Bash Auto-Classifier",
+    body: `<span class="badge badge-v41">V4.1 — #11</span><br><br>
+    Skips approval dialog for provably read-only bash commands.<br><br>
+    <b>RO base commands include:</b> <code>ls, cat, head, tail, grep, find, git log/status/diff/show, pip list/show/freeze</code><br><br>
+    <b>Pipeline detection:</b> any <code>;</code>, <code>&&</code>, <code>||</code>, <code>></code>, <code>>></code> forces non-RO<br><br>
+    <b>Exclusions (edge cases that can write):</b>
+    <ul>
+    <li><code>sed -i/-ni/--in-place</code> — in-place edit</li>
+    <li><code>git stash apply/pop/drop</code> — modifies working tree</li>
+    <li><code>diff --output=file</code> — writes to file</li>
+    </ul>`
+  },
+  partial_guard: {
+    title: "#10: Partial View Guard",
+    body: `<span class="badge badge-v41">V4.1 — #10</span><br><br>
+    Warns if <code>edit_file</code> is called on a file that was only partially read.<br><br>
+    <ul>
+    <li>Tracks <code>(start_line, end_line)</code> in <code>_FILE_PARTIAL_READS</code> dict on every <code>read_file</code></li>
+    <li>If <code>edit_file</code> called on partial file: prepends advisory warning</li>
+    <li>Warning is non-blocking — edit still proceeds</li>
+    <li>Full read clears the partial flag; <code>write_file</code> also clears it</li>
+    <li>Cleared at all 4 session reset locations</li>
+    </ul>`
+  },
+  offload: {
+    title: "V2-A: Tool Result Disk Offload",
+    body: `<span class="badge badge-v42">V4.2 — V2-A</span><br><br>
+    Results > 50,000 chars written to disk instead of kept in context.<br><br>
+    <ul>
+    <li>File saved to <code>.tool_cache/&lt;id&gt;_&lt;tool&gt;.txt</code> in workspace</li>
+    <li>Preview returned to LLM: first 2,000 chars + last 500 chars</li>
+    <li>Pointer message tells LLM where to find full output</li>
+    <li>Runs BEFORE <code>SECURITY.truncate_output</code> (important — otherwise truncation kills content first)</li>
+    <li>Fail-open: if disk write fails, original result returned unchanged</li>
+    </ul>
+    <code>MAX_TOOL_RESULT_CHARS = 50_000</code> — mirrors runnable's per-tool cap.`
+  },
+  truncate: {
+    title: "SECURITY.truncate_output()",
+    body: `Hard cap on tool results before they enter the conversation.<br><br>
+    <ul>
+    <li>Cap: 30,000 chars (after V2-A offload, so large results already handled)</li>
+    <li>Appends truncation notice if cut</li>
+    <li>Applied to ALL tool results without exception</li>
+    </ul>
+    Note: V2-A runs first so full content is always saved to disk even if truncated here.`
+  },
+  batch_cap: {
+    title: "V2-G: Per-Batch Aggregate Tool Result Cap",
+    body: `<span class="badge badge-v42">V4.2 — V2-G</span><br><br>
+    If total chars across all tool results in a batch exceeds 200,000, largest results trimmed first.<br><br>
+    <b>Protected tools (never trimmed):</b>
+    <code>todo_write, todo_read, semantic_search, edit_file, write_file</code><br><br>
+    <b>Trim behavior:</b>
+    <ul>
+    <li>Sort by size descending, trim largest first</li>
+    <li>Each trimmed result: first 1,000 chars + pointer to use read_file</li>
+    <li>Stop trimming once batch total &lt;= 200K</li>
+    <li>Warning emitted if batch still over cap after all trimmable results trimmed</li>
+    </ul>
+    Mirrors runnable's <code>src/constants/toolLimits.ts</code> 200K batch cap.`
+  },
+  // Compaction
+  before_llm: {
+    title: "Before LLM Call — Pre-Flight Checks",
+    body: `Several checks happen before every Bedrock API call:<br><br>
+    <ol>
+    <li>Cold cache detection (V2-E) — proactive microcompact if stale</li>
+    <li>Context usage check — microcompact at 70%, full compact at 80%</li>
+    <li>Message role alternation fix — Bedrock requires alternating user/assistant</li>
+    <li>Stop check callback — allows external cancellation</li>
+    </ol>`
+  },
+  cold_cache: {
+    title: "V2-E: Cold Cache Detection",
+    body: `<span class="badge badge-v42">V4.2 — V2-E</span><br><br>
+    If a long time has passed since the last API call, prompt cache is likely evicted.<br><br>
+    <ul>
+    <li>Threshold: <code>COLD_CACHE_THRESHOLD_SECONDS = 30 * 60</code> (30 minutes)</li>
+    <li>Tracked via <code>self._last_api_call_time: float = 0.0</code></li>
+    <li>If gap exceeded AND savings >= 5K tokens: run proactive microcompact</li>
+    <li>Log message: "Cold cache detected (Xmin gap) — microcompact applied"</li>
+    <li>Reset in <code>Agent.reset()</code> so loaded sessions don't inherit stale timestamps</li>
+    </ul>
+    Mirrors runnable's <code>src/services/compact/microCompact.ts</code> time-based detection.`
+  },
+  cold_microcompact: {
+    title: "Cold Cache Proactive Microcompact",
+    body: `Same microcompact logic as the 70% threshold, but triggered by time gap rather than context usage.<br><br>
+    Only runs if calculated savings >= <code>MICROCOMPACT_MIN_SAVINGS</code> (5,000 tokens).<br><br>
+    This avoids wasted LLM processing when context is sparse but cache is cold.`
+  },
+  bedrock_call: {
+    title: "Bedrock API Call (make_request)",
+    body: `Sends messages to AWS Bedrock via <code>BedrockClient.chat()</code>.<br><br>
+    <ul>
+    <li>Model: configurable (e.g., <code>us.anthropic.claude-haiku-4-5-20251001-v1:0</code>)</li>
+    <li>Inference profile IDs required for cross-region models (must include <code>us.</code> prefix)</li>
+    <li>Extended thinking: optional, configurable budget tokens</li>
+    <li>Streaming: supported via <code>converse_stream</code></li>
+    <li>On success: updates <code>_last_api_call_time</code></li>
+    </ul>`
+  },
+  auto_compact: {
+    title: "Auto-Compact in Agent.run()",
+    body: `Triggered when context >= 80% during the main run loop.<br><br>
+    <ul>
+    <li>Checks <code>_auto_compact_paused</code> circuit breaker first</li>
+    <li>Calls <code>COMPACTOR.compact(messages, summary)</code></li>
+    <li>On success: fires <code>on_compact_fn</code> callback → clears always_allow</li>
+    <li>On failure: increments circuit breaker, pauses after 3 consecutive failures</li>
+    </ul>`
+  },
+  on_compact_fn: {
+    title: "V2-D: on_compact_fn Callback",
+    body: `<span class="badge badge-v42">V4.2 — V2-D</span><br><br>
+    New optional callback on Agent.__init__ fired after every successful compact.<br><br>
+    <code>on_compact_fn: Callable = None</code><br><br>
+    In <code>create_chat_ui()</code>:
+    <pre style="background:#0d1117;padding:8px;border-radius:4px;margin-top:8px;font-size:12px;">on_compact_fn=lambda: ui_state["always_allow"].clear()
+    if "always_allow" in ui_state else None</pre>
+    Propagated to sub-agents in <code>_run_task_tool()</code> via <code>on_compact_fn=self.on_compact_fn</code>.`
+  },
+  pre_send_compact: {
+    title: "Pre-Send Compact (do_pre_send_compact)",
+    body: `Called before every user message send if context > 75%.<br><br>
+    <b>Stage 1 — Prune only:</b>
+    <ul>
+    <li>Remove old tool result content (microcompact)</li>
+    <li>If new usage < 75%: return early (Stage 2 skipped)</li>
+    <li>V2-D fix: early return path NOW clears always_allow</li>
+    </ul>
+    <b>Stage 2 — Full compact:</b>
+    <ul>
+    <li>create_llm_summary + truncate messages</li>
+    <li>Clears always_allow on success</li>
+    <li>Increments circuit breaker on failure</li>
+    </ul>`
+  },
+  prune_only: {
+    title: "Prune-Only Early Return (V2-D Fix)",
+    body: `<span class="badge badge-v42">V4.2 — V2-D fix</span><br><br>
+    Before V4.2, if Stage 1 prune was sufficient (no full compact needed), the function returned early <b>without clearing always_allow</b>.<br><br>
+    Fix: added always_allow clear to prune-only exit path.<br><br>
+    <pre style="background:#0d1117;padding:8px;border-radius:4px;margin-top:8px;font-size:12px;">if new_pct < 75:
+    if "always_allow" in ui_state:
+        ui_state["always_allow"].clear()
+    return True  # ← now clears before returning</pre>`
+  },
+  manual_compact: {
+    title: "Manual Compact Button",
+    body: `User-triggered compact — always available, not gated by circuit breaker.<br><br>
+    <ul>
+    <li>Calls <code>create_llm_summary()</code> directly</li>
+    <li>Shows summary to user in UI</li>
+    <li>Clears always_allow set (V2-D)</li>
+    <li>Success resets circuit breaker failure count</li>
+    </ul>`
+  },
+  // Memory
+  session_start: {
+    title: "Session Initialization",
+    body: `On every new session, memory is loaded and injected into the system prompt.<br><br>
+    Load order:
+    <ol>
+    <li><code>_load_persistent_memory()</code> reads <code>memory.md</code></li>
+    <li><code>_parse_memory_sections()</code> splits into typed sections</li>
+    <li>Each section injected with descriptive label in system prompt</li>
+    </ol>`
+  },
+  load_memory: {
+    title: "_load_persistent_memory()",
+    body: `Reads <code>memory.md</code> from the session workspace.<br><br>
+    <ul>
+    <li>Exceptions now logged via <code>logging.warning()</code> (V4.1 fix — was silently swallowed)</li>
+    <li>Returns empty string if file doesn't exist</li>
+    <li>SECURITY.validate_path() called before read</li>
+    </ul>`
+  },
+  parse_sections: {
+    title: "#7: 4-Type Memory Structure",
+    body: `<span class="badge badge-v41">V4.1 — #7</span><br><br>
+    <code>_parse_memory_sections()</code> splits memory.md into typed sections:<br><br>
+    <ul>
+    <li><code>## USER</code> — user role, preferences, knowledge</li>
+    <li><code>## FEEDBACK</code> — workflow corrections and validated approaches</li>
+    <li><code>## PROJECT</code> — ongoing work context, goals, deadlines</li>
+    <li><code>## REFERENCE</code> — pointers to external systems and file locations</li>
+    </ul>
+    Legacy flat-format files loaded under <code>## Notes</code> with upgrade prompt.`
+  },
+  inject_memory: {
+    title: "Memory Injection into System Prompt",
+    body: `Each section injected with its own descriptive label for clarity.<br><br>
+    Example injection:
+    <pre style="background:#0d1117;padding:8px;border-radius:4px;margin-top:8px;font-size:12px;">[USER CONTEXT]
+{user_section}
+
+[WORKFLOW FEEDBACK]
+{feedback_section}
+
+[PROJECT CONTEXT]
+{project_section}
+
+[REFERENCES]
+{reference_section}</pre>`
+  },
+  auto_extract: {
+    title: "#8: Memory Auto-Extraction",
+    body: `<span class="badge badge-v41">V4.1 — #8</span><br><br>
+    At session end, if >= 4 user turns and opt-in enabled, runs LLM extraction.<br><br>
+    <ul>
+    <li>Config: <code>enable_memory_extraction: bool = False</code></li>
+    <li>Extraction format: <code>[TYPE] key | one-sentence fact</code></li>
+    <li>Existing memory injected to avoid re-extracting known facts</li>
+    <li>Result appended under timestamped comment block</li>
+    <li><code>max_tokens=1024</code> for extraction call</li>
+    </ul>`
+  },
+  what_not_save: {
+    title: "V2-C: WHAT NOT TO SAVE Filter",
+    body: `<span class="badge badge-v42">V4.2 — V2-C</span><br><br>
+    Enhanced extraction prompt includes explicit exclusion list:<br><br>
+    <b>Do NOT save:</b>
+    <ul>
+    <li>Code patterns, conventions, architecture (derivable from code)</li>
+    <li>Ephemeral file paths / lists of files read during session<br><em>(exception: canonical project locations are valid [REFERENCE] entries)</em></li>
+    <li>Git history or recent changes (use git log)</li>
+    <li>Debugging solutions / fix recipes (fix is in the code)</li>
+    <li>Project structural facts like repo layout and team ownership</li>
+    <li>Activity logs or summaries of "what we did"</li>
+    </ul>
+    Mirrors runnable's <code>WHAT_NOT_TO_SAVE_SECTION</code> from <code>src/services/extractMemories/prompts.ts</code>.`
+  },
+  staleness: {
+    title: "Staleness Annotation",
+    body: `Memories that reference specific file paths, function names, or flags get a staleness note:<br><br>
+    <pre style="background:#0d1117;padding:8px;border-radius:4px;margin-top:8px;font-size:12px;">(verify still exists — may have been renamed or removed)</pre>
+    This reminds the agent (and user) that memory records are point-in-time observations and specific references should be verified before acting on them.`
+  },
+  memory_write: {
+    title: "Atomic Memory Write",
+    body: `Memory extraction result appended as a single atomic write.<br><br>
+    <pre style="background:#0d1117;padding:8px;border-radius:4px;margin-top:8px;font-size:12px;">with open(path, "a") as f:
+    f.write(f"\\n\\n# Extracted {timestamp}\\n")
+    f.write(extracted_content)</pre>
+    Single <code>f.write()</code> call = atomic (no partial writes).<br>
+    <code>SECURITY.validate_path()</code> called before open.`
+  },
+  // Security
+  sec_catastrophic: {
+    title: "LAYER -1: Catastrophic Pattern Hard Block",
+    body: `<span class="badge badge-v41">V4.1 — #12</span><br><br>
+    Checked FIRST, before any other gate. Cannot be bypassed.<br><br>
+    <b>Why a separate layer?</b> The allowlist (Layer 0) can be modified via config. Catastrophic patterns cannot — they're hardcoded in the class and precompiled at import time.<br><br>
+    If a regex fails to compile, the import fails (fail-closed security posture).`
+  },
+  sec_allowlist: {
+    title: "LAYER 0: Tool Allowlist",
+    body: `Only tools explicitly in <code>allowed_tools</code> set can be called.<br><br>
+    <ul>
+    <li>Default set: 22 tools</li>
+    <li>Configurable via <code>agent_config.json</code> <code>tool_allowlist</code></li>
+    <li>Sub-agents inherit parent's allowlist unless overridden</li>
+    <li>Checked after CATASTROPHIC_PATTERNS (cannot be used to bypass Layer -1)</li>
+    </ul>`
+  },
+  sec_path: {
+    title: "LAYER 1: Path Validation",
+    body: `All file operations must stay within the workspace boundary.<br><br>
+    <ul>
+    <li><code>SECURITY.validate_path(path)</code> called before every read/write/edit</li>
+    <li>Resolves symlinks and relative paths before checking</li>
+    <li>Blocks paths outside <code>CONFIG.workspace</code></li>
+    <li>Also called before memory write and file restoration</li>
+    </ul>`
+  },
+  sec_injection: {
+    title: "LAYER 2: Command Injection Detection",
+    body: `Scans bash command strings for shell metacharacters that could enable injection.<br><br>
+    <ul>
+    <li>Checks for unquoted: <code>; | & ` $() &lt;&gt;</code></li>
+    <li>Distinguishes legitimate quoted uses from injection attempts</li>
+    <li>Applied to all bash tool calls</li>
+    </ul>`
+  },
+  sec_truncate: {
+    title: "LAYER 3: Output Truncation",
+    body: `Hard cap on all tool results.<br><br>
+    <ul>
+    <li>30,000 char hard cap via <code>SECURITY.truncate_output()</code></li>
+    <li>Runs AFTER V2-A disk offload (so full content is always saved)</li>
+    <li>Truncation notice appended if content was cut</li>
+    <li>Applied to every tool result without exception</li>
+    </ul>`
+  },
+  sec_ro: {
+    title: "LAYER 4: Read-Only Auto-Classifier",
+    body: `<span class="badge badge-v41">V4.1 — #11</span><br><br>
+    Provably read-only bash commands skip the approval dialog entirely.<br><br>
+    <ul>
+    <li><code>_classify_bash_ro(command)</code> checks base command + flags</li>
+    <li>Any pipe/redirect/chain → not RO</li>
+    <li>Improves UX: no dialog for <code>git log</code>, <code>cat</code>, <code>ls</code>, etc.</li>
+    <li>Conservative: edge cases default to NOT RO (safer)</li>
+    </ul>`
+  }
+};
+
+function nodeClick(id) {
+  const detail = NODE_DETAILS[id];
+  if (!detail) return;
+  document.getElementById('modal-title').textContent = detail.title;
+  document.getElementById('modal-body').innerHTML = detail.body;
+  document.getElementById('modal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  securityLevel: 'loose',
+  flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+});
+</script>
+
+<hr style="border-color:#30363d;margin-top:40px;">
+<p style="color:#484f58;font-size:12px;margin-top:20px;">
+  SageMaker Coding Agent V4.2.0 | 22 tools | 5-layer security | 4/3× token padding |
+  50K per-tool cap + 200K batch cap | deque(30) memory window |
+  V4.1: #7 #8 #10 #11 #12 #14 | V4.2: V2-A V2-C V2-D V2-E V2-F V2-G |
+  Generated 2026-04-01
+</p>
+</body>
+</html>
