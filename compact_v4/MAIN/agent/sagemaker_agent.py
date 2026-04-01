@@ -351,7 +351,35 @@ Format as a comprehensive summary that preserves all context needed to continue 
                 return response.text
         except Exception as e:
             import logging
-            logging.warning(f"LLM summary failed: {e}")
+            err_str = str(e).lower()
+            # V4.2 V2-J: PTL recovery — if prompt-too-long, halve input and retry once
+            if ("prompt" in err_str and "long" in err_str) or "too many tokens" in err_str:
+                logging.warning(f"LLM summary PTL — halving input and retrying: {e}")
+                try:
+                    halved = cls.MAX_SUMMARY_INPUT_MESSAGES // 2
+                    if len(messages) > halved and halved >= 4:
+                        tail = messages[-halved:]
+                        summary_prompt = cls.create_summary_prompt(tail)
+                        retry_msgs = list(tail)
+                        if retry_msgs and retry_msgs[-1].get("role") == "user":
+                            retry_msgs.append({"role": "assistant", "content": "[Preparing summary...]"})
+                        retry_msgs.append({"role": "user", "content": summary_prompt})
+                        response = client.chat(
+                            messages=retry_msgs,
+                            system=("You are summarizing a coding conversation. Be concise but preserve:\n"
+                                    "1. Current task and goal\n2. Key files modified or read\n"
+                                    "3. Important decisions made\n4. Where we left off\n"
+                                    "5. What needs to happen next"),
+                            tools=None, max_tokens=2000, temperature=0.0
+                        )
+                        if response and response.usage:
+                            TOKENS.add(response.usage, model_id=client.model_id)
+                        if response and response.text:
+                            return response.text
+                except Exception as retry_e:
+                    logging.warning(f"LLM summary PTL retry also failed: {retry_e}")
+            else:
+                logging.warning(f"LLM summary failed: {e}")
         return None
 
     # Fallback fixed overhead estimate; actual is computed dynamically by TOKENS.get_fixed_overhead()
@@ -1757,7 +1785,9 @@ class BedrockClient:
 
         # V4.1 #14: Prompt cache boundary.
         # If cache enabled and supported, split system string into static (cached) + dynamic (uncached) blocks.
-        # Bedrock requires "anthropic_beta" in the request body to enable prompt caching.
+        # Bedrock supports prompt caching natively via cache_control blocks in content.
+        # No anthropic_beta header needed — it's a GA feature on Bedrock.
+        # Haiku 4.5: min 4096 tokens/checkpoint. Sonnet 4.5: min 1024 tokens/checkpoint.
         # self.prompt_cache_supported is set False after first failed attempt to avoid repeated retries.
         cache_active = CONFIG.enable_prompt_cache and self.prompt_cache_supported
         if cache_active and isinstance(system, list):
@@ -1791,9 +1821,8 @@ class BedrockClient:
             "system": system_field,
             "messages": messages,
         }
-        if use_cache:
-            # Required by Bedrock to activate the prompt caching feature
-            body["anthropic_beta"] = ["prompt-caching-2024-07-31"]
+        # Note: Bedrock prompt caching is activated by cache_control blocks in content.
+        # No anthropic_beta header needed (that header is for the direct Anthropic API only).
 
         # Extended thinking mode (requires temperature=1)
         if thinking_enabled:
@@ -1817,13 +1846,11 @@ class BedrockClient:
         except Exception as e:
             # V4.1 #14: If cache_control blocks cause a Bedrock validation error,
             # fall back to plain string system prompt and disable caching for this session.
-            # Condition is narrow: only trigger on explicit cache_control rejection signals.
             err_str = str(e)
             is_cache_error = use_cache and (
                 "cache_control" in err_str
                 or "prompt-caching" in err_str
-                or ("ValidationException" in err_str and "anthropic_beta" in err_str)
-                or ("ValidationException" in err_str and "invalid beta flag" in err_str)  # Haiku/Sonnet 4.5+ on Bedrock
+                or ("ValidationException" in err_str and "cache" in err_str.lower())
             )
             if is_cache_error:
                 logging.warning(f"Prompt cache not supported by this model/region, falling back: {e}")
@@ -1835,7 +1862,7 @@ class BedrockClient:
                     body["system"] = "\n\n".join(
                         b.get("text", "") for b in system if isinstance(b, dict)
                     )
-                body.pop("anthropic_beta", None)
+                # No anthropic_beta to remove — Bedrock caching is content-block based
                 response = self.client.invoke_model(
                     modelId=self.model_id,
                     body=json.dumps(body, separators=(',', ':')),
@@ -2927,6 +2954,19 @@ def tool_read_file(args: Dict) -> str:
     # DEDUP: If file already in context and no offset specified, return hint
     if FILE_CACHE.is_in_context(abs_path) and offset == 0:
         return f"[File already in context: {os.path.basename(path)}]\n[Use offset parameter to read specific sections, or grep to search.]"
+
+    # V4.2 V2-H: FILE_UNCHANGED_STUB — if file unchanged since last read, return stub
+    # Saves context tokens when LLM re-reads files that haven't been modified.
+    with _FILES_READ_LOCK:
+        last_read_mtime = _FILE_READ_TIMES.get(abs_path)
+    if last_read_mtime is not None and offset == 0:
+        try:
+            current_mtime = os.path.getmtime(abs_path)
+            if abs(current_mtime - last_read_mtime) < 0.5:  # Same mtime = unchanged
+                return (f"[File unchanged since last read: {os.path.basename(path)}]\n"
+                        f"[{abs_path} — mtime unchanged. Use offset to read specific lines, or edit_file to modify.]")
+        except OSError:
+            pass
 
     # Enforce max file size
     try:
@@ -6046,7 +6086,7 @@ class Agent:
                 _mc_msgs, _mc_saved = microcompact(self.messages)
                 if _mc_saved >= MICROCOMPACT_MIN_SAVINGS:
                     self.messages = _mc_msgs
-                    output_fn(f"[Microcompact: freed ~{_mc_saved // 4} tokens]")
+                    output_fn(f"[Microcompact: freed ~{_mc_saved} tokens]")
 
             # Smart compaction when context gets high (2-stage)
             if COMPACTOR.should_compact(self.messages, CONFIG.context_max_tokens):
@@ -6328,6 +6368,55 @@ class Agent:
                     # Only 1 approved — run sequentially (will be handled in main dispatch loop)
                     pass
 
+            # V4.2 V2-I: Parallel read-only tool execution (like runnable's partitionToolCalls)
+            # Batch consecutive read-only tools and run them concurrently for ~40% latency reduction.
+            _RO_TOOLS = frozenset({"read_file", "glob", "grep", "list_dir", "semantic_search", "view_image"})
+            _ro_parallel_results: Dict[str, str] = {}
+            if len(response.tool_calls) >= 2:
+                _ro_batch: list = []
+                for _tc in response.tool_calls:
+                    _tn = _tc.name
+                    _is_ro = (_tn in _RO_TOOLS or
+                              (_tn == "bash" and _classify_bash_ro(_tc.input.get("command", ""))))
+                    if _is_ro and _tc.id not in _skipped_ids:
+                        _ro_batch.append(_tc)
+                    else:
+                        # Non-RO tool breaks the batch — execute any accumulated RO batch
+                        if len(_ro_batch) >= 2:
+                            try:
+                                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(_ro_batch), 6)) as _pool:
+                                    def _exec_ro(_t):
+                                        _f = TOOLS.get(_t.name, [None])[0]
+                                        if _f:
+                                            return _t.id, _f(_t.input)
+                                        return _t.id, f"Unknown tool: {_t.name}"
+                                    for _fut in concurrent.futures.as_completed([_pool.submit(_exec_ro, _t) for _t in _ro_batch]):
+                                        try:
+                                            _tid, _res = _fut.result()
+                                            _ro_parallel_results[_tid] = _res
+                                        except Exception as _e:
+                                            pass
+                            except Exception:
+                                pass  # Fall back to sequential
+                        _ro_batch = []
+                # Flush final batch
+                if len(_ro_batch) >= 2:
+                    try:
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(_ro_batch), 6)) as _pool:
+                            def _exec_ro_final(_t):
+                                _f = TOOLS.get(_t.name, [None])[0]
+                                if _f:
+                                    return _t.id, _f(_t.input)
+                                return _t.id, f"Unknown tool: {_t.name}"
+                            for _fut in concurrent.futures.as_completed([_pool.submit(_exec_ro_final, _t) for _t in _ro_batch]):
+                                try:
+                                    _tid, _res = _fut.result()
+                                    _ro_parallel_results[_tid] = _res
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
             # Execute tools with 5-layer error recovery
             tool_results = []
             for tc in response.tool_calls:
@@ -6443,8 +6532,10 @@ class Agent:
                 # === LAYER 5: Execute with Error Recovery ===
                 output_fn(f"[Calling {tool_name}...]")
                 try:
-                    # Use pre-computed parallel result if available
-                    if tc.id in _parallel_results:
+                    # Use pre-computed parallel result if available (task or RO batch)
+                    if tc.id in _ro_parallel_results:
+                        result = _ro_parallel_results[tc.id]
+                    elif tc.id in _parallel_results:
                         result = _parallel_results[tc.id]
                     elif tool_name == "task":
                         result = self._run_task_tool(args, output_fn)
