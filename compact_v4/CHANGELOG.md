@@ -43,6 +43,13 @@ Base: compact_v4 v4.2.0
   - unchanged file reads returning the stub instead of the generic in-context hint
   - prompt-too-long summary recovery retrying with smaller context
   - consecutive read-only tool calls running concurrently
+- Added Playwright checks for both flowchart HTML pages:
+  - all V4 tabs
+  - all runnable tabs
+  - every runnable detail modal in `NODE_DETAILS`
+- Real Bedrock ping verified on 2026-04-01:
+  - `anthropic.claude-3-haiku-20240307-v1:0` returned `OK`
+  - runtime also confirmed the cache-control fallback path is required for this model/region
 
 ### Documentation
 - PS_FLOWCHART_RUNNABLE.html completely rebuilt as multi-page reference document

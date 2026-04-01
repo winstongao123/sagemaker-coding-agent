@@ -133,12 +133,30 @@ Some gaps are worth future work, like snip compaction. Others are not worth the 
 - `python -m py_compile compact_v4/MAIN/agent/sagemaker_agent.py compact_v4/MAIN/tests/test_v42_gap_closure.py`
 - `python -m pytest compact_v4/MAIN/tests/test_v42_gap_closure.py -q`
 - Result: `3 passed`
+- `npx playwright test PS_ClaudeCode_Insights/tests/flowcharts.spec.js --reporter=line`
+- Result: `2 passed`
 
 Regression tests cover:
 
 - unchanged-file stub behavior
 - prompt-too-long summary retry
 - read-only parallel dispatch
+- V4 HTML tab switching
+- Runnable HTML tab switching and every detail modal in `NODE_DETAILS`
+
+### Live AWS Bedrock check completed
+
+- Date: `2026-04-01`
+- Model: `anthropic.claude-3-haiku-20240307-v1:0`
+- Region used by V4 config: `ap-southeast-2`
+- Real response: `OK`
+- Real usage: `input_tokens=12`, `output_tokens=4`
+
+Important finding from the live call:
+
+- the default model and region combination rejected `system.0.cache_control` with a `ValidationException`
+- V4's fallback path still worked and returned a valid answer
+- this means the prompt-cache fallback logic is not theoretical; it was exercised in a real Bedrock request
 
 ### Bedrock prompt caching notes
 

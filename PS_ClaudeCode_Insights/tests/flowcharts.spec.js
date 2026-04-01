@@ -10,6 +10,7 @@ test.describe('architecture flowchart pages', () => {
   test('V4 HTML tabs switch correctly', async ({ page }) => {
     await page.goto(localFileUrl('PS_FLOWCHART_V4.html'));
     await expect(page.locator('h1')).toContainText('SageMaker Coding Agent V4.2.1');
+    await expect(page.locator('.mermaid')).toHaveCount(3);
 
     const tabs = [
       { label: 'Architecture', panel: '#architecture', heading: 'Architecture' },
@@ -24,9 +25,13 @@ test.describe('architecture flowchart pages', () => {
       await expect(page.locator(tab.panel)).toHaveClass(/active/);
       await expect(page.locator(`${tab.panel} h2`).first()).toHaveText(tab.heading);
     }
+
+    const bodyText = await page.locator('body').textContent();
+    expect(bodyText).not.toContain('Ã');
+    expect(bodyText).not.toContain('â€');
   });
 
-  test('Runnable HTML tabs and modal work correctly', async ({ page }) => {
+  test('Runnable HTML tabs and all detail modals work correctly', async ({ page }) => {
     await page.goto(localFileUrl('PS_FLOWCHART_RUNNABLE.html'));
     await expect(page.locator('h1')).toContainText('Claude Code Runnable');
 
@@ -43,11 +48,20 @@ test.describe('architecture flowchart pages', () => {
       await expect(page.locator(tab.panel)).toHaveClass(/active/);
     }
 
-    await page.evaluate(() => window.nodeClick('query_engine'));
-    await expect(page.locator('.modal-overlay')).toHaveClass(/active/);
-    await expect(page.locator('.modal h3')).toContainText('QueryEngine');
-    await expect(page.locator('.modal-body')).toContainText('submitMessage');
-    await page.locator('.modal-close').click();
-    await expect(page.locator('.modal-overlay')).not.toHaveClass(/active/);
+    const nodeIds = await page.evaluate(() => Object.keys(NODE_DETAILS));
+    expect(nodeIds.length).toBeGreaterThan(20);
+
+    for (const id of nodeIds) {
+      await page.evaluate((nodeId) => nodeClick(nodeId), id);
+      await expect(page.locator('.modal-overlay')).toHaveClass(/active/);
+      await expect(page.locator('.modal h3')).not.toHaveText('');
+      await expect(page.locator('.modal-body')).not.toHaveText('');
+      await page.locator('.modal-close').click();
+      await expect(page.locator('.modal-overlay')).not.toHaveClass(/active/);
+    }
+
+    const bodyText = await page.locator('body').textContent();
+    expect(bodyText).not.toContain('Ã');
+    expect(bodyText).not.toContain('â€');
   });
 });

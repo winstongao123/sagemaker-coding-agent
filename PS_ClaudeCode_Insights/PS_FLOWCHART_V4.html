@@ -405,8 +405,22 @@ flowchart TD
     <ul>
       <li><code>python -m py_compile compact_v4/MAIN/agent/sagemaker_agent.py compact_v4/MAIN/tests/test_v42_gap_closure.py</code></li>
       <li><code>python -m pytest compact_v4/MAIN/tests/test_v42_gap_closure.py -q</code> -> 3 passed</li>
-      <li>Regression tests cover unchanged-file stubs, PTL summary retry, and read-only parallel dispatch.</li>
+      <li><code>npx playwright test PS_ClaudeCode_Insights/tests/flowcharts.spec.js --reporter=line</code> -> 2 passed</li>
+      <li>Regression tests cover unchanged-file stubs, PTL summary retry, read-only parallel dispatch, V4 tab switching, and all runnable detail modals.</li>
     </ul>
+
+    <h3>Live AWS Bedrock check</h3>
+    <ul>
+      <li>Date: 2026-04-01</li>
+      <li>Model: <code>anthropic.claude-3-haiku-20240307-v1:0</code></li>
+      <li>Region: <code>ap-southeast-2</code></li>
+      <li>Real response: <code>OK</code></li>
+      <li>Real usage: <code>input_tokens=12</code>, <code>output_tokens=4</code></li>
+    </ul>
+    <div class="callout warn">
+      Important live finding: this model and region rejected <code>system.0.cache_control</code> with a Bedrock <code>ValidationException</code>,
+      so V4's prompt-cache fallback path was exercised for real and is genuinely needed.
+    </div>
 
     <h3>Bedrock prompt caching notes</h3>
     <div class="callout">
