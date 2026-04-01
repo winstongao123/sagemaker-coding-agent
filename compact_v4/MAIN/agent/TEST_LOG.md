@@ -139,7 +139,20 @@ Haiku 4.5 cannot activate prompt caching for this agent's system+tools size (~3,
 
 **Pass rate: 3/3**
 
+### Tool Call Count Monitoring Tests
+
+| ID | Test | Model | Expected | Actual | Status |
+|----|------|-------|----------|--------|--------|
+| T14 | Parallel tool efficiency: "find .py AND search import" | Haiku 4.5 | Exactly 2 calls (glob + grep), parallel | 2 calls: `glob(**/*.py)` + `grep(import)` | **PASS** |
+| T15 | No tools on factual question: "What is Python?" | Haiku 4.5 | 0 tool calls | 0 tool calls | **PASS** |
+
+**Pass rate: 5/5** (T11-T15)
+
+**Token efficiency**: T14 used 1,922 input + 107 output. T15 used 1,907 input + 100 output. Minimal cost.
+
 These tests verify that the V4.3.1 prompt engineering upgrade (from Runnable patterns) correctly steers the model to:
 1. Prefer dedicated tools (read_file, glob, grep) over bash equivalents
 2. Use direct tools for simple operations instead of spawning sub-agents
-3. Follow the "Using Tools" and "Sub-agent Coordination" system prompt sections
+3. Call exactly the right number of tools (no extras, no ghost calls)
+4. Not call tools when a factual answer suffices
+5. Follow the "Using Tools" and "Sub-agent Coordination" system prompt sections
