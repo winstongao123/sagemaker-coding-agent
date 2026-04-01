@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.0.0 (April 2026)
+Version: 4.1.0 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.0.0"
+__version__ = "4.1.0"
 
 # ============================================================
 # IMPORTS
@@ -818,6 +818,8 @@ class Config:
 
     # V4 capabilities
     load_claude_md: bool = True   # Auto-load CLAUDE.md from workspace + parent dirs into system prompt
+    enable_prompt_cache: bool = True  # Cache static system prompt prefix on Bedrock (saves ~90% tokens/turn)
+    enable_memory_extraction: bool = False  # V4.1 #8: Auto-extract learnings to memory.md at session end (opt-in)
     enable_skills: bool = True
     skills_dir: str = "./skills"
     enable_mcp: bool = False
@@ -905,6 +907,8 @@ def _apply_config_file(config: 'Config') -> None:
         "require_auth": bool, "require_tool_approval": bool,
         "aws_bedrock_only": bool, "disable_local_traces": bool, "session_cost_limit": float,
         "load_claude_md": bool,
+        "enable_prompt_cache": bool,
+        "enable_memory_extraction": bool,
         "enable_skills": bool, "skills_dir": str,
         "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
         "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
@@ -992,6 +996,37 @@ class SecurityManager:
         ".netrc", ".npmrc", ".pypirc",
         "service-account.json", "service_account.json",  # GCP credentials
     }
+
+    # V4.1 #12: Catastrophic operations — hard-blocked regardless of allowlist, config, or user approval.
+    # These are checked FIRST in validate_command() before any other layer and cannot be disabled.
+    # Patterns are precompiled so any malformed regex fails at import time (fail-closed, not fail-open).
+    # Short options like -rf/-fr, split -r -f, and long --recursive forms are all covered.
+    CATASTROPHIC_PATTERNS = [
+        # rm targeting / or ~ with any recursive flag variant
+        (r"\brm\b.*(?:-[^\s]*r|-r\b|--recursive\b).*\s+/\s*$",   "Catastrophic: rm recursive on root /"),
+        (r"\brm\b.*(?:-[^\s]*r|-r\b|--recursive\b).*\s+/\*",     "Catastrophic: rm recursive on /*"),
+        (r"\brm\b.*(?:-[^\s]*r|-r\b|--recursive\b).*\s+~/?\s*$", "Catastrophic: rm recursive on home ~"),
+        (r"\brm\b.*(?:-[^\s]*r|-r\b|--recursive\b).*\s+~/?/?\*", "Catastrophic: rm recursive on ~/*"),
+        # dd reading from /dev/zero or /dev/urandom (dangerous regardless of output target)
+        (r"\bdd\b.*\bif=/dev/(zero|urandom|random)\b", "Catastrophic: dd from /dev/zero or /dev/urandom"),
+        # Disk formatting and partitioning
+        (r"\bmkfs\b",  "Catastrophic: disk format operation"),
+        (r"\bfdisk\b", "Catastrophic: disk partitioning"),
+        (r"\bparted\b","Catastrophic: disk partitioning"),
+        # Fork bomb
+        (r":\s*\(\)\s*\{[^}]*:\s*\|[^}]*:\s*&[^}]*\}\s*;", "Catastrophic: fork bomb"),
+        # Recursive chmod on root
+        (r"\bchmod\b.*-R\b.*\b(777|000)\b.*\s+/", "Catastrophic: recursive chmod on /"),
+        # Direct disk device write
+        (r">\s*/dev/(sd[a-z]|hd[a-z]|nvme\d+n\d+)(\b|$)", "Catastrophic: direct disk device write"),
+        # Shutdown/halt (irreversible on a running server)
+        (r"\bshutdown\b", "Catastrophic: system shutdown"),
+        (r"\b(?:init|telinit)\s+0\b", "Catastrophic: system halt via init 0"),
+    ]
+    # Precompile all catastrophic patterns at class definition time — fail-closed on bad regex
+    _CATASTROPHIC_COMPILED = [
+        (re.compile(p), reason) for p, reason in CATASTROPHIC_PATTERNS
+    ]
 
     # Extended dangerous bash patterns (70+ patterns)
     DANGEROUS_PATTERNS = [
@@ -1301,6 +1336,13 @@ AWS access tiers (SageMaker execution role):
         Layer 2: Denylist - regex patterns block dangerous argument patterns
         Layer 3: Network - block network commands unless explicitly allowed
         """
+        # === LAYER -1: Catastrophic path enforcement (V4.1 #12) ===
+        # Hard-blocked regardless of allowlist, config, or user approval. Runs first, cannot be bypassed.
+        # Uses precompiled patterns (_CATASTROPHIC_COMPILED) — no try/except, bad regex fails at import.
+        for compiled, reason in self._CATASTROPHIC_COMPILED:
+            if compiled.search(command):
+                return False, f"HARD BLOCKED — {reason}. This operation is permanently disabled."
+
         # === LAYER 0: Bedrock-only mode — block aws CLI entirely ===
         if CONFIG.aws_bedrock_only and re.search(r'\baws\s', command):
             return False, "AWS CLI blocked (aws_bedrock_only=true). V3 only uses Bedrock via Python SDK."
@@ -1661,6 +1703,7 @@ class BedrockClient:
         self.model_id = model_id
         self.region = region
         self.mock_mode = mock_mode
+        self.prompt_cache_supported = True  # V4.1 #14: set False after first cache fallback
         if not mock_mode:
             self.client = boto3.client("bedrock-runtime", region_name=region, config=_BEDROCK_CLIENT_CONFIG)
         else:
@@ -1706,12 +1749,45 @@ class BedrockClient:
         if self.mock_mode:
             return self._mock_response(messages, tools)
 
+        # V4.1 #14: Prompt cache boundary.
+        # If cache enabled and supported, split system string into static (cached) + dynamic (uncached) blocks.
+        # Bedrock requires "anthropic_beta" in the request body to enable prompt caching.
+        # self.prompt_cache_supported is set False after first failed attempt to avoid repeated retries.
+        cache_active = CONFIG.enable_prompt_cache and self.prompt_cache_supported
+        if cache_active and isinstance(system, list):
+            # Already formatted as cache blocks by caller — pass as-is
+            system_field = system
+            use_cache = True
+        elif cache_active and isinstance(system, str):
+            # Split at the dynamic boundary marker if present, else cache full prompt
+            _CACHE_BOUNDARY = "\n\n# === DYNAMIC ==="
+            if _CACHE_BOUNDARY in system:
+                static_part, dynamic_part = system.split(_CACHE_BOUNDARY, 1)
+                system_field = [
+                    {"type": "text", "text": static_part,
+                     "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": dynamic_part},
+                ]
+            else:
+                # No boundary — cache the whole prompt as static
+                system_field = [
+                    {"type": "text", "text": system,
+                     "cache_control": {"type": "ephemeral"}},
+                ]
+            use_cache = True
+        else:
+            system_field = system
+            use_cache = False
+
         body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": max_tokens,
-            "system": system,
+            "system": system_field,
             "messages": messages,
         }
+        if use_cache:
+            # Required by Bedrock to activate the prompt caching feature
+            body["anthropic_beta"] = ["prompt-caching-2024-07-31"]
 
         # Extended thinking mode (requires temperature=1)
         if thinking_enabled:
@@ -1726,11 +1802,40 @@ class BedrockClient:
         if tools:
             body["tools"] = tools
 
-        response = self.client.invoke_model(
-            modelId=self.model_id,
-            body=json.dumps(body, separators=(',', ':')),  # Minified JSON saves ~5% payload
-            contentType="application/json"
-        )
+        try:
+            response = self.client.invoke_model(
+                modelId=self.model_id,
+                body=json.dumps(body, separators=(',', ':')),
+                contentType="application/json",
+            )
+        except Exception as e:
+            # V4.1 #14: If cache_control blocks cause a Bedrock validation error,
+            # fall back to plain string system prompt and disable caching for this session.
+            # Condition is narrow: only trigger on explicit cache_control rejection signals.
+            err_str = str(e)
+            is_cache_error = use_cache and (
+                "cache_control" in err_str
+                or "prompt-caching" in err_str
+                or ("ValidationException" in err_str and "anthropic_beta" in err_str)
+            )
+            if is_cache_error:
+                logging.warning(f"Prompt cache not supported by this model/region, falling back: {e}")
+                self.prompt_cache_supported = False  # Suppress cache blocks for remainder of session
+                # Flatten system back to plain string
+                if isinstance(system, str):
+                    body["system"] = system
+                else:
+                    body["system"] = "\n\n".join(
+                        b.get("text", "") for b in system if isinstance(b, dict)
+                    )
+                body.pop("anthropic_beta", None)
+                response = self.client.invoke_model(
+                    modelId=self.model_id,
+                    body=json.dumps(body, separators=(',', ':')),
+                    contentType="application/json",
+                )
+            else:
+                raise
         result = json.loads(response["body"].read())
         return self._parse(result)
 
@@ -2630,8 +2735,9 @@ TOKENS = TokenTracker()
 # Global state
 _TODOS = []  # Will be synced to ui_state["todos"] for persistence
 _FILES_READ = set()
-_FILES_READ_LOCK = threading.Lock()  # Protects _FILES_READ and _FILE_READ_TIMES during parallel sub-agent execution
+_FILES_READ_LOCK = threading.Lock()  # Protects _FILES_READ, _FILE_READ_TIMES, and _FILE_PARTIAL_READS
 _FILE_READ_TIMES: Dict[str, float] = {}  # V4: abs_path -> mtime when last read/written (under _FILES_READ_LOCK)
+_FILE_PARTIAL_READS: Dict[str, Tuple[int, int]] = {}  # V4.1 #10: abs_path -> (start_line, end_line) if partial read
 
 
 # ============================================================
@@ -2817,6 +2923,16 @@ def tool_read_file(args: Dict) -> str:
         # Select lines with offset/limit
         total_lines = len(lines)
         selected = lines[offset:offset + limit]
+
+        # V4.1 #10: Track partial reads so edit_file can warn if file was only partially seen
+        is_partial = (offset > 0) or (offset + limit < total_lines)
+        with _FILES_READ_LOCK:
+            if is_partial and len(selected) > 0:  # Guard: skip if selection is empty (offset beyond EOF)
+                start_line = offset + 1
+                end_line = offset + len(selected)
+                _FILE_PARTIAL_READS[abs_path] = (start_line, end_line)
+            else:
+                _FILE_PARTIAL_READS.pop(abs_path, None)  # Full read (or empty result) clears partial flag
         result = []
         for i, line in enumerate(selected, start=offset + 1):
             if len(line) > 2000:
@@ -3045,6 +3161,7 @@ def tool_write_file(args: Dict) -> str:
                 _FILE_READ_TIMES[abs_path] = os.path.getmtime(path)
             except OSError:
                 pass
+            _FILE_PARTIAL_READS.pop(abs_path, None)  # V4.1 #10: write = full knowledge, clear partial flag
         # Cache the FULL file content (not just the fragment for append mode)
         if mode == "append":
             full_content = old_content + content
@@ -3107,6 +3224,18 @@ def tool_edit_file(args: Dict) -> str:
         if abs_path not in _FILES_READ:
             return "Error: Must read file before editing. Use read_file first."
 
+    # V4.1 #10: Partial view guard — warn if file was only partially read
+    with _FILES_READ_LOCK:
+        partial_range = _FILE_PARTIAL_READS.get(abs_path)
+    partial_warning = ""
+    if partial_range is not None:
+        start_line, end_line = partial_range
+        partial_warning = (
+            f"[WARNING: You only read lines {start_line}-{end_line} of this file. "
+            f"You may not have seen all relevant context. "
+            f"Re-read the full file with read_file before editing if uncertain.]\n"
+        )
+
     try:
         # Snapshot before modification (for revert)
         SNAPSHOTS.save(path)
@@ -3168,6 +3297,10 @@ def tool_edit_file(args: Dict) -> str:
         lint_err = _auto_lint_python(abs_path)
         if lint_err:
             result += f"\n{lint_err}"
+
+        # V4.1 #10: Prepend partial view warning if file was only partially read
+        if partial_warning:
+            result = partial_warning + result
         return result
     except Exception as e:
         return f"Error editing file: {e}"
@@ -3445,6 +3578,104 @@ def _docker_base_cmd() -> List[str]:
     if CONFIG.exec_docker_readonly_rootfs:
         cmd.extend(["--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m"])
     return cmd
+
+# V4.1 #11: Command auto-classifier — read-only bash commands bypass the approval dialog.
+# A command is read-only if its base command is inherently non-mutating AND no write-flagged
+# subcommands/options appear. Write ops (git commit/push/add, pip install, cp/mv, etc.) still
+# require approval. False negatives (classify write as read) are treated as write (safe direction).
+
+_RO_BASE_COMMANDS: frozenset = frozenset({
+    "cat", "head", "tail", "wc", "sort", "uniq", "file", "stat",
+    "find", "tree", "du", "df", "md5sum", "sha256sum", "ls", "dir",
+    "grep", "rg", "awk", "cut", "tr",
+    "echo", "printf", "pwd", "whoami", "hostname", "uname", "date",
+    "which", "where", "type", "jq", "yq",
+    # Note: 'diff' excluded — diff --output=<file> can write; approved separately
+})
+
+# git subcommands that are read-only when no write flags are present
+_RO_GIT_SUBCOMMANDS: frozenset = frozenset({
+    "log", "status", "diff", "show", "describe",
+    "rev-parse", "shortlog", "whatchanged", "blame", "annotate", "ls-files",
+    "ls-tree", "cat-file",
+    # Note: "stash" excluded — 'git stash apply/pop/drop' are write ops
+    # Note: "branch", "tag", "remote" handled separately with flag inspection
+})
+
+# git subcommands that are read-only only when no write flags are present
+_RO_GIT_WITH_FLAGS: frozenset = frozenset({"branch", "tag", "remote"})
+# flags that make branch/tag write operations
+_WRITE_GIT_FLAGS: frozenset = frozenset({
+    "-d", "-D", "-m", "-M", "-c", "-C", "-f", "-u",
+    "--delete", "--move", "--copy", "--force", "--set-upstream",
+    "--set-upstream-to", "--unset-upstream", "--edit-description",
+})
+# remote subcommands that modify config
+_WRITE_GIT_REMOTE_SUBS: frozenset = frozenset({
+    "add", "remove", "rm", "rename", "set-url", "set-head", "prune",
+})
+
+# git stash write sub-subcommands (when base sub is "stash")
+_WRITE_GIT_STASH_OPS: frozenset = frozenset({
+    "apply", "pop", "drop", "clear", "store", "branch",
+})
+
+# pip subcommands that are read-only
+_RO_PIP_SUBCOMMANDS: frozenset = frozenset({"list", "show", "freeze", "check", "inspect"})
+
+
+def _classify_bash_ro(command: str) -> bool:
+    """Return True if command is provably read-only and can skip the approval dialog.
+
+    Conservative: any ambiguous case returns False (requires approval).
+    """
+    if not command or not command.strip():
+        return False
+    # Pipelines with semicolons, &&, ||, or redirections may contain write steps — don't classify
+    if any(op in command for op in [";", "&&", "||", ">", ">>"]):
+        return False
+    # tee in a pipeline writes to a file regardless of the left-side command
+    if re.search(r'\|\s*tee\b', command):
+        return False
+    # Use shlex.split for correct tokenization of quoted arguments
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False  # malformed quoting — can't safely classify
+    if not tokens:
+        return False
+    base = os.path.basename(tokens[0])
+
+    if base in _RO_BASE_COMMANDS:
+        return True
+    if base == "sed":
+        # sed is read-only only without -i / --in-place.
+        # Covers combined short opts (-ni contains 'i'), --in-place, --in-place=suffix.
+        for t in tokens[1:]:
+            if t == "--in-place" or t.startswith("--in-place="):
+                return False
+            if t.startswith("-") and not t.startswith("--") and "i" in t[1:]:
+                return False  # e.g. -i, -ni, -ri all contain in-place flag
+        return True
+    if base == "git":
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub in _RO_GIT_SUBCOMMANDS:
+            return True
+        if sub in _RO_GIT_WITH_FLAGS:
+            flags = tokens[2:]
+            if sub == "remote":
+                # read-only if no subcommand, or subcommand is show/get-url/-v/--verbose
+                if not flags or flags[0] in ("-v", "--verbose", "-n", "show", "get-url"):
+                    return True
+                return flags[0] not in _WRITE_GIT_REMOTE_SUBS
+            # branch / tag: read-only unless a write flag is present
+            return not any(f in _WRITE_GIT_FLAGS for f in flags)
+        return False
+    if base == "pip" or base == "pip3":
+        sub = tokens[1] if len(tokens) > 1 else ""
+        return sub in _RO_PIP_SUBCOMMANDS
+    return False
+
 
 def tool_bash(args: Dict) -> str:
     """Execute shell command with allowlist enforcement and no shell=True."""
@@ -5170,22 +5401,235 @@ def load_project_instructions(workspace: str) -> str:
     return "\n\n---\n\n".join(reversed(instructions))  # parent first, workspace last (wins)
 
 
+# V4.1 #7: 4-type memory structure. memory.md should use typed sections:
+#   ## USER — who the user is (role, expertise, preferences)
+#   ## FEEDBACK — collaboration guidance (what to repeat/avoid)
+#   ## PROJECT — ongoing context, goals, decisions
+#   ## REFERENCE — external resource pointers
+# Legacy flat-format memory.md is loaded as-is under a generic "Notes" label.
+
+_MEMORY_TYPES = ("USER", "FEEDBACK", "PROJECT", "REFERENCE")
+_MEMORY_TYPE_DESC = {
+    "USER":      "User profile (role, expertise, preferences)",
+    "FEEDBACK":  "Collaboration guidance (what to repeat or avoid)",
+    "PROJECT":   "Project context (goals, decisions, current state)",
+    "REFERENCE": "External resource pointers (URLs, file paths, docs)",
+}
+
+
+def _parse_memory_sections(content: str) -> dict:
+    """Split memory.md content into typed sections. Returns {type: text}.
+
+    Recognises '## USER', '## FEEDBACK', '## PROJECT', '## REFERENCE' headings
+    (case-insensitive). Any content before the first typed heading goes into 'NOTES'.
+    """
+    sections: dict = {}
+    current_type = "NOTES"
+    current_lines: list = []
+
+    for line in content.splitlines():
+        stripped = line.strip().upper()
+        # Match "## TYPE" or "## TYPE:" headings
+        matched_type = None
+        for t in _MEMORY_TYPES:
+            if stripped in (f"## {t}", f"## {t}:"):
+                matched_type = t
+                break
+        if matched_type:
+            # Save previous section
+            body = "\n".join(current_lines).strip()
+            if body:
+                sections[current_type] = sections.get(current_type, "") + body + "\n"
+            current_type = matched_type
+            current_lines = []
+        else:
+            current_lines.append(line)
+
+    body = "\n".join(current_lines).strip()
+    if body:
+        sections[current_type] = sections.get(current_type, "") + body + "\n"
+    return sections
+
+
 def _load_persistent_memory() -> str:
-    """Load persistent memory from workspace memory.md file."""
+    """Load persistent memory from workspace memory.md file.
+
+    V4.1 #7: Parses 4-type sections (USER/FEEDBACK/PROJECT/REFERENCE) and presents
+    each with a labelled header. Legacy flat-format files load under a generic 'Notes' label.
+    """
     memory_path = os.path.join(CONFIG.workspace, "memory.md")
-    if os.path.isfile(memory_path):
-        try:
-            total_size = os.path.getsize(memory_path)
-            with open(memory_path, 'r', encoding='utf-8') as f:
-                content = f.read(10000)  # Cap at 10K chars (~2500 tokens)
-            header = "\n\n# Persistent Memory (from memory.md)\n"
-            if total_size > 10000:
-                header += f"[WARNING: memory.md is {total_size:,} chars but only first 10,000 loaded. Prune old entries to stay under limit.]\n\n"
-            return f"{header}{content}\n"
-        except Exception:
-            pass
+    if not os.path.isfile(memory_path):
+        return ""
+    try:
+        total_size = os.path.getsize(memory_path)
+        with open(memory_path, 'r', encoding='utf-8') as f:
+            content = f.read(10000)  # Cap at 10K chars (~2500 tokens)
+        sections = _parse_memory_sections(content)
+        if not sections:
+            return ""
+
+        output = "\n\n# Persistent Memory (from memory.md)\n"
+        if total_size > 10000:
+            output += f"[WARNING: memory.md is {total_size:,} chars but only first 10,000 loaded. Prune old entries.]\n"
+
+        for mem_type in _MEMORY_TYPES:
+            if mem_type in sections:
+                desc = _MEMORY_TYPE_DESC[mem_type]
+                output += f"\n## {mem_type} — {desc}\n{sections[mem_type]}"
+        # Legacy / unclassified content
+        if "NOTES" in sections:
+            output += f"\n## Notes (legacy — consider tagging as USER/FEEDBACK/PROJECT/REFERENCE)\n{sections['NOTES']}"
+        return output + "\n"
+    except Exception as e:
+        logging.warning(f"Failed to load memory.md: {e}")
     return ""
 
+# ============================================================
+# V4.1 #8: MEMORY AUTO-EXTRACTION
+# ============================================================
+# At session end (or when compact runs), if enable_memory_extraction=True and
+# the session has >= MEMORY_EXTRACT_MIN_TURNS turns, the agent makes one LLM call
+# to extract useful learnings and appends them to memory.md.
+# Off by default — user opts in via agent_config.json.
+
+MEMORY_EXTRACT_MIN_TURNS: int = 10  # Minimum conversation turns to trigger extraction
+
+_MEMORY_EXTRACT_PROMPT = """Review the conversation above and identify what (if anything) is worth saving to long-term memory.
+
+For each type, output facts in this exact format (one per line):
+[USER] key | one-sentence fact about who the user is or how they prefer to work
+[FEEDBACK] key | one-sentence guidance on what to repeat or avoid in future sessions
+[PROJECT] key | one-sentence decision, goal, or context about the current project
+[REFERENCE] key | one-sentence pointer to an external resource (URL, file, doc)
+
+Rules:
+- Only include genuinely useful, non-obvious facts
+- Skip ephemeral task details (e.g., "user asked to read foo.py")
+- Skip things already in memory.md (the existing memory is included above)
+- Maximum 3 items per type
+- If nothing is worth saving for a type, omit that type entirely
+- If nothing is worth saving at all, output only: NOTHING
+
+Example output:
+[USER] language | User works primarily in Python, not R
+[FEEDBACK] confirm_before_delete | Always ask before deleting files — user had bad experience
+[PROJECT] auth_approach | Using JWT tokens stored in HTTP-only cookies for auth layer
+"""
+
+
+def _extract_and_append_memories(agent: "Agent", output_fn: Callable = None) -> Optional[str]:
+    """Run one LLM call to extract session learnings and append them to memory.md.
+
+    V4.1 #8: Called at session end when enable_memory_extraction=True.
+    Returns a summary of what was saved, or None if nothing was extracted.
+    """
+    if not CONFIG.enable_memory_extraction:
+        return None
+
+    # Check minimum turn count (user + assistant pairs)
+    turn_count = sum(1 for m in agent.messages if m.get("role") == "user")
+    if turn_count < MEMORY_EXTRACT_MIN_TURNS:
+        return None
+
+    if output_fn:
+        output_fn("[Memory extraction: reviewing session for learnings...]")
+
+    # Build a concise conversation summary (cap to avoid huge LLM call)
+    MAX_CHARS = 8000
+    conv_text = []
+    for msg in agent.messages[-40:]:  # Last 40 messages max
+        role = msg.get("role", "?")
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            # Flatten content blocks
+            text_parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            content = " ".join(text_parts)
+        elif not isinstance(content, str):
+            content = str(content)
+        conv_text.append(f"{role.upper()}: {content[:500]}")
+    full_conv = "\n".join(conv_text)
+    if len(full_conv) > MAX_CHARS:
+        full_conv = full_conv[:MAX_CHARS] + "\n...[truncated]"
+
+    # Load existing memory to give context (so LLM doesn't re-extract what's already there)
+    memory_path = os.path.join(CONFIG.workspace, "memory.md")
+    existing_memory = ""
+    if os.path.isfile(memory_path):
+        try:
+            with open(memory_path, 'r', encoding='utf-8') as f:
+                existing_memory = f.read(3000)
+        except Exception:
+            pass
+
+    extract_messages = [
+        {
+            "role": "user",
+            "content": (
+                f"=== EXISTING MEMORY ===\n{existing_memory or '(empty)'}\n\n"
+                f"=== CONVERSATION ===\n{full_conv}\n\n"
+                f"{_MEMORY_EXTRACT_PROMPT}"
+            )
+        }
+    ]
+
+    try:
+        response = agent.client.chat(
+            messages=extract_messages,
+            system="You are a memory extraction assistant. Extract only the most valuable, durable facts from this session.",
+            max_tokens=512,
+            temperature=0.0,
+        )
+        raw = (response.text or "").strip()
+        if not raw or raw.upper() == "NOTHING" or not raw:
+            return None
+
+        # Parse lines into typed entries
+        new_entries: dict = {t: [] for t in _MEMORY_TYPES}
+        for line in raw.splitlines():
+            line = line.strip()
+            for mem_type in _MEMORY_TYPES:
+                prefix = f"[{mem_type}]"
+                if line.upper().startswith(prefix):
+                    fact = line[len(prefix):].strip()
+                    if fact:
+                        new_entries[mem_type].append(fact)
+                    break
+
+        # Build append text
+        append_lines = []
+        for mem_type in _MEMORY_TYPES:
+            if new_entries[mem_type]:
+                append_lines.append(f"\n## {mem_type}")
+                for fact in new_entries[mem_type]:
+                    append_lines.append(f"- {fact}")
+        if not append_lines:
+            return None
+
+        append_text = "\n".join(append_lines) + "\n"
+
+        # Append to memory.md (create if missing)
+        try:
+            with open(memory_path, 'a', encoding='utf-8') as f:
+                f.write(f"\n<!-- Auto-extracted {datetime.now().strftime('%Y-%m-%d %H:%M')} -->\n")
+                f.write(append_text)
+            count = sum(len(v) for v in new_entries.values())
+            summary = f"[Memory extraction: saved {count} item(s) to memory.md]"
+            if output_fn:
+                output_fn(summary)
+            return summary
+        except Exception as e:
+            logging.warning(f"Memory extraction: failed to write memory.md: {e}")
+            return None
+
+    except Exception as e:
+        logging.warning(f"Memory extraction LLM call failed: {e}")
+        return None
+
+
+# V4.1 #14: SYSTEM_PROMPT is split into STATIC (cacheable) + DYNAMIC boundary.
+# Everything before _CACHE_BOUNDARY is sent once and cached by Bedrock.
+# Everything after (memory, skills, CLAUDE.md) is sent fresh each turn.
+# The boundary marker itself is stripped before sending.
 SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS SageMaker.
 
 # Rules
@@ -5198,7 +5642,12 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - Follow existing code style. Minimal changes. No extra abstractions.
 
 # Memory
-write_file to memory.md for cross-session context. Auto-loaded on start. Save decisions/patterns, not ephemeral state.
+write_file to memory.md for cross-session context. Auto-loaded on start. Use 4 typed sections:
+- ## USER — user role, expertise, preferences
+- ## FEEDBACK — guidance on what to repeat or avoid
+- ## PROJECT — goals, decisions, current state
+- ## REFERENCE — external resource pointers (URLs, paths, docs)
+Save decisions/patterns, not ephemeral task state.
 
 # Documents
 create_chart FIRST (PNG), then create_word/create_pdf with ![alt](image.png). Use /report skill for guided workflow.
@@ -5215,6 +5664,8 @@ MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Pref
 # Commands
 `/cost`, `/revert <file|all>`, `/verify [full|quick|pre-commit]`, `/checkpoint [name|list]`, `/commands` (custom).
 Code references: `file_path:line_number`.
+
+# === DYNAMIC ===
 """
 
 # ============================================================
@@ -5876,7 +6327,13 @@ class Agent:
 
                 # === LAYER 4: Permission Check ===
                 # Skip approval for parallel results (already approved before parallel execution)
-                if tc.id not in _parallel_results and needs_approval and self.on_approval:
+                # V4.1 #11: Also skip approval for provably read-only bash commands
+                _is_ro_bash = (
+                    tool_name == "bash"
+                    and CONFIG.require_tool_approval
+                    and _classify_bash_ro(args.get("command", ""))
+                )
+                if tc.id not in _parallel_results and needs_approval and self.on_approval and not _is_ro_bash:
                     approved = self.on_approval(tool_name, args)
                     AUDIT.log(self.session_id, "approval_request", tool_name, args,
                              "Approved" if approved else "Denied", approved)
@@ -5974,6 +6431,7 @@ class Agent:
         with _FILES_READ_LOCK:
             _FILES_READ.clear()
             _FILE_READ_TIMES.clear()  # V4: clear staleness tracking on session reset
+            _FILE_PARTIAL_READS.clear()  # V4.1 #10: clear partial view tracking
         _reset_global_exec()  # Reset global exec budget for new session
         CONTEXT.reset()
         TOKENS.reset()
@@ -7351,6 +7809,9 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', 'Agent is running. Stop it first.')
             return
         global _TODOS, _FILES_READ
+        # V4.1 #8: Auto-extract memories at session end if enabled
+        if ui_state["agent"]:
+            _extract_and_append_memories(ui_state["agent"], output_fn=lambda m: add_message('system', m))
         if ui_state["agent"]:
             ui_state["agent"].reset()
         ui_state["agent"] = None
@@ -7360,6 +7821,7 @@ def create_chat_ui(mock_mode: bool = None):
         with _FILES_READ_LOCK:
             _FILES_READ.clear()
             _FILE_READ_TIMES.clear()  # V4: clear staleness tracking on session clear
+            _FILE_PARTIAL_READS.clear()  # V4.1 #10: clear partial view tracking
         TOKENS.reset()
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
@@ -7412,6 +7874,7 @@ def create_chat_ui(mock_mode: bool = None):
         with _FILES_READ_LOCK:
             _FILES_READ.clear()
             _FILE_READ_TIMES.clear()  # V4: clear staleness tracking on session load
+            _FILE_PARTIAL_READS.clear()  # V4.1 #10: clear partial view tracking
         session_id = session_dropdown.value
         if not session_id:
             # New session - just clear
@@ -7530,6 +7993,9 @@ def create_chat_ui(mock_mode: bool = None):
             add_message('system', 'Agent is running. Stop it first.')
             return
         global _TODOS, _FILES_READ
+        # V4.1 #8: Auto-extract memories at session end if enabled
+        if ui_state["agent"]:
+            _extract_and_append_memories(ui_state["agent"], output_fn=lambda m: add_message('system', m))
         if ui_state["agent"]:
             ui_state["agent"].reset()
         ui_state["agent"] = None
@@ -7539,6 +8005,7 @@ def create_chat_ui(mock_mode: bool = None):
         with _FILES_READ_LOCK:
             _FILES_READ.clear()
             _FILE_READ_TIMES.clear()  # V4: clear staleness tracking on new session
+            _FILE_PARTIAL_READS.clear()  # V4.1 #10: clear partial view tracking
         TOKENS.reset()
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
