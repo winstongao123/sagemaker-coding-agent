@@ -1823,6 +1823,7 @@ class BedrockClient:
                 "cache_control" in err_str
                 or "prompt-caching" in err_str
                 or ("ValidationException" in err_str and "anthropic_beta" in err_str)
+                or ("ValidationException" in err_str and "invalid beta flag" in err_str)  # Haiku/Sonnet 4.5+ on Bedrock
             )
             if is_cache_error:
                 logging.warning(f"Prompt cache not supported by this model/region, falling back: {e}")
