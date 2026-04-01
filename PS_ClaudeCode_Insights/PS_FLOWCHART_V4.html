@@ -145,7 +145,10 @@
     background: #0d1828;
     border: 1px solid #20324d;
     overflow: auto;
+    display: flex;
+    justify-content: center;
   }
+  .mermaid svg { margin: 0 auto !important; max-width: 100%; }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -227,6 +230,7 @@
 
   <div class="tabbar">
     <button class="tab active" data-tab="architecture">Architecture</button>
+    <button class="tab" data-tab="harness">Harness + Coordination</button>
     <button class="tab" data-tab="comparison">Runnable Comparison</button>
     <button class="tab" data-tab="better">What V4 Does Better</button>
     <button class="tab" data-tab="beginner">Beginner Guide</button>
@@ -315,6 +319,102 @@ flowchart TD
     </div>
   </section>
 
+  <section id="harness" class="panel">
+    <h2>Harness + Coordination</h2>
+    <div class="callout good">
+      This is the deeper agentic harness view. It covers the runtime responsibilities around the model, not just the model call itself:
+      state tracking, compaction, file context, approval flow, sub-agent routing, and how those pieces coordinate.
+    </div>
+
+    <h3>1. Runtime Harness Responsibilities</h3>
+    <div class="grid">
+      <div class="card">
+        <h3>System prompt harness</h3>
+        <ul>
+          <li>Builds the static + dynamic prompt split.</li>
+          <li>Injects memory and discovered <code>CLAUDE.md</code> content.</li>
+          <li>Controls tool schema exposure and model-specific Bedrock request shape.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>State harness</h3>
+        <ul>
+          <li>Tracks file reads, partial reads, diffs, and stale edits.</li>
+          <li>Tracks session cost, token usage, and turn budgets.</li>
+          <li>Resets or prunes state during clear, load, new session, and compact paths.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Approval harness</h3>
+        <ul>
+          <li>Hard-blocks catastrophic commands first.</li>
+          <li>Auto-approves read-only bash where classification is safe.</li>
+          <li>Maintains user approval state and clears stale approvals on compact.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Execution harness</h3>
+        <ul>
+          <li>Parses tool calls, batches read-only tools, and serializes risky writes.</li>
+          <li>Handles stop requests, compact retry, and compact circuit-breaking.</li>
+          <li>Returns tool results back into the main loop for follow-up turns.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>2. Sub-Agent Coordination</h3>
+    <div class="mermaid">
+flowchart TD
+    A([Parent agent turn]) --> B{task tool calls?}
+    B -->|No| C([Stay in parent loop])
+    B -->|Yes| D[Check sub-agent depth limit]
+    D --> E[Pick agent type\nexplore / plan / review / build / general]
+    E --> F[Optional model override]
+    F --> G[Create child Bedrock client]
+    G --> H[Clear child file-context markers]
+    H --> I{Several task calls?}
+    I -->|Yes| J[Run sub-agents in parallel\nup to 4 workers]
+    I -->|No| K[Run single sub-agent]
+    J --> L[Collect outputs\nrestore parent markers]
+    K --> L
+    L --> M([Parent loop continues])
+    </div>
+    <div class="callout warn">
+      Important comparison point: V4 does have real sub-agent coordination, parallelism, depth limits, and model overrides. It is not as isolated as runnable's worktree-based design,
+      but it is more capable than the earlier V4 summary page made obvious.
+    </div>
+
+    <h3>3. Memory + Context Management</h3>
+    <table>
+      <tr><th>Area</th><th>Runnable</th><th>V4.2.1</th><th>What matters</th></tr>
+      <tr><td>Memory structure</td><td>Per-file memory items + MEMORY.md index</td><td>Single <code>memory.md</code> with typed sections</td><td>Runnable scales better for large memory stores; V4 is simpler to inspect in notebooks.</td></tr>
+      <tr><td>Memory extraction</td><td>Forked sub-agent with full conversation context</td><td>Single in-process LLM extraction path</td><td>Runnable is richer; V4 is lighter and easier to run in SageMaker.</td></tr>
+      <tr><td>File context dedup</td><td>Unchanged-file stub + in-context discipline</td><td>Now includes unchanged-file stub and file-context cache tracking</td><td>V4 closed the practical repeated-read waste issue.</td></tr>
+      <tr><td>Compaction</td><td>4-tier with cached MC + time MC + snip + full compact</td><td>Time-aware microcompact + full compact + PTL retry</td><td>V4 is still missing runnable's snip and server-side cache edits.</td></tr>
+      <tr><td>Post-compact cleanup</td><td>Broad cleanup of cache-sensitive runtime state</td><td>Clears read tracking, approvals, partial reads, and restores recent files</td><td>V4 is strong here, but still less cache-stable because it mutates messages.</td></tr>
+    </table>
+
+    <h3>4. Harness Risks Still Open</h3>
+    <div class="grid">
+      <div class="card">
+        <h3>Shared globals</h3>
+        <p>Some V4 tracking structures are still shared at module scope, so overlapping sub-agents can interfere with each other more than in runnable.</p>
+      </div>
+      <div class="card">
+        <h3>Cache analytics</h3>
+        <p>Runnable tracks why prompt cache breaks. V4 has fallback logic, but still lacks good cache-break visibility.</p>
+      </div>
+      <div class="card">
+        <h3>Worktree isolation</h3>
+        <p>Runnable can isolate sub-agents in git worktrees. V4 keeps everything in one workspace, which is simpler but weaker for parallel safety.</p>
+      </div>
+      <div class="card">
+        <h3>Snip tier</h3>
+        <p>V4 still jumps from microcompact to full compact. Runnable's snip tier is still the cleanest missing context-management middle ground.</p>
+      </div>
+    </div>
+  </section>
+
   <section id="comparison" class="panel">
     <h2>Runnable Comparison</h2>
     <div class="callout warn">
@@ -333,6 +433,11 @@ flowchart TD
       <tr><td>Streaming tool execution</td><td>Yes</td><td>No</td><td><span class="pill partial">Open</span></td><td>Jupyter UX and Bedrock response handling make this less attractive than in a CLI.</td></tr>
       <tr><td>Immutable message objects</td><td>Yes</td><td>No</td><td><span class="pill partial">Open</span></td><td>V4 still mutates some message content during microcompact, so cache purity is lower.</td></tr>
       <tr><td>Per-file memory store</td><td>Yes</td><td>No</td><td><span class="pill partial">Intentional</span></td><td>V4 keeps a flatter memory model because SageMaker sessions are usually smaller and easier to inspect manually.</td></tr>
+      <tr><td>Memory extraction as forked sub-agent</td><td>Yes</td><td>No</td><td><span class="pill partial">Open</span></td><td>Runnable's memory extraction harness is richer and more context-aware.</td></tr>
+      <tr><td>Prompt cache break diagnostics</td><td>Yes</td><td>No</td><td><span class="pill partial">Open</span></td><td>V4 can fall back correctly, but still cannot explain cache misses the way runnable can.</td></tr>
+      <tr><td>Worktree-isolated sub-agents</td><td>Yes</td><td>No</td><td><span class="pill partial">Open</span></td><td>Runnable is safer for parallel editing; V4 is simpler for one-user SageMaker sessions.</td></tr>
+      <tr><td>Parallel sub-agent execution</td><td>Yes</td><td>Yes</td><td><span class="pill yes">Closed</span></td><td>V4 already runs several delegated task calls in parallel, but without runnable's worktree isolation.</td></tr>
+      <tr><td>Sub-agent model override</td><td>Not emphasized</td><td>Yes</td><td><span class="pill yes">V4 edge</span></td><td>V4 can steer different sub-agent types toward different Bedrock models more directly.</td></tr>
       <tr><td>Sub-agent state isolation</td><td>Stronger</td><td>Partial</td><td><span class="pill partial">Open</span></td><td>V4 still has some shared globals like <code>_FILE_READ_TIMES</code> that are a concurrency risk if many sub-agents overlap.</td></tr>
     </table>
   </section>
@@ -412,15 +517,33 @@ flowchart TD
     <h3>Live AWS Bedrock check</h3>
     <ul>
       <li>Date: 2026-04-01</li>
-      <li>Model: <code>anthropic.claude-3-haiku-20240307-v1:0</code></li>
+      <li>V4 default runtime target: <code>au.anthropic.claude-haiku-4-5-20251001-v1:0</code></li>
+      <li>Prompt-cache validation target: <code>au.anthropic.claude-sonnet-4-5-20250929-v1:0</code></li>
       <li>Region: <code>ap-southeast-2</code></li>
-      <li>Real response: <code>OK</code></li>
-      <li>Real usage: <code>input_tokens=12</code>, <code>output_tokens=4</code></li>
     </ul>
     <div class="callout warn">
-      Important live finding: this model and region rejected <code>system.0.cache_control</code> with a Bedrock <code>ValidationException</code>,
-      so V4's prompt-cache fallback path was exercised for real and is genuinely needed.
+      Important live finding: legacy Claude 3 Haiku rejected <code>system.0.cache_control</code> with a Bedrock <code>ValidationException</code>,
+      so V4's prompt-cache fallback path is genuinely needed for older or incompatible models.
     </div>
+
+    <table>
+      <tr><th>Model tested</th><th>Purpose</th><th>Result</th><th>Cache behavior observed</th></tr>
+      <tr><td><code>anthropic.claude-3-haiku-20240307-v1:0</code></td><td>Legacy baseline</td><td>Returned <code>OK</code></td><td>Rejected cache block; fallback path required.</td></tr>
+      <tr><td><code>anthropic.claude-3-5-sonnet-20241022-v2:0</code></td><td>Mid-generation check</td><td>Returned <code>OK</code> with caching disabled</td><td>Direct model ID was not reliable for prompt-caching path here.</td></tr>
+      <tr><td><code>au.anthropic.claude-haiku-4-5-20251001-v1:0</code></td><td>Preferred V4 runtime</td><td>Returned <code>OK</code></td><td>Accepted cache fields; small prompt did not cross cache threshold.</td></tr>
+      <tr><td><code>au.anthropic.claude-sonnet-4-5-20250929-v1:0</code></td><td>Prompt-cache verification</td><td>Returned <code>OK</code></td><td>Verified cache creation on call 1 and cache read on call 2 with a long static prompt.</td></tr>
+    </table>
+
+    <h3>PDF coverage audit</h3>
+    <div class="callout">
+      Honest answer: the HTML now covers the major source-verifiable points the PDFs were strong on, especially query-loop design, four-tier runnable compaction, prompt-cache stability,
+      permission coordination, memory extraction, and sub-agent architecture. The PDFs are image-heavy, so they were used as secondary guidance and then checked against code.
+    </div>
+    <ul>
+      <li>Covered from PDF themes: query harness, tool orchestration, prompt caching, permission race design, memory structure, sub-agent / worktree ideas, and post-compact cleanup concepts.</li>
+      <li>Corrected against source: subscription-tiered parallelism, Capybara as a separate model tier, and inflated file / line-count claims.</li>
+      <li>Not claimed as fully learned from PDFs alone: exact UI-only details or any point we could not verify in code.</li>
+    </ul>
 
     <h3>Bedrock prompt caching notes</h3>
     <div class="callout">
@@ -440,9 +563,10 @@ flowchart TD
     <h3>Current honest answer to "is V4 the best yet?"</h3>
     <table>
       <tr><th>Question</th><th>Answer</th></tr>
-      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes, for the most important SageMaker-safe items: prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, and PTL-safe compaction retry.</td></tr>
-      <tr><td>Is V4 fully identical to runnable?</td><td>No. Snip compaction, streaming tool execution, immutable message design, and deeper sub-agent isolation are still open or intentionally different.</td></tr>
-      <tr><td>Is V4 the better fit inside AWS SageMaker?</td><td>Yes, if the goal is a safer, notebook-friendly, Bedrock-native coding/reporting agent rather than a terminal-first general-purpose CLI clone.</td></tr>
+      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes, for the most important SageMaker-safe items: prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, PTL-safe compaction retry, and practical sub-agent coordination.</td></tr>
+      <tr><td>Is V4 fully identical to runnable?</td><td>No. Snip compaction, streaming tool execution, immutable message design, memory extraction as a fork, cache-break diagnostics, worktree isolation, and deeper sub-agent isolation are still open or intentionally different.</td></tr>
+      <tr><td>Is this the best AWS-focused version in this repo?</td><td>Yes, V4.2.1 is the best AWS-targeted version in this repo right now, especially with Haiku 4.5 as the default runtime and Sonnet 4.5 reserved for cache verification or harder turns.</td></tr>
+      <tr><td>Is caching actually working on AWS?</td><td>Yes, but not uniformly across all models. It fails on legacy Claude 3 Haiku, works on the AU 4.5 inference-profile models, and was directly verified with a real cache write then cache read on Sonnet 4.5.</td></tr>
     </table>
   </section>
 

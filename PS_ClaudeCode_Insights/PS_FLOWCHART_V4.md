@@ -51,7 +51,39 @@ Beginner analogy: compaction is like cleaning a desk without throwing away the i
 - Approval gating for risky tools
 - Partial-view warning and file staleness protection
 
-## 2. Runnable Comparison
+## 2. Harness and Coordination
+
+### Runtime harness responsibilities
+
+- system prompt assembly
+- memory and `CLAUDE.md` injection
+- file-context tracking
+- approval and safety gating
+- compaction and retry handling
+- tool execution orchestration
+- sub-agent spawning and result reintegration
+
+### Sub-agent coordination
+
+- V4 supports typed sub-agents such as explore, plan, review, build, and general.
+- It enforces a depth limit.
+- It can override the model per sub-agent type.
+- It can run multiple delegated task calls in parallel.
+- It restores parent file-context markers after child runs finish.
+
+Important limitation: V4 still does not match runnable's worktree-style isolation, so shared globals remain a weaker point.
+
+### Memory and context management
+
+| Area | Runnable | V4.2.1 | What matters |
+|---|---|---|---|
+| Memory structure | Per-file memory items + MEMORY.md index | Single `memory.md` with typed sections | Runnable scales better; V4 is simpler to inspect in notebooks. |
+| Memory extraction | Forked sub-agent with full conversation context | Single in-process LLM extraction path | Runnable is richer; V4 is lighter. |
+| File context dedup | Unchanged-file stub + in-context discipline | Same practical protection now present | V4 closed the repeated unchanged-read waste path. |
+| Compaction | Cached MC + time MC + snip + full compact | Time-aware microcompact + full compact + PTL retry | V4 still lacks snip and server-side cache edits. |
+| Post-compact cleanup | Broad cache-sensitive cleanup | Strong cleanup, but message mutation still hurts cache purity | Runnable remains stronger for cache stability. |
+
+## 3. Runnable Comparison
 
 This is the apple-to-apple section: what Claude Code runnable has, what V4 now matches, and what is still intentionally different.
 
@@ -67,9 +99,14 @@ This is the apple-to-apple section: what Claude Code runnable has, what V4 now m
 | Streaming tool execution | Yes | No | Open | Less attractive in notebook UX than in a terminal CLI. |
 | Immutable message objects | Yes | No | Open | V4 still mutates some message content during microcompact. |
 | Per-file memory store | Yes | No | Intentional | V4 keeps a flatter memory model because SageMaker sessions are usually easier to inspect manually. |
+| Memory extraction as forked sub-agent | Yes | No | Open | Runnable's memory extraction harness is richer and more context-aware. |
+| Prompt cache break diagnostics | Yes | No | Open | V4 falls back correctly, but cannot explain cache misses as deeply. |
+| Worktree-isolated sub-agents | Yes | No | Open | Runnable is safer for parallel editing; V4 is simpler for one-user SageMaker sessions. |
+| Parallel sub-agent execution | Yes | Yes | Closed | V4 can already run several delegated task calls in parallel. |
+| Sub-agent model override | Not emphasized | Yes | V4 edge | V4 can steer sub-agent types toward different Bedrock models more directly. |
 | Sub-agent state isolation | Stronger | Partial | Open | Shared globals like `_FILE_READ_TIMES` are still a concurrency risk if many sub-agents overlap. |
 
-## 3. What V4 Does Better
+## 4. What V4 Does Better
 
 ### Bedrock-first resilience
 
@@ -95,7 +132,7 @@ This is the apple-to-apple section: what Claude Code runnable has, what V4 now m
 - Session persistence and audit logs are easier to inspect locally.
 - Model override support lets different sub-agent types use different Bedrock models.
 
-## 4. Beginner Guide
+## 5. Beginner Guide
 
 ### What is the system prompt?
 
@@ -126,7 +163,7 @@ Because the environment is different. Runnable is a CLI product built for Anthro
 
 Some gaps are worth future work, like snip compaction. Others are not worth the complexity yet in SageMaker, like full streaming tool execution in a notebook UI. And one big item, server-side `cache_edits`, depends on what Bedrock exposes at the API level, not only on local Python code.
 
-## 5. Bedrock and Verification
+## 6. Bedrock and Verification
 
 ### Local verification completed
 
@@ -147,16 +184,41 @@ Regression tests cover:
 ### Live AWS Bedrock check completed
 
 - Date: `2026-04-01`
-- Model: `anthropic.claude-3-haiku-20240307-v1:0`
+- V4 default runtime target: `au.anthropic.claude-haiku-4-5-20251001-v1:0`
+- Prompt-cache validation target: `au.anthropic.claude-sonnet-4-5-20250929-v1:0`
 - Region used by V4 config: `ap-southeast-2`
-- Real response: `OK`
-- Real usage: `input_tokens=12`, `output_tokens=4`
+- Legacy baseline `anthropic.claude-3-haiku-20240307-v1:0`: returned `OK` but rejected `system.0.cache_control`, so fallback was required
+- Preferred runtime `au.anthropic.claude-haiku-4-5-20251001-v1:0`: returned `OK` and accepted cache fields
+- Prompt-cache verification `au.anthropic.claude-sonnet-4-5-20250929-v1:0`: returned `OK` and showed real cache write on call 1 plus cache read on call 2 with a long static prompt
 
-Important finding from the live call:
+Practical finding:
 
-- the default model and region combination rejected `system.0.cache_control` with a `ValidationException`
-- V4's fallback path still worked and returned a valid answer
-- this means the prompt-cache fallback logic is not theoretical; it was exercised in a real Bedrock request
+- caching is not uniformly available across all Claude model IDs
+- legacy Claude 3 Haiku needs fallback
+- AU 4.5 inference-profile models are the correct AWS path here
+
+### PDF coverage audit
+
+Honest answer: the HTML now covers the major source-verifiable points the PDFs were strong on, especially:
+
+- query harness
+- tool orchestration
+- prompt caching
+- permission race design
+- memory structure
+- sub-agent and worktree concepts
+- post-compact cleanup concepts
+
+What was corrected against source:
+
+- subscription-tiered parallelism
+- Capybara as a separate model tier
+- inflated file and line-count claims
+
+What is not claimed from PDFs alone:
+
+- UI-only details
+- any point we could not verify in code
 
 ### Bedrock prompt caching notes
 
@@ -170,15 +232,16 @@ Official references:
 
 Inference from official docs: AWS documents prompt caching with checkpoints and supported-model rules, but does not document runnable-style `cache_edits` support on Bedrock. That is why V4 still uses message-level microcompact instead of runnable's server-side cache deletion path.
 
-## 6. Honest Final Answers
+## 7. Honest Final Answers
 
 | Question | Answer |
 |---|---|
-| Did V4 learn the high-value runnable lessons? | Yes, for the most important SageMaker-safe items: prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, and PTL-safe compaction retry. |
-| Is V4 fully identical to runnable? | No. Snip compaction, streaming tool execution, immutable message design, and deeper sub-agent isolation are still open or intentionally different. |
-| Is V4 the better fit inside AWS SageMaker? | Yes, if the goal is a safer, notebook-friendly, Bedrock-native coding and reporting agent rather than a terminal-first general-purpose CLI clone. |
+| Did V4 learn the high-value runnable lessons? | Yes, for the most important SageMaker-safe items: prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, PTL-safe compaction retry, and practical sub-agent coordination. |
+| Is V4 fully identical to runnable? | No. Snip compaction, streaming tool execution, immutable message design, memory extraction as a fork, cache-break diagnostics, worktree isolation, and deeper sub-agent isolation are still open or intentionally different. |
+| Is this the best AWS-focused version in this repo? | Yes, V4.2.1 is the best AWS-targeted version in this repo right now, especially with Haiku 4.5 as the default runtime and Sonnet 4.5 reserved for cache verification or harder turns. |
+| Is caching actually working on AWS? | Yes, but not uniformly across all models. It fails on legacy Claude 3 Haiku, works on the AU 4.5 inference-profile models, and was directly verified with a real cache write then cache read on Sonnet 4.5. |
 
-## Source of Truth
+## 8. Source of Truth
 
 - V4 source: `compact_v4/MAIN/agent/sagemaker_agent.py`
 - Runnable comparison source: `compare_code/gg-claude-code-runnable`

@@ -1,5 +1,55 @@
 # Compact V4 Changelog
 
+## v4.3.0 — Fresh Runnable Audit Gap Closure (2026-04-01)
+
+Base: compact_v4 v4.2.1
+
+Source: Fresh full audit of gg-claude-code-runnable/src/ (1,438 TS files) — see PS_DEEP_ANALYSIS_V3.md
+
+### V3-A — Diminishing Returns Detection
+- Tracks output token count for last 3 turns per run() call
+- If 3+ consecutive turns produce <500 output tokens: emits advisory warning
+- Mirrors runnable's `query/tokenBudget.ts` BudgetTracker diminishing-returns check
+- Resets at start of each run() call; only fires once; top-level agent only (no sub-agent noise)
+
+### V3-B — Memory 200-Line / 25KB Cap
+- `_load_persistent_memory()` now caps at `_MEMORY_MAX_LINES=200` lines AND `_MEMORY_MAX_BYTES=25_000` bytes
+- Line cap applied first (splitlines), then byte cap (f.read)
+- Warning message updated to reflect actual limits hit
+- Mirrors runnable's `memdir/memdir.ts` `MAX_ENTRYPOINT_LINES=200`, `MAX_ENTRYPOINT_BYTES=25_000`
+- Previously only capped at 10K chars (~8KB, ~2500 tokens) — now aligned with Runnable
+
+### V3-C — Cold-Cache Microcompact keepRecent
+- `microcompact()` now accepts `keep_n_override: int = None` parameter
+- Cold-cache path (V2-E, 30-min gap detection) now calls `microcompact(keep_n_override=KEEP_LAST_N_COLD_CACHE=1)`
+- More aggressive cleanup when cache is cold: keep only last 1 result per tool type (vs normal default of 3)
+- Mirrors runnable's `timeBasedMCConfig.ts` `keepRecent=5` pattern
+
+### V3-D — Auto-Memory "Already Wrote" Check
+- `_extract_and_append_memories()` now checks if the main agent wrote to `memory.md` this session
+- If a `write_file`/`edit_file` tool call targeting `memory.md` is found in messages: extraction is skipped
+- Mirrors runnable's `extractMemories.ts` `hasMemoryWritesSince()` — main agent's explicit writes always win
+- Prevents duplicate/conflicting memory entries when agent manually curates memory
+
+### V3-E — Per-Turn Cache Indicator (UI)
+- After every LLM response (top-level agent only), emits a cache status line via output_fn
+- `WRITE X tok`: first turn — system prompt written to Bedrock's server-side cache
+- `HIT X tok (saved ~$Y)`: subsequent turns — tokens served from cache with per-turn cost savings shown
+- `WRITE X tok | HIT Y tok`: both in same turn (mixed scenario)
+- Uses `TOKENS.format_cache_line(usage)` — no output if no cache activity
+- Sub-agents suppressed (subagent_depth > 0) to avoid noise
+
+### V3-F — Cache Savings in /cost
+- `TokenTracker.get_cache_savings_usd()`: calculates total session USD saved from prompt caching
+- `get_cost()` now shows: `$X.XXXX (cache Y% | saved ~$Z)` when cache is active
+- Formula: cache_read_tokens × input_price × 0.90 (90% discount = 90% savings vs full price)
+
+### Testing Note
+- Behavioral tests run on Bedrock Haiku 4.5 (`anthropic.claude-haiku-4-5-20251001-v1:0`)
+- See TEST_LOG.md for pass/fail results per feature
+
+---
+
 ## v4.2.1 — Deep Gap Closure + Bedrock Fix (2026-04-01)
 
 Base: compact_v4 v4.2.0
@@ -57,8 +107,16 @@ Base: compact_v4 v4.2.0
   - 9 Mermaid flowcharts with 30+ interactive click-to-detail nodes
   - Full comparison tables validated against actual runnable source (1,438 TS files)
   - PDF accuracy assessment (3 Chinese-language analyses cross-referenced)
+- PS_FLOWCHART_V4.html expanded to cover:
+  - harness responsibilities
+  - sub-agent coordination
+  - memory and context-management comparison
+  - live AWS caching reality by model family
 - Deep source analysis: 5 background agents analyzed runnable source covering query loop,
   tool dispatch, context management, permissions, memory, prompts, and model selection
+- AWS runtime policy aligned for current testing:
+  - default runtime model now AU Haiku 4.5
+  - Sonnet 4.5 kept for prompt-cache verification and harder turns
 
 ---
 

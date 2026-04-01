@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.2.1"
+__version__ = "4.3.0"
 
 # ============================================================
 # IMPORTS
@@ -822,7 +822,9 @@ class Config:
     """Agent configuration."""
     # AWS Settings
     region: str = "ap-southeast-2"  # Sydney
-    model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"  # Haiku: 8 req/min (vs Sonnet: 1 req/min)
+    # Default runtime model: Haiku 4.5 inference profile for normal AWS usage.
+    # Sonnet 4.5 remains available for prompt-cache validation and harder turns.
+    model_id: str = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     # Workspace - use absolute paths to avoid confusion
     workspace: str = os.getcwd()
@@ -1764,6 +1766,7 @@ class BedrockClient:
         self.region = region
         self.mock_mode = mock_mode
         self.prompt_cache_supported = True  # V4.1 #14: set False after first cache fallback
+        self._cache_threshold_warned = False  # V4.3: warn once if cache enabled but below model threshold
         if not mock_mode:
             self.client = boto3.client("bedrock-runtime", region_name=region, config=_BEDROCK_CLIENT_CONFIG)
         else:
@@ -1825,11 +1828,18 @@ class BedrockClient:
             _CACHE_BOUNDARY = "\n\n# === DYNAMIC ==="
             if _CACHE_BOUNDARY in system:
                 static_part, dynamic_part = system.split(_CACHE_BOUNDARY, 1)
-                system_field = [
-                    {"type": "text", "text": static_part,
-                     "cache_control": {"type": "ephemeral"}},
-                    {"type": "text", "text": dynamic_part},
-                ]
+                # V4.3 fix: Bedrock rejects empty/whitespace text blocks — only add dynamic block if non-empty
+                if dynamic_part.strip():
+                    system_field = [
+                        {"type": "text", "text": static_part,
+                         "cache_control": {"type": "ephemeral"}},
+                        {"type": "text", "text": dynamic_part},
+                    ]
+                else:
+                    system_field = [
+                        {"type": "text", "text": static_part,
+                         "cache_control": {"type": "ephemeral"}},
+                    ]
             else:
                 # No boundary — cache the whole prompt as static
                 system_field = [
@@ -2738,13 +2748,56 @@ class TokenTracker:
         """Get session total as string."""
         return f"In:{self.session_input:,} Out:{self.session_output:,} Total:{self.session_total:,}"
 
+    def get_cache_savings_usd(self) -> float:
+        """V4.3 V3-F: Calculate USD saved by prompt caching this session.
+        Cache reads cost 10% of regular input price — savings = 90% of what those tokens would have cost.
+        """
+        mid = CONFIG.model_id
+        pricing = _MODEL_PRICING.get(mid)
+        if not pricing or self.session_cache_read == 0:
+            return 0.0
+        # Savings = what we WOULD have paid at full price minus what we actually paid (10%)
+        full_price_per_1k = pricing["input"]
+        savings = (self.session_cache_read / 1000) * full_price_per_1k * 0.90
+        return savings
+
+    def format_cache_line(self, usage: dict, cache_attempted: bool = False, client=None) -> str:
+        """V4.3 V3-E: Format per-turn cache indicator line for UI output.
+        Returns empty string if no cache activity and no threshold issue.
+        Mirrors runnable's pattern: show WRITE on first turn, HIT + savings on subsequent turns.
+        When cache_attempted=True but 0 tokens cached, emits one-time below-threshold warning.
+        """
+        cache_read = usage.get("cache_read_input_tokens", 0)
+        cache_write = usage.get("cache_creation_input_tokens", 0)
+        if cache_read == 0 and cache_write == 0:
+            # V4.3: one-time warning if caching was attempted but no tokens cached
+            # (system prompt likely below model's minimum token threshold)
+            if cache_attempted and client and not client._cache_threshold_warned:
+                client._cache_threshold_warned = True
+                return "[Cache: INACTIVE — prompt below model threshold. Switch to Sonnet 4.5 for caching.]"
+            return ""
+        parts = []
+        if cache_write > 0:
+            parts.append(f"WRITE {cache_write:,} tok")
+        if cache_read > 0:
+            # Calculate per-turn savings
+            mid = self._model_id or CONFIG.model_id
+            pricing = _MODEL_PRICING.get(mid)
+            if pricing:
+                saved = (cache_read / 1000) * pricing["input"] * 0.90
+                parts.append(f"HIT {cache_read:,} tok (saved ~${saved:.4f})")
+            else:
+                parts.append(f"HIT {cache_read:,} tok")
+        return f"[Cache: {' | '.join(parts)}]"
+
     def get_cost(self) -> str:
-        """Get session cost as string, with cache efficiency if applicable."""
+        """Get session cost as string, with cache efficiency and total savings if applicable."""
         cost_str = f"${self.session_cost:.4f}" if self.session_cost < 0.01 else f"${self.session_cost:.2f}"
-        # Show cache efficiency if caching is active
+        # V4.3 V3-F: show cache hit % and total money saved
         if self.session_cache_read > 0 and self.session_input > 0:
             cache_pct = (self.session_cache_read / self.session_input) * 100
-            cost_str += f" (cache: {cache_pct:.0f}%)"
+            savings = self.get_cache_savings_usd()
+            cost_str += f" (cache {cache_pct:.0f}% | saved ~${savings:.4f})"
         return cost_str
 
     def get_fixed_overhead(self) -> int:
@@ -2865,7 +2918,8 @@ MICROCOMPACT_TOOLS: Set[str] = {
 }
 MICROCOMPACT_MARKER: str = "[Tool output cleared to save context — re-run if needed]"
 MICROCOMPACT_MIN_SAVINGS: int = 5000  # Only apply if saving >= 5K tokens
-KEEP_LAST_N_PER_TOOL: int = 3         # Keep last 3 results per tool type
+KEEP_LAST_N_PER_TOOL: int = 3         # Keep last 3 results per tool type (normal path)
+KEEP_LAST_N_COLD_CACHE: int = 1       # V4.3 V3-C: cold-cache path — more aggressive (mirrors runnable keepRecent)
 
 
 def _find_tool_name(messages: List[Dict], tool_use_id: str) -> str:
@@ -2882,12 +2936,14 @@ def _find_tool_name(messages: List[Dict], tool_use_id: str) -> str:
     return ""
 
 
-def microcompact(messages: List[Dict]) -> Tuple[List[Dict], int]:
+def microcompact(messages: List[Dict], keep_n_override: int = None) -> Tuple[List[Dict], int]:
     """
     V4: Replace old tool result contents with marker. Newest-first pass.
-    Keeps last KEEP_LAST_N_PER_TOOL results per tool type.
+    Keeps last KEEP_LAST_N_PER_TOOL results per tool type (or keep_n_override if set).
+    V4.3 V3-C: keep_n_override=KEEP_LAST_N_COLD_CACHE used on cold-cache path for more aggressive cleanup.
     Returns (new_messages, tokens_saved).
     """
+    keep_n = keep_n_override if keep_n_override is not None else KEEP_LAST_N_PER_TOOL
     tokens_before = CONTEXT.estimate_tokens(messages)
     keep_counts: Dict[str, int] = {}
     any_read_file_cleared = False
@@ -2907,7 +2963,7 @@ def microcompact(messages: List[Dict]) -> Tuple[List[Dict], int]:
                         if tool_name in MICROCOMPACT_TOOLS:
                             keep_counts[tool_name] = keep_counts.get(tool_name, 0) + 1
                             already_cleared = block.get("content") == MICROCOMPACT_MARKER
-                            if keep_counts[tool_name] > KEEP_LAST_N_PER_TOOL and not already_cleared:
+                            if keep_counts[tool_name] > keep_n and not already_cleared:
                                 block = {**block, "content": MICROCOMPACT_MARKER}
                                 if tool_name == "read_file":
                                     any_read_file_cleared = True
@@ -5576,11 +5632,16 @@ def _parse_memory_sections(content: str) -> dict:
     return sections
 
 
+_MEMORY_MAX_LINES: int = 200       # V4.3 V3-B: mirrors runnable MAX_ENTRYPOINT_LINES=200
+_MEMORY_MAX_BYTES: int = 25_000    # V4.3 V3-B: mirrors runnable MAX_ENTRYPOINT_BYTES=25_000
+
+
 def _load_persistent_memory() -> str:
     """Load persistent memory from workspace memory.md file.
 
     V4.1 #7: Parses 4-type sections (USER/FEEDBACK/PROJECT/REFERENCE) and presents
     each with a labelled header. Legacy flat-format files load under a generic 'Notes' label.
+    V4.3 V3-B: Cap at 200 lines AND 25KB (mirrors runnable memdir.ts limits) — previously only 10K chars.
     """
     memory_path = os.path.join(CONFIG.workspace, "memory.md")
     if not os.path.isfile(memory_path):
@@ -5588,14 +5649,23 @@ def _load_persistent_memory() -> str:
     try:
         total_size = os.path.getsize(memory_path)
         with open(memory_path, 'r', encoding='utf-8') as f:
-            content = f.read(10000)  # Cap at 10K chars (~2500 tokens)
+            raw = f.read(_MEMORY_MAX_BYTES)  # Byte cap first
+
+        # Line cap: keep first _MEMORY_MAX_LINES lines
+        lines = raw.splitlines(keepends=True)
+        truncated_by_lines = len(lines) > _MEMORY_MAX_LINES
+        if truncated_by_lines:
+            lines = lines[:_MEMORY_MAX_LINES]
+        content = "".join(lines)
+
         sections = _parse_memory_sections(content)
         if not sections:
             return ""
 
         output = "\n\n# Persistent Memory (from memory.md)\n"
-        if total_size > 10000:
-            output += f"[WARNING: memory.md is {total_size:,} chars but only first 10,000 loaded. Prune old entries.]\n"
+        was_truncated = total_size > _MEMORY_MAX_BYTES or truncated_by_lines
+        if was_truncated:
+            output += f"[WARNING: memory.md truncated to {_MEMORY_MAX_LINES} lines / {_MEMORY_MAX_BYTES:,} bytes. Prune old entries.]\n"
 
         for mem_type in _MEMORY_TYPES:
             if mem_type in sections:
@@ -5667,6 +5737,23 @@ def _extract_and_append_memories(agent: "Agent", output_fn: Callable = None) -> 
     turn_count = sum(1 for m in agent.messages if m.get("role") == "user")
     if turn_count < MEMORY_EXTRACT_MIN_TURNS:
         return None
+
+    # V4.3 V3-D: Skip auto-extraction if the main agent already wrote to memory.md this session.
+    # Mirrors runnable's hasMemoryWritesSince() — main agent's explicit writes always take priority.
+    _memory_path_norm = os.path.normpath(os.path.join(CONFIG.workspace, "memory.md")).lower()
+    for _msg in agent.messages:
+        if _msg.get("role") != "assistant":
+            continue
+        _content = _msg.get("content", [])
+        if not isinstance(_content, list):
+            continue
+        for _block in _content:
+            if not isinstance(_block, dict) or _block.get("type") != "tool_use":
+                continue
+            if _block.get("name") in ("write_file", "edit_file"):
+                _fp = str(_block.get("input", {}).get("file_path", "")).lower()
+                if _memory_path_norm.endswith("memory.md") and _fp.endswith("memory.md"):
+                    return None  # Main agent already wrote — skip extraction
 
     if output_fn:
         output_fn("[Memory extraction: reviewing session for learnings...]")
@@ -5905,6 +5992,9 @@ class Agent:
         self.user_msg_count = 0
         self._compact_failure_count = 0  # V4: circuit breaker counter
         self._last_api_call_time: float = 0.0  # V4.2 V2-E: timestamp of last successful API call
+        # V4.3 V3-A: Diminishing returns tracking (mirrors runnable tokenBudget.ts BudgetTracker)
+        self._turn_output_tokens: list = []  # Rolling window of output token counts per turn
+        self._diminishing_warned: bool = False  # Only warn once per run() call
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
         """Ask the user a question and wait for response via text input widget."""
@@ -6044,6 +6134,9 @@ class Agent:
             plan_mode: If True, block write operations and only allow read-only tools
         """
         global _auto_compact_paused
+        # V4.3 V3-A: Reset diminishing-returns state at start of each run() call
+        self._turn_output_tokens = []
+        self._diminishing_warned = False
         # Use provided system prompt or default.
         # NOTE: Skill injection is handled ONLY by the UI send flow (on_send),
         # which appends active skill content before calling agent.run().
@@ -6194,7 +6287,9 @@ class Agent:
             if (self._last_api_call_time > 0 and
                     _now - self._last_api_call_time > COLD_CACHE_THRESHOLD_SECONDS):
                 _gap_min = (_now - self._last_api_call_time) / 60
-                _mc_msgs, _mc_saved = microcompact(self.messages)
+                # V4.3 V3-C: cold-cache path uses KEEP_LAST_N_COLD_CACHE (more aggressive than normal)
+                # Mirrors runnable's keepRecent=5 — since cache expired anyway, clear older results
+                _mc_msgs, _mc_saved = microcompact(self.messages, keep_n_override=KEEP_LAST_N_COLD_CACHE)
                 if _mc_saved > MICROCOMPACT_MIN_SAVINGS:
                     self.messages = _mc_msgs
                     output_fn(f"[i] Cold cache detected ({_gap_min:.0f}min gap) — "
@@ -6251,6 +6346,25 @@ class Agent:
                 if self.on_tokens:
                     self.on_tokens(TOKENS.get_stats())
                 self._last_api_call_time = time.time()  # V4.2 V2-E: update cold-cache timestamp
+                # V4.3 V3-E: Per-turn cache indicator (only for top-level agent to avoid noise from sub-agents)
+                if self.subagent_depth == 0:
+                    _cache_attempted = CONFIG.enable_prompt_cache and self.client.prompt_cache_supported
+                    _cache_line = TOKENS.format_cache_line(response.usage, cache_attempted=_cache_attempted, client=self.client)
+                    if _cache_line:
+                        output_fn(_cache_line)
+                # V4.3 V3-A: Diminishing returns detection (mirrors runnable tokenBudget.ts)
+                # If 3+ consecutive turns produce <500 output tokens, the agent may be stuck/looping.
+                # Only warn once per run() call; only for top-level agent.
+                if self.subagent_depth == 0 and not self._diminishing_warned:
+                    _out_toks = response.usage.get("output_tokens", 0)
+                    self._turn_output_tokens.append(_out_toks)
+                    if len(self._turn_output_tokens) > 3:
+                        self._turn_output_tokens = self._turn_output_tokens[-3:]
+                    if (len(self._turn_output_tokens) >= 3 and
+                            all(t < 500 for t in self._turn_output_tokens)):
+                        self._diminishing_warned = True
+                        output_fn("[i] Diminishing returns: 3 consecutive turns with <500 output tokens. "
+                                  "Agent may be stuck — consider stopping and rephrasing.")
 
             # Check stop again after LLM returns (user may have clicked during the call)
             if self.on_stop_check and self.on_stop_check():
@@ -6701,12 +6815,12 @@ def escape_html(text: str) -> str:
 
 # Available Bedrock models (cross-region rates)
 BEDROCK_MODELS = [
-    ("Claude 3 Haiku", "anthropic.claude-3-haiku-20240307-v1:0"),
-    ("Claude 3 Sonnet", "anthropic.claude-3-sonnet-20240229-v1:0"),
+    ("Claude 4.5 Haiku (AU) - default", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ("Claude 4.5 Sonnet (AU) - cache tests / harder turns", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
     ("Claude 3.5 Sonnet v2", "anthropic.claude-3-5-sonnet-20241022-v2:0"),
     ("Claude 3.5 Sonnet", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
-    ("Claude 4.5 Sonnet (AU)", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
-    ("Claude 4.5 Haiku (AU)", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ("Claude 3 Haiku", "anthropic.claude-3-haiku-20240307-v1:0"),
+    ("Claude 3 Sonnet", "anthropic.claude-3-sonnet-20240229-v1:0"),
     ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
     ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
 ]

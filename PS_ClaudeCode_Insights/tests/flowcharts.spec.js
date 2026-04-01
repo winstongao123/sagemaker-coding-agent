@@ -10,10 +10,11 @@ test.describe('architecture flowchart pages', () => {
   test('V4 HTML tabs switch correctly', async ({ page }) => {
     await page.goto(localFileUrl('PS_FLOWCHART_V4.html'));
     await expect(page.locator('h1')).toContainText('SageMaker Coding Agent V4.2.1');
-    await expect(page.locator('.mermaid')).toHaveCount(3);
+    await expect(page.locator('.mermaid')).toHaveCount(4);
 
     const tabs = [
       { label: 'Architecture', panel: '#architecture', heading: 'Architecture' },
+      { label: 'Harness + Coordination', panel: '#harness', heading: 'Harness + Coordination' },
       { label: 'Runnable Comparison', panel: '#comparison', heading: 'Runnable Comparison' },
       { label: 'What V4 Does Better', panel: '#better', heading: 'What V4 Does Better' },
       { label: 'Beginner Guide', panel: '#beginner', heading: 'Beginner Guide' },
@@ -29,6 +30,15 @@ test.describe('architecture flowchart pages', () => {
     const bodyText = await page.locator('body').textContent();
     expect(bodyText).not.toContain('Ã');
     expect(bodyText).not.toContain('â€');
+
+    const centered = await page.locator('.mermaid svg').first().evaluate((svg) => {
+      const svgRect = svg.getBoundingClientRect();
+      const parentRect = svg.parentElement.getBoundingClientRect();
+      const svgCenter = svgRect.left + svgRect.width / 2;
+      const parentCenter = parentRect.left + parentRect.width / 2;
+      return Math.abs(svgCenter - parentCenter);
+    });
+    expect(centered).toBeLessThan(40);
   });
 
   test('Runnable HTML tabs and all detail modals work correctly', async ({ page }) => {
@@ -63,5 +73,14 @@ test.describe('architecture flowchart pages', () => {
     const bodyText = await page.locator('body').textContent();
     expect(bodyText).not.toContain('Ã');
     expect(bodyText).not.toContain('â€');
+
+    const centered = await page.locator('.mermaid svg').first().evaluate((svg) => {
+      const svgRect = svg.getBoundingClientRect();
+      const parentRect = svg.parentElement.getBoundingClientRect();
+      const svgCenter = svgRect.left + svgRect.width / 2;
+      const parentCenter = parentRect.left + parentRect.width / 2;
+      return Math.abs(svgCenter - parentCenter);
+    });
+    expect(centered).toBeLessThan(40);
   });
 });
