@@ -158,21 +158,22 @@ Auto-extracted at session end. Stored in `memory.md`. Capped at 200 lines / 25KB
 
 The `clara-full-review` skill runs a production readiness assessment. You choose what to review:
 
-**Full review:** "Start the ClaRA review"
-**Select phases:** "Run ClaRA phase 1 and 2 only"
-**Select components:** "Review Component 1 only" / "Review C2 and C3 only"
-**Select sections:** "Run phase 2 sections 2.2 and 2.10 only"
-**Resume:** "Continue ClaRA review from phase 3"
+ClaRA has 3 components you can review individually or together:
+- **C1**: End-to-End Claims (document extraction + 21 assessment checks)
+- **C2**: Agentic Framework (Bedrock inline agents, supervisor, Snowflake)
+- **C3**: UI Layer (Streamlit/Cognito, minimal prototype)
 
-5 phases:
-1. Discovery -- file tree, dependencies, AWS inventory, code metrics
-2. Component 1 -- bug validation, CHECK_REGISTRY, test evidence
-3. Components 2+3 -- agent definitions, orchestration, SQL risks
-4. Production Readiness -- R/A/G scorecard, cost projections, FTE impact
-5. Synthesis -- final report + business case
+Example commands:
+- "Start the ClaRA review" -- all components, all phases
+- "Review C1 (End-to-End Claims) only" -- Phase 1 + 2 + 4(C1) + 5
+- "Review C2 (Agentic Framework) only" -- Phase 1 + 3(3.1-3.9) + 4(C2) + 5
+- "Review C1 and C2, skip UI" -- Phase 1 + 2 + 3(3.1-3.9) + 4(C1+C2) + 5
+- "Just validate the 9 bugs" -- Phase 2 section 2.2 only
+- "Just the R/A/G scorecard for C1" -- Phase 4 (C1) only
 
+5 phases: Discovery, Component 1, Components 2+3, Prod Readiness, Synthesis.
 Agent pauses for your review between phases. Output files are cumulative.
-Cost: ~$0.80 (discovery only) to ~$5.85 (full review). See `skills/clara/V4_NOTES.md` for V4 config.
+Cost: ~$0.80 (discovery only) to ~$5.85 (full review). See `skills/clara/V4_NOTES.md`.
 
 For ClaRA sessions, increase cost limit in Cell 3:
 ```python

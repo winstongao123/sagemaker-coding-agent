@@ -48,19 +48,43 @@ When the user selects specific phases, components, or sections — run ONLY thos
 - Write to output file after EACH section — do not hold in memory
 - Use `write_file` with `mode: "append"` for incremental output
 
-## Component Filter
+## Component-to-Phase Mapping
 
-When user selects specific components, apply this filter:
+ClaRA has 3 components. Each maps to specific phases and sections:
 
-| Selection | What to scan | What to skip |
-|-----------|-------------|-------------|
-| C1 only | "end to end claim process" folder, CHECK_REGISTRY, bug validation | Agent framework, UI |
-| C2 only | Agent definitions, orchestration, tools, Snowflake | Claims checks, UI |
-| C3 only | UI files, Cognito, Streamlit/React | Claims checks, agent framework |
-| C1 + C2 | Both above | UI |
-| All (default) | Everything | Nothing |
+```
+Component 1: End-to-End Claims Process (document extraction + 21 assessment checks)
+Component 2: Agentic Framework (Bedrock inline agents, supervisor, sub-agents, Snowflake)
+Component 3: UI Layer (Streamlit/Cognito/Copilot Studio, minimal prototype)
+```
 
-In Phase 4 (Production Readiness), only score selected components in the R/A/G matrix.
+| | Phase 1: Discovery | Phase 2: C1 Claims | Phase 3: C2+C3 | Phase 4: Prod Readiness | Phase 5: Synthesis |
+|---|---|---|---|---|---|
+| **C1 selected** | 1.1-1.9 (full scan) | **2.1-2.10 (all)** | skip | 4.1-4.11 (C1 column only) | C1 findings only |
+| **C2 selected** | 1.1-1.9 (full scan) | skip | **3.1-3.9** | 4.1-4.11 (C2 column only) | C2 findings only |
+| **C3 selected** | 1.1-1.9 (full scan) | skip | **3.10-3.11** | 4.1-4.11 (C3 column only) | C3 findings only |
+| **C1 + C2** | 1.1-1.9 (full scan) | **2.1-2.10** | **3.1-3.9** | 4.1-4.11 (C1+C2 columns) | C1+C2 findings |
+| **C1 + C3** | 1.1-1.9 (full scan) | **2.1-2.10** | **3.10-3.11** | 4.1-4.11 (C1+C3 columns) | C1+C3 findings |
+| **C2 + C3** | 1.1-1.9 (full scan) | skip | **3.1-3.11 (all)** | 4.1-4.11 (C2+C3 columns) | C2+C3 findings |
+| **All (default)** | 1.1-1.9 (full scan) | **2.1-2.10** | **3.1-3.11 (all)** | 4.1-4.11 (all 3 columns) | All findings |
+
+**Phase 1 always runs** (it discovers the codebase structure needed by all other phases).
+**Phase 4 R/A/G scorecard** only scores selected components — empty columns show "NOT REVIEWED".
+**Phase 5 synthesis** merges whatever output files exist. Missing phases noted as gaps.
+
+### Example Commands
+
+| What you say | What runs |
+|-------------|-----------|
+| "Start the ClaRA review" | All phases, all components |
+| "Review C1 (End-to-End Claims) only" | Phase 1 + Phase 2 + Phase 4 (C1) + Phase 5 |
+| "Review C2 (Agentic Framework) only" | Phase 1 + Phase 3 (3.1-3.9) + Phase 4 (C2) + Phase 5 |
+| "Review C3 (UI) only" | Phase 1 + Phase 3 (3.10-3.11) + Phase 4 (C3) + Phase 5 |
+| "Review C1 and C2, skip UI" | Phase 1 + Phase 2 + Phase 3 (3.1-3.9) + Phase 4 (C1+C2) + Phase 5 |
+| "Just do discovery" | Phase 1 only |
+| "Just validate the 9 bugs" | Phase 2 section 2.2 only |
+| "Just the R/A/G scorecard for C1" | Phase 4 (C1 column) only |
+| "Skip to synthesis" | Phase 5 (reads existing output/ files) |
 
 ---
 
