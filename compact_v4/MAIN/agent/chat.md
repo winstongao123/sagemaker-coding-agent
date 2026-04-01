@@ -152,18 +152,33 @@ Auto-extracted at session end. Stored in `memory.md`. Capped at 200 lines / 25KB
 | coding-standards | 153 | KISS, DRY, YAGNI, naming, function design |
 | report | 45 | Report generation workflow |
 | clara | 80 | ClaRA review methodology: evidence labeling, R/A/G thresholds, PII patterns |
-| clara-full-review | 150 | Full 5-phase ClaRA codebase review with user pause between phases (~$6 est.) |
+| clara-full-review | 190 | Selective 5-phase ClaRA review — run all, pick phases, pick components, or pick sections (~$0.80-$5.85) |
 
 ### ClaRA Review Workflow
 
-The `clara-full-review` skill runs a 5-phase production readiness assessment:
+The `clara-full-review` skill runs a production readiness assessment. You choose what to review:
+
+**Full review:** "Start the ClaRA review"
+**Select phases:** "Run ClaRA phase 1 and 2 only"
+**Select components:** "Review Component 1 only" / "Review C2 and C3 only"
+**Select sections:** "Run phase 2 sections 2.2 and 2.10 only"
+**Resume:** "Continue ClaRA review from phase 3"
+
+5 phases:
 1. Discovery -- file tree, dependencies, AWS inventory, code metrics
 2. Component 1 -- bug validation, CHECK_REGISTRY, test evidence
 3. Components 2+3 -- agent definitions, orchestration, SQL risks
 4. Production Readiness -- R/A/G scorecard, cost projections, FTE impact
 5. Synthesis -- final report + business case
 
-Usage: `/skill use clara-full-review` then "Start the ClaRA review". Agent pauses for user review between phases. See `skills/clara/V4_NOTES.md` for V4 config.
+Agent pauses for your review between phases. Output files are cumulative.
+Cost: ~$0.80 (discovery only) to ~$5.85 (full review). See `skills/clara/V4_NOTES.md` for V4 config.
+
+For ClaRA sessions, increase cost limit in Cell 3:
+```python
+CONFIG.session_cost_limit = 10.0
+CONFIG.max_turns = 80
+```
 
 ### Version History
 
