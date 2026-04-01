@@ -1,5 +1,51 @@
 # Compact V4 Changelog
 
+## v4.2.1 — Deep Gap Closure + Bedrock Fix (2026-04-01)
+
+Base: compact_v4 v4.2.0
+
+### Critical Fix
+- **Bedrock prompt caching**: Removed `anthropic_beta: ["prompt-caching-2024-07-31"]` header.
+  Bedrock doesn't use Anthropic beta headers — caching is activated natively via `cache_control`
+  blocks in content. This was causing "invalid beta flag" errors on Haiku 4.5 and Sonnet 4.5.
+  All Claude models on Bedrock support prompt caching (Haiku 4.5: min 4096 tokens, Sonnet 4.5: min 1024).
+
+### Bug Fix
+- **_mc_saved // 4 double-conversion**: Microcompact status message was dividing an already-token
+  value by 4. `_mc_saved` from `microcompact()` is already in tokens. Fixed to print directly.
+
+### New Features
+
+#### V2-H — FILE_UNCHANGED_STUB
+- If a file hasn't changed since last read (mtime unchanged within 0.5s), returns a short stub
+  instead of re-reading the full file content into context
+- Saves significant context tokens when LLM re-reads files that weren't modified
+- Mirrors runnable's `FILE_UNCHANGED_STUB` from `FileReadTool/prompt.ts`
+
+#### V2-I — Parallel Read-Only Tool Execution
+- Consecutive read-only tools (read_file, glob, grep, list_dir, semantic_search, bash RO)
+  batched and run concurrently via ThreadPoolExecutor (max 6 workers)
+- Non-RO tools break the batch → accumulated RO batch executed, then sequential continues
+- Results merged back into the main dispatch loop via `_ro_parallel_results` dict
+- ~40% latency reduction on multi-read turns (3-5 file reads + greps)
+- Mirrors runnable's `partitionToolCalls()` from `services/tools/toolOrchestration.ts`
+
+#### V2-J — PTL (Prompt-Too-Long) Recovery
+- If `create_llm_summary()` fails with a prompt-too-long error, halves input and retries once
+- Catches both "prompt too long" and "too many tokens" error strings
+- Mirrors runnable's `truncateHeadForPTLRetry()` from `services/compact/compact.ts`
+
+### Documentation
+- PS_FLOWCHART_RUNNABLE.html completely rebuilt as multi-page reference document
+  - 5 tabs: Architecture, V4 Has, V4 Missing, V4 Does Better, Deep Details
+  - 9 Mermaid flowcharts with 30+ interactive click-to-detail nodes
+  - Full comparison tables validated against actual runnable source (1,438 TS files)
+  - PDF accuracy assessment (3 Chinese-language analyses cross-referenced)
+- Deep source analysis: 5 background agents analyzed runnable source covering query loop,
+  tool dispatch, context management, permissions, memory, prompts, and model selection
+
+---
+
 ## v4.2.0 — Runnable Gap Closure (2026-04-01)
 
 Base: compact_v4 v4.1.0
