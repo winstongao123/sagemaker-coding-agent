@@ -83,3 +83,31 @@
 | PTL retry (3 attempts) | PASS | prompt-too-long error triggers trim + retry |
 | Parallel RO tools (V2-I) | PASS | 3-file parallel read confirmed |
 | Cache beta header removed | PASS | No `anthropic_beta` header — Bedrock-native cache_control |
+
+---
+
+## V4.3.0 — Extended Behavioral Tests (2026-04-01)
+
+### Bug found and fixed during testing
+
+| Bug | Found in | Fix |
+|-----|----------|-----|
+| `get_cache_savings_usd()` used `CONFIG.model_id` instead of actual session model | T10 | `add()` now updates `self._model_id` when `model_id` arg provided |
+
+### Test Results T6-T10
+
+| ID | Test | Model | Expected | Actual | Status | Notes |
+|----|------|-------|----------|--------|--------|-------|
+| T6 | Multi-turn 5 turns, no ghost tool calls | Haiku 4.5 | 0 tool calls on factual turns | [0,0,0,0,0] tool calls | **PASS** | 5 turns, all factual questions answered without tool use |
+| T7 | FILE_UNCHANGED_STUB inside workspace | Haiku 4.5 | Stub on 2nd read of unchanged file | Stub returned correctly | **PASS** | Content on read 1, FILE_UNCHANGED_STUB on read 2 |
+| T7x | FILE_UNCHANGED_STUB outside workspace | Haiku 4.5 | Security error (correct) | "Path outside workspace" error | **PASS** | Security correctly blocks out-of-workspace paths |
+| T8 | Diminishing returns logic (3 turns <500 tok) | Sonnet 4.5 | warned=True after 3 low turns | warned=True on [10,10,8] | **PASS** | Logic correct; resets on new run() call |
+| T8b | Diminishing state resets on new run() | Sonnet 4.5 | State cleared at run() start | State cleared correctly | **PASS** | Pre-seeded values erased, rebuilt fresh |
+| T9 | Subagent depth limit at max depth | Haiku 4.5 | Blocked with message | "Blocked: sub-agent depth limit reached (2)" | **PASS** | Hard stop at CONFIG.subagent_max_depth |
+| T10 | Cache savings USD uses correct model pricing | Sonnet 4.5 | $0.009587 (Sonnet price) | $0.009587 | **PASS** | After fix: `add()` now tracks `_model_id` from caller |
+
+**Pass rate: 7/7**
+
+### Haiku 4.5 Caching — Final Note
+
+Haiku 4.5 cannot activate prompt caching for this agent's system+tools size (~3,565 tokens < 4,096 minimum). This is a model constraint, not a bug. The `[Cache: INACTIVE]` indicator is shown once to inform the user. Use Sonnet 4.5 if caching is needed.

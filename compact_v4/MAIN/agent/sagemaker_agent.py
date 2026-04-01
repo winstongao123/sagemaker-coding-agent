@@ -2702,6 +2702,8 @@ class TokenTracker:
             # ASSUMPTION: Bedrock input_tokens = TOTAL including cache_read + cache_write.
             # Cache reads are 90% cheaper, cache writes are 25% more expensive.
             mid = model_id or CONFIG.model_id
+            if model_id:
+                self._model_id = model_id  # V4.3 fix: track actual model used for accurate savings calc
             pricing = _MODEL_PRICING.get(mid)
             if pricing:
                 base_input = pricing["input"]
@@ -2751,8 +2753,9 @@ class TokenTracker:
     def get_cache_savings_usd(self) -> float:
         """V4.3 V3-F: Calculate USD saved by prompt caching this session.
         Cache reads cost 10% of regular input price — savings = 90% of what those tokens would have cost.
+        Uses self._model_id (set on first add() call) so Sonnet sessions use Sonnet pricing, not default.
         """
-        mid = CONFIG.model_id
+        mid = self._model_id or CONFIG.model_id
         pricing = _MODEL_PRICING.get(mid)
         if not pricing or self.session_cache_read == 0:
             return 0.0
