@@ -5349,7 +5349,7 @@ AGENT_TYPES = {
     "build": {
         "description": "Full-access development agent with all tools",
         "tools": None,  # None = all tools
-        "prompt_suffix": "You are a build sub-agent. Complete the implementation fully — don't gold-plate, but don't leave half-done. Report: what was implemented, files changed, how to test, any issues.",
+        "prompt_suffix": "You are a build sub-agent. Complete the implementation fully — don't gold-plate, but don't leave half-done. Always use ABSOLUTE file paths. Report:\n- Scope: what was implemented\n- Result: summary of changes\n- Key files: absolute paths of files changed\n- Issues: anything unresolved or needing attention",
         "max_turns": 25,
     },
     "plan": {
@@ -5362,14 +5362,41 @@ AGENT_TYPES = {
     "explore": {
         "description": "Fast codebase exploration agent",
         "tools": {"read_file", "glob", "grep", "list_dir", "semantic_search"},
-        "prompt_suffix": "You are an explore sub-agent. Search efficiently using glob and grep. Return:\n- Scope: what you searched\n- Result: what you found\n- Key files: paths and line numbers\nDo NOT modify files. Report only what you observe.",
+        "prompt_suffix": ("=== CRITICAL: READ-ONLY MODE — NO FILE MODIFICATIONS ===\n"
+            "You are an explore sub-agent. You are STRICTLY PROHIBITED from creating, modifying, or deleting files.\n"
+            "Search efficiently using glob and grep. Always use ABSOLUTE file paths in your response.\n"
+            "Return:\n- Scope: what you searched\n- Result: what you found\n- Key files: absolute paths and line numbers\n"
+            "Report only what you observe. Do NOT suggest changes — only report findings."),
         "max_turns": 10,
+    },
+    "verify": {
+        "description": "Adversarial testing agent — tries to BREAK the implementation",
+        "tools": {"read_file", "glob", "grep", "list_dir", "bash", "python_exec", "semantic_search"},
+        "prompt_suffix": ("You are a verification sub-agent. Your job is NOT to confirm the implementation works — "
+            "it is to try to BREAK it. Be adversarial.\n\n"
+            "## Required Steps\n"
+            "1. Read the relevant code files\n"
+            "2. Run the build/install if applicable\n"
+            "3. Run existing tests (pytest, npm test, etc.)\n"
+            "4. Run linters/type-checkers if available\n"
+            "5. Test edge cases: empty input, null, large data, boundary values\n"
+            "6. Check for regressions in related functionality\n\n"
+            "## Output Format\n"
+            "For each check:\n"
+            "### Check: [what was tested]\n"
+            "**Command:** [exact command run]\n"
+            "**Output:** [actual output observed]\n"
+            "**Result:** PASS | FAIL | PARTIAL\n\n"
+            "## Final Verdict\n"
+            "End with exactly one of: VERDICT: PASS | VERDICT: FAIL | VERDICT: PARTIAL\n"
+            "Always use ABSOLUTE file paths."),
+        "max_turns": 15,
     },
     "general": {
         "description": "General-purpose sub-agent for complex multi-step tasks",
         "tools": {"read_file", "glob", "grep", "list_dir", "bash", "python_exec",
                   "semantic_search", "view_image", "skill", "write_file", "edit_file"},
-        "prompt_suffix": "You are a general sub-agent. Complete the task fully — don't gold-plate, but don't leave half-done. Report:\n- Scope: what was asked\n- Result: what was done\n- Key files: files read or changed\n- Issues: anything unresolved",
+        "prompt_suffix": "You are a general sub-agent. Complete the task fully — don't gold-plate, but don't leave half-done. Always use ABSOLUTE file paths. Report:\n- Scope: what was asked\n- Result: what was done\n- Key files: absolute paths of files read or changed\n- Issues: anything unresolved",
         "max_turns": 15,
     },
     "review": {
@@ -5434,7 +5461,7 @@ for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
 # ============== TOOL REGISTRY ==============
 
 TOOLS = {
-    "read_file": (tool_read_file, False, "Read file contents with line numbers. Use offset/limit for large files. Can read images (PNG, JPG), PDFs, and notebooks. You MUST read a file before editing it.",
+    "read_file": (tool_read_file, False, "Read file contents with line numbers. WHEN: reading source code, configs, data files, images, PDFs, notebooks. WHEN NOT: searching for patterns (use grep), finding files by name (use glob). Use offset/limit for large files. You MUST read a file before editing it.",
         {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
 
     "write_file": (tool_write_file, True, "Write content to file. You MUST read first if file exists. Prefer edit_file for modifications — use write_file only for new files or complete rewrites.",
@@ -5443,16 +5470,16 @@ TOOLS = {
     "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. MUST read first. old_string must be unique — include more surrounding context if not unique, or use replace_all=true for all occurrences.",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace (must be unique in file)"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences (use for renaming)"}}, "required": ["file_path", "old_string", "new_string"]}),
 
-    "glob": (tool_glob, False, "Find files by name pattern. Use this instead of bash find/ls. Results sorted by modification time.",
+    "glob": (tool_glob, False, "Find files by name pattern. WHEN: locating files by name/extension (e.g. **/*.py, src/*.ts). WHEN NOT: searching file contents (use grep). Use this instead of bash find/ls. Results sorted by modification time.",
         {"type": "object", "properties": {"pattern": {"type": "string", "description": "Glob pattern (e.g. **/*.py, src/*.ts)"}, "path": {"type": "string", "description": "Directory to search"}}, "required": ["pattern"]}),
 
-    "grep": (tool_grep, False, "Search file contents using regex. Use this instead of bash grep/rg. Supports file filtering and case-insensitive search.",
+    "grep": (tool_grep, False, "Search file contents using regex. WHEN: finding patterns, function definitions, variable usage, error messages across files. WHEN NOT: finding files by name (use glob). Use this instead of bash grep/rg. Supports file filtering and case-insensitive search.",
         {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern to search for"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "File filter (e.g. *.py)"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
 
     "list_dir": (tool_list_dir, False, "List directory contents",
         {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}),
 
-    "bash": (tool_bash, True, "Run shell command. Use for: git, pip, system commands, scripts. Do NOT use for file read/edit/search — use dedicated tools instead.",
+    "bash": (tool_bash, True, "Run shell command. WHEN: git operations, pip install, running scripts, system commands (ls -la, wc, date). WHEN NOT: reading files (use read_file not cat/head/tail), editing files (use edit_file not sed/awk), writing files (use write_file not echo/heredoc), searching files (use glob not find/ls), searching content (use grep not grep/rg). Prefer dedicated tools — they are faster. Git safety: NEVER force-push to main, create NEW commits (don't amend after hook failure), stage specific files (not git add -A), use HEREDOC for commit messages.",
         {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 600)"}}, "required": ["command"]}),
 
     "python_exec": (tool_python_exec, True, "Execute Python code for data processing, calculations, scripting.",
@@ -5522,7 +5549,7 @@ TOOLS = {
         }, "required": []}),
 
     "task": (tool_task, True,
-        "Spawn sub-agent for complex tasks. Types: explore (read-only search), plan (architecture), review (code review), build (full dev), general (multi-step). Do NOT use for simple searches — use glob/grep directly. Write prompts like briefing a colleague: explain what, why, and enough context to make judgment calls.",
+        "Spawn sub-agent for complex tasks. WHEN: multi-file research, code review, complex implementation, tasks that need isolation. WHEN NOT: simple file reads (use read_file), quick searches (use glob/grep directly), single-step operations. Types: explore (read-only search), plan (architecture), review (code review), build (full dev), general (multi-step). Write prompts like briefing a colleague: explain what, why, and enough context to make judgment calls. Never delegate understanding — synthesize sub-agent findings yourself.",
         {"type": "object", "properties": {
             "description": {"type": "string", "description": "3-5 word summary"},
             "prompt": {"type": "string", "description": "Complete task instructions with context"},
@@ -6035,6 +6062,8 @@ class Agent:
         # V4.3 V3-A: Diminishing returns tracking (mirrors runnable tokenBudget.ts BudgetTracker)
         self._turn_output_tokens: list = []  # Rolling window of output token counts per turn
         self._diminishing_warned: bool = False  # Only warn once per run() call
+        # V4.3.2: Cache-breakage detection (from Runnable analysis — postCompactCleanup pattern)
+        self._cache_broken_by_compact: bool = False  # Set True after compact, reset on next cache HIT
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
         """Ask the user a question and wait for response via text input widget."""
@@ -6284,6 +6313,10 @@ class Agent:
                         # V4.2 V2-D: Expire stale "always approve" decisions — old context is gone
                         if self.on_compact_fn:
                             self.on_compact_fn()
+                        # V4.3.2: Cache-breakage detection after compact (from Runnable analysis).
+                        # Compact changes the message array, which may invalidate the Bedrock
+                        # prompt cache. Track this so the user knows caching restarted.
+                        self._cache_broken_by_compact = True
 
             # Fallback: simple trim if still too long (preserve role alternation)
             if len(self.messages) > CONFIG.max_history * 2:
@@ -6392,6 +6425,16 @@ class Agent:
                     _cache_line = TOKENS.format_cache_line(response.usage, cache_attempted=_cache_attempted, client=self.client)
                     if _cache_line:
                         output_fn(_cache_line)
+                    # V4.3.2: Cache-breakage detection after compact. If compact happened and
+                    # this turn shows cache_read > 0, cache is restored. If cache_read == 0 and
+                    # we expected caching, the compact invalidated the cache (new prefix).
+                    if self._cache_broken_by_compact:
+                        _cr = response.usage.get("cache_read_input_tokens", 0)
+                        if _cr > 0:
+                            self._cache_broken_by_compact = False  # Cache restored
+                        elif _cache_attempted:
+                            output_fn("[Cache: restarted after compact — next turn should rebuild cache]")
+                            self._cache_broken_by_compact = False  # Only warn once
                 # V4.3 V3-A: Diminishing returns detection (mirrors runnable tokenBudget.ts)
                 # If 3+ consecutive turns produce <500 output tokens, the agent may be stuck/looping.
                 # Only warn once per run() call; only for top-level agent.

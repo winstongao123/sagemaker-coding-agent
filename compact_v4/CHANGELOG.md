@@ -1,5 +1,53 @@
 # Compact V4 Changelog
 
+## v4.3.2 — Complete Runnable Learning Integration (2026-04-02)
+
+Base: compact_v4 v4.3.1
+
+Source: Comprehensive analysis of 6 PDFs + how-claude-code-works repo + full prompt extraction (24 prompts).
+See PS_[03]_PROMPT_ANALYSIS.md for complete prompt inventory.
+
+### Cache-Breakage Detection (from Runnable postCompactCleanup pattern)
+- Added `_cache_broken_by_compact` flag to Agent class
+- After autocompact, flag is set True
+- On next API call, detects if cache was invalidated and informs user
+- Helps users understand caching behavior after context compression
+
+### WHEN-not-WHAT Tool Descriptions (from Runnable 90-line Bash tool)
+- read_file: "WHEN: reading source code... WHEN NOT: searching for patterns (use grep)"
+- glob: "WHEN: locating files by name... WHEN NOT: searching file contents (use grep)"
+- grep: "WHEN: finding patterns... WHEN NOT: finding files by name (use glob)"
+- bash: "WHEN: git operations, pip install... WHEN NOT: reading/editing/writing/searching files"
+- task: "WHEN: multi-file research, code review... WHEN NOT: simple reads, quick searches"
+
+### Bash Git Safety in Tool Description
+- Added git safety rules directly to bash tool description (not just system prompt)
+- "NEVER force-push to main, create NEW commits, stage specific files, use HEREDOC"
+
+### New "verify" Sub-agent Type (from Runnable verificationAgent.ts)
+- Adversarial testing agent that tries to BREAK the implementation
+- Runs build, tests, linters, edge cases, regressions
+- Structured output: Check/Command/Output/Result format with VERDICT: PASS|FAIL|PARTIAL
+- Available as `subagent_type="verify"` in task tool
+
+### Enhanced Explore Agent (from Runnable exploreAgent.ts)
+- Added "STRICTLY PROHIBITED from creating, modifying, or deleting files"
+- Explicit read-only enforcement in prompt (not just tool restriction)
+- Prevents wasted tool calls where LLM tries to write despite having no write tools
+
+### Absolute Path Requirement for All Sub-agents
+- build, explore, general, verify agents all now require absolute paths in output
+- Matches Runnable's subagent notes pattern
+
+### Documentation
+- Created PS_[03]_PROMPT_ANALYSIS.md — tracks all 24 Runnable prompts and V4 status
+- Updated PS_[04]_LEARNING_JOURNEY.md with PDF integration section
+- Created Web_doc/PS_WEBDOC_LEARNINGS.md — cross-references 6 PDFs with verified source code
+- Organized PS docs with numbered reading sequence: [01] through [04]
+- Built PS_FLOWCHART_RUNNABLE.html (5 tabs, 10 flowcharts) and PS_FLOWCHART_V4.html (5 tabs, 8 flowcharts)
+
+---
+
 ## v4.3.1 — Prompt Engineering Upgrade from Runnable (2026-04-01)
 
 Base: compact_v4 v4.3.0
