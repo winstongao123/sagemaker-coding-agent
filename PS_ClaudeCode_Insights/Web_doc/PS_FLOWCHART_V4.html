@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SageMaker Coding Agent V4 - Architecture Deep Dive</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #1e1e1e;
+  --surface: #252526;
+  --surface2: #2d2d30;
+  --text: #d4d4d4;
+  --muted: #808080;
+  --accent: #569cd6;
+  --accent2: #4ec9b0;
+  --green: #6a9955;
+  --orange: #ce9178;
+  --red: #f44747;
+  --purple: #c586c0;
+  --yellow: #dcdcaa;
+  --border: #404040;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.shell { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.header { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin-bottom: 20px; }
+.header h1 { font-size: clamp(24px, 3vw, 36px); color: var(--accent2); margin-bottom: 8px; }
+.header p { color: var(--muted); font-size: 14px; }
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+.stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; min-width: 120px; }
+.stat-num { font-size: 22px; font-weight: bold; color: var(--accent); }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 0; flex-wrap: wrap; }
+.tab { padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
+.tab:hover { color: var(--text); background: var(--surface); }
+.tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+.tab-content { display: none; padding: 24px 0; }
+.tab-content.active { display: block; }
+h2 { color: var(--accent); font-size: 22px; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+h3 { color: var(--accent2); font-size: 17px; margin: 24px 0 12px; }
+h4 { color: var(--purple); font-size: 15px; margin: 16px 0 8px; }
+p { margin: 8px 0; font-size: 14px; }
+.chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; text-align: center; overflow-x: auto; }
+.chart-container .chart-title { color: var(--yellow); font-weight: bold; font-size: 15px; margin-bottom: 8px; }
+.chart-container .chart-desc { color: var(--muted); font-size: 13px; margin-bottom: 16px; max-width: 700px; margin-left: auto; margin-right: auto; }
+.mermaid { display: flex; justify-content: center; align-items: center; min-height: 200px; }
+.mermaid svg { margin: 0 auto !important; max-width: 100%; }
+.callout { background: var(--surface2); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 12px 0; font-size: 13px; }
+.callout.beginner { border-left-color: var(--green); }
+.callout.beginner::before { content: "In Simple Terms: "; color: var(--green); font-weight: bold; }
+.callout.warning { border-left-color: var(--orange); }
+.callout.warning::before { content: "Trade-off: "; color: var(--orange); font-weight: bold; }
+.callout.important { border-left-color: var(--red); }
+.callout.important::before { content: "Key Insight: "; color: var(--red); font-weight: bold; }
+.callout.learned { border-left-color: var(--accent2); }
+.callout.learned::before { content: "Learned from Runnable: "; color: var(--accent2); font-weight: bold; }
+code { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; color: var(--accent2); }
+pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; overflow-x: auto; font-size: 12px; margin: 10px 0; font-family: 'Cascadia Code', 'Consolas', monospace; line-height: 1.5; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+th { background: var(--surface2); color: var(--accent); text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
+td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+tr:nth-child(even) { background: var(--surface); }
+details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; }
+details summary { padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--accent2); font-size: 14px; }
+details summary:hover { background: var(--surface2); }
+details > div, details > p, details > pre, details > table, details > .chart-container, details > .callout { padding: 0 16px 16px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.badge-file { background: #1f3044; color: var(--accent); font-family: monospace; }
+.badge-yes { background: #1a3a1a; color: #6a9955; }
+.badge-no { background: #3a1a1a; color: #f44747; }
+.badge-partial { background: #3a3a1a; color: #dcdcaa; }
+.badge-v4 { background: #1a2a3a; color: var(--accent2); }
+@media (max-width: 768px) {
+  .shell { padding: 12px; }
+  .tab { padding: 10px 12px; font-size: 12px; }
+  .stats-row { gap: 8px; }
+  .stat-box { min-width: 80px; padding: 8px 10px; }
+  h2 { font-size: 18px; }
+  table { font-size: 11px; }
+}
+@media (max-width: 375px) {
+  .tab { padding: 8px 8px; font-size: 11px; }
+  .header h1 { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- HEADER -->
+<div class="header">
+  <h1>SageMaker Coding Agent V4 - Architecture Deep Dive</h1>
+  <p>Python/Bedrock AI coding agent for Power BI dashboard generation. Source: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (v4.3.1, ~8,500 lines)</p>
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-num">~8,500</div><div class="stat-label">Lines (single file)</div></div>
+    <div class="stat-box"><div class="stat-num">25+</div><div class="stat-label">Tools</div></div>
+    <div class="stat-box"><div class="stat-num">16</div><div class="stat-label">Security Layers</div></div>
+    <div class="stat-box"><div class="stat-num">29</div><div class="stat-label">Runnable Features</div></div>
+    <div class="stat-box"><div class="stat-num">4</div><div class="stat-label">Memory Types</div></div>
+    <div class="stat-box"><div class="stat-num">22</div><div class="stat-label">Bedrock Tests Pass</div></div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab(0)">1. Architecture</div>
+  <div class="tab" onclick="switchTab(1)">2. Security</div>
+  <div class="tab" onclick="switchTab(2)">3. Cross-Compare</div>
+  <div class="tab" onclick="switchTab(3)">4. What V4 Learned</div>
+  <div class="tab" onclick="switchTab(4)">5. Details</div>
+</div>
+
+<!-- ==================== TAB 1: ARCHITECTURE ==================== -->
+<div class="tab-content active" id="tab-0">
+
+<h2>Architecture Flowcharts</h2>
+<p>V4 is a single-file Python agent running on AWS SageMaker with Bedrock API. All flowcharts verified against actual source code.</p>
+
+<!-- FLOWCHART 1: Agent.run() Loop -->
+<div class="chart-container">
+  <div class="chart-title">1. Agent.run() Loop (Main Execution Engine)</div>
+  <div class="chart-desc">V4's core loop in the run() method. Like Runnable, it's a simple while loop -- NOT a DAG. Each turn: build prompt, call Bedrock, parse response, dispatch tools, feed results back. The loop continues until the model says stop or budget is exhausted.</div>
+  <div class="mermaid">
+flowchart TD
+    A["User task input\n(from Jupyter notebook)"] --> B["Agent.run()\n(main entry point)"]
+    B --> C["Build System Prompt\n(_base_prompt + dynamic)"]
+    C --> D["Assemble Tools Array\n(25+ tools with schemas)"]
+    D --> E["BedrockClient.call()\n(InvokeModel API)"]
+    E --> F["Parse Response\n(text + tool_use blocks)"]
+    F --> G{"Response type?"}
+    G -->|"text only\n(end_turn)"| H["Return response\nto user"]
+    G -->|"tool_use blocks"| I["Classify tools\n(RO vs write)"]
+    I --> J{"Read-only?"}
+    J -->|"yes"| K["Execute ALL in parallel\n(batch RO tools)"]
+    J -->|"no"| L["Execute ONE at a time\n(approval required)"]
+    K --> M["Collect tool_results"]
+    L --> M
+    M --> N["Append to messages\n(maintain history)"]
+    N --> O{"Budget check"}
+    O -->|"within budget"| P{"Context size?"}
+    O -->|"exceeded"| Q["Stop: budget limit"]
+    P -->|"OK"| C
+    P -->|"too large"| R["Compactor\n(microcompact or autocompact)"]
+    R --> C
+
+    style A fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style B fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style E fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style K fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style L fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style R fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+    style Q fill:#5a2020,stroke:#f44747,color:#d4d4d4
+  </div>
+</div>
+<div class="callout learned">The simple while-loop design was directly inspired by Runnable's query() async generator. V4 chose the same "loop not DAG" philosophy because reliability beats complexity in production agents.</div>
+
+<!-- FLOWCHART 2: BedrockClient -->
+<div class="chart-container">
+  <div class="chart-title">2. BedrockClient (AWS Bedrock API Integration)</div>
+  <div class="chart-desc">V4 uses AWS Bedrock's InvokeModel API instead of Anthropic's direct API. This means: different caching mechanism, no streaming tool_use, different token tracking. The client handles prompt assembly, caching boundaries, and response parsing.</div>
+  <div class="mermaid">
+flowchart TD
+    A["BedrockClient.call()"] --> B["Build request body"]
+
+    subgraph "Request Assembly"
+      C["System Prompt\n(STATIC section)"]
+      C --> D["cache_control boundary\n(marks end of cached prefix)"]
+      D --> E["Tools Array\n(25+ tool schemas)"]
+      E --> F["Dynamic Messages\n(conversation history)"]
+    end
+
+    B --> C
+    F --> G["boto3 bedrock-runtime\nInvokeModel API"]
+    G --> H["Parse response JSON"]
+    H --> I["Extract:\n- text content\n- tool_use blocks\n- stop_reason\n- usage tokens"]
+    I --> J["TokenTracker.track()"]
+    J --> K["Record:\n- input_tokens\n- output_tokens\n- cache_read_input_tokens\n- cache_creation_input_tokens"]
+    K --> L["Return parsed response"]
+
+    subgraph "Thinking Budget (V4-specific)"
+      M["CONFIG.thinking_budget > 0?"]
+      M -->|"yes"| N["Add thinking block\nbudget_tokens = value"]
+      M -->|"no"| O["Standard generation"]
+    end
+
+    style A fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style D fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style G fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style J fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+  </div>
+</div>
+<div class="callout beginner">BedrockClient is V4's "translator" to AWS. It takes the agent's prompt and tools, packages them into the exact format AWS Bedrock expects, sends the request, and translates the response back. Think of it as a postal service between V4 and the AI model.</div>
+
+<!-- FLOWCHART 3: TokenTracker -->
+<div class="chart-container">
+  <div class="chart-title">3. TokenTracker (Cost-Aware Token Management)</div>
+  <div class="chart-desc">Every API call's token usage is tracked with cache awareness. V4 calculates actual cost accounting for cache discounts (90% savings on cached tokens). The /cost command shows real-time spending.</div>
+  <div class="mermaid">
+flowchart TD
+    A["API response received"] --> B["Extract usage block:\ninput_tokens\noutput_tokens\ncache_read_input_tokens\ncache_creation_input_tokens"]
+    B --> C["TokenTracker.track()"]
+    C --> D["Per-turn accumulation"]
+    D --> E{"Cache status?"}
+    E -->|"cache_read > 0"| F["Cache HIT\n(90% discount applied)"]
+    E -->|"cache_creation > 0"| G["Cache WRITE\n(25% premium for creation)"]
+    E -->|"neither"| H["Cache INACTIVE\n(full price, no caching)"]
+
+    F --> I["Calculate cost:\ncache_read * price * 0.1\n+ new_tokens * price"]
+    G --> I
+    H --> J["Calculate cost:\nall_tokens * full_price"]
+
+    I --> K["Model-aware pricing\n(Haiku vs Sonnet vs Opus)"]
+    J --> K
+    K --> L["Update session totals"]
+    L --> M{"Budget check"}
+    M -->|"cost > 80% limit"| N["Warning displayed"]
+    M -->|"cost > 100% limit"| O["Session STOPS"]
+    M -->|"OK"| P["Continue"]
+
+    subgraph "/cost Display"
+      Q["Total input tokens"]
+      R["Total output tokens"]
+      S["Cache savings USD"]
+      T["Total session cost"]
+      U["Cache indicator:\nWRITE / HIT / INACTIVE"]
+    end
+
+    style F fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style G fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+    style H fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style N fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style O fill:#5a2020,stroke:#f44747,color:#d4d4d4
+  </div>
+</div>
+<div class="callout learned">Cache-aware cost tracking was implemented after studying Runnable's token management. V4 adds the per-turn cache indicator (WRITE/HIT/INACTIVE) which is V4-specific -- Runnable doesn't display this to the user.</div>
+
+<!-- FLOWCHART 4: Compactor -->
+<div class="chart-container">
+  <div class="chart-title">4. Compactor (Context Compression Engine)</div>
+  <div class="chart-desc">When context grows too large, V4's Compactor has two strategies: microcompact (fast, replaces old tool results) and autocompact (thorough, generates LLM summary). Both learned from Runnable's 4-layer approach, adapted for Bedrock.</div>
+  <div class="mermaid">
+flowchart TD
+    A["should_compact() check"] --> B{"Context > threshold?"}
+    B -->|"no"| C["Continue normally"]
+    B -->|"yes"| D{"Cache status?"}
+
+    D -->|"Cold cache\n(> 30 min inactive)"| E["Microcompact\n(fast, no LLM call)"]
+    D -->|"Warm cache"| F["AutoCompact\n(LLM summary)"]
+
+    E --> G["prune_tool_outputs()\nKeep recent 1 result only\n(KEEP_LAST_N_COLD_CACHE=1)"]
+    G --> H["Replace old results\nwith FILE_UNCHANGED_STUB"]
+    H --> I["Context reduced\n(no API call needed)"]
+
+    F --> J["Fork zero-tool LLM call\n(NO_TOOLS preamble)"]
+    J --> K["Generate structured summary\nPreserve: task, steps, files,\ndecisions, approach, next"]
+    K --> L{"Summary fits?"}
+    L -->|"yes"| M["Replace old messages\nwith summary"]
+    L -->|"prompt_too_long"| N["PTL Retry\n(up to 3 attempts)"]
+    N --> O["Truncate summary\nheader progressively"]
+    O --> L
+
+    M --> P["Clear always_allow\n(reset permissions)"]
+    P --> Q["Resume with fresh context"]
+    I --> Q
+
+    subgraph "Diminishing Returns Detection"
+      R["Track per-turn token delta"]
+      R --> S{"3+ turns with\n< 500 token change?"}
+      S -->|"yes"| T["Warn user once:\nQuality may degrade"]
+      S -->|"no"| U["Continue normally"]
+    end
+
+    style E fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+    style F fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style N fill:#5a2020,stroke:#f44747,color:#d4d4d4
+    style T fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style Q fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+  </div>
+</div>
+<div class="callout beginner">When V4's conversation gets too long, it has two cleanup strategies. The fast way (microcompact): just replace old tool outputs with "you already read this file" stubs. The thorough way (autocompact): ask the AI to summarize everything, then replace the long history with the summary. If the summary itself is too long, it retries up to 3 times.</div>
+
+<!-- FLOWCHART 5: Sub-agent System -->
+<div class="chart-container">
+  <div class="chart-title">5. Sub-agent System (Task Delegation)</div>
+  <div class="chart-desc">V4 has 3 sub-agent types with context isolation and structured output format. Unlike Runnable, V4 doesn't have fork subagent (Bedrock caching works differently) or Coordinator Mode (deferred to V4.4).</div>
+  <div class="mermaid">
+flowchart TD
+    A["Main Agent"] --> B["Sub-agent tool invoked"]
+    B --> C{"Agent Type\n(from AGENT_TYPES dict)"}
+
+    C -->|"explore"| D["Explore Agent\nTools: read-only only\nPurpose: Search/research\nModel: same as parent"]
+    C -->|"general"| E["General Agent\nTools: full set\nPurpose: Complex tasks\nModel: same as parent"]
+    C -->|"build"| F["Build Agent\nTools: full + build-specific\nPurpose: Code generation\nModel: same as parent"]
+
+    D --> G["Context Isolation"]
+    E --> G
+    F --> G
+
+    G --> H["Save parent state\n(file cache, messages)"]
+    H --> I["Clear context\n(fresh start for sub-agent)"]
+    I --> J["Depth check\n(CONFIG.subagent_max_depth)"]
+    J --> K{"Within depth?"}
+    K -->|"yes"| L["Execute sub-agent\n(same run() function)"]
+    K -->|"no"| M["Error: max depth\nexceeded"]
+
+    L --> N["Structured Output:\nScope | Result | Key Files\nFiles Changed | Issues"]
+    N --> O["Restore parent state"]
+    O --> P["Return result\nto parent agent"]
+
+    style D fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style E fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style F fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style G fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style M fill:#5a2020,stroke:#f44747,color:#d4d4d4
+    style N fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+  </div>
+</div>
+<div class="callout learned">Sub-agent structured output format (Scope/Result/Key Files/Files Changed/Issues) was directly adopted from Runnable's forkSubagent.ts. Context isolation (save/clear/restore) was inspired by Runnable's readFileState cloning pattern.</div>
+
+<!-- FLOWCHART 6: Memory System -->
+<div class="chart-container">
+  <div class="chart-title">6. Memory System (4-Type Persistent Knowledge)</div>
+  <div class="chart-desc">V4 uses the same 4-type memory taxonomy as Runnable: USER, FEEDBACK, PROJECT, REFERENCE. Memory is loaded into the cached system prompt prefix so it's free after the first API turn.</div>
+  <div class="mermaid">
+flowchart TD
+    A["Session end or\nmemory trigger"] --> B{"Already wrote to\nmemory this session?"}
+    B -->|"yes"| C["SKIP extraction\n(already wrote guard)"]
+    B -->|"no"| D["Extract memories\nfrom conversation"]
+
+    D --> E{"Classify type"}
+    E -->|"user role/prefs"| F["Type: USER"]
+    E -->|"correction/praise"| G["Type: FEEDBACK\n(Rule + Why + How to apply)"]
+    E -->|"goals/deadlines"| H["Type: PROJECT"]
+    E -->|"external links"| I["Type: REFERENCE"]
+
+    F --> J["Write to memory.md"]
+    G --> J
+    H --> J
+    I --> J
+
+    J --> K{"Cap check"}
+    K -->|"> 200 lines"| L["Truncate"]
+    K -->|"> 25KB"| L
+    K -->|"within limits"| M["Saved"]
+    L --> M
+
+    subgraph "Loading (Next Session)"
+      N["_load_persistent_memory()"] --> O["Parse memory.md"]
+      O --> P["Inject into _base_prompt\n(CACHED section)"]
+      P --> Q["Free after first turn\n(served from Bedrock cache)"]
+    end
+
+    style B fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+    style C fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style D fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style J fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style Q fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+  </div>
+</div>
+<div class="callout learned">4-type taxonomy, "already wrote" guard, 200-line/25KB cap, and memory-in-cached-prefix all adopted from Runnable. V4 doesn't have Runnable's semantic recall (LLM-ranked top-5) or Dream mode (background processing).</div>
+
+<!-- FLOWCHART 7: Security Layers Overview -->
+<div class="chart-container">
+  <div class="chart-title">7. Security Layers (16-Layer Defense-in-Depth)</div>
+  <div class="chart-desc">V4 has MORE security layers than Runnable (16 vs 7) because SageMaker is shared infrastructure where a compromised agent could affect other users' workloads. Every layer is enforced at the code level, not the UI level.</div>
+  <div class="mermaid">
+flowchart TD
+    A["Tool execution\nrequested"] --> B["Layer 1: Workspace\nboundary enforcement"]
+    B --> C["Layer 2: Path traversal\nblocking (symlink resolve)"]
+    C --> D["Layer 3: Catastrophic\ncommand blocklist"]
+    D --> E{"Tool type?"}
+
+    E -->|"Bash"| F["Layer 4: Command allowlist\n(70 allowed commands)"]
+    F --> G["Layer 5: Dangerous pattern\nblocklist (75 patterns)"]
+
+    E -->|"Python"| H["Layer 6: Regex validation\n(63 patterns)"]
+    H --> I["Layer 7: AST import\nvalidation (67 modules)"]
+    I --> J["Layer 8: Runtime sandbox\n(open/remove intercepted)"]
+
+    E -->|"AWS"| K["Layer 9: Bedrock-only\nenforcement (regex+AST+getattr)"]
+
+    G --> L["Layer 10: RO classifier\n(auto-bypass approval)"]
+    J --> L
+    K --> L
+
+    L --> M["Layer 11: Tool approval\ndialog (user sees command)"]
+    M --> N["Layer 12: Sub-agent\ndepth limit"]
+    N --> O["Layer 13: Tool result\nsize cap (50K chars)"]
+    O --> P["Layer 14: Per-batch\naggregate cap (200K)"]
+    P --> Q["Layer 15: Session cost\nbudget limit"]
+    Q --> R["Layer 16: Trust boundary\n(never follow tool output)"]
+    R --> S["EXECUTE"]
+
+    style B fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+    style D fill:#5a2020,stroke:#f44747,color:#d4d4d4
+    style F fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style H fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style K fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style L fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style S fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+  </div>
+</div>
+<div class="callout important">V4's 16-layer security is its strongest advantage over Runnable. Runnable has 7 layers designed for desktop/CLI. V4 has 16 layers designed for shared cloud infrastructure where a single security breach could compromise other users' AWS resources.</div>
+
+<!-- FLOWCHART 8: File Operations -->
+<div class="chart-container">
+  <div class="chart-title">8. File Operations with Cache and Stubs</div>
+  <div class="chart-desc">File operations are optimized with an in-memory cache. If a file hasn't changed since last read, FILE_UNCHANGED_STUB is returned instead of the full content -- saving potentially thousands of tokens.</div>
+  <div class="mermaid">
+flowchart TD
+    A["read_file(path)"] --> B{"In FILE_CACHE?"}
+    B -->|"yes"| C{"Content changed\nsince last read?"}
+    B -->|"no"| D["Read from disk"]
+
+    C -->|"same"| E["Return FILE_UNCHANGED_STUB\n(saves tokens)"]
+    C -->|"different"| D
+
+    D --> F["Update FILE_CACHE\n(store content + hash)"]
+    F --> G["Return full content"]
+
+    H["write_file(path, content)"] --> I["Write to disk"]
+    I --> J["Update FILE_CACHE"]
+    J --> K["Return success"]
+
+    L["edit_file(path, old, new)"] --> M{"old_string exists\nin file?"}
+    M -->|"exact match"| N["Replace old with new"]
+    M -->|"not found"| O["Error: no match"]
+    N --> P["Update FILE_CACHE"]
+    P --> Q["Return success"]
+
+    style E fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style D fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style O fill:#5a2020,stroke:#f44747,color:#d4d4d4
+  </div>
+</div>
+<div class="callout learned">FILE_UNCHANGED_STUB was adopted from Runnable's FileReadTool pattern. In a typical coding session, the same file is read 5-10 times. Without the stub, each re-read costs 500-2000 tokens. With the stub, re-reads cost ~10 tokens.</div>
+
+</div>
+
+<!-- ==================== TAB 2: SECURITY ==================== -->
+<div class="tab-content" id="tab-1">
+
+<h2>16 Security Layers</h2>
+<p>V4's security is designed for SageMaker -- shared cloud infrastructure where agents run alongside other users' workloads. Every layer is fail-closed: if in doubt, block.</p>
+
+<h3>Layer 1: Workspace Boundary Enforcement</h3>
+<p><strong>What it blocks</strong>: Any file operation outside the designated workspace directory.</p>
+<p><strong>How it works</strong>: <code>_enforce_workspace()</code> resolves the absolute path and checks it starts with the workspace prefix. All write operations require this check to pass.</p>
+<p><strong>Why in SageMaker</strong>: Users share the instance filesystem. Without boundary enforcement, one agent could read/modify another user's files.</p>
+
+<h3>Layer 2: Path Traversal Blocking</h3>
+<p><strong>What it blocks</strong>: Paths like <code>../../etc/passwd</code> or symlinks pointing outside workspace.</p>
+<p><strong>How it works</strong>: Symlinks are resolved to their real path before boundary checking. This prevents an attacker from creating a symlink inside the workspace that points to a sensitive system file.</p>
+
+<h3>Layer 3: Catastrophic Command Blocklist</h3>
+<p><strong>What it blocks</strong>: Commands that could destroy the system: <code>rm -rf /</code>, <code>mkfs</code>, <code>format</code>, <code>dd if=/dev/zero</code>, etc.</p>
+<p><strong>How it works</strong>: Precompiled regex patterns matched against every bash command. Fail-closed at import time -- if the regex compilation fails, the agent won't start.</p>
+<div class="callout important">These patterns are checked BEFORE any other analysis. Even in bypass mode, catastrophic commands are ALWAYS blocked.</div>
+
+<h3>Layer 4: Bash Command Allowlist (70 commands)</h3>
+<p><strong>What it blocks</strong>: Any bash command not on the allowlist.</p>
+<p><strong>How it works</strong>: The first word of each command is extracted and checked against a whitelist of 70 known-safe commands (ls, cat, grep, git, python, pip, etc.). Unknown commands are blocked.</p>
+
+<h3>Layer 5: Bash Dangerous Pattern Blocklist (75 patterns)</h3>
+<p><strong>What it blocks</strong>: Dangerous patterns within allowed commands: <code>eval</code>, <code>$()</code> in dangerous contexts, pipe to shell, background processes, etc.</p>
+<p><strong>How it works</strong>: 75 regex patterns checked against the full command string. Catches command injection, privilege escalation, and data exfiltration attempts.</p>
+
+<div class="chart-container">
+  <div class="chart-title">Bash Security Pipeline</div>
+  <div class="mermaid">
+flowchart LR
+    A["Bash command\nreceived"] --> B["Catastrophic\ncheck (Layer 3)"]
+    B -->|"blocked"| C["DENY"]
+    B -->|"pass"| D["Allowlist\ncheck (Layer 4)"]
+    D -->|"unknown cmd"| C
+    D -->|"allowed"| E["Pattern\ncheck (Layer 5)"]
+    E -->|"dangerous"| C
+    E -->|"safe"| F["RO Classifier\n(Layer 10)"]
+    F -->|"read-only"| G["Auto-approve"]
+    F -->|"has effects"| H["User approval\n(Layer 11)"]
+
+    style C fill:#5a2020,stroke:#f44747,color:#d4d4d4
+    style G fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style H fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+  </div>
+</div>
+
+<h3>Layer 6: Python Regex Validation (63 patterns)</h3>
+<p><strong>What it blocks</strong>: Dangerous Python patterns: <code>os.system()</code>, <code>subprocess.call()</code>, <code>exec()</code>, <code>eval()</code>, <code>open('/etc/')</code>, network access, etc.</p>
+
+<h3>Layer 7: Python AST Import Validation (67 modules)</h3>
+<p><strong>What it blocks</strong>: Any Python import not on the allowlist of 67 safe modules.</p>
+<p><strong>How it works</strong>: Python's AST module parses the code and extracts all import statements. Each imported module is checked against the allowlist (os, json, pandas, numpy, matplotlib, etc.). Unknown imports are blocked.</p>
+
+<div class="chart-container">
+  <div class="chart-title">Python Security Pipeline</div>
+  <div class="mermaid">
+flowchart LR
+    A["Python code\nreceived"] --> B["Regex scan\n(63 patterns)"]
+    B -->|"dangerous"| C["DENY"]
+    B -->|"pass"| D["AST parse"]
+    D -->|"parse fails"| C
+    D -->|"success"| E["Import check\n(67 modules)"]
+    E -->|"unknown import"| C
+    E -->|"all allowed"| F["Runtime sandbox\n(Layer 8)"]
+    F --> G["Execute with\nintercepted builtins"]
+
+    style C fill:#5a2020,stroke:#f44747,color:#d4d4d4
+    style G fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+  </div>
+</div>
+
+<h3>Layer 8: Python Runtime Sandbox</h3>
+<p><strong>What it blocks</strong>: Even if code passes static analysis, runtime operations like <code>open()</code> and <code>os.remove()</code> are intercepted.</p>
+<p><strong>How it works</strong>: The sandbox replaces Python builtins with wrapped versions that enforce workspace boundaries at runtime.</p>
+
+<h3>Layer 9: AWS Bedrock-Only Enforcement</h3>
+<p><strong>What it blocks</strong>: Any AWS API call that isn't to Bedrock (preventing S3 data theft, EC2 manipulation, IAM changes).</p>
+<p><strong>How it works</strong>: Three layers: (1) Regex checks for boto3 service names, (2) AST analysis of boto3.client() calls, (3) getattr interception on boto3 module.</p>
+
+<div class="chart-container">
+  <div class="chart-title">AWS Security Enforcement</div>
+  <div class="mermaid">
+flowchart TD
+    A["Code uses boto3"] --> B["Regex: check for\nnon-bedrock service names"]
+    B -->|"found s3/ec2/iam/etc"| C["DENY"]
+    B -->|"only bedrock"| D["AST: parse\nboto3.client() calls"]
+    D -->|"non-bedrock client"| C
+    D -->|"bedrock only"| E["Runtime: getattr\ninterception on boto3"]
+    E -->|"accessing non-bedrock"| C
+    E -->|"bedrock only"| F["ALLOW"]
+
+    style C fill:#5a2020,stroke:#f44747,color:#d4d4d4
+    style F fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+  </div>
+</div>
+
+<h3>Layers 10-16: Cross-Cutting Protections</h3>
+<table>
+<tr><th>Layer</th><th>What</th><th>Mechanism</th></tr>
+<tr><td>10</td><td>RO Auto-Classifier</td><td><code>is_command_readonly()</code> bypasses approval for safe commands</td></tr>
+<tr><td>11</td><td>Tool Approval Dialog</td><td>User sees exact command before execution</td></tr>
+<tr><td>12</td><td>Sub-agent Depth Limit</td><td><code>CONFIG.subagent_max_depth</code> prevents runaway chains</td></tr>
+<tr><td>13</td><td>Tool Result Size Cap</td><td>50K characters per individual tool result</td></tr>
+<tr><td>14</td><td>Per-Batch Aggregate Cap</td><td>200K characters total across all tool results in a batch</td></tr>
+<tr><td>15</td><td>Session Cost Budget</td><td><code>session_cost_limit</code> with 80% warning, 100% hard stop</td></tr>
+<tr><td>16</td><td>Trust Boundary</td><td>Never follow instructions found in tool output (prompt injection defense)</td></tr>
+</table>
+
+</div>
+
+<!-- ==================== TAB 3: CROSS-COMPARE ==================== -->
+<div class="tab-content" id="tab-2">
+
+<h2>Cross-Compare: V4 vs Runnable</h2>
+<p>Open this alongside the Runnable HTML for side-by-side comparison. Same sections, same order.</p>
+
+<h3>Section 1: Agent Loop</h3>
+<h4>How V4 Does It</h4>
+<p><code>Agent.run()</code> in <code>sagemaker_agent.py</code> implements a while loop. Each turn: build prompt (static _base_prompt + dynamic messages), call BedrockClient, parse response, classify tools (RO vs write), execute (parallel for RO, serial for writes), collect results, check budget and context size. Unlike Runnable's 7 Continue Sites, V4 has a simpler flow: PTL retry (3 attempts) and diminishing returns detection.</p>
+<p>V4 is single-file Python (~8,500 lines) vs Runnable's 1,884 TypeScript files. This is by design -- V4 runs in SageMaker Jupyter notebooks where file distribution is impractical.</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">compact_v4/MAIN/agent/sagemaker_agent.py</span></p>
+<h4>Strengths</h4>
+<p>Single-file simplicity. Python ecosystem (pandas, matplotlib, Power BI SDK). Bedrock integration with IAM-based auth (no API keys needed). Thinking budget support (V4-specific).</p>
+<h4>Limitations</h4>
+<p>No streaming tool pre-execution (Bedrock limitation). No reactive compact. No Context Collapse (projection-based). Single-file makes large refactors harder.</p>
+<div class="callout beginner">V4's loop is simpler than Runnable's -- fewer recovery paths but covers the essential cases (prompt too long, budget exceeded, diminishing returns). The simplicity is a feature: less can go wrong.</div>
+
+<h3>Section 2: Context Management</h3>
+<h4>How V4 Does It</h4>
+<p>2-layer compression: microcompact (fast, no LLM call, replaces old tool outputs with stubs) and autocompact (thorough, zero-tool LLM summary with PTL retry). Cold-cache detection triggers microcompact with KEEP_LAST_N_COLD_CACHE=1 (more aggressive pruning). Diminishing returns detection warns after 3+ turns with &lt;500 token delta.</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">sagemaker_agent.py</span> (microcompact ~line 2916, autocompact ~line 6323)</p>
+<h4>Strengths</h4>
+<p>Cold-cache optimization avoids wasted tokens on stale sessions. Diminishing returns warning helps users recognize quality degradation. Zero-tool mode prevents compact recursion.</p>
+<h4>Limitations</h4>
+<p>No Context Collapse (non-destructive folding). No post-compact file re-read (restoring edited file context). No compact circuit breaker (3 failures -> stop). These are V4.4 candidates.</p>
+<div class="callout beginner">V4 has 2 cleanup strategies vs Runnable's 4. The missing layers (Context Collapse, Snip) are complex but add value for very long sessions. For typical SageMaker tasks (build a dashboard), 2 layers are sufficient.</div>
+
+<h3>Section 3: Token Optimization</h3>
+<h4>How V4 Does It</h4>
+<p><strong>Prompt caching</strong>: Static system prompt + tools marked with <code>cache_control</code> block at the boundary. Bedrock caching requires 4,096+ tokens for Haiku (V4's static section is ~3,565 tokens -- below threshold for Haiku, works for Sonnet). <strong>FILE_UNCHANGED_STUB</strong>: Returns stub for unchanged files. <strong>Tool result caps</strong>: 50K per tool. <strong>Microcompact</strong>: Replaces old results with stubs.</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">sagemaker_agent.py</span> (cache boundary ~line 5867, FILE_UNCHANGED_STUB ~line 3044)</p>
+<h4>Strengths</h4>
+<p>Cache-aware cost tracking with per-turn indicator. Model-aware pricing (different rates for Haiku/Sonnet/Opus). Cache savings displayed in USD.</p>
+<h4>Limitations</h4>
+<p>Haiku caching threshold (4,096 tokens) means caching is inactive for Haiku. No lazy tool loading (all tools always in context). No position-pinned cache edits.</p>
+<div class="callout beginner">V4 saves money the same way Runnable does -- by caching the system prompt and reusing it across turns. The main difference: Runnable uses Anthropic's API (no minimum), V4 uses Bedrock (minimum 4,096 tokens for some models).</div>
+
+<h3>Section 4: Sub-agents</h3>
+<h4>How V4 Does It</h4>
+<p>3 agent types (explore/general/build) defined in AGENT_TYPES dict. Each has specific tool restrictions and prompt suffix. Context isolation via save/clear/restore of parent state. Depth limiting via CONFIG.subagent_max_depth. Structured output format (Scope/Result/Key Files/Files Changed/Issues) prescribed in prompt suffix.</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">sagemaker_agent.py</span> (AGENT_TYPES ~line 5352, isolation ~line 5365)</p>
+<h4>Strengths</h4>
+<p>Clean context isolation (save/clear/restore). Structured output format ensures reliable synthesis. MCP auto-registration for domain-specific tools.</p>
+<h4>Limitations</h4>
+<p>No fork subagent (cache sharing across parent-child). No Coordinator Mode (pure dispatcher role). No SendMessage (inter-agent communication). No Git Worktree isolation. These are deferred to V4.4.</p>
+<div class="callout beginner">V4's sub-agents are simpler than Runnable's. They can research, build, and explore -- but can't talk to each other or share cached context. For Power BI dashboard generation (the primary use case), this is sufficient.</div>
+
+<h3>Section 5: Memory</h3>
+<h4>How V4 Does It</h4>
+<p>4-type taxonomy (USER/FEEDBACK/PROJECT/REFERENCE). Memory loaded into cached system prompt prefix via <code>_load_persistent_memory()</code>. 200-line / 25KB cap enforced. "Already wrote" guard skips extraction if the main agent already modified memory during the session. Memory extraction at session end.</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">sagemaker_agent.py</span> (memory types ~line 5589, cap ~line 5648, guard ~line 5745)</p>
+<h4>Strengths</h4>
+<p>"Already wrote" guard prevents duplicate extraction. Memory in cached prefix is free after first turn. 4-type taxonomy forces structured storage.</p>
+<h4>Limitations</h4>
+<p>No semantic recall (first-match, not LLM-ranked). No WHAT_NOT_TO_SAVE as explicit constant (conceptually in prompts). No Dream mode (background processing). No async prefetch.</p>
+<div class="callout beginner">V4 and Runnable share the same memory philosophy: 4 types, strict caps, in the cached prompt. V4's memory is simpler -- it loads all memories rather than ranking them. For smaller projects this works; for large projects with 100+ memories, Runnable's ranked recall would be better.</div>
+
+<h3>Section 6: Security</h3>
+<h4>How V4 Does It</h4>
+<p>16 security layers (see Security tab for full details). V4 has MORE layers than Runnable because SageMaker is shared infrastructure. Key V4-specific layers: Python AST import validation (67 modules), AWS bedrock-only enforcement (3-layer), Python runtime sandbox (intercepted builtins).</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">sagemaker_agent.py</span> (layers spread across ~lines 1037-1574)</p>
+<h4>Strengths</h4>
+<p>16 layers vs Runnable's 7. Python-specific validation (regex + AST + runtime). AWS-specific enforcement. More comprehensive for cloud/shared environments.</p>
+<h4>Limitations</h4>
+<p>No tree-sitter AST for bash (uses regex + allowlist instead). No OS-level sandbox (macOS Seatbelt / Linux namespaces). These are less critical in SageMaker's already-sandboxed environment.</p>
+<div class="callout beginner">V4's security is like a bank vault with 16 locks. Runnable has 7 locks but they're more sophisticated (tree-sitter parsing). V4 compensates with MORE layers and AWS-specific protections that Runnable doesn't need.</div>
+
+<h3>Section 7: Prompt Engineering</h3>
+<h4>How V4 Does It</h4>
+<p>System prompt: ~72 lines with 6 sections (System Identity, Doing Tasks, Actions with Care, Using Tools, Output Efficiency, Sub-agent Coordination). Tool descriptions for 7 key tools upgraded to WHEN-not-WHAT pattern. Sub-agent prompts include structured output format. Compact prompt includes NO_TOOLS preamble. Memory extraction includes type-specific guidance.</p>
+<h4>Key Files</h4>
+<p><span class="badge badge-file">sagemaker_agent.py</span> (SYSTEM_PROMPT ~line 5871, tool descriptions throughout)</p>
+<h4>Strengths</h4>
+<p>Adopted key patterns from Runnable: WHEN-not-WHAT, structured worker output, NO_TOOLS compact, "never delegate understanding". V4.3.1 is the direct result of studying Runnable's prompts.</p>
+<h4>Limitations</h4>
+<p>72 lines vs Runnable's 900+. Fewer conditional sections. No memoized section assembly. No feature-gated prompt sections. The gap is justified by V4's simpler environment (fewer tools, single-file, Bedrock-only).</p>
+<div class="callout beginner">V4's prompts are like a concise employee handbook (72 pages) vs Runnable's comprehensive manual (900 pages). Both cover the essentials; Runnable has more edge cases covered because it serves millions of users with diverse needs.</div>
+
+</div>
+
+<!-- ==================== TAB 4: WHAT V4 LEARNED ==================== -->
+<div class="tab-content" id="tab-3">
+
+<h2>What V4 Learned from Runnable</h2>
+<p>29 features implemented across V4.1 through V4.3.1, organized by version. Plus features deliberately NOT implemented and why.</p>
+
+<h3>V4.1.0 (6 features - Foundation)</h3>
+<table>
+<tr><th>Feature</th><th>From Runnable</th><th>V4 Implementation</th></tr>
+<tr><td>Prompt cache boundary</td><td><code>services/api/claude.ts</code></td><td>Static/dynamic split with cache_control block</td></tr>
+<tr><td>Catastrophic path hard block</td><td><code>tools/BashTool/</code> CATASTROPHIC</td><td>Precompiled regex, fail-closed at import</td></tr>
+<tr><td>Command auto-classifier (RO bypass)</td><td><code>bashPermissions.ts</code></td><td><code>is_command_readonly()</code> function</td></tr>
+<tr><td>4-type memory system</td><td><code>memdir/memoryTypes.ts</code></td><td>USER/FEEDBACK/PROJECT/REFERENCE</td></tr>
+<tr><td>Memory auto-extraction</td><td><code>extractMemories.ts</code></td><td>Session-end extraction with type classification</td></tr>
+<tr><td>Partial view guard</td><td>No direct equivalent</td><td>V4-original: prevents reading partial file states</td></tr>
+</table>
+
+<h3>V4.2.0 (6 features - Token Optimization)</h3>
+<table>
+<tr><th>Feature</th><th>From Runnable</th><th>V4 Implementation</th></tr>
+<tr><td>Tool result size cap + disk offload</td><td><code>toolLimits.ts</code> (50K)</td><td>50K per tool, 200K per batch</td></tr>
+<tr><td>Enhanced memory extraction (WHAT_NOT_TO_SAVE)</td><td><code>extractMemories/prompts.ts</code></td><td>Type-specific guidance in extraction prompt</td></tr>
+<tr><td>Clear always_allow on compact</td><td><code>autoCompact.ts</code></td><td>Reset permissions after context compression</td></tr>
+<tr><td>Cold-cache microcompact</td><td><code>timeBasedMCConfig.ts</code></td><td>30-min inactivity triggers aggressive pruning</td></tr>
+<tr><td>Conservative 4/3 token padding</td><td><code>tokenBudget.ts</code></td><td>Same padding for token estimation</td></tr>
+<tr><td>Per-batch aggregate cap</td><td><code>toolLimits.ts</code> (200K)</td><td>200K aggregate across all tool results in batch</td></tr>
+</table>
+
+<h3>V4.2.1 (3 features - File & Retry)</h3>
+<table>
+<tr><th>Feature</th><th>From Runnable</th><th>V4 Implementation</th></tr>
+<tr><td>FILE_UNCHANGED_STUB</td><td><code>FileReadTool/prompt.ts</code></td><td>Returns stub for unchanged files (saves 500-2000 tokens/read)</td></tr>
+<tr><td>Parallel read-only tools</td><td><code>partitionToolCalls()</code></td><td>Batch RO tools for ~40% latency reduction</td></tr>
+<tr><td>PTL retry (3 attempts)</td><td><code>truncateHeadForPTLRetry()</code></td><td>Progressive truncation on prompt_too_long error</td></tr>
+</table>
+
+<h3>V4.3.0 (6 features - Intelligence)</h3>
+<table>
+<tr><th>Feature</th><th>From Runnable</th><th>V4 Implementation</th></tr>
+<tr><td>Diminishing returns warning</td><td><code>tokenBudget.ts</code></td><td>Advisory after 3+ turns with &lt;500 token delta</td></tr>
+<tr><td>Memory 200-line / 25KB cap</td><td><code>memdir.ts</code></td><td>Exact match on both limits</td></tr>
+<tr><td>Cold-cache keepRecent=1</td><td><code>timeBasedMCConfig.ts</code></td><td>More aggressive: keep only 1 recent result</td></tr>
+<tr><td>Auto-memory "already wrote" skip</td><td><code>hasMemoryWritesSince()</code></td><td>Skip extraction if agent already wrote memory</td></tr>
+<tr><td>Per-turn cache indicator</td><td>V4-original</td><td>WRITE / HIT / INACTIVE displayed per turn</td></tr>
+<tr><td>Cache savings USD</td><td>V4-original</td><td>Shows actual USD saved from caching in /cost</td></tr>
+</table>
+
+<h3>V4.3.1 (8 features - Prompt Engineering)</h3>
+<table>
+<tr><th>Feature</th><th>From Runnable</th><th>V4 Implementation</th></tr>
+<tr><td>6 system prompt sections</td><td>900-line system prompt</td><td>Doing Tasks, Actions with Care, Using Tools, Output, Git Safety, Sub-agent</td></tr>
+<tr><td>7 tool descriptions (WHEN pattern)</td><td>90-line Bash tool desc</td><td>read_file, write_file, edit_file, bash, glob, grep, python</td></tr>
+<tr><td>Sub-agent structured output</td><td><code>forkSubagent.ts</code></td><td>Scope/Result/Key Files/Files Changed/Issues</td></tr>
+<tr><td>Compact zero-tool mode</td><td>NO_TOOLS preamble</td><td>Summary agent cannot invoke tools</td></tr>
+<tr><td>"Never delegate understanding"</td><td>Coordinator prompt</td><td>Added to sub-agent coordination section</td></tr>
+<tr><td>Parallelism instruction</td><td>"Parallelism is superpower"</td><td>Explicit parallel tool guidance in system prompt</td></tr>
+<tr><td>Research-Synthesize-Implement-Verify</td><td>Coordinator 4-phase</td><td>Added as workflow guidance</td></tr>
+<tr><td>Decision table for sub-agents</td><td>Coordinator decision table</td><td>When to reuse vs spawn fresh</td></tr>
+</table>
+
+<h3>NOT Implemented (and Why)</h3>
+<table>
+<tr><th>Pattern</th><th>Runnable Source</th><th>Reason NOT Implemented</th></tr>
+<tr><td>Coordinator Mode</td><td><code>coordinatorMode.ts</code></td><td>Requires two incompatible system prompts + mode switching. Deferred to V4.4.</td></tr>
+<tr><td>SendMessage Tool</td><td><code>SendMessageTool/</code></td><td>Requires async message queue infrastructure. Not applicable to sync sub-agents.</td></tr>
+<tr><td>Fork Subagent</td><td><code>forkSubagent.ts</code></td><td>Requires byte-identical API prefix. Bedrock caching mechanism is different.</td></tr>
+<tr><td>Position-pinned Cache Edits</td><td><code>microCompact.ts</code></td><td>Requires tracking edit positions across API calls. Very high complexity.</td></tr>
+<tr><td>Reactive Compact</td><td><code>autoCompact.ts</code></td><td>Wastes one API call to hit PTL error. V4's PTL retry is more efficient.</td></tr>
+<tr><td>Context Collapse</td><td><code>compact.ts</code></td><td>Complex projection-based folding. V4's microcompact + autocompact sufficient for SageMaker.</td></tr>
+<tr><td>Snip Boundaries</td><td><code>snipCompact.ts</code></td><td>UI/history feature not applicable to Jupyter notebook context.</td></tr>
+<tr><td>LLM Bash Classifier</td><td><code>bashPermissions.js</code></td><td>Requires LLM call per bash command. V4's static regex classifier is sufficient.</td></tr>
+<tr><td>tree-sitter AST</td><td><code>BashPermissionRequest.tsx</code></td><td>Adds dependency complexity. V4's regex + allowlist sufficient in SageMaker sandbox.</td></tr>
+<tr><td>Frustration Telemetry</td><td><code>userPromptKeywords.ts</code></td><td>SageMaker context has different UX patterns than CLI.</td></tr>
+</table>
+
+<h3>V4-Specific Features (Not from Runnable)</h3>
+<table>
+<tr><th>Feature</th><th>Purpose</th></tr>
+<tr><td>Thinking budget support</td><td>Extended reasoning with budget_tokens parameter</td></tr>
+<tr><td>Mock mode</td><td>Testing without API calls (CONFIG.mock_mode)</td></tr>
+<tr><td>Thread-local storage isolation</td><td>Sub-agent state isolation via Python TLS</td></tr>
+<tr><td>MCP auto-registration</td><td>Domain-specific tool registration (Power BI SDK)</td></tr>
+<tr><td>Execution budget persistence</td><td>Budget survives Jupyter kernel restarts</td></tr>
+<tr><td>Per-turn cache indicator</td><td>WRITE/HIT/INACTIVE visual feedback</td></tr>
+<tr><td>Cache savings USD display</td><td>Shows actual money saved from caching</td></tr>
+<tr><td>AWS bedrock-only enforcement</td><td>3-layer AWS API restriction (regex+AST+getattr)</td></tr>
+<tr><td>Python runtime sandbox</td><td>Intercepted builtins for workspace enforcement</td></tr>
+</table>
+
+</div>
+
+<!-- ==================== TAB 5: DETAILS ==================== -->
+<div class="tab-content" id="tab-4">
+
+<h2>Technical Deep Dive</h2>
+
+<h3>Bedrock API Integration</h3>
+<div class="chart-container">
+  <div class="chart-title">Bedrock InvokeModel Flow</div>
+  <div class="chart-desc">How V4 communicates with AWS Bedrock, including the request format and caching mechanism.</div>
+  <div class="mermaid">
+flowchart TD
+    A["BedrockClient.call()"] --> B["Build request:\nsystem (with cache_control)\n+ tools array\n+ messages"]
+    B --> C["boto3.client('bedrock-runtime')"]
+    C --> D["invoke_model(\nmodelId=CONFIG.model_id,\nbody=request_json\n)"]
+    D --> E["Parse response"]
+    E --> F["Extract content blocks:\ntext, tool_use, thinking"]
+    F --> G["Extract usage:\ninput_tokens, output_tokens\ncache_read, cache_creation"]
+    G --> H["TokenTracker.track()"]
+
+    subgraph "Cache Behavior (Bedrock)"
+      I["First call: cache WRITE\n(25% premium on creation)"]
+      I --> J["Subsequent calls:\ncache READ (90% discount)"]
+      J --> K["Cache TTL: 5 minutes\n(Bedrock default)"]
+      K --> L["After 30 min idle:\ncache COLD\n(trigger microcompact)"]
+    end
+
+    style D fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style I fill:#3d3520,stroke:#dcdcaa,color:#d4d4d4
+    style J fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+    style L fill:#5a2020,stroke:#f44747,color:#d4d4d4
+  </div>
+</div>
+
+<h3>Cost Tracking Flow</h3>
+<div class="chart-container">
+  <div class="chart-title">TokenTracker Cost Calculation</div>
+  <div class="mermaid">
+flowchart LR
+    A["API response\nusage block"] --> B["Model pricing lookup\n(Haiku/Sonnet/Opus)"]
+    B --> C["Calculate:\ncache_read * 0.1 * price\n+ cache_write * 1.25 * price\n+ new_input * price\n+ output * output_price"]
+    C --> D["Session total += cost"]
+    D --> E{"> 80% budget?"}
+    E -->|"yes"| F["Display warning"]
+    E -->|"no"| G["Continue"]
+    F --> H{"> 100% budget?"}
+    H -->|"yes"| I["STOP session"]
+    H -->|"no"| G
+
+    style F fill:#5a2d20,stroke:#ce9178,color:#d4d4d4
+    style I fill:#5a2020,stroke:#f44747,color:#d4d4d4
+  </div>
+</div>
+
+<h3>Skill System</h3>
+<details>
+<summary>SKILL.md Format and Loading</summary>
+<div>
+<pre>
+# SKILL.md Format
+---
+name: skill_name
+description: What this skill does
+when_to_use: When to activate this skill
+---
+
+Skill content here (markdown).
+Instructions for the agent when this skill is active.
+</pre>
+<p>Skills are loaded from <code>compact_v4/MAIN/agent/skills/</code>. Each skill is a markdown file with YAML frontmatter. Skills are loaded at session start and their content is injected into the system prompt when relevant.</p>
+<p><strong>V4-specific</strong>: Skills include Power BI-specific knowledge (DAX patterns, visualization best practices, data modeling rules) that don't exist in Runnable.</p>
+</div>
+</details>
+
+<h3>Custom Commands</h3>
+<details>
+<summary>Template Expansion and Agent Delegation</summary>
+<div>
+<table>
+<tr><th>Command</th><th>What It Does</th></tr>
+<tr><td><code>/cost</code></td><td>Displays session token usage, cost, and cache savings</td></tr>
+<tr><td><code>/compact</code></td><td>Forces context compression (autocompact)</td></tr>
+<tr><td><code>/memory</code></td><td>Shows current memory contents</td></tr>
+<tr><td><code>/clear</code></td><td>Clears conversation history</td></tr>
+<tr><td><code>/help</code></td><td>Shows available commands</td></tr>
+</table>
+<p>Custom commands use <code>$ARGUMENTS</code> template expansion. Some commands delegate to sub-agents (e.g., <code>/review</code> spawns an explore agent for code review).</p>
+</div>
+</details>
+
+<h3>Clara Review Workflow</h3>
+<details>
+<summary>5-Phase Code Review System</summary>
+<div>
+<div class="chart-container">
+  <div class="chart-title">Clara 5-Phase Review</div>
+  <div class="mermaid">
+flowchart LR
+    A["Phase 1:\nComponent Selection"] --> B["Phase 2:\nStatic Analysis\n(security, imports)"]
+    B --> C["Phase 3:\nLogic Review\n(correctness, edge cases)"]
+    C --> D["Phase 4:\nIntegration Check\n(API compat, deps)"]
+    D --> E["Phase 5:\nOutput Files\n(report.md + scores)"]
+
+    style A fill:#264f78,stroke:#569cd6,color:#d4d4d4
+    style C fill:#4a3060,stroke:#c586c0,color:#d4d4d4
+    style E fill:#2d4a22,stroke:#6a9955,color:#d4d4d4
+  </div>
+</div>
+<p>Clara is V4's built-in code review system. It reviews agent-generated code for security vulnerabilities, logic errors, integration issues, and style violations. Output includes a detailed report and confidence scores.</p>
+</div>
+</details>
+
+<h3>Key Thresholds Reference</h3>
+<table>
+<tr><th>Threshold</th><th>Value</th><th>Notes</th></tr>
+<tr><td>AutoCompact trigger</td><td>~87% context</td><td>Same formula as Runnable</td></tr>
+<tr><td>Cold-cache detection</td><td>30 minutes inactive</td><td>Triggers aggressive microcompact</td></tr>
+<tr><td>Tool result cap (per tool)</td><td>50,000 characters</td><td>Same as Runnable</td></tr>
+<tr><td>Tool result cap (per batch)</td><td>200,000 characters</td><td>Same as Runnable</td></tr>
+<tr><td>Memory index cap</td><td>200 lines / 25KB</td><td>Same as Runnable</td></tr>
+<tr><td>PTL retry limit</td><td>3 attempts</td><td>Same as Runnable</td></tr>
+<tr><td>Diminishing returns</td><td>3+ turns, &lt;500 tok delta</td><td>Advisory warning (once per run)</td></tr>
+<tr><td>Haiku caching threshold</td><td>4,096 tokens minimum</td><td>V4 static prefix ~3,565 (below)</td></tr>
+<tr><td>Cost budget warning</td><td>80% of session_cost_limit</td><td>Displayed to user</td></tr>
+<tr><td>Cost budget hard stop</td><td>100% of session_cost_limit</td><td>Session terminated</td></tr>
+<tr><td>Sub-agent max depth</td><td>CONFIG.subagent_max_depth</td><td>Prevents runaway chains</td></tr>
+<tr><td>Bash allowlist</td><td>70 commands</td><td>Fail-closed for unknown</td></tr>
+<tr><td>Python import allowlist</td><td>67 modules</td><td>AST-enforced</td></tr>
+<tr><td>Bash dangerous patterns</td><td>75 regex patterns</td><td>Pre-compiled blocklist</td></tr>
+<tr><td>Python dangerous patterns</td><td>63 regex patterns</td><td>Pre-compiled blocklist</td></tr>
+</table>
+
+</div>
+
+</div><!-- shell -->
+
+<script>
+function switchTab(index) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === index));
+  document.querySelectorAll('.tab-content').forEach((c, i) => c.classList.toggle('active', i === index));
+  setTimeout(() => { mermaid.run(); }, 100);
+}
+
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#264f78',
+    primaryTextColor: '#d4d4d4',
+    primaryBorderColor: '#569cd6',
+    lineColor: '#808080',
+    secondaryColor: '#2d4a22',
+    tertiaryColor: '#3d3520',
+    fontFamily: 'Segoe UI, sans-serif',
+    fontSize: '13px'
+  },
+  flowchart: {
+    htmlLabels: true,
+    curve: 'basis',
+    padding: 12
+  }
+});
+</script>
+
+</body>
+</html>

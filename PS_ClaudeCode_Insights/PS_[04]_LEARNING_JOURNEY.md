@@ -235,4 +235,57 @@ Implemented after full prompt extraction from Runnable. See `PS_PROMPT_COMPARISO
 
 ---
 
-*Last updated: 2026-04-01.*
+---
+
+## 10. WebDoc / PDF Cross-Reference (Added 2026-04-02)
+
+6 Chinese-language internet analyses of Claude Code were reviewed (PDFs 1-3, 5-7 in `Web_doc/`) plus the `how-claude-code-works` GitHub repo (12 structured chapters). All major technical claims were verified against the actual Runnable source code. See `Web_doc/PS_WEBDOC_LEARNINGS.md` for the full cross-referenced document.
+
+### New Insights from PDFs Not Previously Documented
+
+| Source | Insight | Relevance to V4 |
+|--------|---------|-----------------|
+| PDF-1 | cc_workload QoS hint to Anthropic API | N/A (Anthropic-specific, not Bedrock) |
+| PDF-1 | Model cascading: Haiku -> Capybara -> Opus | V4 uses CONFIG.model_id; no auto-cascade |
+| PDF-2 | StreamingToolExecutor (parallel tool exec during streaming) | N/A for Bedrock (no streaming tool_use) |
+| PDF-2 | 7 message types including TombstoneMessage for fallback | V4 has simpler message types; fallback not needed |
+| PDF-2 | Immutable messages for cache hit rates | Bedrock handles caching differently |
+| PDF-3 | Dream mode (background memory processing via safetiedAgent) | Interesting for V4.4 but requires background processing |
+| PDF-5 | Frustration telemetry (matchesNegativeKeyword regex) | Could add for UX monitoring in SageMaker |
+| PDF-5 | 44 unreleased feature flags (KAIROS, BUDDY, ULTRAPLAN, etc.) | KAIROS (persistent memory) most relevant |
+| PDF-5 | Undercover mode (hide Claude involvement in commits) | Not applicable |
+| PDF-6 | Control plane vs execution plane separation | V4 has this implicitly (CONFIG vs agent loop) |
+| PDF-6 | Tools as unified protocol (schema + permission + status + format) | V4 tools are function-based; adequate for scope |
+| PDF-7 | Full system prompt analysis (30K chars, conditional sections) | V4.3.1 already adopted key sections |
+| Repo | tree-sitter AST for bash analysis (23 static checks) | V4 uses regex+allowlist; sufficient for SageMaker |
+| Repo | Hooks system (25 events, 4 types, fast-path optimization) | Interesting but V4 doesn't have hooks architecture |
+| Repo | Skills system (6-layer priority, lazy loading, token budget) | V4 has skills but simpler loading |
+| Repo | FileEditTool uniqueness constraint (old_string must be unique) | V4 uses exact match; similar philosophy |
+| Repo | Startup optimization (9-stage 235ms, parallel init) | V4 is single-file; startup not a bottleneck |
+| Repo | Swarm Mode (named agents, point-to-point mailbox, Tmux/iTerm2) | Beyond V4 scope; requires terminal multiplexing |
+| Repo | Autocompact failure circuit breaker (3 consecutive -> stop) | V4 has PTL retry limit but no compact circuit breaker |
+
+### V4 Potential Additions for V4.4 (Updated)
+
+1. **Post-compact file re-read** — Re-read last N edited files after autocompact to restore context
+2. **Autocompact circuit breaker** — Stop after 3 consecutive failures (prevent waste)
+3. **Semantic memory recall** — LLM-ranked top-5 instead of first-match
+4. **WHAT_NOT_TO_SAVE as structured constant** — Currently in prompts but not enforced programmatically
+5. **Coordinator Mode** — Full role-swap prompt system (deferred from V4.3)
+
+### Verification Summary
+All 10 major claims from internet articles verified against `gg-claude-code-runnable/src/`:
+- StreamingToolExecutor ✅
+- TombstoneMessage (7 message types) ✅
+- partitionToolCalls ✅
+- 4-tier compression ✅
+- Fork subagent (byte-identical prefix) ✅
+- matchesNegativeKeyword ✅
+- KAIROS/BUDDY/ULTRAPLAN flags ✅
+- Coordinator Mode ✅
+- cc_workload hint ✅
+- tree-sitter AST bash analysis ✅
+
+---
+
+*Last updated: 2026-04-02. WebDoc integration complete.*
