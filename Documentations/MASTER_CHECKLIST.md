@@ -12,16 +12,19 @@
 ### 1A. Codebase Analysis
 - [x] **Deep dive Runnable source code** (1,438 TS files) — PS_DEEP_ANALYSIS_V2.md, V3.md
 - [x] **Extract ALL Runnable prompts** — system, tool descriptions, coordinator, compact, subagent, memory — PS_PROMPT_COMPARISON.md
-- [x] **PDF analysis (1-7)** — verify each claim against actual source code — PS_WEBDOC_LEARNINGS.md
-- [ ] **"how-claude-code-works" repo analysis** — clone, review, cross-reference with our findings
+- [ ] **PDF analysis (1-7)** — verify each claim against actual source code, document which section is true/false/relevant — PS_WEBDOC_LEARNINGS.md (IN PROGRESS)
+- [ ] **"how-claude-code-works" repo analysis** — clone to local (`PS_ClaudeCode_Insights/`), review, cross-reference with our findings, integrate useful discoveries
 - [x] **Identify advanced patterns** — Coordinator Mode, Fork Subagent, Context Collapse, SendMessage, tree-sitter AST — documented in PS_LEARNING_JOURNEY.md
 - [x] **Track what learned / not learned / why** — PS_LEARNING_JOURNEY.md Section 8
+- [ ] **Understand PDF authors' methodology** — how did they discover patterns in the codebase? Are there analysis techniques we missed?
+- [ ] **If PDFs reveal accurate findings we missed** — implement in V4, document in CHANGELOG
 
 ### 1B. Documentation Completeness
 - [x] All analytical MDs organized with PS_ prefix in `PS_ClaudeCode_Insights/`
-- [ ] Cross-check: are ALL agentic design patterns from Runnable documented? (Codex review needed)
-- [ ] Ensure PDFs 1-7 findings integrated into analytical MDs where accurate
+- [ ] **Codex review: coverage audit** — Codex 3.5 must evaluate if ALL agentic design patterns are captured
+- [ ] Ensure PDFs 1-7 accurate findings integrated into analytical MDs
 - [ ] Number MDs in reading sequence if needed: [1]...[X]
+- [ ] **Prompt analytics complete** — PS_PROMPT_COMPARISON.md must have every Runnable prompt with: what we learned, what NOT learned, why not, what implemented in V4
 
 ### 1C. Key Files
 | File | Purpose | Status |
@@ -130,10 +133,12 @@
 ### 4C. HTML Quality
 - [ ] Mermaid.js dark theme, charts centered
 - [ ] Mobile responsive (iPhone/iPad compatible, no horizontal scroll)
-- [ ] Beginner explanations under each flowchart (collapsible)
+- [ ] Beginner explanations under each flowchart (collapsible `<details>` blocks: what, why, how)
+- [ ] Three explanation levels: one-line summary, mechanism with flowchart, why it matters
 - [ ] No garbled characters (UTF-8, no special Unicode)
-- [ ] Playwright tests pass (rendering, centering, mobile, tabs)
-- [ ] Codex review: UX quality + codebase coverage
+- [ ] Playwright tests pass (rendering, centering, mobile viewport, all tabs clickable)
+- [ ] Codex review: UX quality (no broken chars, proper layout)
+- [ ] Codex review: codebase coverage (did we capture everything relevant to agentic design?)
 
 ### 4D. Key File
 - Handover spec: `PS_ClaudeCode_Insights/TASK_B_HANDOVER.md`
@@ -164,7 +169,7 @@
 - [x] Single zip file (157KB → now 189KB with Clara prompts)
 - [x] No secrets or PII in zip
 
-### 5C. Confidence
+### 5C. Ship Confidence (V4 agent only — excludes HTML)
 | Category | % | Notes |
 |----------|---|-------|
 | Code quality | 95% | 22 tests pass, Codex reviewed |
@@ -172,8 +177,14 @@
 | Prompt engineering | 95% | V4.3.1 upgrade from Runnable best practices |
 | Security | 98% | 16 layers verified |
 | Clara readiness | 90% | Skills + prompts included, not tested on real codebase |
+| **Ship ready** | **95%** | Ready to ship. Remaining 5% = untested on actual company SageMaker |
+
+### 5E. Learning Confidence (HTML + documentation — separate from ship)
+| Category | % | Notes |
+|----------|---|-------|
+| Runnable analysis | 90% | Missing: "how-claude-code-works" repo, PDF integration |
 | HTML reports | 0% | Task B — not started |
-| Overall | **93%** | HTML is the remaining gap |
+| **Learning complete** | **45%** | HTMLs are the biggest gap — all the knowledge exists but not visualized |
 
 ### 5D. On SageMaker Setup
 1. Upload `compact_v4.zip` to Teams channel
@@ -209,4 +220,15 @@
 | 5. Ship Package | 100% | Ready (zip built, transfer method decided) |
 | 6. Process | 100% | All rules followed |
 
-**Next session priority**: Part 4 (HTML Reports) — read `TASK_B_HANDOVER.md` and execute.
+**Next session priority order:**
+1. Part 1 remaining: clone "how-claude-code-works", finish PDF verification, Codex coverage audit
+2. Part 2: if Part 1 reveals new learnings → implement in V4, test, update zip
+3. Part 4: HTML Reports — read `TASK_B_HANDOVER.md` and execute
+4. Codex review everything produced
+
+**After shipping to company:**
+- Test V4 on actual company SageMaker (Part 3B gap)
+- Run Clara review on actual ClaRA codebase (Part 5C gap)
+- These two items close the remaining 5% ship confidence
+
+**IMPORTANT**: The repo root `CLAUDE.md` still references V3 as current. Update it to reference V4 when V3 is fully superseded.
