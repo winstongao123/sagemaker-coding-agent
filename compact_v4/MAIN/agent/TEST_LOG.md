@@ -1,5 +1,43 @@
 # V4 Behavioral Test Log
 
+## V4.3.2 — Complete Runnable Integration Tests
+**Date**: 2026-04-02
+**Version**: 4.3.2
+**Model**: `au.anthropic.claude-haiku-4-5-20251001-v1:0` (Haiku 4.5, Sydney)
+**Tester**: Claude Opus 4.6 (automated)
+**Cost**: $0.0018 for 8 tests (3 API calls)
+
+### Test Results
+
+| ID | Test | Expected | Actual | Status |
+|----|------|----------|--------|--------|
+| T23 | Multi-turn + Haiku caching | Cache active on turn 2 | cache_read=4,323 tokens | **PASS** |
+| T24 | Tool use (read_file dispatch) | LLM calls read_file | stop_reason=tool_use, name=read_file | **PASS** |
+| T25 | Security: catastrophic block | rm -rf / blocked | Blocked | **PASS** |
+| T26 | Security: allowlist | ls -la allowed | Allowed | **PASS** |
+| T27 | Security: path traversal | ../../etc/passwd blocked | Blocked | **PASS** |
+| T28 | Security: injection | curl|bash blocked | Blocked | **PASS** |
+| T29 | Security: Python import | subprocess blocked | Blocked | **PASS** |
+| T30 | 6 agent types | verify + explore RO + abs paths | All present and correct | **PASS** |
+| T31 | Context management | Circuit breaker + cache-breakage + diminishing | All flags present | **PASS** |
+| T32 | Memory system | 4 types + WHAT_NOT_TO_SAVE + 200-line cap | All present | **PASS** |
+| T33 | WHEN-not-WHAT | 5 tools + git safety | All present | **PASS** |
+| T34 | Token tracking | Cost + savings + cache indicator | $0.0018 cost, $0.0128 saved | **PASS** |
+
+**Pass rate: 12/12 (T23-T34)**
+
+### CRITICAL FINDING: Haiku Caching Now Active!
+
+v4.3.2's enhanced WHEN-not-WHAT tool descriptions increased total token count past Haiku's 4,096-token caching minimum:
+- **v4.3.1**: system+tools ~3,565 tokens (BELOW threshold, caching INACTIVE)
+- **v4.3.2**: system+tools ~4,323 tokens (ABOVE threshold, caching ACTIVE)
+- **Impact**: 90% cost reduction on cached tokens for every turn after the first
+- **Root cause**: Longer tool descriptions from Runnable's patterns pushed past the threshold
+
+This was an unintended but significant benefit of the WHEN-not-WHAT enhancement.
+
+---
+
 ## V4.3.0 — Bedrock Behavioral Tests
 **Date**: 2026-04-01
 **Version**: 4.3.0
