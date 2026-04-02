@@ -51,8 +51,32 @@ All 4 blockers from AGENT_BUGS.md are fixed in V4:
 
 ## Recommended Workflow
 
-1. Load Clara skill: `/skill use clara`
-2. Set workspace to ClaRA codebase root
-3. Copy `00_CONTEXT.md` into workspace
-4. Run prompts 01-05 sequentially, pasting each into chat
-5. Between prompts: check output/ folder for completeness
+The prompt files are included in the zip — no separate copying needed.
+
+1. Unzip `compact_v4.zip` on SageMaker
+2. Load skill: `/skill use clara-full-review`
+3. Set workspace to ClaRA codebase root
+4. Copy prompt files into workspace:
+   ```bash
+   cp MAIN/agent/skills/clara/prompts/00_CONTEXT.md <clara_root>/
+   ```
+5. Start: "Start the ClaRA review" (or select specific components)
+6. For each phase, agent will use FULL_REVIEW.md as orchestration guide
+7. Paste the phase-specific prompt (01-05) when agent asks for phase details
+
+## Prompts Included in This Package
+
+The `skills/clara/prompts/` folder contains the full review prompt suite:
+
+| File | Phase | What it covers |
+|------|-------|---------------|
+| `00_CONTEXT.md` | All | ClaRA context, evidence rules, R/A/G thresholds, PII patterns |
+| `01_DISCOVERY.md` | Phase 1 | File tree, dependencies, AWS inventory, code metrics |
+| `02_COMPONENT1.md` | Phase 2 | Bug validation, CHECK_REGISTRY, extraction code |
+| `03_COMPONENT2_3.md` | Phase 3 | Agent definitions, orchestration, SQL, UI |
+| `04_PROD_READINESS.md` | Phase 4 | R/A/G scorecard, cost projections, FTE impact |
+| `05_SYNTHESIS.md` | Phase 5 | Final report + business case |
+| `HOW_TO_USE.md` | Setup | Pre-flight, model config, cost estimates, failure recovery |
+
+Source of truth: `D:\OneDrive - ArcSage\Coding Agent\clara_review_prompts\`
+Git backup: `github.com/winstonpgao/planning_bot` (main branch)
