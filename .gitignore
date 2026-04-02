@@ -33,3 +33,4 @@ truncated_outputs/
 .pytest_cache/
 test_*.py
 nul
+_archive/compare_code/gg-claude-code-runnable

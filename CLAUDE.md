@@ -1,42 +1,54 @@
 # SageMaker Coding Agent
 
-## Overview
-AI coding agent that runs in SageMaker/Jupyter notebooks. Generates Power BI dashboards from CSV data using LLMs. Multiple versions from simple to production-grade.
+## Current: V4.3.2 (2026-04-02)
 
-## Versions
+AI coding agent for SageMaker/Jupyter. 25+ tools, 16 security layers, 6 sub-agent types, prompt caching, 4-type memory. Learned from Claude Code (Runnable) source code analysis.
 
-| Version | Path | Description |
-|---------|------|-------------|
-| **V3 (current)** | `compact_v3/MAIN/agent/` | Review agent, /verify, /checkpoint, 5 skills, v3.1.0 |
-| V2 | `compact_v2/MAIN/agent/` | External config, cost tracking, error recovery |
-| V1 | `compact/` | Single-file AWS Bedrock (chat.ipynb + sagemaker_agent.py) |
-| GCP | `compact_GCP/` | Single-file GCP Vertex AI (chat.ipynb + gemini_agent.py) |
-| Complete | `complete/` | Modular multi-file (core/, tools/, config.py, agent.ipynb) |
+## Quick Start
+- **Ship to company**: `compact_v4/compact_v4.zip` (60 files, via Teams)
+- **Learn architecture**: Open both HTMLs in `PS_ClaudeCode_Insights/Web_doc/` side by side
 
-## V3 Structure (`compact_v3/MAIN/agent/`)
+## Folder Structure
+
 ```
-sagemaker_agent.py      # Core agent (v3.1.0) - source of truth
-chat.ipynb              # Jupyter notebook entry point
-chat.md                 # Companion doc (copy of .py)
-sagemaker_agent.md      # Companion doc (copy of .py)
-USER_GUIDE.md           # User guide
-skills/
-├── coding-standards/   # Code style enforcement
-├── review/             # Code review agent
-├── verify/             # Verification skill
-├── powerbi-dashboard/  # V1 dashboard generator (sales/business only)
-└── powerbi-dashboard-v2/  # V2 dashboard generator (any domain)
+compact_v4/                    ★ CURRENT — V4.3.2 agent (ship this)
+├── MAIN/agent/
+│   ├── sagemaker_agent.py     Core agent (~8,500 lines)
+│   ├── chat.md                Companion doc (md version of ipynb)
+│   ├── USER_GUIDE.md          Full user documentation
+│   ├── TEST_LOG.md            34 Bedrock tests (all PASS)
+│   ├── memory.md              Persistent memory template
+│   └── skills/                6 skills (clara, review, verify, etc.)
+├── CHANGELOG.md               v4.0.0 through v4.3.2
+└── compact_v4.zip             Ship-ready (60 files, 3.1MB)
+
+PS_ClaudeCode_Insights/        ★ LEARNING — Runnable Claude Code analysis
+├── PS_[01]_DEEP_ANALYSIS_V2.md    Codebase audit #1 (10 features)
+├── PS_[02]_DEEP_ANALYSIS_V3.md    Codebase audit #2 (6 features)
+├── PS_[03]_PROMPT_ANALYSIS.md     All 24 Runnable prompts tracked
+├── PS_[03a]_PROMPT_COMPARISON.md  Side-by-side prompt comparison
+├── PS_[04]_LEARNING_JOURNEY.md    Full implementation narrative
+├── PS_[05]_VS_OPENCLAW.md         OpenClaw comparison
+└── Web_doc/
+    ├── PS_FLOWCHART_RUNNABLE.html ★ Open this (Runnable architecture)
+    ├── PS_FLOWCHART_V4.html       ★ Open this (V4 architecture)
+    └── PS_WEBDOC_LEARNINGS.md     PDF 1-7 cross-reference
+
+Documentations/                MASTER_CHECKLIST.md (completion tracking)
+SESSION_STATE.md               Handover doc for next agent session
+_archive/                      Old versions (V1-V3), working files, temp
 ```
 
-## Key Rules
-- **Source of truth**: `.py` and `.ipynb` files, NOT companion `.md` files
-- **After code changes**: update `.md` companion (copy .py to .md), update CHANGELOG, push
-- **Version**: Always increment `__version__` in `sagemaker_agent.py` on feature changes
-- **Skills sync**: `compact_v3/MAIN/agent/skills/` is the canonical source for Power BI skills. Sync to `D:\Github\AIPower\skill/` and `skill-v2/`.
+## Git Rules
+- Push to `sageagent` remote ONLY (`https://github.com/winstonpgao/sageagent.git`)
+- After code changes: update CHANGELOG, chat.md, rebuild zip, push
+- Skills canonical source: `compact_v4/MAIN/agent/skills/`
 
-## Git
-- **Push to**: `sageagent` remote (`https://github.com/winstonpgao/sageagent.git`)
-- **Do NOT push to**: `origin` (permission denied for winstonpgao)
-
-## Tests
-- `compact_v3/MAIN/tests/` - 6 Power BI test dashboards (enrollment, csv, healthcare, hr, logistics, marketing)
+## V4.3.2 Highlights
+- 35 features learned from Runnable Claude Code + 9 V4-original
+- 16 security layers (bash allowlist, Python AST, AWS bedrock-only, etc.)
+- 6 sub-agent types: explore, verify, plan, review, general, build
+- Prompt caching active on Haiku (pushed past 4,096-token threshold)
+- WHEN-not-WHAT tool descriptions (reduces wasted tool calls)
+- Cache-breakage detection after compact
+- 34 Bedrock tests pass, Codex reviewed 10/10
