@@ -778,14 +778,33 @@ flowchart TD
 
 <h3>Section 6: Security</h3>
 <h4>How V4 Does It</h4>
-<p>16 security layers (see Security tab for full details). V4 has MORE layers than Runnable because SageMaker is shared infrastructure. Key V4-specific layers: Python AST import validation (67 modules), AWS bedrock-only enforcement (3-layer), Python runtime sandbox (intercepted builtins).</p>
+<p>16 security layers (see Security tab for full details). V4 has MORE layers than Runnable because SageMaker is shared infrastructure. V4 does NOT have Docker or OS-level sandboxing — SageMaker itself provides the compute isolation. V4's sandbox is Python-level (intercepted builtins).</p>
 <h4>Key Files</h4>
 <p><span class="badge badge-file">sagemaker_agent.py</span> (layers spread across ~lines 1037-1574)</p>
-<h4>Strengths</h4>
-<p>16 layers vs Runnable's 7. Python-specific validation (regex + AST + runtime). AWS-specific enforcement. More comprehensive for cloud/shared environments.</p>
-<h4>Limitations</h4>
-<p>No tree-sitter AST for bash (uses regex + allowlist instead). No OS-level sandbox (macOS Seatbelt / Linux namespaces). These are less critical in SageMaker's already-sandboxed environment.</p>
-<div class="callout beginner">V4's security is like a bank vault with 16 locks. Runnable has 7 locks but they're more sophisticated (tree-sitter parsing). V4 compensates with MORE layers and AWS-specific protections that Runnable doesn't need.</div>
+<h4>Side-by-Side: What Each System Implements</h4>
+<table>
+<tr><th>Security Layer</th><th>Runnable</th><th>V4</th></tr>
+<tr><td>Trust dialog / first-run consent</td><td>YES</td><td>YES (tool approval)</td></tr>
+<tr><td>Permission modes (default/auto/bypass)</td><td>YES (5 modes)</td><td>YES (approval + auto-RO)</td></tr>
+<tr><td>Rule matching (allow/deny patterns)</td><td>YES (3 patterns)</td><td>YES (allowlist + denylist)</td></tr>
+<tr><td>Bash analysis: tree-sitter AST (23 checks)</td><td>YES</td><td>NO (uses regex + 70-cmd allowlist + 75 denylist patterns instead)</td></tr>
+<tr><td>Tool-level validation</td><td>YES</td><td>YES (per-tool approval flag)</td></tr>
+<tr><td>OS-level sandbox (Seatbelt/namespaces)</td><td>YES (macOS/Linux)</td><td>NO (SageMaker provides compute isolation)</td></tr>
+<tr><td>User confirmation (200ms race protection)</td><td>YES</td><td>YES (approval dialog)</td></tr>
+<tr><td>Catastrophic command blocklist</td><td>YES (partial)</td><td>YES (13 patterns, fail-closed at import)</td></tr>
+<tr><td>Path traversal + symlink blocking</td><td>YES (basic)</td><td>YES (resolve + boundary check)</td></tr>
+<tr><td>Python regex validation (63 patterns)</td><td>NO</td><td>YES (V4-specific)</td></tr>
+<tr><td>Python AST import allowlist (67 modules)</td><td>NO</td><td>YES (V4-specific)</td></tr>
+<tr><td>Python runtime sandbox (intercepted builtins)</td><td>NO</td><td>YES (V4-specific, not Docker)</td></tr>
+<tr><td>AWS bedrock-only enforcement (3-layer)</td><td>NO (not AWS)</td><td>YES (V4-specific)</td></tr>
+<tr><td>Sub-agent depth limiting</td><td>YES</td><td>YES</td></tr>
+<tr><td>Tool result size caps (50K/200K)</td><td>YES</td><td>YES</td></tr>
+<tr><td>Session cost budget</td><td>YES (USD)</td><td>YES (80% warn, 100% stop)</td></tr>
+<tr><td>Trust boundary (ignore tool output instructions)</td><td>YES</td><td>YES</td></tr>
+<tr><td>Secret pattern detection (13 patterns)</td><td>NO</td><td>YES (V4-specific)</td></tr>
+<tr><td>Sensitive file blocking (.env, id_rsa)</td><td>YES (.git/.claude)</td><td>YES (.env, credentials, keys)</td></tr>
+</table>
+<div class="callout beginner">V4 does NOT use Docker containers or OS-level sandboxing. Instead, SageMaker itself isolates compute. V4 adds Python-level protection (intercepted builtins that block file access outside workspace) and AWS-level protection (only Bedrock API allowed). Think of it as: Runnable trusts the OS to sandbox, V4 trusts SageMaker to sandbox + adds its own code-level checks on top.</div>
 
 <h3>Section 7: Prompt Engineering</h3>
 <h4>How V4 Does It</h4>

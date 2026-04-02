@@ -831,14 +831,30 @@ Your response MUST follow this format:
 
 <h3>Section 6: Security</h3>
 <h4>How Runnable Does It</h4>
-<p>7-layer defense: (1) Trust dialog, (2) Permission modes (default/acceptEdits/plan/bypass/auto), (3) Rule matching (allow/deny/ask with 3 patterns), (4) tree-sitter AST bash analysis (23 static checks, fail-closed on unparseable), (5) Tool-level validateInput + checkPermissions, (6) Sandbox isolation (macOS Seatbelt, Linux namespaces), (7) User confirmation with 200ms race protection. Bypass-immune paths: .git/, .claude/, .bashrc.</p>
+<p>7-layer defense: (1) Trust dialog, (2) Permission modes (5 options), (3) Rule matching (allow/deny/ask), (4) tree-sitter AST bash analysis (23 checks), (5) Tool-level validation, (6) OS Sandbox (macOS Seatbelt, Linux namespaces), (7) User confirmation. Runnable runs on the user's own machine — OS-level sandboxing is the primary isolation.</p>
 <h4>Key Files</h4>
 <p><span class="badge badge-file">src/components/permissions/</span> <span class="badge badge-file">src/tools/BashTool/</span></p>
+<h4>Side-by-Side: What Each System Implements</h4>
+<table>
+<tr><th>Security Layer</th><th>Runnable</th><th>V4</th></tr>
+<tr><td>Trust dialog / first-run consent</td><td>YES</td><td>YES</td></tr>
+<tr><td>Permission modes</td><td>YES (5 modes)</td><td>YES (approval + auto-RO)</td></tr>
+<tr><td>Rule matching (allow/deny)</td><td>YES (3 patterns)</td><td>YES (allowlist + denylist)</td></tr>
+<tr><td>Bash: tree-sitter AST (23 checks)</td><td>YES</td><td>NO (regex + allowlist instead)</td></tr>
+<tr><td>OS sandbox (Seatbelt/namespaces)</td><td>YES</td><td>NO (SageMaker isolates instead)</td></tr>
+<tr><td>User confirmation</td><td>YES (200ms race protect)</td><td>YES</td></tr>
+<tr><td>Catastrophic blocklist</td><td>YES</td><td>YES (13 patterns)</td></tr>
+<tr><td>Python validation (regex + AST + runtime)</td><td>NO</td><td>YES (3-layer V4-specific)</td></tr>
+<tr><td>AWS service restriction</td><td>NO (not AWS)</td><td>YES (bedrock-only, 3-layer)</td></tr>
+<tr><td>Secret detection (13 patterns)</td><td>NO</td><td>YES (V4-specific)</td></tr>
+<tr><td>Tool result caps (50K/200K)</td><td>YES</td><td>YES</td></tr>
+<tr><td>Cost budget</td><td>YES</td><td>YES</td></tr>
+</table>
 <h4>Strengths</h4>
-<p>Layered approach means no single failure compromises security. tree-sitter AST catches sophisticated bash injection. Fail-closed design means unknown commands are denied by default.</p>
+<p>tree-sitter AST catches sophisticated bash injection patterns that regex misses. OS-level sandbox is the strongest isolation possible. Fail-closed on unparseable commands.</p>
 <h4>Limitations</h4>
-<p>Designed for desktop/CLI context -- different trade-offs than server-side (SageMaker). tree-sitter adds parsing overhead. Auto mode's 2-second LLM classifier can slow down workflows.</p>
-<div class="callout beginner">Security works like airport checkpoints. First, you show your passport (trust dialog). Then your boarding pass is checked (permission mode). Then your bag goes through X-ray (tree-sitter analysis). Then a human guard does a visual check (user confirmation). Multiple layers mean even if one fails, others catch the problem.</div>
+<p>Designed for desktop/CLI — no Python validation, no AWS restriction, no secret detection. These aren't needed on a personal machine but ARE needed on shared infrastructure (SageMaker).</p>
+<div class="callout beginner">Runnable and V4 take different security approaches because they run in different environments. Runnable trusts the OS to sandbox (your own laptop). V4 can't rely on OS sandbox (shared SageMaker), so it adds its own Python-level and AWS-level protections instead. Both achieve the same goal: prevent the AI from doing damage.</div>
 
 <h3>Section 7: Prompt Engineering</h3>
 <h4>How Runnable Does It</h4>
