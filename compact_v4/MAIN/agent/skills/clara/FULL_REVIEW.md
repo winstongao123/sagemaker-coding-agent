@@ -31,15 +31,49 @@ When the user selects specific phases, components, or sections — run ONLY thos
 
 ---
 
+## Suggested Workspace Setup
+
+Before starting, set up this folder structure in the ClaRA codebase root:
+
+```
+<clara_root>/                        ← set this as your workspace
+  00_CONTEXT.md                      ← REQUIRED — copy from skills/clara/prompts/
+  reference/                         ← OPTIONAL — put all reference docs here
+    end_to_end_review.docx           ← existing claims review (Winston's ~20 page doc)
+    architecture.png                 ← any architecture diagrams (V4 can view_image)
+    design_notes.pdf                 ← any design docs (V4 can read up to 20 pages)
+    framework_comparison.md          ← RE-TRAC/LangGraph comparison (if available)
+  output/                            ← CREATED AUTOMATICALLY — all findings go here
+    01_discovery.md
+    02_component1.md
+    03_component2_3.md
+    04_prod_readiness.md
+    05_FINAL_REPORT.md
+    05b_BUSINESS_CASE_INPUT.md
+```
+
+**Images and docs in reference/ are automatically picked up:**
+- PNG/JPG → viewed with `view_image` tool in Phase 1 (section 1.7)
+- PDF → read with `read_file` tool (up to 20 pages)
+- .docx → read with `read_file` tool
+- .md → read directly
+- .drawio → cannot be read (binary) — export as PNG first
+
+**To copy 00_CONTEXT.md from this package:**
+```bash
+cp MAIN/agent/skills/clara/prompts/00_CONTEXT.md <clara_root>/
+```
+
+---
+
 ## Pre-Flight (do this FIRST, regardless of selection)
 
 1. Confirm workspace is set to ClaRA codebase root
-2. Check: `read_file 00_CONTEXT.md` — must exist and be readable
+2. Check: `read_file 00_CONTEXT.md` — must exist and be readable. If missing, tell user to copy from `skills/clara/prompts/00_CONTEXT.md` and STOP.
 3. Create output folder: `bash mkdir -p output`
-4. Create reference folder: `bash mkdir -p reference`
-5. Check for optional reference: `read_file reference/end_to_end_review.md` (OK if missing)
-6. If resuming (phase 2+): check which output/ files already exist. Read them for context.
-7. Report pre-flight status to user. If 00_CONTEXT.md missing, STOP.
+4. Scan reference/ folder: `glob("reference/*")` — list all files found, read each one (images via view_image, docs via read_file). Report what was found.
+5. If resuming (phase 2+): check which output/ files already exist. Read them for context.
+6. Report pre-flight status to user: workspace path, 00_CONTEXT.md status, reference files found, output files already present.
 
 ## Evidence Rules (apply throughout)
 
