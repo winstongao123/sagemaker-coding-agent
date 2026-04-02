@@ -603,8 +603,9 @@ flowchart TD
 <!-- ==================== TAB 3: CROSS-COMPARE ==================== -->
 <div class="tab-content" id="tab-2">
 
-<h2>Cross-Compare: V4 vs Runnable</h2>
+<h2>Cross-Compare: V4 vs Runnable [Harness Engineering]</h2>
 <p>Open this alongside the Runnable HTML for side-by-side comparison. Same sections, same order.</p>
+<div class="callout important"><strong>Harness Engineering</strong> = the runtime infrastructure that wraps around the LLM: the agent loop, tool dispatch, context management, permission system, hooks, memory, and extensibility. These 7 sections below cover the complete harness — everything that makes a coding agent production-grade beyond just calling an API.</div>
 
 <h3>Section 1: Agent Loop</h3>
 <h4>How V4 Does It</h4>
@@ -690,7 +691,18 @@ flowchart TD
 <div class="tab-content" id="tab-3">
 
 <h2>What V4 Learned from Runnable</h2>
-<p>29 features implemented across V4.1 through V4.3.1, organized by version. Plus features deliberately NOT implemented and why.</p>
+<p>35 features implemented across V4.1 through V4.3.2, organized by version. Plus features deliberately NOT implemented and why.</p>
+
+<h3>V4.3.2 (6 features - Complete Runnable Integration)</h3>
+<table>
+<tr><th>Feature</th><th>From Runnable</th><th>V4 Implementation</th></tr>
+<tr><td>Cache-breakage detection</td><td><code>postCompactCleanup</code> pattern</td><td>Detects when compact invalidates Bedrock cache, warns user</td></tr>
+<tr><td>WHEN-not-WHAT tool descriptions</td><td>90-line Bash tool desc</td><td>5 tools: read_file, glob, grep, bash, task with explicit WHEN/WHEN NOT</td></tr>
+<tr><td>Verify agent (adversarial testing)</td><td><code>verificationAgent.ts</code></td><td>New "verify" sub-agent type that tries to BREAK implementation</td></tr>
+<tr><td>Explore agent RO enforcement</td><td><code>exploreAgent.ts</code></td><td>"STRICTLY PROHIBITED" from file modifications in prompt</td></tr>
+<tr><td>Bash git safety in tool desc</td><td><code>BashTool/prompt.ts</code></td><td>Git safety rules directly in bash tool description</td></tr>
+<tr><td>Absolute path requirement</td><td>Subagent notes</td><td>All 4 sub-agent types require absolute paths in output</td></tr>
+</table>
 
 <h3>V4.1.0 (6 features - Foundation)</h3>
 <table>
@@ -749,12 +761,12 @@ flowchart TD
 <h3>NOT Implemented (and Why)</h3>
 <table>
 <tr><th>Pattern</th><th>Runnable Source</th><th>Reason NOT Implemented</th></tr>
-<tr><td>Coordinator Mode</td><td><code>coordinatorMode.ts</code></td><td>Requires two incompatible system prompts + mode switching. Deferred to V4.4.</td></tr>
+<tr><td>Coordinator Mode</td><td><code>coordinatorMode.ts</code></td><td><strong>Agentic relevance: HIGH</strong>. Pure dispatcher that can't execute — only delegates via TeamCreate/SendMessage. Requires REPLACING the entire system prompt (not adding to it). V4 uses task tool with depth limiting instead — simpler but less powerful for large multi-agent workflows. Deferred: needs architectural redesign.</td></tr>
 <tr><td>SendMessage Tool</td><td><code>SendMessageTool/</code></td><td>Requires async message queue infrastructure. Not applicable to sync sub-agents.</td></tr>
-<tr><td>Fork Subagent</td><td><code>forkSubagent.ts</code></td><td>Requires byte-identical API prefix. Bedrock caching mechanism is different.</td></tr>
+<tr><td>Fork Subagent</td><td><code>forkSubagent.ts</code></td><td><strong>Agentic relevance: HIGH</strong>. Creates child with parent's exact API prefix for 60%+ token savings via cache sharing. <strong>Cannot implement</strong>: Bedrock's prompt cache is server-managed — you can't control the byte-level API prefix. Anthropic's direct API allows this; Bedrock doesn't expose the mechanism.</td></tr>
 <tr><td>Position-pinned Cache Edits</td><td><code>microCompact.ts</code></td><td>Requires tracking edit positions across API calls. Very high complexity.</td></tr>
 <tr><td>Reactive Compact</td><td><code>autoCompact.ts</code></td><td>Wastes one API call to hit PTL error. V4's PTL retry is more efficient.</td></tr>
-<tr><td>Context Collapse</td><td><code>compact.ts</code></td><td>Complex projection-based folding. V4's microcompact + autocompact sufficient for SageMaker.</td></tr>
+<tr><td>Context Collapse</td><td><code>compact.ts</code></td><td><strong>Agentic relevance: MEDIUM</strong>. Non-destructive projection that "folds" context (can unfold later). V4 uses destructive summarization instead. Tradeoff: projection preserves exact content but adds bookkeeping complexity. V4's multi-tier thresholds (70%/80%/90%) compensate effectively.</td></tr>
 <tr><td>Snip Boundaries</td><td><code>snipCompact.ts</code></td><td>UI/history feature not applicable to Jupyter notebook context.</td></tr>
 <tr><td>LLM Bash Classifier</td><td><code>bashPermissions.js</code></td><td>Requires LLM call per bash command. V4's static regex classifier is sufficient.</td></tr>
 <tr><td>tree-sitter AST</td><td><code>BashPermissionRequest.tsx</code></td><td>Adds dependency complexity. V4's regex + allowlist sufficient in SageMaker sandbox.</td></tr>
