@@ -79,7 +79,8 @@ Applies widget config and calls `create_chat_ui()`.
 |------|-------------|-------|-----------|
 | build | Build, compile, fix errors, run tests | All 22 | 25 |
 | plan | Architecture analysis, planning (read-only) | 11 | 15 |
-| explore | Fast file search, codebase navigation | 5 | 10 |
+| explore | Fast file search, codebase navigation (STRICTLY read-only) | 5 | 10 |
+| verify | Adversarial testing — tries to BREAK the code | 7 | 15 |
 | general | General coding tasks | 11 | 15 |
 | review | Security, quality, performance review | 6 | 10 |
 
@@ -185,6 +186,7 @@ CONFIG.max_turns = 80
 
 | Version | Key Changes |
 |---------|-------------|
+| V4.3.2 | Complete Runnable learning: cache-breakage detection, WHEN-not-WHAT tool descriptions, verify agent, explore RO enforcement, bash git safety, absolute paths |
 | V4.3.1 | Prompt engineering upgrade: 6 system prompt sections, 7 tool descriptions, sub-agent structured output, compact zero-tool mode |
 | V4.3.0 | Diminishing returns, memory 200-line cap, cold-cache microcompact, auto-memory guard, cache indicator, cache savings USD |
 | V4.2.1 | FILE_UNCHANGED_STUB, parallel RO tools, PTL retry, Bedrock cache fix |
