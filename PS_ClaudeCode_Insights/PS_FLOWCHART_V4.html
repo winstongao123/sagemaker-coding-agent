@@ -373,9 +373,9 @@ flowchart TD
     F --> G[Create child Bedrock client]
     G --> H[Clear child file-context markers]
     H --> I{Several task calls?}
-    I -->|Yes| J[Run sub-agents in parallel\nup to 4 workers]
+    I -->|Yes| J["Run sub-agents in parallel (up to 4 workers)"]
     I -->|No| K[Run single sub-agent]
-    J --> L[Collect outputs\nrestore parent markers]
+    J --> L["Collect outputs, restore parent markers"]
     K --> L
     L --> M([Parent loop continues])
     </div>
