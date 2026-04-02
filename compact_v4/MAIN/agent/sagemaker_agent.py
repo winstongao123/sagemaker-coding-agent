@@ -5549,7 +5549,7 @@ TOOLS = {
         }, "required": []}),
 
     "task": (tool_task, True,
-        "Spawn sub-agent for complex tasks. WHEN: multi-file research, code review, complex implementation, tasks that need isolation. WHEN NOT: simple file reads (use read_file), quick searches (use glob/grep directly), single-step operations. Types: explore (read-only search), plan (architecture), review (code review), build (full dev), general (multi-step). Write prompts like briefing a colleague: explain what, why, and enough context to make judgment calls. Never delegate understanding — synthesize sub-agent findings yourself.",
+        "Spawn sub-agent for complex tasks. WHEN: multi-file research, code review, complex implementation, tasks that need isolation, adversarial testing. WHEN NOT: simple file reads (use read_file), quick searches (use glob/grep directly), single-step operations. Types: explore (read-only search), plan (architecture), review (code review), verify (adversarial testing — tries to BREAK the code), build (full dev), general (multi-step). Write prompts like briefing a colleague: explain what, why, and enough context to make judgment calls. Never delegate understanding — synthesize sub-agent findings yourself.",
         {"type": "object", "properties": {
             "description": {"type": "string", "description": "3-5 word summary"},
             "prompt": {"type": "string", "description": "Complete task instructions with context"},
@@ -6063,7 +6063,7 @@ class Agent:
         self._turn_output_tokens: list = []  # Rolling window of output token counts per turn
         self._diminishing_warned: bool = False  # Only warn once per run() call
         # V4.3.2: Cache-breakage detection (from Runnable analysis — postCompactCleanup pattern)
-        self._cache_broken_by_compact: bool = False  # Set True after compact, reset on next cache HIT
+        self._cache_broken_by_compact: bool = False  # Set True after compact, reset on next API call (cache HIT or miss-with-warning)
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
         """Ask the user a question and wait for response via text input widget."""
