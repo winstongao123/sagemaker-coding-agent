@@ -71,17 +71,36 @@ details > div, details > p, details > pre, details > table, details > .chart-con
 .badge-no { background: #3a1a1a; color: #f44747; }
 .badge-partial { background: #3a3a1a; color: #dcdcaa; }
 .badge-v4 { background: #1a2a3a; color: var(--accent2); }
+/* Responsive — iPad */
+@media (max-width: 1024px) {
+  .shell { padding: 16px; }
+  .chart-container { padding: 14px; }
+  .mermaid { min-height: 150px; }
+  table { font-size: 12px; }
+}
+/* Responsive — iPhone / small phones */
 @media (max-width: 768px) {
-  .shell { padding: 12px; }
-  .tab { padding: 10px 12px; font-size: 12px; }
-  .stats-row { gap: 8px; }
-  .stat-box { min-width: 80px; padding: 8px 10px; }
+  .shell { padding: 10px; }
+  .tab { padding: 10px 10px; font-size: 12px; min-height: 44px; }
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+  .stats-row { gap: 6px; }
+  .stat-box { min-width: 70px; padding: 8px 8px; flex: 1 1 auto; }
+  .stat-num { font-size: 18px; }
   h2 { font-size: 18px; }
-  table { font-size: 11px; }
+  h3 { font-size: 15px; }
+  table { font-size: 11px; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .chart-container { padding: 10px; margin: 10px 0; }
+  .mermaid svg { max-width: 100%; height: auto !important; }
+  pre { font-size: 11px; padding: 10px; }
+  .callout { font-size: 12px; padding: 10px 12px; }
+  details summary { font-size: 13px; padding: 10px 12px; }
 }
 @media (max-width: 375px) {
-  .tab { padding: 8px 8px; font-size: 11px; }
-  .header h1 { font-size: 20px; }
+  .tab { padding: 8px 6px; font-size: 10px; }
+  .header h1 { font-size: 18px; }
+  .stat-num { font-size: 16px; }
+  .stat-label { font-size: 9px; }
+  body { font-size: 13px; }
 }
 </style>
 </head>
@@ -154,6 +173,22 @@ flowchart TD
   </div>
 </div>
 <div class="callout learned">The simple while-loop design was directly inspired by Runnable's query() async generator. V4 chose the same "loop not DAG" philosophy because reliability beats complexity in production agents.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>V4 vs Runnable loop differences</strong>:</p>
+<table>
+<tr><th>Aspect</th><th>V4</th><th>Runnable</th></tr>
+<tr><td>Language</td><td>Python (single file, ~8,500 lines)</td><td>TypeScript (1,884 files)</td></tr>
+<tr><td>API</td><td>AWS Bedrock InvokeModel</td><td>Anthropic Messages API (streaming)</td></tr>
+<tr><td>Streaming</td><td>No streaming tool_use (Bedrock limitation)</td><td>StreamingToolExecutor pre-execution</td></tr>
+<tr><td>Recovery paths</td><td>PTL retry (3), budget check, diminishing returns</td><td>7 Continue Sites</td></tr>
+<tr><td>Parallelism</td><td>ThreadPoolExecutor for RO tools</td><td>JavaScript async/await</td></tr>
+</table>
+<p><strong>Why single-file?</strong> V4 runs in SageMaker Jupyter notebooks where distributing multiple files is impractical. The single-file design means you can <code>%run sagemaker_agent.py</code> and everything is loaded.</p>
+<p><strong>Thinking budget</strong>: V4-specific feature. When <code>CONFIG.thinking_budget > 0</code>, the API request includes a thinking block that gives the model extended reasoning time. Not available in Runnable.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 2: BedrockClient -->
 <div class="chart-container">
@@ -402,6 +437,21 @@ flowchart TD
   </div>
 </div>
 <div class="callout important">V4's 16-layer security is its strongest advantage over Runnable. Runnable has 7 layers designed for desktop/CLI. V4 has 16 layers designed for shared cloud infrastructure where a single security breach could compromise other users' AWS resources.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Why 16 layers vs Runnable's 7?</strong></p>
+<p>Runnable runs on a user's own machine — if the AI deletes something, only that user is affected. V4 runs on shared SageMaker infrastructure where one agent could:</p>
+<ul>
+<li>Access other users' files (workspace boundary prevents this)</li>
+<li>Use AWS services to exfiltrate data (bedrock-only enforcement prevents this)</li>
+<li>Run arbitrary Python with <code>import os; os.system('rm -rf /')</code> (AST import validation + runtime sandbox prevent this)</li>
+<li>Exhaust shared compute resources (cost budget prevents this)</li>
+</ul>
+<p><strong>Defense-in-depth</strong>: No single layer is "the security". Each layer catches what the previous one might miss. Even if an attacker bypasses the bash allowlist, the dangerous pattern blocklist catches injection. Even if that's bypassed, the RO classifier requires user approval. Even if the user approves, the workspace boundary prevents damage outside the workspace.</p>
+<p><strong>Fail-closed design</strong>: Unknown commands are blocked. Unknown Python imports are blocked. Unparseable bash is blocked. The default is DENY, not ALLOW.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 8: File Operations -->
 <div class="chart-container">

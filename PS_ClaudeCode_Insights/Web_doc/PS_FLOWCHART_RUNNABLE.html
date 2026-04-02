@@ -85,18 +85,36 @@ details > div, details > p, details > pre, details > table, details > .chart-con
 .badge-file { background: #1f3044; color: var(--accent); font-family: monospace; }
 .badge-verified { background: #1a3a1a; color: #6a9955; }
 
-/* Responsive */
+/* Responsive — iPad */
+@media (max-width: 1024px) {
+  .shell { padding: 16px; }
+  .chart-container { padding: 14px; }
+  .mermaid { min-height: 150px; }
+  table { font-size: 12px; }
+}
+/* Responsive — iPhone / small phones */
 @media (max-width: 768px) {
-  .shell { padding: 12px; }
-  .tab { padding: 10px 12px; font-size: 12px; }
-  .stats-row { gap: 8px; }
-  .stat-box { min-width: 80px; padding: 8px 10px; }
+  .shell { padding: 10px; }
+  .tab { padding: 10px 10px; font-size: 12px; min-height: 44px; /* touch target */ }
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+  .stats-row { gap: 6px; }
+  .stat-box { min-width: 70px; padding: 8px 8px; flex: 1 1 auto; }
+  .stat-num { font-size: 18px; }
   h2 { font-size: 18px; }
-  table { font-size: 11px; }
+  h3 { font-size: 15px; }
+  table { font-size: 11px; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .chart-container { padding: 10px; margin: 10px 0; }
+  .mermaid svg { max-width: 100%; height: auto !important; }
+  pre { font-size: 11px; padding: 10px; }
+  .callout { font-size: 12px; padding: 10px 12px; }
+  details summary { font-size: 13px; padding: 10px 12px; }
 }
 @media (max-width: 375px) {
-  .tab { padding: 8px 8px; font-size: 11px; }
-  .header h1 { font-size: 20px; }
+  .tab { padding: 8px 6px; font-size: 10px; }
+  .header h1 { font-size: 18px; }
+  .stat-num { font-size: 16px; }
+  .stat-label { font-size: 9px; }
+  body { font-size: 13px; }
 }
 </style>
 </head>
@@ -170,6 +188,28 @@ flowchart TD
   </div>
 </div>
 <div class="callout beginner">The agent works like a conversation loop. User says something -> AI thinks -> AI uses tools -> AI sees results -> AI thinks again. This repeats until the AI decides it's done. There is NO pre-planned workflow -- each step decides the next step.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Why a loop, not a DAG?</strong> Most AI frameworks (LangGraph, CrewAI) use directed acyclic graphs to plan workflows upfront. Anthropic chose a simple while(true) loop because:</p>
+<ul>
+<li>Coding tasks are inherently unpredictable — you don't know what tools you'll need until you see the code</li>
+<li>Error recovery is simpler in a loop (just retry the turn) than in a DAG (need to replan the graph)</li>
+<li>The LLM itself is the "planner" — it decides each next step based on what it learned so far</li>
+</ul>
+<p><strong>7 Continue Sites</strong>: The loop has 7 special recovery points where it can retry instead of failing:</p>
+<ol>
+<li><code>next_turn</code> — normal continuation</li>
+<li><code>collapse_drain_retry</code> — context too big, collapse and retry</li>
+<li><code>reactive_compact_retry</code> — proactive compression needed</li>
+<li><code>max_output_tokens_escalate</code> — response was cut short, request more</li>
+<li><code>max_output_tokens_recovery</code> — escalation failed, recover gracefully</li>
+<li><code>stop_hook_blocking</code> — a hook is blocking, wait</li>
+<li><code>token_budget_continuation</code> — budget check before continuing</li>
+</ol>
+<p><strong>Key files</strong>: <code>src/query.ts</code> (1,728 lines — the async generator), <code>src/QueryEngine.ts</code> (1,155 lines — session management)</p>
+</div>
+</details>
 
 <!-- FLOWCHART 2: Context Management Pipeline -->
 <div class="chart-container">
@@ -202,6 +242,22 @@ flowchart TD
   </div>
 </div>
 <div class="callout beginner">Imagine you're writing a very long essay but your paper can only hold 200 pages. Instead of throwing away your entire essay at page 200, Claude Code first shrinks old paragraphs (microcompact), then writes a summary of everything so far (autocompact), and only as a last resort collapses sections. It always keeps the most recent and important parts.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Why 4 layers?</strong> Each layer is progressively more expensive:</p>
+<table>
+<tr><th>Layer</th><th>Cost</th><th>Quality Loss</th><th>When Used</th></tr>
+<tr><td>Tool Result Budget</td><td>Zero (just trimming)</td><td>Low (old results only)</td><td>~80% utilization</td></tr>
+<tr><td>Microcompact</td><td>Zero (no LLM call)</td><td>Medium (stubs replace content)</td><td>~85% utilization</td></tr>
+<tr><td>AutoCompact</td><td>One LLM call (~2K tokens)</td><td>Medium-High (summarized)</td><td>~87% utilization</td></tr>
+<tr><td>Context Collapse</td><td>Zero (projection)</td><td>Low (can unfold later)</td><td>~90% utilization</td></tr>
+</table>
+<p><strong>Post-compact cleanup</strong>: After autocompact, Claude Code automatically re-reads the last 5 edited files (max 5K tokens each) and re-activates the current skill context (max 25K tokens). This restores critical context that was lost in the summary.</p>
+<p><strong>Circuit breaker</strong>: If autocompact fails 3 times in a row, it stops trying (prevents wasting API calls on a broken compact loop).</p>
+<p><strong>Key files</strong>: <code>src/services/compact/autoCompact.ts</code>, <code>microCompact.ts</code>, <code>snipCompact.ts</code></p>
+</div>
+</details>
 
 <!-- FLOWCHART 3: Sub-agent System -->
 <div class="chart-container">
@@ -246,6 +302,19 @@ flowchart TD
   </div>
 </div>
 <div class="callout beginner">Think of sub-agents like asking a colleague to research something. You give them limited access (read-only for quick searches, full access for complex tasks), they work independently, and report back in a structured format. They share your office (same process) but have their own notepad (isolated state).</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Not separate processes</strong>: Unlike LangGraph's "graph nodes" or CrewAI's "agents", Runnable's sub-agents are just recursive calls to the same <code>query()</code> function. The difference is:</p>
+<ul>
+<li><strong>Tool restriction</strong>: Explore agents only get read-only tools; General agents get everything</li>
+<li><strong>State isolation</strong>: <code>readFileState</code> is cloned, <code>setAppState</code> becomes a no-op, <code>abortController</code> gets a new child</li>
+<li><strong>Git worktree</strong>: When <code>isolation: "worktree"</code> is set, the sub-agent gets its own git worktree (isolated copy of the repo) so it can make changes without conflicting with the parent</li>
+</ul>
+<p><strong>Fork subagent (cache optimization)</strong>: Fork creates a child whose API request starts with the EXACT same bytes as the parent. Since Anthropic's caching is prefix-based, the child gets the parent's entire cached context for free — saving 60%+ tokens. This is the most token-efficient way to delegate work.</p>
+<p><strong>Key files</strong>: <code>src/tools/AgentTool/</code>, <code>forkSubagent.ts</code>, <code>src/coordinator/coordinatorMode.ts</code></p>
+</div>
+</details>
 
 <!-- FLOWCHART 4: Memory System -->
 <div class="chart-container">
@@ -341,6 +410,23 @@ flowchart TD
   </div>
 </div>
 <div class="callout beginner">When Claude wants to use multiple tools at once (like reading 3 files), safe tools run together (parallel) while risky tools (like running bash commands) run one at a time. If a tool returns a huge result (like listing 10,000 files), it gets saved to disk and only a summary goes back to the AI -- preventing context overflow.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>partitionToolCalls()</strong> in <code>toolOrchestration.ts</code> splits each batch of tool requests:</p>
+<ul>
+<li><strong>Read-only batch</strong>: Read, Glob, Grep, ListDir — all safe to run simultaneously (max 10 parallel)</li>
+<li><strong>Write batch</strong>: Bash, Edit, Write — must run one at a time (side effects)</li>
+</ul>
+<p><strong>Result size management</strong>:</p>
+<ul>
+<li>Per-tool cap: 50,000 characters — larger results truncated</li>
+<li>Per-batch cap: 200,000 characters aggregate — if total exceeds, largest results truncated first</li>
+<li>Disk offload: Results over 100K chars saved to temp file, only a summary injected into context</li>
+</ul>
+<p><strong>Permission flow</strong>: In "auto" mode, an independent LLM classifier (2-second timeout) decides if a command is safe. This prevents blocking the user for every <code>ls</code> or <code>git status</code> while still catching dangerous commands.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 6: Prompt Assembly -->
 <div class="chart-container">

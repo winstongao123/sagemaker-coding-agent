@@ -6,7 +6,7 @@
 
 # SageAgent V4
 
-AI coding assistant for SageMaker notebooks. 22 tools, 16 security layers, prompt caching, sub-agent coordination. v4.3.1.
+AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, verify agent. v4.3.2.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
