@@ -5485,10 +5485,10 @@ TOOLS = {
     "python_exec": (tool_python_exec, True, "Execute Python code for data processing, calculations, scripting.",
         {"type": "object", "properties": {"code": {"type": "string"}, "timeout": {"type": "integer", "description": "Seconds (max 300)"}}, "required": ["code"]}),
 
-    "create_word": (tool_create_word, True, "Create .docx with markdown. Headings, bold, tables, ![caption|width=6.5](image.png). Create charts FIRST as PNG.",
+    "create_word": (tool_create_word, True, "Create .docx with markdown. WHEN: producing final reports, proposals, documentation. WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) then create_word with ![caption|width=6.5](chart.png) to embed. Use # headings for structure, **bold** for emphasis, - bullets for lists, | tables |. Do NOT mix raw markdown with plain text — use consistent formatting throughout. include_toc=true for long documents.",
         {"type": "object", "properties": {"filepath": {"type": "string"}, "content": {"type": "string", "description": "Markdown content with ![alt](img) for images"}, "title": {"type": "string"}, "include_toc": {"type": "boolean"}, "header": {"type": "string"}, "footer": {"type": "string"}}, "required": ["filepath", "content"]}),
 
-    "create_excel": (tool_create_excel, True, "Create .xlsx. Optional chart: set chart_type + x_column + y_columns.",
+    "create_excel": (tool_create_excel, True, "Create .xlsx with data and optional embedded chart. WHEN: data tables, spreadsheets with visualizations. For chart: set chart_type (bar/line/pie) + x_column + y_columns. Data format: [{col1: val1, col2: val2}, ...]. Charts are embedded IN the sheet (not separate files).",
         {"type": "object", "properties": {
             "filepath": {"type": "string"},
             "data": {"type": "array", "description": "[{col:val}]"},
@@ -5510,7 +5510,7 @@ TOOLS = {
             }, "required": ["type", "source"]}}
         }, "required": ["filepath", "cells"]}),
 
-    "create_chart": (tool_create_chart, True, "Create chart PNG. Types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo.",
+    "create_chart": (tool_create_chart, True, "Create chart PNG image. WHEN: generating visualizations for Word/PDF reports (create chart FIRST, then embed with ![](path.png)). Types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo. Always set title, xlabel, ylabel for professional output. Use dpi=150 for reports.",
         {"type": "object", "properties": {
             "chart_type": {"type": "string", "enum": ["bar", "grouped_bar", "stacked_bar", "line", "pie", "scatter", "horizontal_bar", "combo"]},
             "title": {"type": "string"},
@@ -5522,7 +5522,7 @@ TOOLS = {
             "style": {"type": "string"}
         }, "required": ["data"]}),
 
-    "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with structured sections.",
+    "create_pdf": (tool_create_pdf, True, "Create PDF document (.pdf) with structured sections. WHEN: formal reports, printable documents. Content array format: [{type:'heading',data:'Title'}, {type:'text',data:'Body'}, {type:'table',data:[rows]}, {type:'image',data:'chart.png'}]. Create charts FIRST as PNG, then reference in content array. Use page_size='a4' for international.",
         {"type": "object", "properties": {
             "filepath": {"type": "string", "description": "Output PDF path"},
             "title": {"type": "string", "description": "Document title"},
@@ -5952,7 +5952,7 @@ write_file to memory.md for cross-session context. Auto-loaded on start. Use 4 t
 Save decisions/patterns, not ephemeral task state. Do NOT save: code patterns (read from code), git history (git log is authoritative), fix recipes (fix is in the code), ephemeral paths explored this session.
 
 # Documents
-create_chart FIRST (PNG), then create_word/create_pdf with ![alt](image.png). Use /report skill for guided workflow.
+WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create_word or create_pdf with ![caption](chart.png) to embed. NEVER mix raw markdown syntax with plain text in documents — be consistent. For Excel: set chart_type + x_column + y_columns to embed chart directly in sheet. Use /report skill for guided workflow.
 
 # Security
 - Workspace boundary enforced. Write ops require approval.

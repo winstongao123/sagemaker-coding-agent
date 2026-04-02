@@ -226,6 +226,20 @@ flowchart TD
   </div>
 </div>
 <div class="callout beginner">BedrockClient is V4's "translator" to AWS. It takes the agent's prompt and tools, packages them into the exact format AWS Bedrock expects, sends the request, and translates the response back. Think of it as a postal service between V4 and the AI model.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Request format</strong>: Bedrock's InvokeModel API takes a JSON body with three sections:</p>
+<ul>
+<li><strong>system</strong>: The system prompt (with <code>cache_control</code> block marking the cache boundary)</li>
+<li><strong>tools</strong>: Array of 25+ tool schemas (name + description + input_schema)</li>
+<li><strong>messages</strong>: The conversation history (user/assistant alternation)</li>
+</ul>
+<p><strong>Caching</strong>: The system + tools section is marked as cacheable. After the first API call, Bedrock caches this prefix. Subsequent calls get 90% discount on these tokens. V4.3.2's WHEN-not-WHAT descriptions pushed the total past Haiku's 4,096-token minimum, so <strong>Haiku caching now works</strong> (it was inactive in v4.3.1).</p>
+<p><strong>Thinking budget</strong>: V4-specific feature not in Runnable. When <code>CONFIG.thinking_budget > 0</code>, the request includes an extended thinking block that gives the model more reasoning time before responding.</p>
+<p><strong>Error handling</strong>: RetryHandler with exponential backoff (2s base, 60s max, 5 retries) handles rate limits (429), server errors (500-504), and quota exceeded.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 3: TokenTracker -->
 <div class="chart-container">
@@ -269,6 +283,19 @@ flowchart TD
   </div>
 </div>
 <div class="callout learned">Cache-aware cost tracking was implemented after studying Runnable's token management. V4 adds the per-turn cache indicator (WRITE/HIT/INACTIVE) which is V4-specific -- Runnable doesn't display this to the user.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Cost formula</strong>:</p>
+<pre>cost = (regular_input / 1000) * base_price          # Full price
+     + (cache_read / 1000) * base_price * 0.1        # 90% discount
+     + (cache_write / 1000) * base_price * 1.25       # 25% premium
+     + (output / 1000) * output_price                 # Full price</pre>
+<p><strong>Model-aware pricing</strong>: V4 tracks which model is actually used (not just CONFIG default). Haiku costs $1.10/M input, Sonnet costs $3.30/M. This ensures accurate cost display when switching models mid-session.</p>
+<p><strong>Budget enforcement</strong>: At 80% of <code>session_cost_limit</code>, a warning is displayed. At 100%, the session stops. This prevents runaway costs from long agent loops.</p>
+<p><strong>/cost command</strong> shows: total tokens, cache hit %, total USD spent, total USD saved from caching.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 4: Compactor -->
 <div class="chart-container">
@@ -314,6 +341,22 @@ flowchart TD
   </div>
 </div>
 <div class="callout beginner">When V4's conversation gets too long, it has two cleanup strategies. The fast way (microcompact): just replace old tool outputs with "you already read this file" stubs. The thorough way (autocompact): ask the AI to summarize everything, then replace the long history with the summary. If the summary itself is too long, it retries up to 3 times.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>Multi-tier thresholds</strong> (learned from Runnable's 4-layer approach):</p>
+<table>
+<tr><th>Threshold</th><th>Action</th><th>Cost</th></tr>
+<tr><td>70% context</td><td>Microcompact: replace old tool outputs with stubs</td><td>Zero (no API call)</td></tr>
+<tr><td>80% context</td><td>AutoCompact: LLM generates structured 9-section summary</td><td>One API call (~2K tokens)</td></tr>
+<tr><td>90% context</td><td>Post-send microcompact: aggressive cleanup after sending</td><td>Zero</td></tr>
+</table>
+<p><strong>Cold-cache optimization</strong>: If no API call for 30+ minutes, Bedrock's cache expires. V4 detects this and runs aggressive microcompact (keepRecent=1) to minimize wasted uncached tokens.</p>
+<p><strong>Circuit breaker</strong>: If autocompact fails 3 times consecutively, it pauses for the session (prevents wasting API calls).</p>
+<p><strong>Cache-breakage detection</strong> (v4.3.2): After compact, the message array changes, which may invalidate the Bedrock cache. V4 detects this and warns the user: "Cache restarted after compact."</p>
+<p><strong>Post-compact file re-read</strong>: After autocompact, V4 automatically re-reads recently edited files to restore critical context that was lost in summarization.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 5: Sub-agent System -->
 <div class="chart-container">
@@ -352,6 +395,24 @@ flowchart TD
   </div>
 </div>
 <div class="callout learned">Sub-agent structured output format (Scope/Result/Key Files/Files Changed/Issues) was directly adopted from Runnable's forkSubagent.ts. Context isolation (save/clear/restore) was inspired by Runnable's readFileState cloning pattern.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>6 agent types</strong> (v4.3.2 — added verify):</p>
+<table>
+<tr><th>Type</th><th>Tools</th><th>Purpose</th><th>Key Prompt Feature</th></tr>
+<tr><td>explore</td><td>5 (read-only)</td><td>Fast codebase search</td><td>"STRICTLY PROHIBITED from modifying files"</td></tr>
+<tr><td>verify</td><td>7</td><td>Adversarial testing</td><td>"Try to BREAK it" + VERDICT: PASS/FAIL/PARTIAL</td></tr>
+<tr><td>plan</td><td>11</td><td>Architecture analysis</td><td>Read-only + structured plan output</td></tr>
+<tr><td>review</td><td>6</td><td>Code review (4 categories)</td><td>Security/Quality/Performance/Testing + X/10 rating</td></tr>
+<tr><td>general</td><td>11</td><td>Multi-step coding tasks</td><td>Scope/Result/Key Files/Issues output</td></tr>
+<tr><td>build</td><td>All 22+</td><td>Full implementation</td><td>All tools, 25-turn max</td></tr>
+</table>
+<p><strong>Context isolation</strong>: When a sub-agent runs, the parent's file cache and messages are saved, cleared, and restored after the sub-agent completes. This prevents sub-agent actions from contaminating parent state.</p>
+<p><strong>Depth limiting</strong>: <code>CONFIG.subagent_max_depth</code> (default 2) prevents sub-agents from spawning sub-sub-sub-agents infinitely.</p>
+<p><strong>"Never delegate understanding"</strong>: In the system prompt, the agent is told to synthesize sub-agent findings itself, not blindly forward them. This prevents the #1 failure mode: coordinator becoming a message router.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 6: Memory System -->
 <div class="chart-container">
@@ -394,6 +455,28 @@ flowchart TD
   </div>
 </div>
 <div class="callout learned">4-type taxonomy, "already wrote" guard, 200-line/25KB cap, and memory-in-cached-prefix all adopted from Runnable. V4 doesn't have Runnable's semantic recall (LLM-ranked top-5) or Dream mode (background processing).</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>4-type taxonomy</strong> (from Runnable's memoryTypes.ts):</p>
+<ul>
+<li><strong>USER</strong>: Who the user is, their expertise, preferences. Example: "User works in Python, prefers concise answers"</li>
+<li><strong>FEEDBACK</strong>: What to repeat or avoid. Example: "Always ask before deleting files — user had bad experience." Structured as: Rule + Why + How to apply</li>
+<li><strong>PROJECT</strong>: Ongoing work context. Example: "Using JWT tokens for auth layer." Include absolute dates, not relative.</li>
+<li><strong>REFERENCE</strong>: External pointers. Example: "API docs at https://..."</li>
+</ul>
+<p><strong>WHAT_NOT_TO_SAVE</strong> (prevents memory bloat):</p>
+<ul>
+<li>Code patterns (read from code instead)</li>
+<li>Git history (use git log)</li>
+<li>Fix recipes (the fix is in the code)</li>
+<li>Ephemeral paths explored this session</li>
+<li>Activity logs (files read, tools called)</li>
+</ul>
+<p><strong>"Already wrote" guard</strong>: If the agent already wrote to memory.md during the session, skip auto-extraction at session end (prevents duplicates).</p>
+<p><strong>Caps</strong>: 200 lines OR 25KB, whichever is reached first. This keeps memory useful, not bloated.</p>
+</div>
+</details>
 
 <!-- FLOWCHART 7: Security Layers Overview -->
 <div class="chart-container">
@@ -485,6 +568,20 @@ flowchart TD
   </div>
 </div>
 <div class="callout learned">FILE_UNCHANGED_STUB was adopted from Runnable's FileReadTool pattern. In a typical coding session, the same file is read 5-10 times. Without the stub, each re-read costs 500-2000 tokens. With the stub, re-reads cost ~10 tokens.</div>
+<details>
+<summary>How it works (technical detail)</summary>
+<div>
+<p><strong>FILE_CACHE</strong>: An in-memory dict mapping file paths to (content, modification_time). When <code>read_file</code> is called:</p>
+<ol>
+<li>Check if path is in FILE_CACHE</li>
+<li>Compare current mtime with cached mtime</li>
+<li>If unchanged: return <code>"File unchanged since last read."</code> (~10 tokens)</li>
+<li>If changed or new: read from disk, update cache, return full content (~500-2000 tokens)</li>
+</ol>
+<p><strong>Token savings</strong>: In a typical 20-turn session, a key file might be read 8 times. Without the stub: 8 x 1000 = 8,000 tokens. With: 1000 + 7 x 10 = 1,070 tokens. <strong>87% savings.</strong></p>
+<p><strong>Cache invalidation</strong>: After compact (context compression), file cache markers are cleared so the next read returns full content (the AI lost the context of what was previously read).</p>
+</div>
+</details>
 
 </div>
 
@@ -511,6 +608,7 @@ flowchart TD
 <h3>Layer 4: Bash Command Allowlist (70 commands)</h3>
 <p><strong>What it blocks</strong>: Any bash command not on the allowlist.</p>
 <p><strong>How it works</strong>: The first word of each command is extracted and checked against a whitelist of 70 known-safe commands (ls, cat, grep, git, python, pip, etc.). Unknown commands are blocked.</p>
+<div class="callout beginner">Think of this like a restaurant menu. Only 70 "dishes" (commands) are available. If the AI tries to order something not on the menu, it's refused. This is a whitelist approach — safer than a blacklist because new dangerous commands are automatically blocked.</div>
 
 <h3>Layer 5: Bash Dangerous Pattern Blocklist (75 patterns)</h3>
 <p><strong>What it blocks</strong>: Dangerous patterns within allowed commands: <code>eval</code>, <code>$()</code> in dangerous contexts, pipe to shell, background processes, etc.</p>
@@ -538,6 +636,7 @@ flowchart LR
 
 <h3>Layer 6: Python Regex Validation (63 patterns)</h3>
 <p><strong>What it blocks</strong>: Dangerous Python patterns: <code>os.system()</code>, <code>subprocess.call()</code>, <code>exec()</code>, <code>eval()</code>, <code>open('/etc/')</code>, network access, etc.</p>
+<div class="callout beginner">Even if the AI writes "valid" Python code, it could contain hidden dangers like <code>subprocess.run("rm -rf /")</code>. This layer scans the code text with 63 regex patterns looking for dangerous function calls, before the code even runs.</div>
 
 <h3>Layer 7: Python AST Import Validation (67 modules)</h3>
 <p><strong>What it blocks</strong>: Any Python import not on the allowlist of 67 safe modules.</p>
@@ -564,6 +663,7 @@ flowchart LR
 <h3>Layer 8: Python Runtime Sandbox</h3>
 <p><strong>What it blocks</strong>: Even if code passes static analysis, runtime operations like <code>open()</code> and <code>os.remove()</code> are intercepted.</p>
 <p><strong>How it works</strong>: The sandbox replaces Python builtins with wrapped versions that enforce workspace boundaries at runtime.</p>
+<div class="callout beginner">Layers 6-7 check the code BEFORE it runs. Layer 8 watches it WHILE it runs. If the code tries to <code>open("/etc/shadow")</code> at runtime, the sandbox catches it even if the static analysis missed it. It's like having a security guard watching the code execute in real-time.</div>
 
 <h3>Layer 9: AWS Bedrock-Only Enforcement</h3>
 <p><strong>What it blocks</strong>: Any AWS API call that isn't to Bedrock (preventing S3 data theft, EC2 manipulation, IAM changes).</p>
@@ -618,6 +718,19 @@ flowchart TD
 <h4>Limitations</h4>
 <p>No streaming tool pre-execution (Bedrock limitation). No reactive compact. No Context Collapse (projection-based). Single-file makes large refactors harder.</p>
 <div class="callout beginner">V4's loop is simpler than Runnable's -- fewer recovery paths but covers the essential cases (prompt too long, budget exceeded, diminishing returns). The simplicity is a feature: less can go wrong.</div>
+<details>
+<summary>Harness Engineering: Why this design matters</summary>
+<div>
+<p><strong>What is harness engineering?</strong> It's the runtime infrastructure that wraps around the LLM — the loop, tools, context management, permissions, memory, and extensibility. It's what makes an AI agent production-grade vs a chatbot demo.</p>
+<p><strong>V4's harness design choices</strong>:</p>
+<ul>
+<li><strong>Single-file</strong>: All 8,500 lines in one file. Unusual but deliberate — SageMaker Jupyter notebooks need <code>%run sagemaker_agent.py</code> simplicity.</li>
+<li><strong>ReAct loop</strong>: Not a DAG, not a state machine. Simple while loop where the LLM decides each next step. Same philosophy as Runnable.</li>
+<li><strong>Tool-as-protocol</strong>: Each tool has (function, needs_approval, description, schema). The description IS prompt engineering — it shapes which tools the LLM picks.</li>
+<li><strong>Progressive degradation</strong>: Context too big? Microcompact first (free), then autocompact (1 API call), then PTL retry (fallback). Each level is more expensive but more thorough.</li>
+</ul>
+</div>
+</details>
 
 <h3>Section 2: Context Management</h3>
 <h4>How V4 Does It</h4>
@@ -684,6 +797,28 @@ flowchart TD
 <h4>Limitations</h4>
 <p>72 lines vs Runnable's 900+. Fewer conditional sections. No memoized section assembly. No feature-gated prompt sections. The gap is justified by V4's simpler environment (fewer tools, single-file, Bedrock-only).</p>
 <div class="callout beginner">V4's prompts are like a concise employee handbook (72 pages) vs Runnable's comprehensive manual (900 pages). Both cover the essentials; Runnable has more edge cases covered because it serves millions of users with diverse needs.</div>
+<details>
+<summary>V4 Prompt System (complete overview)</summary>
+<div>
+<p><strong>System prompt</strong> (73 lines, 11 sections):</p>
+<ol>
+<li><strong>System</strong>: Identity, system-reminder tags, auto-compression notice</li>
+<li><strong>Using Tools</strong>: "Do NOT use bash when dedicated tool exists" (WHEN-not-WHAT pattern)</li>
+<li><strong>Doing Tasks</strong>: Simplest approach first, read before edit, no gold-plating</li>
+<li><strong>Executing Actions</strong>: Reversibility awareness, git safety, confirm risky actions</li>
+<li><strong>Output</strong>: Concise markdown, no emoji, file_path:line references</li>
+<li><strong>Sub-agent Coordination</strong>: Never delegate understanding, parallel spawn, 4-phase workflow</li>
+<li><strong>Memory</strong>: 4-type taxonomy, WHAT_NOT_TO_SAVE inline exclusions</li>
+<li><strong>Documents</strong>: create_chart FIRST, then Word/PDF with embedded images</li>
+<li><strong>Security</strong>: Trust boundary, workspace enforcement</li>
+<li><strong>MCP</strong>: Auto-registered tools, prefer MCP when available</li>
+<li><strong>Commands</strong>: /cost, /revert, /verify, /checkpoint, /commands</li>
+</ol>
+<p><strong>Why 73 lines not 900?</strong> V4 uses Haiku (small model, 4,096-token cache minimum). Every token matters. The v4.3.2 WHEN-not-WHAT descriptions pushed the total past this threshold, enabling caching. Adding more would make the prompt bigger but wouldn't improve caching — it would just cost more.</p>
+<p><strong>Tool descriptions</strong>: 5 key tools use WHEN/WHEN NOT pattern (learned from Runnable's 90-line bash description). This reduces wasted tool calls by ~30% compared to simple "what it does" descriptions.</p>
+<p><strong>Compact prompt</strong>: Zero-tool mode ("You have ZERO tools — do NOT attempt tool calls") prevents ghost tool calls during summarization. 9-section format preserves: task, steps, files, decisions, approach, questions, results, errors, next step.</p>
+</div>
+</details>
 
 </div>
 
