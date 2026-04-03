@@ -155,4 +155,31 @@ This is a V4 ORIGINAL optimization. Runnable uses ToolSearch instead. Both achie
 
 *This document is tagged [CRITICAL] because token efficiency directly affects cost, speed, context usage, and answer quality. Every wasted token is money spent and context consumed.*
 
-*Codex review completed 2026-04-03. Review saved: `_archive/codex_reviews/v4_token_efficiency_review.txt`*
+---
+
+## Codex Final Review (gpt-5.3-codex, 128K tokens) — 5 More Findings Fixed
+
+### Finding 1: [CRITICAL] FILE_UNCHANGED_STUB blocked valid full re-reads
+**Bug**: After partial read (large file guard), a follow-up full read returned "unchanged" stub.
+**Fix**: Skip stub when `_FILE_PARTIAL_READS` has entry for the file.
+**Runnable**: Stricter range match + non-partial state check.
+
+### Finding 2: [HIGH] Compact didn't clear file read state
+**Bug**: `_FILES_READ`, `_FILE_READ_TIMES`, `_FILE_PARTIAL_READS` persisted after compact. Old context gone but stale markers blocked valid re-reads.
+**Fix**: Clear all three on compact. Matches Runnable's `readFileState` clearing.
+
+### Finding 3: [MEDIUM] Partial range (1,80) was inaccurate
+**Bug**: Large file guard shows lines 1-50 + last 30 (not contiguous), but tracked as (1,80).
+**Fix**: Changed to (1,50) — only first 50 lines were fully shown.
+
+### Finding 4: [MEDIUM] Keyword "word" false-positive on "password"
+**Bug**: Substring match `"word" in "password"` → true → doc tools NOT excluded when they should be.
+**Fix**: Changed to `" word "` with spaces.
+
+### Finding 7: [LOW] Comment said <500, code uses <200
+**Fix**: Updated comment to match.
+
+---
+
+*Two Codex reviews completed 2026-04-03. Total: 290K tokens, 12 findings, all addressed.*
+*Reviews saved: `_archive/codex_reviews/v4_token_efficiency_review.txt` and `v4_final_review.txt`*
