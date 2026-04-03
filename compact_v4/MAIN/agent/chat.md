@@ -38,7 +38,7 @@ Security & cost settings:
 - `require_tool_approval = True` -- approve/deny before execution
 - `session_cost_limit = 1.0` -- max $1 per session
 
-Custom slash commands: `/review`, `/explain`, `/test`, `/verify`, `/standards`
+Skills-based workflow: `/skills`, `/skill use <name>`, `/skill clear`, `/verify`
 
 Applies widget config and calls `create_chat_ui()`.
 
@@ -53,11 +53,10 @@ Applies widget config and calls `create_chat_ui()`.
 | Send message | Type in input box, press Send |
 | Stop agent | Click Stop button |
 | Check cost | `/cost` (shows token usage, cache savings, session cost) |
-| Code review | `/review filename.py` |
-| Explain code | `/explain filename.py` |
-| Generate tests | `/test filename.py` |
+| Activate skill | `/skill use review` |
+| Deactivate skills | `/skill clear` |
+| List skills | `/skills` |
 | Verify project | `/verify` |
-| Apply standards | `/standards filename.py` |
 | Revert file | `/revert filename.py` or `/revert all` |
 | Compact context | Click Compact button (or auto at 80%) |
 | Save/Load | Save button / Session dropdown + Load |

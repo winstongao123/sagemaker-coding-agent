@@ -16,7 +16,7 @@ A single-file AI coding assistant that runs inside a Jupyter notebook on AWS Sag
 8. [MCP (Model Context Protocol)](#mcp-model-context-protocol)
 9. [Sub-Agents](#sub-agents)
 10. [Architecture Concepts](#architecture-concepts)
-11. [Custom Slash Commands](#custom-slash-commands)
+11. [Skills Workflow](#skills-workflow-replaces-custom-commands)
 12. [Configuration File (agent_config.json)](#configuration-file-agent-config-json)
 13. [Permission Rules](#permission-rules)
 14. [Security](#security)
@@ -705,52 +705,41 @@ These are **not** the same thing:
 
 ---
 
-## Custom Slash Commands
+## Skills Workflow (Replaces Custom Commands)
 
-### What Are They?
+Skills are the recommended way to get structured behavior. They persist across messages and provide richer checklists than one-shot commands.
 
-Custom commands let you define reusable prompt templates. Instead of typing a long instruction every time, you type `/commandname arguments`.
-
-### How to Set Up
-
-Add to `agent_config.json`:
-```json
-{
-  "commands": {
-    "review": {
-      "template": "Review this code for bugs, security issues, and performance problems:\n$ARGUMENTS",
-      "description": "Code review",
-      "agent": "plan"
-    },
-    "test": {
-      "template": "Write comprehensive unit tests for:\n$ARGUMENTS",
-      "description": "Generate tests"
-    },
-    "explain": {
-      "template": "Explain this code in simple terms, suitable for a junior developer:\n$ARGUMENTS",
-      "description": "Code explainer"
-    }
-  }
-}
-```
-
-### How to Use
+### Typical Session
 
 ```
-/review app.py           → expands to "Review this code for bugs... app.py"
-/test my_module.py       → expands to "Write comprehensive unit tests for: my_module.py"
-/explain auth.py         → expands to "Explain this code in simple terms... auth.py"
-/commands                → lists all available custom commands
+/skill use coding-standards          ← turn on at start (stays active all session)
+"write a function to parse CSV"      ← agent follows KISS/DRY/YAGNI while coding
+/verify                              ← after done, runs build/lint/test/security/diff
+/skill use review                    ← activate review checklist
+"review the changes I just made"     ← agent follows 5-category checklist
+/skill clear                         ← deactivate all skills
 ```
 
-### Template Variables
+### Available Skills
 
-- `$ARGUMENTS` — everything you typed after the command name
-- `$1`, `$2` — first and second word after the command name
+| Skill | What it does |
+|-------|-------------|
+| `coding-standards` | KISS, DRY, YAGNI, naming, function design — turn on at session start |
+| `verify` | 6-phase: build → types → lint → test → security → diff |
+| `review` | 5-category code review (security/quality/performance/architecture/testing) |
+| `report` | Professional report generation (charts-first) |
+| `clara` | ClaRA 5-phase codebase review (~$6) |
 
-### Agent Routing
+### Skill Commands
 
-If `"agent"` is set (like `"plan"` in the review example), the expanded prompt is routed through that sub-agent type. This means `/review` runs in read-only mode automatically.
+```
+/skills              ← list all available skills
+/skill use <name>    ← activate (stays on until cleared)
+/skill clear         ← deactivate ALL
+/verify              ← shortcut: auto-activates verify + runs it
+```
+
+See `chat.ipynb` Cell 4 for detailed examples and creating custom skills.
 
 ---
 
@@ -1022,7 +1011,7 @@ Run the install cell again:
 | Analyze image | "Look at diagram.png and explain it" |
 | Fetch a URL | "Fetch https://example.com and summarize it" |
 | Code review | `/skill use code-review` then "Review app.py" |
-| Custom command | `/review sagemaker_agent.py` |
+| Activate skill | `/skill use review` then "review sagemaker_agent.py" |
 | Check cost | `/cost` |
 | Undo edit | `/revert app.py` |
 | Plan mode | Toggle Plan Mode ON, then "Analyze the architecture" |
