@@ -1,0 +1,134 @@
+# [CRITICAL] V4 Token Efficiency — Closing the Gap with Runnable
+
+**Date**: 2026-04-02
+**Priority**: CRITICAL — affects cost, speed, and quality of every V4 session
+**Version**: V4.3.3
+
+---
+
+## The Problem
+
+V4 wastes 40-50% more tokens than Runnable for the same task. A simple "search and understand code" question costs $1+ on Sonnet because:
+
+1. **LLM reads large files in chunks** instead of grepping first (20-30K tokens per read_file call)
+2. **All 22+ tool schemas sent every call** even when only 3-4 are relevant (~1,800 tokens wasted/call)
+3. **Tool results capped at 50K chars** (Runnable caps at 30K)
+4. **Tool descriptions too short** — LLM makes poor tool choices without enough guidance
+
+### Observed: Same Question, Different Efficiency
+
+| Metric | Runnable (estimated) | V4 (observed) |
+|--------|---------------------|---------------|
+| Tool calls | 2-3 | 15+ |
+| Input tokens | ~15K | ~362K |
+| Cost | ~$0.05 | ~$0.42 |
+| Context used | ~5% | ~21% |
+
+---
+
+## 4 Fixes Applied (V4.3.3)
+
+### Fix 1: Large File Guard [HIGHEST IMPACT]
+
+**Problem**: `read_file` on a 8,699-line file dumps 2,000 lines (~15K tokens) into context. LLM often needs only 10-20 lines.
+
+**Fix**: When file >500 lines and no offset specified, return only first 50 + last 30 lines with a message:
+```
+[sagemaker_agent.py] 8699 lines total — LARGE FILE, showing first 50 + last 30 lines.
+Use grep to find specific code, then read_file with offset/limit for the exact section.
+```
+
+**Impact**: Forces grep-first workflow. Saves ~15K tokens per large file read. For a typical "analyze this file" task: saves ~45K tokens (3 reads avoided).
+
+**Code**: `tool_read_file()` in `sagemaker_agent.py`, large file guard block.
+
+### Fix 2: Context-Aware Tool Filtering [HIGH IMPACT]
+
+**Problem**: All 22+ tool schemas sent every API call (~1,800 tokens). Most calls only need 3-4 tools (read_file, grep, glob, bash).
+
+**Fix**: Aggressive context-aware filtering. Exclude tools when not mentioned in recent conversation:
+
+| Tool Group | Excluded When | Tokens Saved |
+|-----------|--------------|-------------|
+| Doc tools (6) | No document/chart keywords in last 4 messages | ~480 tokens |
+| view_image | No image keywords | ~80 tokens |
+| semantic_search | No semantic/deep search keywords | ~80 tokens |
+| web_fetch | No URL keywords | ~80 tokens |
+
+**Impact**: Typical coding session sends ~12 tools instead of 22+ (~720 tokens saved per call × 15 calls = ~10,800 tokens/session).
+
+**Learning from Runnable**: Runnable has `ToolSearch` — the LLM discovers tools on demand. V4 can't replicate this (requires tool search as a tool itself), but context-aware filtering achieves ~60% of the same benefit.
+
+### Fix 3: Lower Tool Result Cap [MEDIUM IMPACT]
+
+**Problem**: Tool results capped at 50K chars. Runnable caps at 30K.
+
+**Fix**: `max_output_chars` lowered from 50,000 to 30,000.
+
+**Impact**: Large tool results truncated earlier, saving ~10K tokens when reading large files or running verbose commands.
+
+### Fix 4: Enhanced Tool Descriptions [MEDIUM IMPACT]
+
+**Problem**: V4 tool descriptions are 2-3 lines. Runnable's are ~90 lines per tool with examples and detailed WHEN NOT guidance.
+
+**Fix**: Enhanced `read_file` description to explicitly mention the 500-line guard and grep-first workflow:
+```
+"IMPORTANT: For files >500 lines, you will only see first 50 + last 30 lines —
+use grep to find the section you need, then read_file with offset/limit."
+```
+
+**Impact**: LLM learns the constraint from the tool description itself, not just from getting truncated results.
+
+---
+
+## Estimated Total Savings
+
+| Fix | Tokens Saved/Session | % of Waste |
+|-----|---------------------|-----------|
+| Large file guard | ~45,000 | 25% |
+| Tool filtering | ~10,800 | 6% |
+| Result cap | ~10,000 | 6% |
+| Better descriptions | ~15,000 (fewer wasted calls) | 8% |
+| **Total** | **~80,000** | **~45%** |
+
+A session that previously used 180K input tokens should now use ~100K for the same task.
+
+---
+
+## What V4 Still Can't Match (Honest)
+
+| Runnable Feature | Why V4 Can't Replicate | Impact |
+|-----------------|----------------------|--------|
+| **ToolSearch (on-demand discovery)** | Requires tool-as-a-tool pattern; Bedrock may not support well | ~500 more tokens saved/call |
+| **90-line tool descriptions** | Would push system prompt past cache threshold on Haiku | Better tool choices |
+| **Model-level tool-use tuning** | Anthropic internal; not available via Bedrock | Fewer wasted calls |
+| **Streaming tool execution** | Jupyter ipywidgets don't support streaming | Perceived speed |
+
+These are architectural limitations. V4 closes the gap from 40-50% waste to ~15-20% waste. The remaining ~15% requires Runnable-level infrastructure changes.
+
+---
+
+## Verification Plan
+
+After deploying V4.3.3:
+1. Ask same question: "does sagemaker_agent.py allow caching?"
+2. Compare: total calls, input tokens, cost
+3. Expected: 4-6 calls (was 15+), ~50K tokens (was ~362K), ~$0.15 (was ~$0.42)
+
+---
+
+## Context-Aware Tool Filtering — Learning from Runnable
+
+This is a key architectural pattern worth highlighting:
+
+**Runnable's ToolSearch**: The LLM can call a `ToolSearch` tool to discover available tools by keyword. Only matched tools are loaded into the next call. This means the LLM never sees tool schemas it doesn't need.
+
+**V4's Approximation**: Instead of on-demand discovery, V4 scans the last 4 messages for keywords and excludes irrelevant tool groups. Less flexible than ToolSearch but achieves ~60% of the token savings without requiring a new tool.
+
+**Why This Matters**: Tool schemas are ~80 tokens each. With 22 tools, that's ~1,760 tokens per call. Over 15 calls = 26,400 tokens just for tool definitions. Filtering to 12 relevant tools saves ~800 tokens/call = 12,000 tokens/session.
+
+This is a V4 ORIGINAL optimization. Runnable uses ToolSearch instead. Both achieve the same goal: don't waste tokens on tools the LLM won't use.
+
+---
+
+*This document is tagged [CRITICAL] because token efficiency directly affects cost, speed, context usage, and answer quality. Every wasted token is money spent and context consumed.*

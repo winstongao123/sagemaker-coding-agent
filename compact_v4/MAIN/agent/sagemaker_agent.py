@@ -836,7 +836,7 @@ class Config:
     max_turns: int = 60
     max_tokens: int = 16384  # Must be > thinking_budget when thinking enabled
     max_history: int = 20
-    max_output_chars: int = 50000  # Allow more output for large files
+    max_output_chars: int = 30000  # V4.3.3 [CRITICAL]: lowered from 50K to 30K (matches Runnable)
     max_file_size: int = 10 * 1024 * 1024  # 10MB
 
     # Context limits (Claude 3.5 = 200K tokens)
@@ -3107,6 +3107,22 @@ def tool_read_file(args: Dict) -> str:
 
         # Select lines with offset/limit
         total_lines = len(lines)
+
+        # V4.3.3 [CRITICAL]: Large file guard — if file >500 lines and no offset specified,
+        # return summary + first/last 50 lines instead of 2000 lines. Saves ~15K tokens per read.
+        # Forces LLM to use grep to find specific sections, then read_file with offset/limit.
+        if total_lines > 500 and offset == 0 and limit >= 2000:
+            head = lines[:50]
+            tail = lines[-30:]
+            head_text = "\n".join(f"{i+1:4}| {l[:2000]}" for i, l in enumerate(head))
+            tail_text = "\n".join(f"{total_lines-30+i+1:4}| {l[:2000]}" for i, l in enumerate(tail))
+            cache_tag = " [cached]" if cache_hit else ""
+            return (f"[{os.path.basename(path)}]{cache_tag} {total_lines} lines total — LARGE FILE, showing first 50 + last 30 lines.\n"
+                    f"Use grep to find specific code, then read_file with offset/limit for the exact section.\n\n"
+                    f"--- First 50 lines ---\n{head_text}\n\n"
+                    f"--- Last 30 lines ---\n{tail_text}\n\n"
+                    f"[{total_lines - 80} lines omitted. Use: read_file with offset=N limit=M, or grep to search.]")
+
         selected = lines[offset:offset + limit]
 
         # V4.1 #10: Track partial reads so edit_file can warn if file was only partially seen
@@ -5461,7 +5477,7 @@ for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
 # ============== TOOL REGISTRY ==============
 
 TOOLS = {
-    "read_file": (tool_read_file, False, "Read file contents with line numbers. WHEN: reading source code, configs, data files, images, PDFs, notebooks. WHEN NOT: searching for patterns (use grep), finding files by name (use glob). Use offset/limit for large files. You MUST read a file before editing it.",
+    "read_file": (tool_read_file, False, "Read file contents with line numbers. WHEN: reading a specific file or section you already know the location of. WHEN NOT: searching for patterns (use grep FIRST), finding files by name (use glob). IMPORTANT: For files >500 lines, you will only see first 50 + last 30 lines — use grep to find the section you need, then read_file with offset/limit. You MUST read a file before editing it.",
         {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
 
     "write_file": (tool_write_file, True, "Write content to file. You MUST read first if file exists. Prefer edit_file for modifications — use write_file only for new files or complete rewrites.",
@@ -6339,16 +6355,30 @@ class Agent:
             # Call LLM with retry logic (runs in background thread so stop button works)
             # In Plan Mode, send ONLY allowed tools (saves ~1,590 tokens/call)
             # Lazy-load: skip doc tools unless conversation mentions docs/charts/reports
+            # V4.3.3 [CRITICAL]: Aggressive context-aware tool filtering
+            # Only send tools relevant to the conversation. Each excluded tool saves ~80 tokens/call.
+            # Doc tools: only when docs/charts mentioned. Vision: only when images mentioned.
+            # Semantic search: only when deep search mentioned. Web fetch: only when URL mentioned.
             _active_allowlist = PLAN_MODE_ALLOWED_TOOLS if getattr(self, '_plan_mode', False) else self.tool_allowlist
             if _active_allowlist is None:
-                # Check if doc tools are needed (scan recent messages for keywords)
+                _recent_text = " ".join(str(m.get("content", ""))[:200].lower() for m in self.messages[-4:])
+                _exclude = set()
+                # Doc tools: only when documents/charts mentioned
                 _DOC_TOOLS = {"create_word", "create_excel", "create_chart", "create_pdf", "create_notebook", "create_markdown"}
                 _DOC_KEYWORDS = {"chart", "report", "document", "docx", "word", "excel", "xlsx", "pdf", "notebook", "ipynb", "plot", "graph", "spreadsheet", "visualization"}
-                _recent_text = " ".join(str(m.get("content", ""))[:200].lower() for m in self.messages[-4:])
-                _needs_docs = any(kw in _recent_text for kw in _DOC_KEYWORDS) or any(
-                    tc_name in _recent_text for tc_name in ("create_word", "create_chart", "create_pdf", "create_excel"))
-                if not _needs_docs:
-                    _active_allowlist = set(TOOLS.keys()) - _DOC_TOOLS
+                if not any(kw in _recent_text for kw in _DOC_KEYWORDS):
+                    _exclude |= _DOC_TOOLS
+                # Vision: only when image mentioned
+                if not any(kw in _recent_text for kw in {"image", "screenshot", "png", "jpg", "jpeg", "photo", "picture", "look at", "view_image"}):
+                    _exclude.add("view_image")
+                # Semantic search: only when semantic/deep/meaning search mentioned
+                if not any(kw in _recent_text for kw in {"semantic", "meaning", "find where", "code search", "semantic_search"}):
+                    _exclude.add("semantic_search")
+                # Web fetch: only when URL mentioned
+                if not any(kw in _recent_text for kw in {"http", "url", "fetch", "web_fetch", "website"}):
+                    _exclude.add("web_fetch")
+                if _exclude:
+                    _active_allowlist = set(TOOLS.keys()) - _exclude
             # Inject pending images into the conversation for Claude's vision
             if _PENDING_IMAGES:
                 _imgs = list(_PENDING_IMAGES)

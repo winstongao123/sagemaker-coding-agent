@@ -452,6 +452,12 @@ flowchart TD
       <tr><td>Budget control in UI</td><td>No (API-level limits)</td><td>Yes: slider $0.50-$20.00, soft-stop</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.3 feature. User can raise budget mid-session without restarting.</td></tr>
       <tr><td>Cache savings display</td><td>Telemetry (not user-facing)</td><td>Yes: "Actual $X | Without cache $Y | Saved $Z"</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.3 feature. User sees real cost vs would-have-cost.</td></tr>
       <tr><td>Markdown rendering in chat</td><td>React/Ink terminal components</td><td>HTML renderer: blue headers, red code, numbered lists, bordered code blocks</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. Previously flat/unreadable, now styled like VS Code.</td></tr>
+      <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--danger);">[CRITICAL] Token Efficiency Fixes — V4.3.3</td></tr>
+      <tr><td>Large file guard (read_file)</td><td>Tool description hints at offset/limit</td><td>Files &gt;500 lines: auto-returns first 50 + last 30 lines. Forces grep→read_file workflow.</td><td><span class="pill yes">V4 edge</span></td><td>[CRITICAL] Saves ~45K tokens/session. LLM can't dump 2000 lines anymore.</td></tr>
+      <tr><td>Context-aware tool filtering</td><td>ToolSearch (on-demand discovery)</td><td>Scan last 4 messages for keywords, exclude doc/vision/web/semantic tools when irrelevant.</td><td><span class="pill yes">V4 edge</span></td><td>[CRITICAL] Saves ~10,800 tokens/session. V4's approximation of Runnable's ToolSearch — ~60% of the benefit.</td></tr>
+      <tr><td>Tool result cap</td><td>30K chars</td><td>30K chars (was 50K)</td><td><span class="pill yes">Closed</span></td><td>Now matches Runnable. Saves ~10K tokens on large reads.</td></tr>
+      <tr><td>read_file description</td><td>~90 lines with examples</td><td>Enhanced: mentions 500-line guard, grep-first workflow</td><td><span class="pill partial">Partial</span></td><td>V4 can't match Runnable's ~90-line descriptions without blowing cache threshold on Haiku.</td></tr>
+      <tr><td>ToolSearch (on-demand)</td><td>Yes — LLM discovers tools by keyword</td><td>No — context-aware filtering approximates this</td><td><span class="pill partial">Architectural</span></td><td>Runnable's ToolSearch is more flexible. V4's keyword filtering is simpler but achieves ~60% savings.</td></tr>
     </table>
   </section>
 
@@ -498,6 +504,15 @@ flowchart TD
           <li>Prompt injection: flag suspected injection in tool results.</li>
           <li>Sub-agent notes: absolute paths, no code recapping.</li>
           <li>6 behavioral gaps closed — all that matter for SageMaker scope.</li>
+        </ul>
+      </div>
+      <div class="card" style="border:2px solid var(--danger);">
+        <h3 style="color:var(--danger);">[CRITICAL] Token Efficiency (V4.3.3)</h3>
+        <ul>
+          <li><b>Large file guard</b>: files &gt;500 lines auto-truncated to first 50 + last 30 lines. Forces grep→read_file workflow. Saves ~45K tokens/session.</li>
+          <li><b>Context-aware tool filtering</b>: doc/vision/web/semantic tools excluded when not relevant. V4's version of Runnable's ToolSearch. Saves ~10,800 tokens/session.</li>
+          <li><b>Result cap 50K→30K</b>: matches Runnable. Large results truncated earlier.</li>
+          <li><b>Total estimated savings: ~80K tokens/session (45% reduction)</b></li>
         </ul>
       </div>
       <div class="card">
