@@ -8660,12 +8660,12 @@ def create_chat_ui(mock_mode: bool = None):
     # Remove "Model:" label — dropdown is self-explanatory
     model_dropdown.description = ''
     model_dropdown.layout = widgets.Layout(width='260px')
-    # Model row: dropdown + plan mode + sub-agent models (all about model/mode selection)
-    model_row = widgets.HBox([model_dropdown, plan_mode_toggle, _sa_toggle])
-    model_row.layout = widgets.Layout(align_items='center', gap='10px')
-    # Toggles row: behavioral settings, compact layout
-    toggles_row = widgets.HBox([approval_checkbox, auto_compact_checkbox, dark_mode_checkbox])
-    toggles_row.layout = widgets.Layout(align_items='center', gap='4px 20px')
+    # Model row: dropdown + sub-agent (both about model selection, keep together)
+    model_row = widgets.HBox([model_dropdown, _sa_toggle])
+    model_row.layout = widgets.Layout(align_items='center', gap='8px')
+    # Toggles row: all checkboxes aligned together on one line
+    toggles_row = widgets.HBox([plan_mode_toggle, approval_checkbox, auto_compact_checkbox, dark_mode_checkbox])
+    toggles_row.layout = widgets.Layout(align_items='center', gap='0px 24px')
 
     # Group 2: Thinking
     thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider])
