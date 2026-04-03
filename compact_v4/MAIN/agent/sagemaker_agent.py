@@ -8662,20 +8662,15 @@ def create_chat_ui(mock_mode: bool = None):
     _sep3 = widgets.HTML('<hr style="margin:4px 0;border:none;border-top:1px solid #333;"/>')
     _sep4 = widgets.HTML('<hr style="margin:2px 0;border:none;border-top:1px solid #333;"/>')
 
-    # Group 1: Model + Mode + Approval (primary controls)
+    # Group 1: Model + Mode + Approval (primary controls, left-aligned like session row)
     model_dropdown.description = ''
     model_dropdown.layout = widgets.Layout(width='260px')
-    # Left group: model + sub-agents | Right group: plan + approval
-    _model_left = widgets.HBox([model_dropdown, _sa_toggle])
-    _model_left.layout = widgets.Layout(align_items='center', gap='8px')
-    _model_right = widgets.HBox([plan_mode_toggle, approval_checkbox])
-    _model_right.layout = widgets.Layout(align_items='center', gap='0px 20px')
-    model_row = widgets.HBox([_model_left, _model_right])
-    model_row.layout = widgets.Layout(align_items='center', justify_content='space-between', width='100%')
+    model_row = widgets.HBox([model_dropdown, _sa_toggle, plan_mode_toggle, approval_checkbox])
+    model_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
-    # Group 2: Thinking + secondary toggles
+    # Group 2: Thinking + secondary toggles (same gap as session/model rows)
     thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, auto_compact_checkbox, dark_mode_checkbox])
-    thinking_row.layout = widgets.Layout(align_items='center', gap='0px 12px')
+    thinking_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
     # Group 3: Session
     session_row = widgets.HBox([session_name_input, save_btn, session_dropdown, load_btn, new_btn])
