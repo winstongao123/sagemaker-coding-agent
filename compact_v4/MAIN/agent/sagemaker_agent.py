@@ -7069,14 +7069,11 @@ def create_chat_ui(mock_mode: bool = None):
                     score += 1
             return score >= 6
 
-        # Preserve alignment for unicode/ascii charts and box-drawing output.
-        if re.search(r"[\u2500-\u257F\u2580-\u259F]", text):
-            return (
-                f'<pre style="background:{chart_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;'
-                f'white-space:pre;line-height:1.3;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">'
-                f'{escape_html(text)}</pre>'
-            )
-        if _looks_ascii_art(lines) and not _has_markdown_table(lines):
+        # V4.3.3 fix: Removed early-return unicode check that wrapped ENTIRE response
+        # in <pre> when any box-drawing char appeared. Charts inside ``` code fences
+        # are handled by the code block parser below. Charts outside fences go through
+        # the line-by-line parser which handles them correctly.
+        if _looks_ascii_art(lines) and not _has_markdown_table(lines) and not any(re.search(r"\*\*|##", l) for l in lines):
             return (
                 f'<pre style="background:{chart_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;'
                 f'white-space:pre;line-height:1.3;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">'
