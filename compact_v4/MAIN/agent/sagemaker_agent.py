@@ -6346,42 +6346,44 @@ class Agent:
                 logging.warning(f"Worktree setup failed: {e}")
                 _worktree_path = None
 
-        # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
-        # When _skip_cache_isolation=True (parallel path), the caller already set up thread-local
-        # context isolation, so we just clear the thread-local set.
-        _saved_in_context = None
-        if not _skip_cache_isolation:
-            _saved_in_context = FILE_CACHE.save_and_clear_context()
-        else:
-            FILE_CACHE.clear_context()  # Clears thread-local context (safe: each thread has its own)
-
-        # Sub-agent stop check: scoped flag so stopping a sub-agent doesn't kill the parent
-        _sub_stopped = [False]
-        def _sub_stop_check():
-            if _sub_stopped[0]:
-                return True
-            # Propagate parent's stop (user clicked global stop)
-            if self.on_stop_check and self.on_stop_check():
-                _sub_stopped[0] = True
-                return True
-            return False
-
-        sub = Agent(
-            sub_client,
-            session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
-            on_approval=self.on_approval,
-            on_ask_user=self.on_ask_user,
-            on_tokens=self.on_tokens,
-            on_thinking=None,
-            on_stop_check=_sub_stop_check,
-            on_compact_fn=self.on_compact_fn,  # V4.2 V2-D: propagate to sub-agents
-            tool_allowlist=allow,
-            subagent_depth=self.subagent_depth + 1,
-        )
-        sub_output = []
-        is_plan_mode = agent_type == "plan"
-
+        # V4.4.0: Outer try/finally guarantees CONFIG.workspace is restored even if
+        # FILE_CACHE or Agent() constructor throws (worktree path would leak otherwise).
         try:
+            # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
+            # When _skip_cache_isolation=True (parallel path), the caller already set up thread-local
+            # context isolation, so we just clear the thread-local set.
+            _saved_in_context = None
+            if not _skip_cache_isolation:
+                _saved_in_context = FILE_CACHE.save_and_clear_context()
+            else:
+                FILE_CACHE.clear_context()  # Clears thread-local context (safe: each thread has its own)
+
+            # Sub-agent stop check: scoped flag so stopping a sub-agent doesn't kill the parent
+            _sub_stopped = [False]
+            def _sub_stop_check():
+                if _sub_stopped[0]:
+                    return True
+                # Propagate parent's stop (user clicked global stop)
+                if self.on_stop_check and self.on_stop_check():
+                    _sub_stopped[0] = True
+                    return True
+                return False
+
+            sub = Agent(
+                sub_client,
+                session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
+                on_approval=self.on_approval,
+                on_ask_user=self.on_ask_user,
+                on_tokens=self.on_tokens,
+                on_thinking=None,
+                on_stop_check=_sub_stop_check,
+                on_compact_fn=self.on_compact_fn,  # V4.2 V2-D: propagate to sub-agents
+                tool_allowlist=allow,
+                subagent_depth=self.subagent_depth + 1,
+            )
+            sub_output = []
+            is_plan_mode = agent_type == "plan"
+
             result = sub.run(
                 prompt,
                 output_fn=lambda t: (sub_output.append(str(t)) if len(sub_output) < 200 else None),
