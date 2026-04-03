@@ -7038,8 +7038,12 @@ def create_chat_ui(mock_mode: bool = None):
                 while i < len(lines) and not lines[i].strip().startswith("```"):
                     code_lines.append(lines[i])
                     i += 1
+                code_fg = "#abb2bf" if dark else "#383a42"
+                code_border = "#333" if dark else "#d0d7de"
                 out.append(
-                    f'<pre style="background:{code_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;">'
+                    f'<pre style="background:{code_bg};color:{code_fg};padding:12px;border-radius:6px;'
+                    f'border:1px solid {code_border};overflow:auto;font-size:12px;line-height:1.5;'
+                    f'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:8px 0;">'
                     f'{escape_html(chr(10).join(code_lines))}</pre>'
                 )
                 i += 1
@@ -7074,6 +7078,21 @@ def create_chat_ui(mock_mode: bool = None):
                     else:
                         break
                 out.append("<ul style=\"margin:8px 0 8px 20px;line-height:1.6;\">" + "".join([f"<li style=\"margin:2px 0;\">{x}</li>" for x in items]) + "</ul>")
+                continue
+
+            # Numbered lists (1. 2. 3.)
+            _ol_match = re.match(r"^(\d+)\.\s+(.*)$", stripped)
+            if _ol_match:
+                items = []
+                while i < len(lines):
+                    s = lines[i].strip()
+                    _nm = re.match(r"^(\d+)\.\s+(.*)$", s)
+                    if _nm:
+                        items.append(_format_inline_md(_nm.group(2).strip(), dark))
+                        i += 1
+                    else:
+                        break
+                out.append("<ol style=\"margin:8px 0 8px 20px;line-height:1.6;\">" + "".join([f"<li style=\"margin:2px 0;\">{x}</li>" for x in items]) + "</ol>")
                 continue
 
             m = re.match(r"^(#{1,3})\s+(.*)$", stripped)
