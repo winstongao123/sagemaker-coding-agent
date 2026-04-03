@@ -8631,52 +8631,79 @@ def create_chat_ui(mock_mode: bool = None):
     ui_state["get_header_html"] = get_header_html
     ui_state["update_tokens"] = update_tokens_display
 
-    # === REDESIGNED LAYOUT ===
-    # Top: Config bar (model, approval, thinking — always visible, key settings)
-    # Below: Session bar
-    # Then: Chat + Input + Buttons + Metrics
-    # Bottom: Collapsible advanced settings
+    # === LAYOUT v2 ===
+    # Grouped sections with visual separators. Status + metrics at bottom.
+    #
+    # ┌─ Header ─────────────────────────────────────────────────┐
+    # │  SageAgent V4  |  22 tools  |  ap-southeast-2            │
+    # ├─ Model & Controls ───────────────────────────────────────┤
+    # │  [Model ▼]  [⚙ Sub-Agents ▶]                            │
+    # │  [☑ Approval]  [☑ Dark Mode]  [Plan Mode]  [Auto-Compact]│
+    # ├─ Thinking ───────────────────────────────────────────────┤
+    # │  [☐ Extended Thinking]  [── Budget ──]  [── Temp ──]     │
+    # ├─ Session ────────────────────────────────────────────────┤
+    # │  [name___]  [💾 Save]  [▼ sessions]  [📂 Load]  [+ New] │
+    # ├─ Chat ───────────────────────────────────────────────────┤
+    # │  (conversation)                                          │
+    # │  [Type your message...                                  ]│
+    # │  [✈ Send] [■ Stop] [🗑 Clear]    [🔧 Compact] [🧹 Clean]│
+    # ├─ Metrics & Status ───────────────────────────────────────┤
+    # │  ▓▓░░░░░░ 14% context | In: 48K | Out: 1K | $0.06      │
+    # │  Model: connected | Plan: OFF | Skills: 0 | Cost: $0.06│
+    # └─────────────────────────────────────────────────────────┘
 
-    # Config bar: Model + key toggles (always visible)
-    config_row = widgets.HBox([
-        model_dropdown, _sa_toggle, approval_checkbox, dark_mode_checkbox,
-        plan_mode_toggle, auto_compact_checkbox
-    ])
-    config_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 10px')
+    _sep = widgets.HTML('<hr style="margin:4px 0;border:none;border-top:1px solid #333;"/>')
+    _sep2 = widgets.HTML('<hr style="margin:4px 0;border:none;border-top:1px solid #333;"/>')
+    _sep3 = widgets.HTML('<hr style="margin:4px 0;border:none;border-top:1px solid #333;"/>')
+    _sep4 = widgets.HTML('<hr style="margin:2px 0;border:none;border-top:1px solid #333;"/>')
 
-    # Thinking row (always visible — key config)
-    thinking_row = widgets.HBox([
-        thinking_checkbox, thinking_budget_slider, temp_slider
-    ])
+    # Group 1: Model & Controls
+    model_row = widgets.HBox([model_dropdown, _sa_toggle])
+    model_row.layout = widgets.Layout(align_items='center', gap='10px')
+    toggles_row = widgets.HBox([approval_checkbox, dark_mode_checkbox, plan_mode_toggle, auto_compact_checkbox])
+    toggles_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 12px')
+
+    # Group 2: Thinking
+    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider])
     thinking_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 12px')
 
-    # Session bar
-    session_row = widgets.HBox([
-        session_name_input, save_btn, session_dropdown, load_btn, new_btn
-    ])
+    # Group 3: Session
+    session_row = widgets.HBox([session_name_input, save_btn, session_dropdown, load_btn, new_btn])
     session_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
-    # Action buttons: Send/Stop left, utility right
+    # Action buttons: primary left, utility right
     action_left = widgets.HBox([send_btn, stop_btn, clear_btn])
+    action_left.layout = widgets.Layout(gap='4px')
     action_right = widgets.HBox([compact_btn, cleanup_btn, status_html])
+    action_right.layout = widgets.Layout(gap='4px')
     action_row = widgets.HBox([action_left, action_right])
     action_row.layout = widgets.Layout(justify_content='space-between', width='100%')
 
-    # Full UI layout
+    # Full UI layout — grouped with separators, status at bottom
     ui = widgets.VBox([
         header,
-        config_row,         # Model, approval, dark mode, plan mode
-        thinking_row,       # Thinking, budget, temperature
-        _sa_panel,          # Collapsible sub-agent model overrides
-        session_row,        # Session management
-        mode_html,          # Status line (model, plan, skills, cost)
-        todo_display,       # Collapsible todo list
-        chat_display,       # Conversation (HTML with internal scroll)
-        approval_box,       # Approval dialog (hidden until needed)
-        ask_user_box,       # Ask-user dialog (hidden until needed)
-        input_box,          # Message input
-        action_row,         # Send/Stop/Clear ... Compact/Clean/Status
-        tokens_html,        # Token metrics
+        # ── Model & Controls ──
+        model_row,
+        toggles_row,
+        _sa_panel,
+        _sep,
+        # ── Thinking ──
+        thinking_row,
+        _sep2,
+        # ── Session ──
+        session_row,
+        _sep3,
+        # ── Chat area ──
+        todo_display,
+        chat_display,
+        approval_box,
+        ask_user_box,
+        input_box,
+        action_row,
+        _sep4,
+        # ── Metrics & Status (bottom) ──
+        tokens_html,
+        mode_html,
     ])
 
     update_session_list()
