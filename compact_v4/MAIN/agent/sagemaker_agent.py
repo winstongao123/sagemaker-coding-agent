@@ -8679,21 +8679,21 @@ def create_chat_ui(mock_mode: bool = None):
     action_row = widgets.HBox([action_left, action_right])
     action_row.layout = widgets.Layout(justify_content='space-between', width='100%')
 
-    # Full UI layout — grouped with separators, status at bottom
+    # Full UI layout — session first (first action), config second, chat main, metrics bottom
     ui = widgets.VBox([
         header,
-        # ── Model & Controls ──
+        # ── Session (first action: load/new/save) ──
+        session_row,
+        _sep,
+        # ── Model & Controls (set once) ──
         model_row,
         toggles_row,
         _sa_panel,
-        _sep,
-        # ── Thinking ──
-        thinking_row,
         _sep2,
-        # ── Session ──
-        session_row,
+        # ── Thinking (set once) ──
+        thinking_row,
         _sep3,
-        # ── Chat area ──
+        # ── Chat area (95% of time here) ──
         todo_display,
         chat_display,
         approval_box,
@@ -8701,7 +8701,7 @@ def create_chat_ui(mock_mode: bool = None):
         input_box,
         action_row,
         _sep4,
-        # ── Metrics & Status (bottom) ──
+        # ── Metrics & Status (reference, bottom) ──
         tokens_html,
         mode_html,
     ])
