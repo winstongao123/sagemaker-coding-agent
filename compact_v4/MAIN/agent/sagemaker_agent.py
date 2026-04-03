@@ -6970,9 +6970,11 @@ def create_chat_ui(mock_mode: bool = None):
         """Render a safe subset of inline markdown."""
         s = escape_html(text)
         code_bg = "#2b2b2b" if dark else "#f3f4f6"
-        s = re.sub(r"`([^`]+)`", rf'<code style="background:{code_bg};padding:1px 4px;border-radius:4px;">\1</code>', s)
-        s = re.sub(r"\*\*\*([^*]+)\*\*\*", r"<b><i>\1</i></b>", s)
-        s = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
+        code_fg = "#e06c75" if dark else "#c7254e"
+        bold_fg = "#ffffff" if dark else "#000000"
+        s = re.sub(r"`([^`]+)`", rf'<code style="background:{code_bg};color:{code_fg};padding:1px 5px;border-radius:3px;font-size:0.9em;">\1</code>', s)
+        s = re.sub(r"\*\*\*([^*]+)\*\*\*", rf'<b style="color:{bold_fg};"><i>\1</i></b>', s)
+        s = re.sub(r"\*\*([^*]+)\*\*", rf'<b style="color:{bold_fg};">\1</b>', s)
         s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<i>\1</i>", s)
         return s
 
@@ -7071,22 +7073,27 @@ def create_chat_ui(mock_mode: bool = None):
                         i += 1
                     else:
                         break
-                out.append("<ul style=\"margin:6px 0 6px 18px;\">" + "".join([f"<li>{x}</li>" for x in items]) + "</ul>")
+                out.append("<ul style=\"margin:8px 0 8px 20px;line-height:1.6;\">" + "".join([f"<li style=\"margin:2px 0;\">{x}</li>" for x in items]) + "</ul>")
                 continue
 
             m = re.match(r"^(#{1,3})\s+(.*)$", stripped)
             if m:
                 level = len(m.group(1))
                 text_part = _format_inline_md(m.group(2), dark)
-                size = "18px" if level == 1 else "16px" if level == 2 else "14px"
-                out.append(f'<div style="font-weight:700;font-size:{size};margin:8px 0 4px 0;color:{fg};">{text_part}</div>')
+                accent = "#4a9eff" if dark else "#1a56db"
+                if level == 1:
+                    out.append(f'<div style="font-weight:800;font-size:20px;margin:16px 0 8px 0;color:{accent};border-bottom:1px solid {"#333" if dark else "#ddd"};padding-bottom:4px;">{text_part}</div>')
+                elif level == 2:
+                    out.append(f'<div style="font-weight:700;font-size:16px;margin:14px 0 6px 0;color:{accent};">{text_part}</div>')
+                else:
+                    out.append(f'<div style="font-weight:600;font-size:14px;margin:10px 0 4px 0;color:{fg};">{text_part}</div>')
                 i += 1
                 continue
 
             if stripped:
-                out.append(f'<div style="margin:2px 0;color:{fg};">{_format_inline_md(line, dark)}</div>')
+                out.append(f'<div style="margin:3px 0;color:{fg};line-height:1.5;">{_format_inline_md(line, dark)}</div>')
             else:
-                out.append("<div style=\"height:6px;\"></div>")
+                out.append("<div style=\"height:8px;\"></div>")
             i += 1
 
         return "".join(out)
@@ -7541,21 +7548,31 @@ def create_chat_ui(mock_mode: bool = None):
         overhead = TOKENS.get_fixed_overhead()
         true_ctx = ctx_tokens + overhead
 
+        # Cache savings (show only when caching has been active)
+        cache_savings = TOKENS.get_cache_savings_usd()
+        cache_part = ""
+        if cache_savings > 0:
+            cache_pct = (TOKENS.session_cache_read / TOKENS.session_input * 100) if TOKENS.session_input > 0 else 0
+            cache_part = f' | Cache: saved <b>${cache_savings:.4f}</b> ({cache_pct:.0f}% hit)'
+        elif TOKENS.session_input > 0 and cache_savings == 0:
+            cache_part = ' | Cache: inactive'
+
         tokens_html.value = f'''
         <div style="font-size:11px;color:{c["fg_muted"]};line-height:1.5;">
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
-                <span>📊 API: In <b>{stats["session_input"]:,}</b> | Out <b>{stats["session_output"]:,}</b> | Calls {stats["api_calls"]}</span>
-                <span>💰 Cost: <b>{cost_fmt}</b> | Last: {last_fmt} | {rate_str}</span>
+                <span>📊 In <b>{stats["session_input"]:,}</b> | Out <b>{stats["session_output"]:,}</b> | Calls {stats["api_calls"]}</span>
+                <span>💰 <b>{cost_fmt}</b> | Last: {last_fmt} | {rate_str}{cache_part}</span>
             </div>
-            <div style="margin-top:3px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
-                <span style="color:{ctx_color}">Context Window: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,}) — your conversation size, compacts at 80%</span>
-                <span style="font-size:10px;">Sent per call: ~{true_ctx:,} — conversation ({ctx_tokens:,}) + fixed overhead (~{overhead:,})</span>
+            <div style="margin-top:3px;">
+                <span style="color:{ctx_color}">Context: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,})</span>
             </div>
             <div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">
                 <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;"></div>
             </div>
         </div>
         '''
+        # Also refresh status line so cost stays in sync
+        update_mode_display()
 
     def add_message(role: str, content: str, tool_name: str = None):
         """Add message and re-render chat."""
