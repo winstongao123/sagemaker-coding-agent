@@ -2799,7 +2799,7 @@ class TokenTracker:
         cost_str = f"${self.session_cost:.4f}" if self.session_cost < 0.01 else f"${self.session_cost:.2f}"
         # V4.3 V3-F: show cache hit % and total money saved
         if self.session_cache_read > 0 and self.session_input > 0:
-            cache_pct = (self.session_cache_read / self.session_input) * 100
+            cache_pct = min(100, (self.session_cache_read / self.session_input) * 100)
             savings = self.get_cache_savings_usd()
             cost_str += f" (cache {cache_pct:.0f}% | saved ~${savings:.4f})"
         return cost_str
@@ -5901,12 +5901,15 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - Tool results and user messages may include <system-reminder> tags with system information.
 - Your conversation is automatically compressed as it approaches context limits — not limited by context window.
 
-# Using Tools
+# Using Tools — EFFICIENCY IS CRITICAL
 - Do NOT use bash when a dedicated tool exists: read_file (not cat/head/tail), edit_file (not sed/awk), write_file (not echo/cat heredoc), glob (not find/ls), grep (not grep/rg).
 - Reserve bash exclusively for git, pip, system commands, and scripts.
+- SEARCH BEFORE READ: Use grep to find specific code, not read_file to scan through large files. Each read_file adds thousands of tokens to context. grep finds the exact lines you need.
+- Use glob to locate files, then grep to find content, then read_file only for the specific section you need (use offset/limit).
 - Call multiple tools in parallel when independent. Do not wait for one to finish before starting another.
 - If a tool call fails, diagnose why before retrying. Don't retry identical calls blindly.
 - Prefer editing existing files to creating new ones. Do not create files unless necessary.
+- MINIMIZE TOOL CALLS: Each call costs tokens. Plan your approach before starting — don't explore aimlessly.
 
 # Doing Tasks
 - Go straight to the point. Try the simplest approach first without going in circles. Do not overdo it.
@@ -6259,10 +6262,13 @@ class Agent:
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
 
-            # Check cost budget
-            if TOKENS.is_over_budget():
-                msg = f"[Session cost ${TOKENS.session_cost:.4f} reached limit ${CONFIG.session_cost_limit:.2f}. Stopping.]"
+            # Check cost budget — soft stop: warn and ask, don't hard-kill
+            if TOKENS.is_over_budget() and not getattr(self, '_budget_override', False):
+                msg = f"[Session cost ${TOKENS.session_cost:.4f} reached limit ${CONFIG.session_cost_limit:.2f}. Increase Budget $ slider in UI to continue, or click Stop.]"
                 output_fn(msg)
+                # Check if user raised the limit while we were running
+                if not TOKENS.is_over_budget():
+                    continue  # User raised limit — keep going
                 return msg
 
             # Check context usage
@@ -7272,6 +7278,20 @@ def create_chat_ui(mock_mode: bool = None):
     load_btn = widgets.Button(description='Load', button_style='info', icon='folder-open')
     new_btn = widgets.Button(description='New', button_style='success', icon='plus')
 
+    # Session budget slider (live control)
+    budget_slider = widgets.FloatSlider(
+        value=CONFIG.session_cost_limit,
+        min=0.5, max=20.0, step=0.5,
+        description='Budget $:',
+        style={'description_width': '70px'},
+        layout=widgets.Layout(width='220px'),
+        readout_format='.1f'
+    )
+    def on_budget_change(change):
+        CONFIG.session_cost_limit = change['new']
+        update_mode_display()
+    budget_slider.observe(on_budget_change, names='value')
+
     # Live parameter controls
     temp_slider = widgets.FloatSlider(
         value=CONFIG.temperature,
@@ -7571,7 +7591,7 @@ def create_chat_ui(mock_mode: bool = None):
         cache_savings = TOKENS.get_cache_savings_usd()
         original_cost = session_cost + cache_savings  # What it WOULD have cost without caching
         if cache_savings > 0:
-            cache_pct = (TOKENS.session_cache_read / TOKENS.session_input * 100) if TOKENS.session_input > 0 else 0
+            cache_pct = min(100, (TOKENS.session_cache_read / TOKENS.session_input * 100)) if TOKENS.session_input > 0 else 0
             orig_fmt = f"${original_cost:.4f}" if original_cost < 0.01 else f"${original_cost:.2f}"
             save_fmt = f"${cache_savings:.4f}" if cache_savings < 0.01 else f"${cache_savings:.2f}"
             cost_line = f'💰 Actual: <b>{cost_fmt}</b> | Without cache: {orig_fmt} | Saved: <b style="color:#4caf50">{save_fmt}</b> ({cache_pct:.0f}% cached)'
@@ -8716,8 +8736,8 @@ def create_chat_ui(mock_mode: bool = None):
     model_row = widgets.HBox([model_dropdown, _sa_toggle, plan_mode_toggle, approval_checkbox])
     model_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
-    # Group 2: Thinking + secondary toggles (same gap as session/model rows)
-    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, auto_compact_checkbox, dark_mode_checkbox])
+    # Group 2: Thinking + budget + secondary toggles
+    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, budget_slider, auto_compact_checkbox, dark_mode_checkbox])
     thinking_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
     # Group 3: Session
