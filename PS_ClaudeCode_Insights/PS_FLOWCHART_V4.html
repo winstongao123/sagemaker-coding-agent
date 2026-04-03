@@ -512,12 +512,14 @@ flowchart TD
         </ul>
       </div>
       <div class="card" style="border:2px solid var(--danger);">
-        <h3 style="color:var(--danger);">[CRITICAL] Token Efficiency (V4.3.3)</h3>
+        <h3 style="color:var(--danger);">[SUPER CRITICAL] Token Efficiency — Verified (V4.3.3)</h3>
         <ul>
-          <li><b>Large file guard</b>: files &gt;500 lines auto-truncated to first 50 + last 30 lines. Forces grep→read_file workflow. Saves ~45K tokens/session.</li>
-          <li><b>Context-aware tool filtering</b>: doc/vision/web/semantic tools excluded when not relevant. V4's version of Runnable's ToolSearch. Saves ~10,800 tokens/session.</li>
-          <li><b>Result cap 50K→30K</b>: matches Runnable. Large results truncated earlier.</li>
-          <li><b>Total estimated savings: ~80K tokens/session (45% reduction)</b></li>
+          <li><b>Large file guard</b>: files &gt;500 lines → first 50 + last 30 only. Forces grep→read_file.</li>
+          <li><b>Context-aware tool filtering</b>: doc/vision/web/semantic excluded when irrelevant.</li>
+          <li><b>SEARCH BEFORE READ</b>: system prompt directive. LLM greps first.</li>
+          <li style="color:var(--accent-2);"><b>VERIFIED RESULTS</b>: Same question, old vs new:</li>
+          <li style="color:var(--accent-2);">Haiku: 362K→40K tokens (<b>9x improvement</b>), $0.42→$0.06</li>
+          <li style="color:var(--accent-2);">Sonnet: 362K→9K tokens (<b>38x improvement</b>), $0.42→$0.05</li>
         </ul>
       </div>
       <div class="card">

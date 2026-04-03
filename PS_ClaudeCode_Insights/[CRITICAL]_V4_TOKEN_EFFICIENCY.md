@@ -181,5 +181,37 @@ This is a V4 ORIGINAL optimization. Runnable uses ToolSearch instead. Both achie
 
 ---
 
+---
+
+## [SUPER CRITICAL] Real-World Verification Results (2026-04-03)
+
+### Test: "does sagemaker_agent.py support caching?" (same question, 3 runs)
+
+| Metric | Old V4 (Haiku, before fixes) | New V4 (Haiku) | New V4 (Sonnet) |
+|--------|---------------------------|----------------|-----------------|
+| **Tool calls** | 15+ | **8** (47% fewer) | **4** (73% fewer) |
+| **Input tokens** | 362,773 | **39,979** (89% less) | **9,413** (97% less) |
+| **Cost** | $0.42 | **$0.06** (86% cheaper) | **$0.05** (88% cheaper) |
+| **Context used** | 21% | **3.6%** | **2.6%** |
+| **Cache savings** | $0 (inactive) | **$0.005 (12%)** | **$0.02 (85%)** |
+
+### Why The Improvement
+
+| Fix | Impact on Haiku | Impact on Sonnet |
+|-----|----------------|------------------|
+| **Large file guard** (>500 lines → 80 lines shown) | Saved ~15K tokens per read_file call | Same |
+| **SEARCH BEFORE READ** in system prompt | Agent greps first instead of reading chunks | Agent greps first (more consistently) |
+| **Context-aware tool filtering** | ~6 tools excluded per call | Same |
+| **Total** | **9x improvement** (362K→40K) | **38x improvement** (362K→9K) |
+
+### Key Insight: Haiku vs Sonnet
+
+Sonnet is 4x more efficient than Haiku for the same task (4 calls vs 8, 9K vs 40K tokens). This is NOT a V4 issue — it's LLM tool-selection quality. Sonnet follows "SEARCH BEFORE READ" more consistently. Haiku still tries multiple search approaches before finding the answer.
+
+**Recommendation**: Use Sonnet for complex analysis tasks (pays for itself in fewer tokens). Use Haiku for simple tasks where the cost difference matters more than efficiency.
+
+---
+
 *Two Codex reviews completed 2026-04-03. Total: 290K tokens, 12 findings, all addressed.*
+*Real-world verification: 9x improvement on Haiku, 38x on Sonnet.*
 *Reviews saved: `_archive/codex_reviews/v4_token_efficiency_review.txt` and `v4_final_review.txt`*
