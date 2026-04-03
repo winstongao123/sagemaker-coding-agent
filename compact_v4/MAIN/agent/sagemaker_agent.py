@@ -8665,8 +8665,13 @@ def create_chat_ui(mock_mode: bool = None):
     # Group 1: Model + Mode + Approval (primary controls)
     model_dropdown.description = ''
     model_dropdown.layout = widgets.Layout(width='260px')
-    model_row = widgets.HBox([model_dropdown, _sa_toggle, plan_mode_toggle, approval_checkbox])
-    model_row.layout = widgets.Layout(align_items='center', justify_content='flex-start', gap='0px 16px')
+    # Left group: model + sub-agents | Right group: plan + approval
+    _model_left = widgets.HBox([model_dropdown, _sa_toggle])
+    _model_left.layout = widgets.Layout(align_items='center', gap='8px')
+    _model_right = widgets.HBox([plan_mode_toggle, approval_checkbox])
+    _model_right.layout = widgets.Layout(align_items='center', gap='0px 20px')
+    model_row = widgets.HBox([_model_left, _model_right])
+    model_row.layout = widgets.Layout(align_items='center', justify_content='space-between', width='100%')
 
     # Group 2: Thinking + secondary toggles
     thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, auto_compact_checkbox, dark_mode_checkbox])
