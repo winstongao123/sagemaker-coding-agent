@@ -7567,21 +7567,25 @@ def create_chat_ui(mock_mode: bool = None):
         overhead = TOKENS.get_fixed_overhead()
         true_ctx = ctx_tokens + overhead
 
-        # Cache savings (show only when caching has been active)
+        # Cache savings and original cost calculation
         cache_savings = TOKENS.get_cache_savings_usd()
-        cache_part = ""
+        original_cost = session_cost + cache_savings  # What it WOULD have cost without caching
         if cache_savings > 0:
             cache_pct = (TOKENS.session_cache_read / TOKENS.session_input * 100) if TOKENS.session_input > 0 else 0
-            cache_part = f' | Cache: saved <b>${cache_savings:.4f}</b> ({cache_pct:.0f}% hit)'
-        elif TOKENS.session_input > 0 and cache_savings == 0:
-            cache_part = ' | Cache: inactive'
+            orig_fmt = f"${original_cost:.4f}" if original_cost < 0.01 else f"${original_cost:.2f}"
+            save_fmt = f"${cache_savings:.4f}" if cache_savings < 0.01 else f"${cache_savings:.2f}"
+            cost_line = f'💰 Actual: <b>{cost_fmt}</b> | Without cache: {orig_fmt} | Saved: <b style="color:#4caf50">{save_fmt}</b> ({cache_pct:.0f}% cached)'
+        else:
+            cost_line = f'💰 Cost: <b>{cost_fmt}</b> | Last: {last_fmt} | {rate_str}'
+            if TOKENS.session_input > 0:
+                cost_line += ' | Cache: <span style="color:#ff9800;">inactive</span>'
 
         tokens_html.value = f'''
         <div style="font-size:11px;color:{c["fg_muted"]};line-height:1.5;">
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
                 <span>📊 In <b>{stats["session_input"]:,}</b> | Out <b>{stats["session_output"]:,}</b> | Calls {stats["api_calls"]}</span>
-                <span>💰 <b>{cost_fmt}</b> | Last: {last_fmt} | {rate_str}{cache_part}</span>
             </div>
+            <div style="margin-top:2px;">{cost_line}</div>
             <div style="margin-top:3px;">
                 <span style="color:{ctx_color}">Context: {ctx_pct:.1f}% ({ctx_tokens:,} / {max_ctx:,})</span>
             </div>
