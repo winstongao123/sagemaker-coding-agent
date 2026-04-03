@@ -1,70 +1,71 @@
-# Session State — V4.4.0 Rich Tool Descriptions + Git Worktree
+# Session State — V4.4.0 Final
 
 > **Last updated**: 2026-04-04 by Claude Opus 4.6
-> **Git state**: Pending commit (changes not yet pushed)
-> **V4 version**: 4.4.0
+> **Git state**: Commit `7c0e8e1` pushed to `sageagent`
+> **V4 version**: 4.4.0 (9,144 lines)
 
 ---
 
 ## WHAT WAS DONE THIS SESSION
 
-### 1. [CRITICAL] Rich Tool Descriptions (Task 1)
-- Rewrote 7 key tool descriptions from 2-3 lines to 15-32 lines each
-- Tools: read_file, write_file, edit_file, glob, grep, bash, task
-- Style: Modeled on Runnable's `src/tools/*/prompt.ts`
-- Each has: Usage section, WHEN to use, WHEN NOT to use, anti-patterns
-- Impact: System prompt + tools > 4,096 tokens → Haiku cache activates → ~90% cheaper/turn
-- Impact: Fixes Haiku's `bash grep` instead of `grep` tool misuse
-- File grew: 8,750 → 9,015 lines (+265 lines)
+### 1. [CRITICAL] Rich Tool Descriptions
+- Rewrote 7 key tools from 2-3 lines to 15-32 lines each (Runnable style)
+- read_file, write_file, edit_file, glob, grep, bash, task
+- Fixes Haiku `bash grep` → now uses `grep` tool correctly
+- System prompt + tools > 4,096 tokens → Haiku cache activates → ~90% cheaper/turn
+- **Tested on SageMaker**: Cache WRITE turn 1, HIT every turn after. $0.07 vs $0.25 without cache.
 
-### 2. [CRITICAL] Git Worktree Isolation for Build Sub-agents (Task 2)
-- Build sub-agents now run in isolated git worktree
-- Flow: create worktree → sub-agent works → merge changes back → cleanup
-- Only for `build` type, sequential path, git repos
-- Graceful fallback if git unavailable or worktree fails
-- Config: `enable_worktree: true` (default), configurable via agent_config.json
-- File grew: 9,015 → 9,090 lines (+75 lines)
+### 2. [CRITICAL] Git Worktree Isolation
+- Build sub-agents run in isolated git worktree
+- Auto git-init for non-git workspaces (uses throwaway -c user config, never touches global)
+- On success: changed files merged back. On failure: discarded.
+- 7 code review findings fixed (2 HIGH, 3 MEDIUM, 2 LOW)
+- **Tested on SageMaker**: Auto-init fires, build agent creates files, isolation works.
 
-### 3. Documentation Updates
-- `compact_v4/CHANGELOG.md`: Full V4.4.0 section with both features
-- `[CRITICAL]_V4_TOKEN_EFFICIENCY.md`: Updated Fix 4, resolved "can't match" gap
-- `[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md`: Added worktree section, resolved Gap #10
-- `V4_VS_RUNNABLE_ARCHITECTURE.md`: Updated verdict (V4 now leads on sub-agents)
-- `PS_FLOWCHART_V4.html`: Updated title, stats, 5 new comparison rows
-- All docs synced to both Documentations/ and PS_ClaudeCode_Insights/ folders
+### 3. Documentation
+- CHANGELOG.md: V4.4.0 section
+- chat.md: V4.4.0 version + sub-agent coordination docs + worktree usage guide
+- [CRITICAL]_V4_TOKEN_EFFICIENCY.md: Fix 4 upgraded, "can't match" gap resolved
+- [CRITICAL]_V4_SUBAGENT_AND_QUALITY.md: Worktree section, Gap #10 resolved
+- V4_VS_RUNNABLE_ARCHITECTURE.md: Verdict updated (V4 leads)
+- PS_FLOWCHART_V4.html: V4.4.0, 5 new comparison rows
+- All synced between Documentations/ and PS_ClaudeCode_Insights/
 
 ---
 
-## WHAT REMAINS (for next agent)
+## RUNNABLE GAP ANALYSIS — COMPLETE DECISIONS
 
-### HIGH PRIORITY
-1. **Codex review** of V4.4.0 changes (tool descriptions + worktree code)
-2. **Push to sageagent** remote after review
-3. **Rebuild zip**: `compact_v4/compact_v4.zip`
+### IMPLEMENTED (V4.4.0)
 
-### MEDIUM PRIORITY
-4. **Live testing**: Upload to SageMaker, test with Haiku:
-   - "analyze sagemaker_agent.py" — should use grep not bash
-   - Check cache indicator: should show WRITE on turn 1 (not INACTIVE)
-   - Test build sub-agent: worktree creation, isolation, merge-back
-5. **chat.md update**: Sync companion doc with new feature descriptions
+| # | Feature | Lines | Impact |
+|---|---------|-------|--------|
+| 1 | Rich tool descriptions (7 tools) | +265 | Haiku uses correct tools, cache activates |
+| 2 | Git worktree isolation | +75 | Build agent mistakes don't corrupt workspace |
+| 3 | Auto git-init | +12 | Worktree works on any workspace without setup |
 
-### WHAT V4 STILL CAN'T MATCH (Honest)
-- ToolSearch (on-demand discovery) — V4 uses keyword filtering instead
-- Model-level tool-use tuning — Anthropic internal
-- Remote agents — V4 doesn't need (single user on SageMaker)
-- Fork subagent (cache-sharing) — Bedrock cache is server-side
+### NOT IMPLEMENTING — WITH REASONS
+
+| # | Feature | Effort | Why NOT |
+|---|---------|--------|---------|
+| 4 | **Background sub-agents** | ~150 lines | UI blocks 30-90 sec max. Background results landing mid-conversation confuse context. Solvable but UX complexity not justified for short waits. |
+| 5 | **Plan agent 5-step structured output** | ~100 lines | Current plan mode returns readable text. JSON format only helps code parsing, no user-facing benefit. |
+| 6 | **ToolSearch (on-demand discovery)** | ~250 lines | V4 keyword filtering already saves ~800 tokens/call (25→12 tools). Full ToolSearch saves extra ~500 tokens/call = $0.01/session, but adds ~2-3 sec latency per turn (extra API call). **PENDING** — may implement if cost becomes concern. |
+| 7 | **Fork subagent (cache-sharing)** | Impossible | Bedrock cache is server-side. Can't share cache prefix between parent and child agents. Anthropic infrastructure limitation. |
+| 8 | **Remote agents** | Not needed | Single user on SageMaker. Remote sandboxes are for multi-user enterprise teams. |
+| 9 | **Model-level tool-use tuning** | Impossible | Anthropic internal optimization. Not available via Bedrock API. |
+
+### VERDICT
+V4.4.0 is at **full parity with Runnable for SageMaker/Bedrock scope**. Remaining gaps are either impossible (Bedrock limitations), unnecessary (single user), or not cost-effective ($0.01 savings for 250 lines + slower responses). Only ToolSearch is pending consideration.
 
 ---
 
-## KEY FILES MODIFIED
-1. `compact_v4/MAIN/agent/sagemaker_agent.py` — 9,090 lines (tool descriptions + worktree)
-2. `compact_v4/CHANGELOG.md` — V4.4.0 section
-3. `Documentations/[CRITICAL]_V4_TOKEN_EFFICIENCY.md` — Fix 4 updated
-4. `Documentations/[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md` — Worktree section
-5. `Documentations/V4_VS_RUNNABLE_ARCHITECTURE.md` — Verdict updated
-6. `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html` — V4.4.0 rows
-7. This file (`SESSION_STATE.md`)
+## KEY FILES
+1. `compact_v4/MAIN/agent/sagemaker_agent.py` — 9,144 lines
+2. `compact_v4/MAIN/agent/chat.md` — V4.4.0 with sub-agent docs
+3. `compact_v4/CHANGELOG.md` — V4.4.0 section
+4. `Documentations/[CRITICAL]_V4_TOKEN_EFFICIENCY.md`
+5. `Documentations/[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md`
+6. `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html`
 
 ---
 

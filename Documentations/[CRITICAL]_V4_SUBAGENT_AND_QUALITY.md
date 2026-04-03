@@ -38,13 +38,17 @@
 
 **Safety**: Only for `build` type. Sequential path only (parallel builds skip worktree). Configurable: `enable_worktree: true` default.
 
-### Acknowledged (Not Implemented — Architectural Gaps)
+### Acknowledged (Not Implementing — Final Decisions)
 
-| # | Gap | Why Not Implemented |
-|---|-----|-------------------|
-| ~~10~~ | ~~Fork vs Fresh decision tree~~ | **RESOLVED in V4.4.0** — Git worktree provides isolation for build agents |
-| 11 | Foreground vs background execution | V4 sub-agents always run foreground. Background would need threading changes. |
-| 12 | Plan agent 5-step workflow | Current plan mode works. Structured output adds complexity without proven benefit. |
+| # | Gap | Decision | Reasoning |
+|---|-----|----------|-----------|
+| ~~10~~ | ~~Fork vs Fresh~~ | **RESOLVED V4.4.0** | Git worktree provides isolation for build agents |
+| 11 | Background sub-agents | **Skip** | UI blocks 30-90 sec max. Background results landing mid-conversation confuse context. UX complexity not justified. |
+| 12 | Plan agent structured output | **Skip** | Current plan mode returns readable text. JSON format only helps code parsing, no user-facing benefit. |
+| 13 | ToolSearch (on-demand discovery) | **Pending** | V4 keyword filtering saves ~800 tok/call. Full ToolSearch saves extra ~500 tok/call ($0.01/session) but adds ~2-3 sec latency per turn. May implement if cost becomes concern. |
+| 14 | Fork subagent (cache-sharing) | **Impossible** | Bedrock cache is server-side. Can't share cache prefix between parent/child. |
+| 15 | Remote agents | **Not needed** | Single user on SageMaker. Remote sandboxes are for multi-user enterprise. |
+| 16 | Model-level tool-use tuning | **Impossible** | Anthropic internal optimization. Not available via Bedrock API. |
 
 ---
 
