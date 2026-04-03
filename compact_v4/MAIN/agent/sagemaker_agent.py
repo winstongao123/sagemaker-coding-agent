@@ -6331,13 +6331,19 @@ class Agent:
                 )
                 if _git_check.returncode != 0:
                     # Auto-init git so worktree isolation works on fresh workspaces (e.g. SageMaker uploaded zip)
+                    # Uses -c flags for user config since SageMaker may not have git user.name/email set
                     subprocess.run(["git", "init"], capture_output=True, timeout=10, cwd=CONFIG.workspace)
                     subprocess.run(["git", "add", "-A"], capture_output=True, timeout=30, cwd=CONFIG.workspace)
-                    subprocess.run(
-                        ["git", "commit", "-m", "auto-init for worktree isolation", "--allow-empty"],
-                        capture_output=True, timeout=15, cwd=CONFIG.workspace
+                    _init_result = subprocess.run(
+                        ["git", "-c", "user.name=SageAgent", "-c", "user.email=agent@local",
+                         "commit", "-m", "auto-init for worktree isolation", "--allow-empty"],
+                        capture_output=True, text=True, timeout=15, cwd=CONFIG.workspace
                     )
-                    output_fn("[Worktree] Auto-initialized git repo for workspace isolation")
+                    if _init_result.returncode == 0:
+                        output_fn("[Worktree] Auto-initialized git repo for workspace isolation")
+                    else:
+                        logging.warning(f"Auto-init commit failed: {_init_result.stderr.strip()}")
+                        _worktree_path = None
                 if True:  # Always proceed — either existing repo or just initialized
                     # Review fix [MEDIUM]: UUID suffix prevents name collision on rapid sequential builds
                     import uuid
