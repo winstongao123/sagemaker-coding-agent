@@ -6329,7 +6329,15 @@ class Agent:
                     ["git", "rev-parse", "--is-inside-work-tree"],
                     capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
                 )
-                if _git_check.returncode == 0:
+                if _git_check.returncode != 0:
+                    # Auto-init git so worktree isolation works on fresh workspaces (e.g. SageMaker uploaded zip)
+                    subprocess.run(["git", "init"], capture_output=True, timeout=10, cwd=CONFIG.workspace)
+                    subprocess.run(["git", "add", "-A"], capture_output=True, timeout=30, cwd=CONFIG.workspace)
+                    subprocess.run(
+                        ["git", "commit", "-m", "auto-init for worktree isolation", "--allow-empty"],
+                        capture_output=True, timeout=15, cwd=CONFIG.workspace
+                    )
+                if True:  # Always proceed — either existing repo or just initialized
                     # Review fix [MEDIUM]: UUID suffix prevents name collision on rapid sequential builds
                     import uuid
                     _wt_name = f"_worktree_build_{int(time.time())}_{uuid.uuid4().hex[:8]}"
