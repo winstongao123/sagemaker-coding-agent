@@ -6,7 +6,7 @@
 
 # SageAgent V4
 
-AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, verify agent. v4.3.2.
+AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, verify agent, git worktree isolation. v4.4.0.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
@@ -185,6 +185,8 @@ CONFIG.max_turns = 80
 
 | Version | Key Changes |
 |---------|-------------|
+| V4.4.0 | [CRITICAL] Rich tool descriptions (7 tools, 15-32 lines each), git worktree isolation for build agents, auto git-init, 6 review fixes |
+| V4.3.3 | UI redesign, markdown rendering, cost display, diminishing returns fix, cache savings display |
 | V4.3.2 | Complete Runnable learning: cache-breakage detection, WHEN-not-WHAT tool descriptions, verify agent, explore RO enforcement, bash git safety, absolute paths |
 | V4.3.1 | Prompt engineering upgrade: 6 system prompt sections, 7 tool descriptions, sub-agent structured output, compact zero-tool mode |
 | V4.3.0 | Diminishing returns, memory 200-line cap, cold-cache microcompact, auto-memory guard, cache indicator, cache savings USD |
