@@ -522,6 +522,17 @@ flowchart TD
           <li style="color:var(--accent-2);">Sonnet: 362K→9K tokens (<b>38x improvement</b>), $0.42→$0.05</li>
         </ul>
       </div>
+      <div class="card" style="border:2px solid var(--danger);">
+        <h3 style="color:var(--danger);">[CRITICAL] Code Quality — Learned from Runnable</h3>
+        <ul>
+          <li><b>False-claims prevention</b>: never claim tests pass when they fail. Never suppress failures. Never characterize incomplete work as done.</li>
+          <li><b>Mandatory verify after 3+ edits</b>: spawn verify sub-agent before reporting completion.</li>
+          <li><b>Minimal-edit principle</b>: bug fix doesn't need surrounding code cleaned up.</li>
+          <li><b>Pre-completion verification</b>: verify it works before saying "done."</li>
+          <li><b>Explore thoroughness</b>: quick/medium/very thorough levels.</li>
+          <li><b>Prompt-writing</b>: explain what/why, what you've ruled out, include file paths.</li>
+        </ul>
+      </div>
       <div class="card">
         <h3>Cost control + verification (V4.3.3)</h3>
         <ul>
