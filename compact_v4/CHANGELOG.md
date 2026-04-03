@@ -1,5 +1,59 @@
 # Compact V4 Changelog
 
+## v4.3.3 — UI Redesign + Bug Fixes (2026-04-02)
+
+Base: compact_v4 v4.3.2
+
+### UI Layout Redesign
+- Session bar moved to top (first action when opening notebook)
+- Model + Sub-Agent Models + Plan Mode + Require Approval on one row
+- Thinking + Budget + Temperature + Auto-Compact + Dark Mode on second row
+- Status line and metrics moved to bottom
+- Sections separated by horizontal rules
+- Action buttons split: Send/Stop/Clear left, Compact/Clean right
+
+### Checkbox Fix
+- All 5 checkboxes now have `indent=False` + `layout=width='auto'`
+- Fixes excessive gaps caused by ipywidgets default padding/width
+
+### Markdown Rendering Improvements
+- H1: 20px blue with bottom border
+- H2: 16px blue
+- H3: 14px normal weight
+- Bold: white on dark / black on light (visible contrast)
+- Inline code: red syntax color (#e06c75), 0.9em
+- Code blocks: border, monospace font, 12px, 1.5 line-height
+- Numbered lists (1. 2. 3.): now render as proper `<ol>`
+- List items: 1.6 line-height, 2px margin
+- Paragraphs: 1.5 line-height, 3px margin
+- Blank lines: 8px spacer
+
+### Cost Display Fix
+- Status line `$0.0000` bug: `update_mode_display()` now called from `update_tokens_display()`
+- Metrics bar shows cache savings: `Actual: $X | Without cache: $Y | Saved: $Z (N% cached)`
+- When caching inactive: shows `Cache: inactive` in orange
+
+### Diminishing Returns Fix
+- Only counts text-only turns (turns with tool calls are skipped — agent is working)
+- Tool call turns reset the counter
+- Threshold lowered from 500 to 200 tokens
+
+### Commands Removed
+- Removed 5 redundant custom_commands from Cell 3 (review, explain, test, verify, standards)
+- Skills cover the same categories with richer persistent checklists
+
+### Notebook Updates
+- Cell 0: added "How It Works" and "Recommended Workflow" with skill examples
+- Cell 2: model dropdown uses dynamic default (no hardcoded name mismatch)
+- Cell 3: simplified — security settings only, no commands
+- Cell 4: full "Skills — Detailed Usage Guide" with examples, workflow, self-review
+
+### Documentation
+- USER_GUIDE.md: V3→V4 title, 6000→8699 lines, 21→25+ tools, 4→6 sub-agents
+- chat.md: synced with notebook, removed stale command references
+- V4_VS_RUNNABLE_ARCHITECTURE.md: dynamic prompts, sub-agents, verification, auth comparison
+- EVALUATION_V4_vs_RUNNABLE_vs_CLAW.md: full competitive analysis with scoped assessment
+
 ## v4.3.2 — Complete Runnable Learning Integration (2026-04-02)
 
 Base: compact_v4 v4.3.1
