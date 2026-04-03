@@ -6337,6 +6337,7 @@ class Agent:
                         ["git", "commit", "-m", "auto-init for worktree isolation", "--allow-empty"],
                         capture_output=True, timeout=15, cwd=CONFIG.workspace
                     )
+                    output_fn("[Worktree] Auto-initialized git repo for workspace isolation")
                 if True:  # Always proceed — either existing repo or just initialized
                     # Review fix [MEDIUM]: UUID suffix prevents name collision on rapid sequential builds
                     import uuid
