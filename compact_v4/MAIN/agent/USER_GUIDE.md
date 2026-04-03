@@ -1,4 +1,4 @@
-# SageMaker Coding Agent V3 — User Guide (v3.1.0)
+# SageAgent V4 — User Guide (v4.3.2)
 
 A single-file AI coding assistant that runs inside a Jupyter notebook on AWS SageMaker, powered by Bedrock Claude.
 
@@ -35,8 +35,8 @@ This is an AI coding assistant that lives inside a Jupyter notebook. You open a 
 **It is NOT a terminal app.** Everything runs as Python code inside the Jupyter kernel. The chat UI is built with `ipywidgets` (text box + send button + output area). You never need to use a terminal — though the agent can run shell commands internally via its `bash` tool.
 
 **Key facts:**
-- Single Python file (`sagemaker_agent.py`, ~6000 lines) — no complex multi-package setup
-- 21 built-in tools (file editing, code execution, document creation, search, etc.)
+- Single Python file (`sagemaker_agent.py`, 8,699 lines) — no complex multi-package setup
+- 25+ built-in tools (file editing, code execution, document creation, search, etc.)
 - Extensible via Skills (custom instructions), MCP (external tool servers), and Sub-agents
 - Built for AWS SageMaker but works in any Jupyter environment with Bedrock access
 
@@ -135,7 +135,7 @@ This app does **NOT** open a terminal or command line. Everything runs as **Pyth
 
 | File | What it is |
 |------|-----------|
-| `sagemaker_agent.py` | A Python module (~6000 lines) that contains ALL the agent logic: tool functions, security checks, the AI conversation loop, the chat UI widgets, etc. |
+| `sagemaker_agent.py` | A Python module (8,699 lines) that contains ALL the agent logic: tool functions, security checks, the AI conversation loop, the chat UI widgets, etc. |
 | `chat.ipynb` | A thin Jupyter notebook that imports `sagemaker_agent.py` and calls `create_chat_ui()` to display the chat interface. |
 
 When you run `chat.ipynb`, it does:
@@ -257,7 +257,7 @@ You never tell the AI "use the read_file tool". You say "read main.py" in plain 
 
 ---
 
-## All 22 Tools Explained
+## All 25+ Tools Explained
 
 Each tool is something the agent can do. You don't call tools directly — you describe what you want in plain English, and the agent picks the right tool.
 
@@ -606,9 +606,11 @@ Sub-agents are **child AI sessions** that the main agent can spawn to handle spe
 
 | Type | What it can do | Tools | Max Turns | When it's used |
 |------|---------------|-------|-----------|---------------|
-| **build** | Full development — read, write, execute | All 22 tools | 25 | "Build a REST API", "Implement feature X" |
-| **plan** | Analysis only — can read but not modify | read_file, glob, grep, list_dir, semantic_search, view_image, todo_write, todo_read | 15 | "Analyze the architecture", "Review this code" |
+| **build** | Full development — read, write, execute | All 25+ tools | 25 | "Build a REST API", "Implement feature X" |
+| **plan** | Analysis only — can read but not modify | read_file, glob, grep, list_dir, semantic_search, view_image, todo_write, todo_read | 15 | "Analyze the architecture", "Plan a refactor" |
 | **explore** | Fast search — minimal tools for speed | read_file, glob, grep, list_dir, semantic_search | 10 | "Find all API endpoints", "Search for auth code" |
+| **verify** | Adversarial testing — tries to BREAK the code | read_file, glob, grep, bash, python_exec, list_dir, semantic_search | 15 | `/verify` or "Test this thoroughly" |
+| **review** | Security, quality, performance review | read_file, glob, grep, list_dir, semantic_search, view_image | 10 | "Review this code for issues" |
 | **general** | Research + some execution | read_file, glob, grep, list_dir, bash, python_exec, semantic_search, view_image | 15 | "Research how this module works and write a summary" |
 
 ### Examples That Trigger Sub-Agents
@@ -686,7 +688,7 @@ Plugins                    = PACKAGING of the above      (bundle for distributio
 | **Context** | Plan Mode toggle (restricts to read-only tools) | Have it (simpler) |
 | **MCP Server** | McpManager (stdio + HTTP transports, auto tool discovery) | Have it |
 | **Hook** | Not implemented | Don't need (Jupyter handles file events) |
-| **Agent** | `task` tool with 4 types: build, plan, explore, general | Have it |
+| **Agent** | `task` tool with 6 types: build, plan, explore, verify, review, general | Have it |
 | **Plugin** | Not applicable | N/A (single-file architecture) |
 
 ### Agent vs Plan Mode
