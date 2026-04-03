@@ -1,8 +1,8 @@
 # [CRITICAL] V4 Token Efficiency — Closing the Gap with Runnable
 
-**Date**: 2026-04-02
+**Date**: 2026-04-03 (updated)
 **Priority**: CRITICAL — affects cost, speed, and quality of every V4 session
-**Version**: V4.3.3
+**Version**: V4.4.0
 
 ---
 
@@ -67,17 +67,24 @@ Use grep to find specific code, then read_file with offset/limit for the exact s
 
 **Impact**: Large tool results truncated earlier, saving ~10K tokens when reading large files or running verbose commands.
 
-### Fix 4: Enhanced Tool Descriptions [MEDIUM IMPACT]
+### Fix 4: Enhanced Tool Descriptions [MEDIUM → HIGH IMPACT in V4.4.0]
 
-**Problem**: V4 tool descriptions are 2-3 lines. Runnable's are ~90 lines per tool with examples and detailed WHEN NOT guidance.
+**Problem**: V4 tool descriptions were 2-3 lines. Runnable's are ~90 lines per tool with examples and detailed WHEN NOT guidance.
 
-**Fix**: Enhanced `read_file` description to explicitly mention the 500-line guard and grep-first workflow:
-```
-"IMPORTANT: For files >500 lines, you will only see first 50 + last 30 lines —
-use grep to find the section you need, then read_file with offset/limit."
-```
+**Fix (V4.3.3)**: Enhanced `read_file` description to explicitly mention the 500-line guard and grep-first workflow.
 
-**Impact**: LLM learns the constraint from the tool description itself, not just from getting truncated results.
+**Fix (V4.4.0 — CRITICAL upgrade)**: Rewrote ALL 7 key tool descriptions to 15-30 lines each:
+- `read_file`: 23 lines — usage guide, WHEN/WHEN NOT, offset/limit guidance, image/notebook support
+- `write_file`: 15 lines — must-read-first, prefer edit_file, mode docs
+- `edit_file`: 17 lines — exact match, replace_all, indentation, "never use sed/awk"
+- `glob`: 16 lines — pattern syntax, recursive matching, "never use bash find"
+- `grep`: 22 lines — **"ALWAYS use this tool for content search. NEVER invoke grep via bash."** as opening line
+- `bash`: 25 lines — dedicated tool preference list, git safety, command execution notes
+- `task`: 32 lines — agent types with capabilities, prompt-writing guide
+
+**Impact**: System prompt + tools now exceeds Haiku's 4,096 token cache threshold → prompt caching activates → each turn ~90% cheaper on cached prefix. Also fixes Haiku's `bash grep` instead of `grep` tool misuse.
+
+**Source**: Modeled on Runnable's `src/tools/*/prompt.ts` — particularly BashTool (~370 lines), GrepTool ("ALWAYS use Grep, NEVER bash grep"), FileReadTool (offset guidance), FileEditTool (exact match emphasis).
 
 ---
 
@@ -100,7 +107,7 @@ A session that previously used 180K input tokens should now use ~100K for the sa
 | Runnable Feature | Why V4 Can't Replicate | Impact |
 |-----------------|----------------------|--------|
 | **ToolSearch (on-demand discovery)** | Requires tool-as-a-tool pattern; Bedrock may not support well | ~500 more tokens saved/call |
-| **90-line tool descriptions** | Would push system prompt past cache threshold on Haiku | Better tool choices |
+| ~~90-line tool descriptions~~ | **RESOLVED in V4.4.0** — 7 key tools rewritten to 15-32 lines. Crosses Haiku cache threshold. | Better tool choices |
 | **Model-level tool-use tuning** | Anthropic internal; not available via Bedrock | Fewer wasted calls |
 | **Streaming tool execution** | Jupyter ipywidgets don't support streaming | Perceived speed |
 

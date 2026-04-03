@@ -889,6 +889,7 @@ class Config:
     mcp_servers: Dict = field(default_factory=dict)  # {"name": {"type": "local"|"remote", ...}}
     mcp_timeout_seconds: int = 30
     subagent_max_depth: int = 2
+    enable_worktree: bool = True  # V4.4: Git worktree isolation for build sub-agents
 
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)  # {"review": {"template": "...", "agent": "plan"}}
@@ -973,7 +974,7 @@ def _apply_config_file(config: 'Config') -> None:
         "enable_prompt_cache": bool,
         "enable_memory_extraction": bool,
         "enable_skills": bool, "skills_dir": str,
-        "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int,
+        "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int, "enable_worktree": bool,
         "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
         "audit_retention_days": int,
     }
@@ -5483,25 +5484,141 @@ for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
 # ============== TOOL REGISTRY ==============
 
 TOOLS = {
-    "read_file": (tool_read_file, False, "Read file contents with line numbers. WHEN: reading a specific file or section you already know the location of. WHEN NOT: searching for patterns (use grep FIRST), finding files by name (use glob). IMPORTANT: For files >500 lines without offset/limit, you will only see first 50 + last 30 lines — use grep to find the section you need, then read_file with offset and limit to read that specific range. You MUST read a file before editing it.",
+    "read_file": (tool_read_file, False,
+        "Reads a file from the local filesystem and returns contents with line numbers.\n\n"
+        "Usage:\n"
+        "- The file_path parameter must be an absolute path, not a relative path.\n"
+        "- By default reads up to 2000 lines from the beginning of the file.\n"
+        "- For files over 500 lines without offset/limit, only the first 50 + last 30 lines are shown "
+        "— use grep to find the section you need, then read_file with offset and limit to read that specific range.\n"
+        "- When you already know which part of the file you need, specify offset and limit to read just that section. "
+        "This is important for large files.\n"
+        "- Results are returned with line numbers (1-indexed).\n"
+        "- Can read images (PNG, JPG, etc.) — contents are described visually.\n"
+        "- Can read Jupyter notebooks (.ipynb) — returns all cells with outputs.\n"
+        "- Can only read files, not directories. Use list_dir or bash ls for directories.\n"
+        "- You MUST read a file before editing it with edit_file. The edit will fail otherwise.\n\n"
+        "WHEN to use:\n"
+        "- Reading a specific file or section you already know the path to\n"
+        "- Viewing file contents before making edits\n"
+        "- Checking the current state of a file after changes\n"
+        "- Reading images, notebooks, or other supported formats\n\n"
+        "WHEN NOT to use:\n"
+        "- Searching for patterns across files → use grep FIRST to find locations, then read_file with offset/limit\n"
+        "- Finding files by name or extension → use glob\n"
+        "- Reading directory listings → use list_dir or bash ls",
         {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
 
-    "write_file": (tool_write_file, True, "Write content to file. You MUST read first if file exists. Prefer edit_file for modifications — use write_file only for new files or complete rewrites.",
+    "write_file": (tool_write_file, True,
+        "Writes content to a file, creating it if it doesn't exist or overwriting if it does.\n\n"
+        "Usage:\n"
+        "- This tool will overwrite the existing file if there is one at the provided path.\n"
+        "- If this is an existing file, you MUST use read_file first to read its contents. This tool will error if you haven't read the file.\n"
+        "- Prefer edit_file for modifying existing files — it only sends the changed portion, saving tokens.\n"
+        "- Use write_file only for creating new files or complete rewrites.\n"
+        "- Supports 'write' mode (default, overwrites entire file) and 'append' mode (adds to end).\n\n"
+        "WHEN to use:\n"
+        "- Creating a brand new file that doesn't exist yet\n"
+        "- Complete rewrite of an existing file (after reading it first)\n"
+        "- Appending content to the end of a file (mode='append')\n\n"
+        "WHEN NOT to use:\n"
+        "- Modifying specific sections of an existing file → use edit_file (cheaper, safer, fewer tokens)\n"
+        "- Never use bash echo/heredoc/cat to write files — ALWAYS use this dedicated tool instead",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}, "mode": {"type": "string", "enum": ["write", "append"], "description": "write (default, overwrites) or append (adds to end)"}}, "required": ["file_path", "content"]}),
 
-    "edit_file": (tool_edit_file, True, "Edit file by replacing EXACT string match. MUST read first. old_string must be unique — include more surrounding context if not unique, or use replace_all=true for all occurrences.",
+    "edit_file": (tool_edit_file, True,
+        "Performs exact string replacement in a file. Finds old_string and replaces it with new_string.\n\n"
+        "Usage:\n"
+        "- You MUST use read_file at least once before editing. This tool will error if you haven't read the file.\n"
+        "- old_string must EXACTLY match text in the file, including all indentation (tabs/spaces) and newlines.\n"
+        "- The edit will FAIL if old_string is not unique in the file. Include more surrounding context lines "
+        "to make it unique, or use replace_all=true to change every occurrence.\n"
+        "- Use replace_all=true for renaming variables, functions, or strings across the entire file.\n"
+        "- ALWAYS prefer editing existing files over creating new ones — prevents file bloat and builds on existing work.\n"
+        "- When copying text from read_file output, the line number prefix is NOT part of the file content — "
+        "do not include it in old_string.\n\n"
+        "WHEN to use:\n"
+        "- Modifying specific sections of existing code (bug fixes, feature additions, refactoring)\n"
+        "- Renaming variables, functions, or strings across a file (with replace_all=true)\n"
+        "- Any targeted change to an existing file\n\n"
+        "WHEN NOT to use:\n"
+        "- Creating brand new files → use write_file\n"
+        "- Complete file rewrites → use write_file\n"
+        "- Never use bash sed/awk to edit files — ALWAYS use this dedicated tool instead",
         {"type": "object", "properties": {"file_path": {"type": "string"}, "old_string": {"type": "string", "description": "Exact text to replace (must be unique in file)"}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean", "description": "Replace all occurrences (use for renaming)"}}, "required": ["file_path", "old_string", "new_string"]}),
 
-    "glob": (tool_glob, False, "Find files by name pattern. Use this instead of bash find or ls. WHEN: locating files by name/extension (e.g. **/*.py, src/**/*.ts). WHEN NOT: searching file contents (use grep). Results sorted by modification time.",
+    "glob": (tool_glob, False,
+        "Fast file pattern matching tool that finds files by name or path pattern.\n\n"
+        "Usage:\n"
+        "- Supports standard glob patterns: **/*.py, src/**/*.ts, *.json, test_*.py\n"
+        "- ** matches any number of directories (recursive)\n"
+        "- * matches any characters within a single path segment\n"
+        "- Returns matching file paths sorted by modification time (newest first)\n"
+        "- Use the optional path parameter to limit search to a specific directory\n"
+        "- Works efficiently with any codebase size\n\n"
+        "WHEN to use:\n"
+        "- Finding files by name or extension (e.g., all Python files: **/*.py)\n"
+        "- Locating a specific file when you know part of its name\n"
+        "- Discovering project structure (e.g., **/*.py to see all Python files)\n\n"
+        "WHEN NOT to use:\n"
+        "- Searching FILE CONTENTS for patterns → use grep (glob only matches file names/paths)\n"
+        "- Open-ended exploration requiring multiple rounds of search → use task tool with explore type\n"
+        "- Never use bash find or ls to find files — ALWAYS use this dedicated tool instead",
         {"type": "object", "properties": {"pattern": {"type": "string", "description": "Glob pattern (e.g. **/*.py, src/*.ts)"}, "path": {"type": "string", "description": "Directory to search"}}, "required": ["pattern"]}),
 
-    "grep": (tool_grep, False, "Search file contents using regex. ALWAYS use this for search tasks — NEVER use bash grep or rg. Supports full regex (e.g. 'log.*Error', 'def\\s+\\w+'). Filter files with glob parameter (e.g. '*.py'). WHEN: finding patterns, function definitions, variable usage, error messages, class names. WHEN NOT: finding files by name (use glob). Use BEFORE read_file to find the exact lines you need.",
+    "grep": (tool_grep, False,
+        "Searches file contents using regex patterns. The primary tool for all content search tasks.\n\n"
+        "IMPORTANT: ALWAYS use this tool for content search. NEVER invoke grep, rg, or ag via bash. "
+        "This tool is optimized for correct output formatting and token efficiency.\n\n"
+        "Usage:\n"
+        "- Supports full regex syntax: 'log.*Error', 'def\\s+\\w+', 'class\\s+MyClass', 'import.*pandas'\n"
+        "- Filter files with glob parameter: '*.py', '*.ts', '**/*.js'\n"
+        "- Case insensitive search with case_insensitive=true\n"
+        "- Returns matching file paths by default — concise and token-efficient\n"
+        "- Use BEFORE read_file to find exact locations, then read_file with offset/limit to read those sections\n\n"
+        "WHEN to use:\n"
+        "- Finding function, class, or variable definitions across a codebase\n"
+        "- Searching for error messages, log patterns, or specific strings\n"
+        "- Locating where a module or function is imported or used\n"
+        "- Finding TODO/FIXME/HACK comments\n"
+        "- Checking if a pattern exists anywhere in the project\n"
+        "- Any search of file CONTENTS\n\n"
+        "WHEN NOT to use:\n"
+        "- Finding files by NAME or extension (not content) → use glob\n"
+        "- Reading a file you already know the path to → use read_file\n"
+        "- Never invoke grep, rg, or ag via bash — ALWAYS use this dedicated tool",
         {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern to search for"}, "path": {"type": "string"}, "glob": {"type": "string", "description": "File filter (e.g. *.py)"}, "case_insensitive": {"type": "boolean"}}, "required": ["pattern"]}),
 
     "list_dir": (tool_list_dir, False, "List directory contents",
         {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}),
 
-    "bash": (tool_bash, True, "Run shell command. WHEN: git operations, pip install, running scripts, system commands. WHEN NOT: reading files (use read_file NOT cat/head/tail), editing files (use edit_file NOT sed/awk), writing files (use write_file NOT echo/heredoc), searching files (use glob NOT find/ls), searching content (use grep NOT bash grep/rg). IMPORTANT: The dedicated tools (read_file, edit_file, grep, glob) are ALWAYS preferred over bash equivalents — they are faster, safer, and save tokens. Only use bash for commands that have no dedicated tool. Git: NEVER force-push to main, create NEW commits, stage specific files, use HEREDOC for messages.",
+    "bash": (tool_bash, True,
+        "Executes a shell command and returns its output.\n\n"
+        "IMPORTANT: Do NOT use bash when a dedicated tool exists. Dedicated tools are faster, safer, and "
+        "save tokens. Use them instead:\n"
+        "- Reading files: use read_file (NOT cat/head/tail/less)\n"
+        "- Editing files: use edit_file (NOT sed/awk)\n"
+        "- Writing files: use write_file (NOT echo/heredoc/cat >)\n"
+        "- Finding files: use glob (NOT find/ls)\n"
+        "- Searching content: use grep (NOT grep/rg/ag)\n\n"
+        "WHEN to use bash:\n"
+        "- Git operations: git status, git diff, git commit, git log, git push\n"
+        "- Package management: pip install, npm install, conda install\n"
+        "- Running scripts and tests: python script.py, pytest, npm test\n"
+        "- Building/compiling projects: make, npm run build\n"
+        "- System commands with no dedicated tool equivalent\n\n"
+        "Git safety rules:\n"
+        "- NEVER force-push to main/master\n"
+        "- ALWAYS create NEW commits (don't amend unless explicitly asked)\n"
+        "- Stage specific files by name (not git add -A or git add .)\n"
+        "- NEVER skip hooks (--no-verify, --no-gpg-sign)\n"
+        "- Use HEREDOC for multi-line commit messages\n\n"
+        "Command execution:\n"
+        "- Working directory persists between calls — use absolute paths to avoid confusion\n"
+        "- Default timeout: 120 seconds (max 600 seconds via timeout parameter)\n"
+        "- Chain dependent commands with && (not newlines)\n"
+        "- For independent parallel commands, make multiple bash tool calls in one message\n"
+        "- Avoid unnecessary sleep commands — diagnose root causes instead of retry loops",
         {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer", "description": "Timeout seconds (max 600)"}}, "required": ["command"]}),
 
     "python_exec": (tool_python_exec, True, "Execute Python code for data processing, calculations, scripting.",
@@ -5571,20 +5688,36 @@ TOOLS = {
         }, "required": []}),
 
     "task": (tool_task, True,
-        "Spawn sub-agent for complex tasks. "
-        "WHEN: multi-file research, code review, complex implementation (3+ files), adversarial testing. "
-        "WHEN NOT: simple file reads (use read_file), quick searches (<3 queries, use glob/grep directly), single-step operations. "
-        "Types: "
-        "explore (fast codebase search — specify thoroughness: 'quick' for basic, 'medium' for moderate, 'very thorough' for comprehensive), "
-        "plan (architecture design — returns step-by-step plan with critical files), "
-        "review (code review — evidence-based, show command output not just opinions), "
-        "verify (adversarial testing — tries to BREAK the code, MANDATORY after 3+ file edits), "
-        "build (full dev — read, write, execute, test), "
-        "general (multi-step research + execution). "
-        "PROMPT WRITING: Brief like a smart colleague who just walked in — explain what you're trying to do, why, what you've already learned or ruled out. "
-        "Include file paths and line numbers when you know them. "
-        "NEVER delegate understanding — don't write 'based on your findings, fix it.' Synthesize findings yourself. "
-        "Launch multiple agents in parallel when tasks are independent (use single message with multiple tool calls).",
+        "Launch a sub-agent to handle complex, multi-step tasks autonomously.\n\n"
+        "Sub-agents run independently with their own conversation context and tool access. "
+        "Each agent type has specific capabilities and restrictions.\n\n"
+        "Agent types:\n"
+        "- explore: Fast codebase search. Specify thoroughness in your prompt: 'quick' (basic grep/glob), "
+        "'medium' (moderate exploration), 'very thorough' (comprehensive multi-location). Read-only — cannot modify files.\n"
+        "- plan: Architecture and design planning. Returns step-by-step plans with critical files and trade-offs. Read-only.\n"
+        "- review: Code review. MUST be evidence-based — show command output and file contents, not just opinions. Read-only.\n"
+        "- verify: Adversarial testing. Tries to BREAK the implementation — edge cases, regressions, error handling. "
+        "MANDATORY after editing 3+ files. Runs tests but cannot modify source.\n"
+        "- build: Full development. Can read, write, execute, and test. Use for multi-file implementations.\n"
+        "- general: Multi-step research and execution. All tools available. Default if type not specified.\n\n"
+        "WHEN to use:\n"
+        "- Multi-file research or exploration requiring 5+ tool calls\n"
+        "- Code review that needs evidence gathering across the codebase\n"
+        "- Complex implementation spanning 3+ files\n"
+        "- Adversarial testing after significant changes\n"
+        "- Any task where autonomous multi-step work is needed\n\n"
+        "WHEN NOT to use:\n"
+        "- Simple file reads → use read_file directly\n"
+        "- Quick searches (1-2 queries) → use glob or grep directly\n"
+        "- Single-step operations → just do them yourself\n"
+        "- Tasks you can complete in 1-2 tool calls\n\n"
+        "PROMPT WRITING — brief the agent like a smart colleague who just walked in:\n"
+        "- Explain WHAT you need done and WHY\n"
+        "- Describe what you've already learned or ruled out\n"
+        "- Include file paths and line numbers when you know them\n"
+        "- Give enough context that the agent can make judgment calls\n"
+        "- NEVER delegate understanding: don't write 'based on findings, fix it' — synthesize yourself\n"
+        "- For parallel independent tasks, launch multiple agents in a single message with multiple tool calls",
         {"type": "object", "properties": {
             "description": {"type": "string", "description": "3-5 word summary"},
             "prompt": {"type": "string", "description": "Complete task instructions with context"},
@@ -6179,6 +6312,40 @@ class Agent:
                 logging.warning(f"Sub-agent model override '{model_override}' failed: {e} — using parent model")
                 pass  # Fall back to parent's client
 
+        # V4.4.0: Git worktree isolation for build sub-agents
+        # Creates an isolated copy of the workspace so build mistakes don't corrupt the original.
+        # Only for 'build' type, only in sequential path (not parallel), only if workspace is a git repo.
+        _worktree_path = None
+        _original_workspace = None
+        _use_worktree = (
+            agent_type == "build"
+            and not _skip_cache_isolation  # Sequential path only — parallel builds skip worktree
+            and CONFIG.enable_worktree
+        )
+        if _use_worktree:
+            try:
+                _git_check = subprocess.run(
+                    ["git", "rev-parse", "--is-inside-work-tree"],
+                    capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
+                )
+                if _git_check.returncode == 0:
+                    _wt_name = f"_worktree_build_{int(time.time())}"
+                    _worktree_path = os.path.join(tempfile.gettempdir(), _wt_name)
+                    _wt_result = subprocess.run(
+                        ["git", "worktree", "add", "--detach", _worktree_path, "HEAD"],
+                        capture_output=True, text=True, timeout=30, cwd=CONFIG.workspace
+                    )
+                    if _wt_result.returncode == 0:
+                        _original_workspace = CONFIG.workspace
+                        CONFIG.workspace = _worktree_path
+                        output_fn(f"[Worktree] Build agent isolated in: {_worktree_path}")
+                    else:
+                        logging.warning(f"Worktree creation failed: {_wt_result.stderr.strip()}")
+                        _worktree_path = None
+            except Exception as e:
+                logging.warning(f"Worktree setup failed: {e}")
+                _worktree_path = None
+
         # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
         # When _skip_cache_isolation=True (parallel path), the caller already set up thread-local
         # context isolation, so we just clear the thread-local set.
@@ -6228,6 +6395,46 @@ class Agent:
             # (skipped when called from parallel path — caller handles restoration)
             if _saved_in_context is not None:
                 FILE_CACHE.restore_context(_saved_in_context)
+
+            # V4.4.0: Worktree cleanup — restore workspace, merge changes, remove worktree
+            if _worktree_path and _original_workspace:
+                CONFIG.workspace = _original_workspace  # Restore immediately
+                try:
+                    # Detect changed files (modified + untracked)
+                    _diff_out = subprocess.run(
+                        ["git", "diff", "--name-only"],
+                        capture_output=True, text=True, timeout=10, cwd=_worktree_path
+                    )
+                    _new_out = subprocess.run(
+                        ["git", "ls-files", "--others", "--exclude-standard"],
+                        capture_output=True, text=True, timeout=10, cwd=_worktree_path
+                    )
+                    _changed = [f for f in (_diff_out.stdout + "\n" + _new_out.stdout).strip().splitlines() if f.strip()]
+
+                    if _changed:
+                        _copied = 0
+                        for _f in _changed:
+                            _src = os.path.join(_worktree_path, _f)
+                            _dst = os.path.join(_original_workspace, _f)
+                            if os.path.isfile(_src):
+                                os.makedirs(os.path.dirname(_dst), exist_ok=True)
+                                shutil.copy2(_src, _dst)
+                                _copied += 1
+                        output_fn(f"[Worktree] {_copied} file(s) merged back to main workspace")
+                    else:
+                        output_fn("[Worktree] No changes — main workspace unchanged")
+                except Exception as e:
+                    logging.warning(f"Worktree merge failed: {e}")
+                    output_fn(f"[Worktree] Warning: merge failed ({e})")
+                finally:
+                    # Always remove worktree (best-effort)
+                    try:
+                        subprocess.run(
+                            ["git", "worktree", "remove", "--force", _worktree_path],
+                            capture_output=True, timeout=15, cwd=_original_workspace
+                        )
+                    except Exception:
+                        pass
 
         tail = "\n".join(sub_output[-8:])
         header = f"[Sub-agent: {agent_type} | {description}]"

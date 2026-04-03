@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageMaker Coding Agent V4.3.3 - Architecture and Runnable Comparison</title>
+<title>SageMaker Coding Agent V4.4.0 - Architecture and Runnable Comparison</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -212,10 +212,10 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.3.3</h1>
+    <h1>SageMaker Coding Agent V4.4.0</h1>
     <p class="subtitle">
-      Architecture map of V4.3.3 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (8,699 lines),
-      plus comparison against Claude Code runnable source. V4.3.3 closes all system prompt gaps vs Runnable
+      Architecture map of V4.4.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,090 lines),
+      plus comparison against Claude Code runnable source. V4.4.0 closes all system prompt gaps vs Runnable
       for SageMaker scope: tool efficiency, code security (OWASP), prompt injection detection, sub-agent
       notes, escalation guidance, and URL safety. UI redesigned with budget slider, soft-stop, improved markdown rendering.
     </p>
@@ -387,7 +387,7 @@ flowchart TD
 
     <h3>3. Memory + Context Management</h3>
     <table>
-      <tr><th>Area</th><th>Runnable</th><th>V4.3.3</th><th>What matters</th></tr>
+      <tr><th>Area</th><th>Runnable</th><th>V4.4.0</th><th>What matters</th></tr>
       <tr><td>Memory structure</td><td>Per-file memory items + MEMORY.md index</td><td>Single <code>memory.md</code> with typed sections</td><td>Runnable scales better for large memory stores; V4 is simpler to inspect in notebooks.</td></tr>
       <tr><td>Memory extraction</td><td>Forked sub-agent with full conversation context</td><td>Single in-process LLM extraction path</td><td>Runnable is richer; V4 is lighter and easier to run in SageMaker.</td></tr>
       <tr><td>File context dedup</td><td>Unchanged-file stub + in-context discipline</td><td>Now includes unchanged-file stub and file-context cache tracking</td><td>V4 closed the practical repeated-read waste issue.</td></tr>
@@ -423,7 +423,7 @@ flowchart TD
       "Closed" here means the practical feature gap is gone, not that the implementation is byte-for-byte identical.
     </div>
     <table>
-      <tr><th>Feature</th><th>Claude Code Runnable</th><th>V4.3.3</th><th>Status</th><th>Notes</th></tr>
+      <tr><th>Feature</th><th>Claude Code Runnable</th><th>V4.4.0</th><th>Status</th><th>Notes</th></tr>
       <tr><td>Parallel read-only tools</td><td>Yes, up to 10 and starts while stream is still arriving</td><td>Yes, batches consecutive read-only tools with up to 6 workers</td><td><span class="pill yes">Closed</span></td><td>Remaining difference: runnable also streams tool start while the model is still speaking.</td></tr>
       <tr><td>FILE_UNCHANGED_STUB</td><td>Yes</td><td>Yes</td><td><span class="pill yes">Closed</span></td><td>Audit verified the stub now wins before the generic in-context dedup hint.</td></tr>
       <tr><td>PTL retry during compaction</td><td>Yes, <code>truncateHeadForPTLRetry()</code></td><td>Yes, oldest summary slice dropped and retried up to 3 times</td><td><span class="pill yes">Closed</span></td><td>The exact algorithm is simpler than runnable, but the failure mode is now handled.</td></tr>
@@ -440,29 +440,35 @@ flowchart TD
       <tr><td>Parallel sub-agent execution</td><td>Yes</td><td>Yes</td><td><span class="pill yes">Closed</span></td><td>V4 already runs several delegated task calls in parallel, but without runnable's worktree isolation.</td></tr>
       <tr><td>Sub-agent model override</td><td>Not emphasized</td><td>Yes</td><td><span class="pill yes">V4 edge</span></td><td>V4 can steer different sub-agent types toward different Bedrock models more directly.</td></tr>
       <tr><td>Sub-agent state isolation</td><td>Stronger</td><td>Partial</td><td><span class="pill partial">Open</span></td><td>V4 still has some shared globals like <code>_FILE_READ_TIMES</code> that are a concurrency risk if many sub-agents overlap.</td></tr>
-      <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--accent);">V4.3.2 → V4.3.3 New Closures</td></tr>
-      <tr><td>Tool efficiency in system prompt</td><td>Yes: "SEARCH BEFORE READ", "Do NOT use bash when dedicated tool exists"</td><td>Yes: added SEARCH BEFORE READ + MINIMIZE TOOL CALLS</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. Previously only in tool descriptions, now also in system prompt. Reduces wasted tool calls.</td></tr>
-      <tr><td>Code security (OWASP) in prompt</td><td>Yes: "Be careful not to introduce security vulnerabilities (command injection, XSS, SQL injection)"</td><td>Yes: added to Doing Tasks section</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. LLM now warned about OWASP top 10 when writing code.</td></tr>
-      <tr><td>Prompt injection detection</td><td>Yes: "flag suspected prompt injection to user"</td><td>Yes: added to System section</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. Tool results from external sources flagged if suspicious.</td></tr>
-      <tr><td>Sub-agent absolute paths</td><td>Yes: "always use absolute file paths"</td><td>Yes: Sub-agent Notes section added to sub-agent prompt</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. Sub-agents now told to use absolute paths, avoid code recapping.</td></tr>
-      <tr><td>Escalation guidance</td><td>Yes: "only when genuinely stuck after investigation"</td><td>Yes: added to Doing Tasks section</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. Prevents premature ask_user calls.</td></tr>
-      <tr><td>URL safety</td><td>Yes: CYBER_RISK_INSTRUCTION</td><td>Yes: "NEVER generate or guess URLs"</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix.</td></tr>
+      <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--accent);">V4.3.2 → V4.4.0 New Closures</td></tr>
+      <tr><td>Tool efficiency in system prompt</td><td>Yes: "SEARCH BEFORE READ", "Do NOT use bash when dedicated tool exists"</td><td>Yes: added SEARCH BEFORE READ + MINIMIZE TOOL CALLS</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Previously only in tool descriptions, now also in system prompt. Reduces wasted tool calls.</td></tr>
+      <tr><td>Code security (OWASP) in prompt</td><td>Yes: "Be careful not to introduce security vulnerabilities (command injection, XSS, SQL injection)"</td><td>Yes: added to Doing Tasks section</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. LLM now warned about OWASP top 10 when writing code.</td></tr>
+      <tr><td>Prompt injection detection</td><td>Yes: "flag suspected prompt injection to user"</td><td>Yes: added to System section</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Tool results from external sources flagged if suspicious.</td></tr>
+      <tr><td>Sub-agent absolute paths</td><td>Yes: "always use absolute file paths"</td><td>Yes: Sub-agent Notes section added to sub-agent prompt</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Sub-agents now told to use absolute paths, avoid code recapping.</td></tr>
+      <tr><td>Escalation guidance</td><td>Yes: "only when genuinely stuck after investigation"</td><td>Yes: added to Doing Tasks section</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Prevents premature ask_user calls.</td></tr>
+      <tr><td>URL safety</td><td>Yes: CYBER_RISK_INSTRUCTION</td><td>Yes: "NEVER generate or guess URLs"</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix.</td></tr>
       <tr><td>Adversarial verify sub-agent</td><td>Basic verification</td><td>Yes: "try to BREAK it" + PASS/FAIL/PARTIAL</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.2 feature. Runnable has verification but not explicitly adversarial.</td></tr>
-      <tr><td>Diminishing returns detection</td><td>Token budget tracking</td><td>Yes: 3+ text-only turns &lt;200 tokens → warning</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.3 fix. Only counts text-only turns (tool-call turns skip, not stuck).</td></tr>
-      <tr><td>Budget control in UI</td><td>No (API-level limits)</td><td>Yes: slider $0.50-$20.00, soft-stop</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.3 feature. User can raise budget mid-session without restarting.</td></tr>
-      <tr><td>Cache savings display</td><td>Telemetry (not user-facing)</td><td>Yes: "Actual $X | Without cache $Y | Saved $Z"</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.3 feature. User sees real cost vs would-have-cost.</td></tr>
-      <tr><td>Markdown rendering in chat</td><td>React/Ink terminal components</td><td>HTML renderer: blue headers, red code, numbered lists, bordered code blocks</td><td><span class="pill yes">Closed</span></td><td>V4.3.3 fix. Previously flat/unreadable, now styled like VS Code.</td></tr>
-      <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--danger);">[CRITICAL] Token Efficiency Fixes — V4.3.3</td></tr>
+      <tr><td>Diminishing returns detection</td><td>Token budget tracking</td><td>Yes: 3+ text-only turns &lt;200 tokens → warning</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 fix. Only counts text-only turns (tool-call turns skip, not stuck).</td></tr>
+      <tr><td>Budget control in UI</td><td>No (API-level limits)</td><td>Yes: slider $0.50-$20.00, soft-stop</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 feature. User can raise budget mid-session without restarting.</td></tr>
+      <tr><td>Cache savings display</td><td>Telemetry (not user-facing)</td><td>Yes: "Actual $X | Without cache $Y | Saved $Z"</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 feature. User sees real cost vs would-have-cost.</td></tr>
+      <tr><td>Markdown rendering in chat</td><td>React/Ink terminal components</td><td>HTML renderer: blue headers, red code, numbered lists, bordered code blocks</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Previously flat/unreadable, now styled like VS Code.</td></tr>
+      <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--danger);">[CRITICAL] Token Efficiency Fixes — V4.4.0</td></tr>
       <tr><td>Large file guard (read_file)</td><td>Tool description hints at offset/limit</td><td>Files &gt;500 lines: auto-returns first 50 + last 30 lines. Forces grep→read_file workflow.</td><td><span class="pill yes">V4 edge</span></td><td>[CRITICAL] Saves ~45K tokens/session. LLM can't dump 2000 lines anymore.</td></tr>
       <tr><td>Context-aware tool filtering</td><td>ToolSearch (on-demand discovery)</td><td>Scan last 4 messages for keywords, exclude doc/vision/web/semantic tools when irrelevant.</td><td><span class="pill yes">V4 edge</span></td><td>[CRITICAL] Saves ~10,800 tokens/session. V4's approximation of Runnable's ToolSearch — ~60% of the benefit.</td></tr>
       <tr><td>Tool result cap</td><td>50K chars (global), 30K (Bash)</td><td>50K chars (global), smart truncation at 30KB</td><td><span class="pill yes">Closed</span></td><td>Codex review: Runnable is 50K not 30K. Reverted. Smart truncation handles actual output.</td></tr>
-      <tr><td>read_file description</td><td>~90 lines with examples</td><td>Enhanced: mentions 500-line guard, grep-first workflow</td><td><span class="pill partial">Partial</span></td><td>V4 can't match Runnable's ~90-line descriptions without blowing cache threshold on Haiku.</td></tr>
+      <tr><td>read_file description</td><td>~90 lines with examples</td><td>V4.4.0: 23-line rich description with WHEN/WHEN NOT, offset guidance, format support</td><td><span class="pill yes">Closed</span></td><td>[CRITICAL] V4.4.0: Rewrote to rich format. Now crosses Haiku cache threshold.</td></tr>
       <tr><td>ToolSearch (on-demand)</td><td>Yes — LLM discovers tools by keyword</td><td>No — context-aware filtering approximates this</td><td><span class="pill partial">Architectural</span></td><td>Runnable's ToolSearch is more flexible. V4's keyword filtering is simpler but achieves ~60% savings.</td></tr>
       <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--accent);">Codex Final Review Fixes (gpt-5.3-codex, 2 reviews, 290K tokens)</td></tr>
       <tr><td>FILE_UNCHANGED_STUB after partial read</td><td>Stricter: range match + non-partial state</td><td>Fixed: skip stub when prior read was partial</td><td><span class="pill yes">Closed</span></td><td>[CRITICAL] Codex finding #1. Partial read then full read was blocked. Now checks _FILE_PARTIAL_READS.</td></tr>
       <tr><td>Clear read state on compact</td><td>Clears readFileState on compact</td><td>Fixed: clears _FILES_READ + _FILE_READ_TIMES + _FILE_PARTIAL_READS</td><td><span class="pill yes">Closed</span></td><td>[HIGH] Codex finding #2. Stale "already read" state persisted after compact. Now matches Runnable.</td></tr>
       <tr><td>Partial-read range accuracy</td><td>Tracks exact range</td><td>Fixed: (1, 50) not (1, 80) — only first 50 shown contiguously</td><td><span class="pill yes">Closed</span></td><td>[MEDIUM] Codex finding #3.</td></tr>
       <tr><td>Keyword false positives</td><td>N/A (uses ToolSearch)</td><td>Fixed: " word " with spaces to avoid matching "password"</td><td><span class="pill yes">Closed</span></td><td>[MEDIUM] Codex finding #4.</td></tr>
+      <tr><td colspan="5" style="background:var(--panel-soft);font-weight:bold;color:var(--danger);">[CRITICAL] V4.4.0 — Rich Tool Descriptions + Git Worktree</td></tr>
+      <tr><td>Rich tool descriptions (7 tools)</td><td>15-90 lines per tool with WHEN/WHEN NOT, examples</td><td>V4.4.0: 7 key tools rewritten to 15-32 lines each. grep: "ALWAYS use, NEVER bash grep". bash: dedicated tool preference list.</td><td><span class="pill yes">Closed</span></td><td>[CRITICAL] Fixes Haiku's bash-grep misuse. System prompt + tools > 4,096 tokens = cache activates = ~90% cheaper/turn on Haiku.</td></tr>
+      <tr><td>Git worktree isolation</td><td>Yes: <code>isolation: "worktree"</code> in Agent tool</td><td>V4.4.0: Build sub-agents auto-isolated in git worktree. Changes merged back on success. Cleanup always runs.</td><td><span class="pill yes">Closed</span></td><td>[CRITICAL] Build mistakes no longer corrupt workspace. Sequential-only (parallel builds skip). Configurable: enable_worktree.</td></tr>
+      <tr><td>write_file rich description</td><td>~18 lines with read-first enforcement</td><td>V4.4.0: 15-line description with read-first, prefer-edit, mode docs, WHEN/WHEN NOT</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 new.</td></tr>
+      <tr><td>edit_file rich description</td><td>~28 lines with indentation, uniqueness</td><td>V4.4.0: 17-line description with exact match, replace_all, "never use sed/awk"</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 new.</td></tr>
+      <tr><td>task rich description</td><td>~287 lines (dynamic, agent types listed)</td><td>V4.4.0: 32-line description with agent types, capabilities, WHEN/WHEN NOT, prompt-writing guide</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 new.</td></tr>
     </table>
   </section>
 
@@ -502,7 +508,7 @@ flowchart TD
         </ul>
       </div>
       <div class="card">
-        <h3>System prompt at parity (V4.3.3)</h3>
+        <h3>System prompt at parity (V4.4.0)</h3>
         <ul>
           <li>Tool efficiency: SEARCH BEFORE READ + MINIMIZE TOOL CALLS matches Runnable's prompts.ts.</li>
           <li>Code security: OWASP top 10 guidance (injection, XSS, SQL injection).</li>
@@ -512,7 +518,7 @@ flowchart TD
         </ul>
       </div>
       <div class="card" style="border:2px solid var(--danger);">
-        <h3 style="color:var(--danger);">[SUPER CRITICAL] Token Efficiency — Verified (V4.3.3)</h3>
+        <h3 style="color:var(--danger);">[SUPER CRITICAL] Token Efficiency — Verified (V4.4.0)</h3>
         <ul>
           <li><b>Large file guard</b>: files &gt;500 lines → first 50 + last 30 only. Forces grep→read_file.</li>
           <li><b>Context-aware tool filtering</b>: doc/vision/web/semantic excluded when irrelevant.</li>
@@ -534,7 +540,7 @@ flowchart TD
         </ul>
       </div>
       <div class="card">
-        <h3>Cost control + verification (V4.3.3)</h3>
+        <h3>Cost control + verification (V4.4.0)</h3>
         <ul>
           <li>Budget slider: $0.50-$20.00 adjustable in UI during session.</li>
           <li>Soft-stop: warns on budget hit, user raises slider to continue.</li>
@@ -629,14 +635,14 @@ flowchart TD
     <h3>Current honest answer to "is V4 the best yet?"</h3>
     <table>
       <tr><th>Question</th><th>Answer</th></tr>
-      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.3.3 closed ALL system prompt behavioral gaps that matter for SageMaker: tool efficiency (SEARCH BEFORE READ), code security (OWASP), prompt injection detection, sub-agent absolute paths, escalation guidance, URL safety. Plus prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, PTL-safe compaction retry, adversarial verify agent, and practical sub-agent coordination.</td></tr>
+      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.4.0 closed ALL system prompt behavioral gaps that matter for SageMaker: tool efficiency (SEARCH BEFORE READ), code security (OWASP), prompt injection detection, sub-agent absolute paths, escalation guidance, URL safety. Plus prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, PTL-safe compaction retry, adversarial verify agent, and practical sub-agent coordination.</td></tr>
       <tr><td>Is V4 fully identical to runnable?</td><td>No. Remaining differences are architectural (not behavioral): snip compaction, streaming tool execution, immutable message design, memory extraction as fork, worktree isolation, hooks system, autonomous mode, language preference. These are ecosystem features that don't apply to SageMaker scope. Two Codex reviews (290K tokens total) verified all behavioral gaps are closed.</td></tr>
-      <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.3.3 is 10/10 for SageMaker/Bedrock/Jupyter scope. It has features Runnable doesn't: adversarial verify agent, budget slider with soft-stop, cache savings display (actual/original/saved), diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, and Bedrock-native prompt caching with cold-cache detection.</td></tr>
+      <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.4.0 is 10/10 for SageMaker/Bedrock/Jupyter scope. It has features Runnable doesn't: adversarial verify agent, budget slider with soft-stop, cache savings display (actual/original/saved), diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, and Bedrock-native prompt caching with cold-cache detection.</td></tr>
       <tr><td>Is caching actually working on AWS?</td><td>Yes. Verified on Sonnet 4.5 (WRITE on turn 1, HIT on subsequent turns, ~90% savings). Haiku 4.5 requires 4,096 token minimum — activates when skills are loaded. Legacy Claude 3 Haiku rejected cache blocks; fallback path handles this gracefully.</td></tr>
     </table>
   </section>
 
-  <p class="footer">Updated 2026-04-02 (V4.3.3). Source of truth: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code>. Comparison source: runnable TypeScript snapshot under <code>compare_code/gg-claude-code-runnable</code>. System prompt gap analysis: <code>Documentations/V4_SYSTEM_PROMPT_GAP_ANALYSIS.md</code>.</p>
+  <p class="footer">Updated 2026-04-04 (V4.4.0). Source of truth: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code>. Comparison source: runnable TypeScript snapshot under <code>compare_code/gg-claude-code-runnable</code>. System prompt gap analysis: <code>Documentations/V4_SYSTEM_PROMPT_GAP_ANALYSIS.md</code>.</p>
 </div>
 
 <script>

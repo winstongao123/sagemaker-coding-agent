@@ -1,5 +1,49 @@
 # Compact V4 Changelog
 
+## v4.4.0 — [CRITICAL] Rich Tool Descriptions + Git Worktree Isolation (2026-04-03)
+
+Base: compact_v4 v4.3.3
+
+### [CRITICAL] Rich Tool Descriptions (Runnable Parity)
+- **Why**: Haiku still used `bash grep` instead of `grep` tool. Short descriptions didn't provide enough guidance for correct tool selection.
+- **What**: Rewrote 7 key tool descriptions from 2-3 lines to 15-30 lines each:
+  - `read_file`: Full usage guide, offset/limit guidance, image/notebook support, WHEN/WHEN NOT sections
+  - `write_file`: Must-read-first enforcement, prefer edit_file guidance, mode documentation
+  - `edit_file`: Exact match requirements, replace_all guidance, indentation preservation
+  - `glob`: Pattern syntax guide, recursive matching, "never use bash find" enforcement
+  - `grep`: "ALWAYS use for content search, NEVER bash grep" as opening line, regex examples, workflow guidance
+  - `bash`: Dedicated tool preference list, git safety rules, command execution notes
+  - `task`: Agent type descriptions with capabilities, WHEN/WHEN NOT, prompt-writing guide
+- **Impact**: System prompt + tools now exceeds 4,096 tokens → activates Haiku's prompt cache → every turn ~90% cheaper on cached prefix
+- **Source**: Modeled on Runnable's `src/tools/*/prompt.ts` style (BashTool ~370 lines, GrepTool ~18 lines, etc.)
+- File grew from 8,750 → 9,015 lines (+265 lines)
+
+### [CRITICAL] Git Worktree Isolation for Build Sub-agents
+- **Why**: When build sub-agent makes mistakes, the main workspace is corrupted. Worktree creates an isolated copy — mistakes don't affect the original.
+- **What**: Before spawning a `build` sub-agent:
+  1. Checks if workspace is a git repo
+  2. Creates a detached worktree: `git worktree add --detach <temp_path> HEAD`
+  3. Temporarily sets `CONFIG.workspace` to worktree path
+  4. Sub-agent works in isolation
+  5. After completion: copies changed/new files back to main workspace
+  6. Always cleans up: `git worktree remove --force`
+- **Safety**:
+  - Only for `build` type (explore/review/verify/plan are read-only)
+  - Only in sequential path (parallel builds skip worktree to avoid CONFIG.workspace race)
+  - Graceful fallback if git not available or worktree creation fails
+- **Config**: `enable_worktree: true` (default). Disable via `agent_config.json`: `"enable_worktree": false`
+- **Code**: `_run_task_tool()` in `sagemaker_agent.py` lines ~6315-6415
+- File grew from 9,015 → 9,090 lines (+75 lines)
+
+### Documentation
+- Updated `[CRITICAL]_V4_TOKEN_EFFICIENCY.md` with V4.4.0 section
+- Updated `[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md` with worktree implementation
+- Updated `PS_FLOWCHART_V4.html` comparison table
+- Updated `CHANGELOG.md` (this file)
+- Updated `SESSION_STATE.md`
+
+---
+
 ## v4.3.3 — UI Redesign + Bug Fixes (2026-04-02)
 
 Base: compact_v4 v4.3.2

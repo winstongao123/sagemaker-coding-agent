@@ -1,8 +1,8 @@
 # [CRITICAL] V4 Sub-Agent Usage + Code Quality — Learned from Runnable
 
-**Date**: 2026-04-03
+**Date**: 2026-04-03 (updated)
 **Priority**: CRITICAL — affects code writing quality, false claims, and verification
-**Version**: V4.3.3
+**Version**: V4.4.0
 
 ---
 
@@ -22,11 +22,27 @@
 | 8 | **Don't peek at running agents** | "Don't read fork output mid-flight — defeats context isolation" | Added to Sub-agent Coordination | MODERATE |
 | 9 | **Query-count threshold** | "Use explore agent only when task requires 3+ queries" | Added: "<3 queries use grep directly" | MODERATE |
 
+### V4.4.0 — Git Worktree Isolation (NEW)
+
+| # | Gap | What V4.4.0 Added | Severity |
+|---|-----|------------------|----------|
+| 10 | **Build agent workspace corruption** | Git worktree isolation: build sub-agents work in detached copy, changes merged back only on success | CRITICAL |
+| 11 | **Rich tool descriptions** | 7 key tools rewritten to 15-30 lines each (Runnable style), fixes Haiku's bash-grep misuse | CRITICAL |
+
+**Git Worktree Flow**:
+1. `git worktree add --detach <temp> HEAD` → isolated copy
+2. Build sub-agent runs all operations in worktree
+3. On completion: changed files copied back to main workspace via `shutil.copy2`
+4. Worktree always cleaned up: `git worktree remove --force`
+5. If worktree fails (no git, creation error) → graceful fallback to direct workspace
+
+**Safety**: Only for `build` type. Sequential path only (parallel builds skip worktree). Configurable: `enable_worktree: true` default.
+
 ### Acknowledged (Not Implemented — Architectural Gaps)
 
 | # | Gap | Why Not Implemented |
 |---|-----|-------------------|
-| 10 | Fork vs Fresh decision tree | V4 has no fork mechanism (no git worktree). Would need architecture change. |
+| ~~10~~ | ~~Fork vs Fresh decision tree~~ | **RESOLVED in V4.4.0** — Git worktree provides isolation for build agents |
 | 11 | Foreground vs background execution | V4 sub-agents always run foreground. Background would need threading changes. |
 | 12 | Plan agent 5-step workflow | Current plan mode works. Structured output adds complexity without proven benefit. |
 

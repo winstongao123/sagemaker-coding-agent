@@ -1,70 +1,70 @@
-# Session State — Runnable Learning + V4 Enhancement
+# Session State — V4.4.0 Rich Tool Descriptions + Git Worktree
 
-> **Last updated**: 2026-04-02 by Claude Opus 4.6
-> **Git state**: Commit `8579744` pushed to `sageagent`
-> **V4 version**: 4.3.2
+> **Last updated**: 2026-04-04 by Claude Opus 4.6
+> **Git state**: Pending commit (changes not yet pushed)
+> **V4 version**: 4.4.0
 
 ---
 
 ## WHAT WAS DONE THIS SESSION
 
-### 1. Read & Verified All 6 PDFs (Chinese internet analyses of Claude Code)
-- PDF 1: 13 Agent Design Patterns (13 pages)
-- PDF 2: Deep Dive into Agent Flow (18 pages)
-- PDF 3: Agent Framework Design (13 pages, includes how-claude-code-works repo)
-- PDF 5: Regex Profanity Detection + Unreleased Features (11 pages)
-- PDF 6: What Is This System Really? (19 pages)
-- PDF 7: Full System Prompt Analysis (26 pages)
-- All major claims verified against actual source code at `gg-claude-code-runnable/src/`
+### 1. [CRITICAL] Rich Tool Descriptions (Task 1)
+- Rewrote 7 key tool descriptions from 2-3 lines to 15-32 lines each
+- Tools: read_file, write_file, edit_file, glob, grep, bash, task
+- Style: Modeled on Runnable's `src/tools/*/prompt.ts`
+- Each has: Usage section, WHEN to use, WHEN NOT to use, anti-patterns
+- Impact: System prompt + tools > 4,096 tokens → Haiku cache activates → ~90% cheaper/turn
+- Impact: Fixes Haiku's `bash grep` instead of `grep` tool misuse
+- File grew: 8,750 → 9,015 lines (+265 lines)
 
-### 2. Complete Prompt Extraction (24 prompts from Runnable)
-- See `PS_ClaudeCode_Insights/PS_[03]_PROMPT_ANALYSIS.md` for full inventory
-- Every prompt's V4 status tracked: IMPLEMENTED / PARTIAL / NOT IMPLEMENTED / N/A
+### 2. [CRITICAL] Git Worktree Isolation for Build Sub-agents (Task 2)
+- Build sub-agents now run in isolated git worktree
+- Flow: create worktree → sub-agent works → merge changes back → cleanup
+- Only for `build` type, sequential path, git repos
+- Graceful fallback if git unavailable or worktree fails
+- Config: `enable_worktree: true` (default), configurable via agent_config.json
+- File grew: 9,015 → 9,090 lines (+75 lines)
 
-### 3. V4.3.2 Code Enhancements (6 changes, 51 insertions)
-- Cache-breakage detection after compact
-- WHEN-not-WHAT tool descriptions for 5 tools
-- New "verify" adversarial testing sub-agent type
-- Explore agent: explicit RO prohibition
-- Bash tool: git safety in description
-- All sub-agents: absolute path requirement
-
-### 4. Documentation
-- `PS_[01]_DEEP_ANALYSIS_V2.md` — Initial codebase audit
-- `PS_[02]_DEEP_ANALYSIS_V3.md` — Fresh audit
-- `PS_[03]_PROMPT_ANALYSIS.md` — **NEW**: All 24 prompts tracked
-- `PS_[03a]_PROMPT_COMPARISON.md` — Side-by-side comparison
-- `PS_[04]_LEARNING_JOURNEY.md` — Full journey + PDF integration
-- `Web_doc/PS_WEBDOC_LEARNINGS.md` — PDF cross-reference
-- `Web_doc/PS_FLOWCHART_RUNNABLE.html` — 5 tabs, 10 flowcharts
-- `Web_doc/PS_FLOWCHART_V4.html` — 5 tabs, 8 flowcharts
+### 3. Documentation Updates
+- `compact_v4/CHANGELOG.md`: Full V4.4.0 section with both features
+- `[CRITICAL]_V4_TOKEN_EFFICIENCY.md`: Updated Fix 4, resolved "can't match" gap
+- `[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md`: Added worktree section, resolved Gap #10
+- `V4_VS_RUNNABLE_ARCHITECTURE.md`: Updated verdict (V4 now leads on sub-agents)
+- `PS_FLOWCHART_V4.html`: Updated title, stats, 5 new comparison rows
+- All docs synced to both Documentations/ and PS_ClaudeCode_Insights/ folders
 
 ---
 
 ## WHAT REMAINS (for next agent)
 
 ### HIGH PRIORITY
-1. **HTMLs need enhancement**: User wants iPad/iPhone compatible, more explanations under each flowchart (hidden/expandable), Playwright testing for UX
-2. **Codex review of HTMLs**: Both for accuracy (do flowcharts match actual code?) and UX (mobile, rendering)
-3. **Companion .md + .zip update**: `compact_v4/MAIN/agent/chat.md` needs refresh, `compact_v4/compact_v4.zip` needs rebuild
+1. **Codex review** of V4.4.0 changes (tool descriptions + worktree code)
+2. **Push to sageagent** remote after review
+3. **Rebuild zip**: `compact_v4/compact_v4.zip`
 
 ### MEDIUM PRIORITY
-4. **Coordinator Mode**: User asked about it — it's documented but NOT implemented (genuinely complex). See PS_[03]_PROMPT_ANALYSIS.md section G.
-5. **Context Collapse**: Projection-based non-destructive folding. V4 has multi-tier thresholds but no projection.
+4. **Live testing**: Upload to SageMaker, test with Haiku:
+   - "analyze sagemaker_agent.py" — should use grep not bash
+   - Check cache indicator: should show WRITE on turn 1 (not INACTIVE)
+   - Test build sub-agent: worktree creation, isolation, merge-back
+5. **chat.md update**: Sync companion doc with new feature descriptions
 
-### WHAT V4 CANNOT LEARN FROM RUNNABLE (documented)
-- Fork Subagent: Bedrock cache is server-side, can't control byte-prefix
-- Proactive Mode: V4 is interactive-only (SageMaker Jupyter)
-- tree-sitter AST: Adds npm dependency to Python agent; regex+allowlist sufficient
-- Session Memory Update: V4's simpler memory.md approach is sufficient
+### WHAT V4 STILL CAN'T MATCH (Honest)
+- ToolSearch (on-demand discovery) — V4 uses keyword filtering instead
+- Model-level tool-use tuning — Anthropic internal
+- Remote agents — V4 doesn't need (single user on SageMaker)
+- Fork subagent (cache-sharing) — Bedrock cache is server-side
 
 ---
 
-## KEY FILES TO READ FIRST
-1. `PS_ClaudeCode_Insights/PS_[03]_PROMPT_ANALYSIS.md` — Master prompt tracker
-2. `compact_v4/CHANGELOG.md` — Version history with all changes
-3. `compact_v4/MAIN/agent/sagemaker_agent.py` — The V4 source (~8,500 lines)
-4. This file (`SESSION_STATE.md`)
+## KEY FILES MODIFIED
+1. `compact_v4/MAIN/agent/sagemaker_agent.py` — 9,090 lines (tool descriptions + worktree)
+2. `compact_v4/CHANGELOG.md` — V4.4.0 section
+3. `Documentations/[CRITICAL]_V4_TOKEN_EFFICIENCY.md` — Fix 4 updated
+4. `Documentations/[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md` — Worktree section
+5. `Documentations/V4_VS_RUNNABLE_ARCHITECTURE.md` — Verdict updated
+6. `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html` — V4.4.0 rows
+7. This file (`SESSION_STATE.md`)
 
 ---
 

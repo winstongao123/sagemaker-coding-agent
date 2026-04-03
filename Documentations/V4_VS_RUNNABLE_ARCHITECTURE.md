@@ -46,10 +46,12 @@
 | verify | Testing | Validation (non-adversarial) |
 | guide | Self-docs | Claude Code help |
 
-**Runnable unique**: Git worktree isolation (agents work on isolated repo copy), remote agents.
+**Runnable unique**: Remote agents (sandbox environments).
+
+**V4.4.0**: Now has git worktree isolation for build agents — matching Runnable's worktree feature.
 
 ### Verdict
-**Tie** — different strengths. V4 has adversarial verify + structured output. Runnable has worktree isolation + remote agents. For SageMaker (single user, no parallel agents), V4's verify is more useful.
+**V4 leads** — has adversarial verify + structured output + worktree isolation (as of V4.4.0). Runnable has remote agents (V4 doesn't need — single user on SageMaker).
 
 ---
 
