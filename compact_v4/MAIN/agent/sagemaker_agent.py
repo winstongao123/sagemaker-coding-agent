@@ -836,7 +836,7 @@ class Config:
     max_turns: int = 60
     max_tokens: int = 16384  # Must be > thinking_budget when thinking enabled
     max_history: int = 20
-    max_output_chars: int = 30000  # V4.3.3 [CRITICAL]: lowered from 50K to 30K (matches Runnable)
+    max_output_chars: int = 50000  # Matches Runnable's DEFAULT_MAX_RESULT_SIZE_CHARS (50K). Smart truncation at 30KB handles actual output.
     max_file_size: int = 10 * 1024 * 1024  # 10MB
 
     # Context limits (Claude 3.5 = 200K tokens)
@@ -3111,11 +3111,15 @@ def tool_read_file(args: Dict) -> str:
         # V4.3.3 [CRITICAL]: Large file guard — if file >500 lines and no offset specified,
         # return summary + first/last 50 lines instead of 2000 lines. Saves ~15K tokens per read.
         # Forces LLM to use grep to find specific sections, then read_file with offset/limit.
+        # Codex review fix: track as partial read so edit_file warns about limited view.
         if total_lines > 500 and offset == 0 and limit >= 2000:
             head = lines[:50]
             tail = lines[-30:]
             head_text = "\n".join(f"{i+1:4}| {l[:2000]}" for i, l in enumerate(head))
             tail_text = "\n".join(f"{total_lines-30+i+1:4}| {l[:2000]}" for i, l in enumerate(tail))
+            # Track as partial read (lines 1-50 + last 30) so edit_file warns
+            with _FILES_READ_LOCK:
+                _FILE_PARTIAL_READS[abs_path] = (1, 80)
             cache_tag = " [cached]" if cache_hit else ""
             return (f"[{os.path.basename(path)}]{cache_tag} {total_lines} lines total — LARGE FILE, showing first 50 + last 30 lines.\n"
                     f"Use grep to find specific code, then read_file with offset/limit for the exact section.\n\n"
@@ -5477,7 +5481,7 @@ for _agent_name, _agent_cfg in CONFIG.agent_overrides.items():
 # ============== TOOL REGISTRY ==============
 
 TOOLS = {
-    "read_file": (tool_read_file, False, "Read file contents with line numbers. WHEN: reading a specific file or section you already know the location of. WHEN NOT: searching for patterns (use grep FIRST), finding files by name (use glob). IMPORTANT: For files >500 lines, you will only see first 50 + last 30 lines — use grep to find the section you need, then read_file with offset/limit. You MUST read a file before editing it.",
+    "read_file": (tool_read_file, False, "Read file contents with line numbers. WHEN: reading a specific file or section you already know the location of. WHEN NOT: searching for patterns (use grep FIRST), finding files by name (use glob). IMPORTANT: For files >500 lines without offset/limit, you will only see first 50 + last 30 lines — use grep to find the section you need, then read_file with offset and limit to read that specific range. You MUST read a file before editing it.",
         {"type": "object", "properties": {"file_path": {"type": "string", "description": "Absolute path to file"}, "offset": {"type": "integer", "description": "Start line (0-indexed)"}, "limit": {"type": "integer", "description": "Max lines (default 2000)"}}, "required": ["file_path"]}),
 
     "write_file": (tool_write_file, True, "Write content to file. You MUST read first if file exists. Prefer edit_file for modifications — use write_file only for new files or complete rewrites.",
@@ -6365,17 +6369,24 @@ class Agent:
                 _exclude = set()
                 # Doc tools: only when documents/charts mentioned
                 _DOC_TOOLS = {"create_word", "create_excel", "create_chart", "create_pdf", "create_notebook", "create_markdown"}
-                _DOC_KEYWORDS = {"chart", "report", "document", "docx", "word", "excel", "xlsx", "pdf", "notebook", "ipynb", "plot", "graph", "spreadsheet", "visualization"}
+                _DOC_KEYWORDS = {"chart", "report", "document", "docx", "word", "excel", "xlsx", "pdf",
+                                 "notebook", "ipynb", "plot", "graph", "spreadsheet", "visualization",
+                                 "markdown", "readme", "create_word", "create_excel", "create_chart"}
                 if not any(kw in _recent_text for kw in _DOC_KEYWORDS):
                     _exclude |= _DOC_TOOLS
                 # Vision: only when image mentioned
-                if not any(kw in _recent_text for kw in {"image", "screenshot", "png", "jpg", "jpeg", "photo", "picture", "look at", "view_image"}):
+                if not any(kw in _recent_text for kw in {"image", "screenshot", "png", "jpg", "jpeg", "gif",
+                                                          "photo", "picture", "look at", "view_image", "img",
+                                                          "diagram", "figure"}):
                     _exclude.add("view_image")
                 # Semantic search: only when semantic/deep/meaning search mentioned
-                if not any(kw in _recent_text for kw in {"semantic", "meaning", "find where", "code search", "semantic_search"}):
+                if not any(kw in _recent_text for kw in {"semantic", "meaning", "find where", "code search",
+                                                          "semantic_search", "references", "callers",
+                                                          "who calls", "used by"}):
                     _exclude.add("semantic_search")
                 # Web fetch: only when URL mentioned
-                if not any(kw in _recent_text for kw in {"http", "url", "fetch", "web_fetch", "website"}):
+                if not any(kw in _recent_text for kw in {"http", "url", "fetch", "web_fetch", "website",
+                                                          "link", "uri", "browse"}):
                     _exclude.add("web_fetch")
                 if _exclude:
                     _active_allowlist = set(TOOLS.keys()) - _exclude

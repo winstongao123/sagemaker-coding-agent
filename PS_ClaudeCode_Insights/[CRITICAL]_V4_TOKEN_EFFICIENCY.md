@@ -131,4 +131,28 @@ This is a V4 ORIGINAL optimization. Runnable uses ToolSearch instead. Both achie
 
 ---
 
+---
+
+## Codex Review (gpt-5.3-codex, 162K tokens) — 4 Findings Fixed
+
+### Finding 1: [HIGH] Large file guard skipped partial-read tracking
+**Bug**: Guard returned before `_FILE_PARTIAL_READS` was set, so `edit_file` didn't warn about partial view.
+**Fix**: Added `_FILE_PARTIAL_READS[abs_path] = (1, 80)` inside the guard before returning.
+
+### Finding 2: [MEDIUM] Tool filtering keywords brittle
+**Missing**: `markdown`, `readme`, `img`, `diagram`, `figure`, `references`, `callers`, `who calls`, `used by`, `link`, `uri`, `browse`, `gif`.
+**Fix**: Added all missing keywords to their respective tool groups.
+
+### Finding 3: [HIGH] Result cap was wrong — Runnable is 50K not 30K
+**Bug**: We lowered `max_output_chars` to 30K claiming "matches Runnable." Codex verified Runnable's `DEFAULT_MAX_RESULT_SIZE_CHARS = 50_000`. Smart truncation at 30KB handles actual output separately.
+**Fix**: Reverted to 50K. Smart truncation (`Truncation.MAX_BYTES = 30KB`) still handles the actual output cap.
+
+### Finding 4: [LOW] Tool description didn't match guard condition
+**Bug**: Description said ">500 lines always shows first/last" but code only triggers when `offset==0 AND limit>=2000`.
+**Fix**: Description now says "without offset/limit" to match actual behavior.
+
+---
+
 *This document is tagged [CRITICAL] because token efficiency directly affects cost, speed, context usage, and answer quality. Every wasted token is money spent and context consumed.*
+
+*Codex review completed 2026-04-03. Review saved: `_archive/codex_reviews/v4_token_efficiency_review.txt`*
