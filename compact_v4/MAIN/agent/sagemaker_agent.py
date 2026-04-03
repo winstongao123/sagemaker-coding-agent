@@ -7186,14 +7186,13 @@ def create_chat_ui(mock_mode: bool = None):
     mode_html = widgets.HTML(value='')
     tokens_html = widgets.HTML(value='<span style="color:gray;font-size:11px;">Tokens: 0</span>')
 
-    # Plan Mode toggle (2-stage)
-    plan_mode_toggle = widgets.ToggleButton(
+    # Plan Mode checkbox (read-only mode — agent can only read/explore, no writes)
+    plan_mode_toggle = widgets.Checkbox(
         value=False,
         description='Plan Mode',
-        icon='map',
-        button_style='',
-        tooltip='When ON: Agent only reads/explores, creates plan file. When OFF: Normal execution.',
-        layout=widgets.Layout(width='140px')
+        indent=False,
+        tooltip='When ON: Agent only reads/explores, no file writes. When OFF: Normal execution.',
+        style={'description_width': 'initial'}
     )
 
     # Auto-compact checkbox (ON by default - always auto-compact at 90%)
@@ -8661,11 +8660,12 @@ def create_chat_ui(mock_mode: bool = None):
     # Remove "Model:" label — dropdown is self-explanatory
     model_dropdown.description = ''
     model_dropdown.layout = widgets.Layout(width='260px')
-    model_row = widgets.HBox([model_dropdown, _sa_toggle])
+    # Model row: dropdown + plan mode + sub-agent models (all about model/mode selection)
+    model_row = widgets.HBox([model_dropdown, plan_mode_toggle, _sa_toggle])
     model_row.layout = widgets.Layout(align_items='center', gap='10px')
-    # Plan Mode + Approval as grey buttons (aligned), then Auto-Compact + Dark Mode
-    toggles_row = widgets.HBox([plan_mode_toggle, approval_checkbox, auto_compact_checkbox, dark_mode_checkbox])
-    toggles_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 12px')
+    # Toggles row: behavioral settings, compact layout
+    toggles_row = widgets.HBox([approval_checkbox, auto_compact_checkbox, dark_mode_checkbox])
+    toggles_row.layout = widgets.Layout(align_items='center', gap='4px 20px')
 
     # Group 2: Thinking
     thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider])
