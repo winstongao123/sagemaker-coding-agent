@@ -8660,7 +8660,7 @@ def create_chat_ui(mock_mode: bool = None):
     model_dropdown.description = ''
     model_dropdown.layout = widgets.Layout(width='260px')
     model_row = widgets.HBox([model_dropdown, _sa_toggle, plan_mode_toggle, approval_checkbox])
-    model_row.layout = widgets.Layout(align_items='center', gap='0px 12px')
+    model_row.layout = widgets.Layout(align_items='center', justify_content='flex-start', gap='0px 16px')
 
     # Group 2: Thinking + secondary toggles
     thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, auto_compact_checkbox, dark_mode_checkbox])
