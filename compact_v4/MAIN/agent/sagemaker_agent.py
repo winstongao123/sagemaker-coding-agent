@@ -8631,37 +8631,52 @@ def create_chat_ui(mock_mode: bool = None):
     ui_state["get_header_html"] = get_header_html
     ui_state["update_tokens"] = update_tokens_display
 
-    # Row 1: Session & Model - [Name] [💾Save] [Session ▼] [📁Load] [+New] | [Model ▼]
-    row1 = widgets.HBox([
-        session_name_input, save_btn, session_dropdown, load_btn, new_btn,
-        widgets.HTML('<span style="margin:0 8px;color:#777;">|</span>'),
-        model_dropdown, plan_mode_toggle, auto_compact_checkbox
+    # === REDESIGNED LAYOUT ===
+    # Top: Config bar (model, approval, thinking — always visible, key settings)
+    # Below: Session bar
+    # Then: Chat + Input + Buttons + Metrics
+    # Bottom: Collapsible advanced settings
+
+    # Config bar: Model + key toggles (always visible)
+    config_row = widgets.HBox([
+        model_dropdown, _sa_toggle, approval_checkbox, dark_mode_checkbox,
+        plan_mode_toggle, auto_compact_checkbox
     ])
-    row1.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 10px')
+    config_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 10px')
 
-    # Row 2: Parameters
-    row2 = widgets.HBox([
-        temp_slider, thinking_checkbox, thinking_budget_slider, dark_mode_checkbox, approval_checkbox, _sa_toggle
+    # Thinking row (always visible — key config)
+    thinking_row = widgets.HBox([
+        thinking_checkbox, thinking_budget_slider, temp_slider
     ])
-    row2.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='8px 12px')
+    thinking_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 12px')
 
-    # Row 3: Buttons (stop_btn hidden by default, shows during processing)
-    row3 = widgets.HBox([send_btn, stop_btn, clear_btn, compact_btn, cleanup_btn, status_html])
+    # Session bar
+    session_row = widgets.HBox([
+        session_name_input, save_btn, session_dropdown, load_btn, new_btn
+    ])
+    session_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
-    # Full UI layout - using HTML widget for chat (no Output widget issues)
+    # Action buttons: Send/Stop left, utility right
+    action_left = widgets.HBox([send_btn, stop_btn, clear_btn])
+    action_right = widgets.HBox([compact_btn, cleanup_btn, status_html])
+    action_row = widgets.HBox([action_left, action_right])
+    action_row.layout = widgets.Layout(justify_content='space-between', width='100%')
+
+    # Full UI layout
     ui = widgets.VBox([
         header,
-        row1,
-        row2,
-        _sa_panel,  # Collapsible sub-agent model overrides
-        mode_html,
-        todo_display,  # Collapsible todo list (2-stage)
-        chat_display,  # HTML widget with internal scroll
-        approval_box,
-        ask_user_box,
-        input_box,
-        row3,
-        tokens_html
+        config_row,         # Model, approval, dark mode, plan mode
+        thinking_row,       # Thinking, budget, temperature
+        _sa_panel,          # Collapsible sub-agent model overrides
+        session_row,        # Session management
+        mode_html,          # Status line (model, plan, skills, cost)
+        todo_display,       # Collapsible todo list
+        chat_display,       # Conversation (HTML with internal scroll)
+        approval_box,       # Approval dialog (hidden until needed)
+        ask_user_box,       # Ask-user dialog (hidden until needed)
+        input_box,          # Message input
+        action_row,         # Send/Stop/Clear ... Compact/Clean/Status
+        tokens_html,        # Token metrics
     ])
 
     update_session_list()
