@@ -3043,9 +3043,11 @@ def tool_read_file(args: Dict) -> str:
 
     # V4.2 V2-H: FILE_UNCHANGED_STUB — if file unchanged since last read, return stub
     # Saves context tokens when LLM re-reads files that haven't been modified.
+    # Codex fix: only return stub if prior read was NOT partial (otherwise user may want full read)
     with _FILES_READ_LOCK:
         last_read_mtime = _FILE_READ_TIMES.get(abs_path)
-    if last_read_mtime is not None and offset == 0:
+        was_partial = abs_path in _FILE_PARTIAL_READS
+    if last_read_mtime is not None and offset == 0 and not was_partial:
         try:
             current_mtime = os.path.getmtime(abs_path)
             if abs(current_mtime - last_read_mtime) < 0.5:  # Same mtime = unchanged
@@ -3117,9 +3119,9 @@ def tool_read_file(args: Dict) -> str:
             tail = lines[-30:]
             head_text = "\n".join(f"{i+1:4}| {l[:2000]}" for i, l in enumerate(head))
             tail_text = "\n".join(f"{total_lines-30+i+1:4}| {l[:2000]}" for i, l in enumerate(tail))
-            # Track as partial read (lines 1-50 + last 30) so edit_file warns
+            # Track as partial read so edit_file warns (non-contiguous: lines 1-50 + last 30)
             with _FILES_READ_LOCK:
-                _FILE_PARTIAL_READS[abs_path] = (1, 80)
+                _FILE_PARTIAL_READS[abs_path] = (1, 50)  # Only first 50 lines were fully shown
             cache_tag = " [cached]" if cache_hit else ""
             return (f"[{os.path.basename(path)}]{cache_tag} {total_lines} lines total — LARGE FILE, showing first 50 + last 30 lines.\n"
                     f"Use grep to find specific code, then read_file with offset/limit for the exact section.\n\n"
@@ -6340,6 +6342,12 @@ class Agent:
                             self._compact_failure_count = 0  # Reset counter on success
                         self.messages = COMPACTOR.compact(self.messages, summary)
                         output_fn("[i] Conversation compacted to preserve context")
+                        # Codex fix: clear file read state on compact (Runnable clears readFileState)
+                        # Old context is gone — stale read markers would block valid re-reads
+                        with _FILES_READ_LOCK:
+                            _FILES_READ.clear()
+                            _FILE_READ_TIMES.clear()
+                            _FILE_PARTIAL_READS.clear()
                         # V4.2 V2-D: Expire stale "always approve" decisions — old context is gone
                         if self.on_compact_fn:
                             self.on_compact_fn()
@@ -6369,7 +6377,8 @@ class Agent:
                 _exclude = set()
                 # Doc tools: only when documents/charts mentioned
                 _DOC_TOOLS = {"create_word", "create_excel", "create_chart", "create_pdf", "create_notebook", "create_markdown"}
-                _DOC_KEYWORDS = {"chart", "report", "document", "docx", "word", "excel", "xlsx", "pdf",
+                # Note: "word" can false-positive on "password" — use " word " with spaces or check tool names
+                _DOC_KEYWORDS = {"chart", "report", "document", "docx", " word ", "excel", "xlsx", "pdf",
                                  "notebook", "ipynb", "plot", "graph", "spreadsheet", "visualization",
                                  "markdown", "readme", "create_word", "create_excel", "create_chart"}
                 if not any(kw in _recent_text for kw in _DOC_KEYWORDS):
@@ -6486,8 +6495,8 @@ class Agent:
                         elif _cache_attempted:
                             output_fn("[Cache: restarted after compact — next turn should rebuild cache]")
                             self._cache_broken_by_compact = False  # Only warn once
-                # V4.3 V3-A: Diminishing returns detection (mirrors runnable tokenBudget.ts)
-                # If 3+ consecutive TEXT-ONLY turns produce <500 output tokens, agent may be stuck.
+                # V4.3.3: Diminishing returns detection (mirrors runnable tokenBudget.ts)
+                # If 3+ consecutive TEXT-ONLY turns produce <200 output tokens, agent may be stuck.
                 # Skip turns with tool calls — those naturally have short output (the agent is working).
                 # Only warn once per run() call; only for top-level agent.
                 if self.subagent_depth == 0 and not self._diminishing_warned:
