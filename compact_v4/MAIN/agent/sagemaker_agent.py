@@ -8656,20 +8656,15 @@ def create_chat_ui(mock_mode: bool = None):
     _sep3 = widgets.HTML('<hr style="margin:4px 0;border:none;border-top:1px solid #333;"/>')
     _sep4 = widgets.HTML('<hr style="margin:2px 0;border:none;border-top:1px solid #333;"/>')
 
-    # Group 1: Model & Controls
-    # Remove "Model:" label — dropdown is self-explanatory
+    # Group 1: Model + Mode + Approval (primary controls)
     model_dropdown.description = ''
     model_dropdown.layout = widgets.Layout(width='260px')
-    # Model row: dropdown + sub-agent (both about model selection, keep together)
-    model_row = widgets.HBox([model_dropdown, _sa_toggle])
-    model_row.layout = widgets.Layout(align_items='center', gap='8px')
-    # Toggles row: all checkboxes aligned together on one line
-    toggles_row = widgets.HBox([plan_mode_toggle, approval_checkbox, auto_compact_checkbox, dark_mode_checkbox])
-    toggles_row.layout = widgets.Layout(align_items='center', gap='0px 24px')
+    model_row = widgets.HBox([model_dropdown, _sa_toggle, plan_mode_toggle, approval_checkbox])
+    model_row.layout = widgets.Layout(align_items='center', gap='0px 12px')
 
-    # Group 2: Thinking
-    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider])
-    thinking_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 12px')
+    # Group 2: Thinking + secondary toggles
+    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, auto_compact_checkbox, dark_mode_checkbox])
+    thinking_row.layout = widgets.Layout(align_items='center', gap='0px 12px')
 
     # Group 3: Session
     session_row = widgets.HBox([session_name_input, save_btn, session_dropdown, load_btn, new_btn])
@@ -8689,12 +8684,11 @@ def create_chat_ui(mock_mode: bool = None):
         # ── Session (first action: load/new/save) ──
         session_row,
         _sep,
-        # ── Model & Controls (set once) ──
+        # ── Model + Plan + Approval (primary) ──
         model_row,
-        toggles_row,
         _sa_panel,
         _sep2,
-        # ── Thinking (set once) ──
+        # ── Thinking + Auto-Compact + Dark Mode (secondary) ──
         thinking_row,
         _sep3,
         # ── Chat area (95% of time here) ──
