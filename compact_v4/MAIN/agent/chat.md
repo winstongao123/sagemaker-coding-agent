@@ -181,6 +181,44 @@ CONFIG.session_cost_limit = 10.0
 CONFIG.max_turns = 80
 ```
 
+### Sub-Agent Coordination
+
+The agent can spawn sub-agents for complex tasks. This happens two ways:
+
+1. **You ask**: "use a build sub-agent to create X" or "review this code"
+2. **Agent decides**: when a task needs 5+ tool calls or spans 3+ files, the agent spawns a sub-agent automatically
+
+**6 sub-agent types:**
+
+| Type | What it does | Can write files? |
+|------|-------------|-----------------|
+| explore | Fast codebase search (quick/medium/thorough) | No |
+| plan | Architecture design, step-by-step plans | No |
+| review | Evidence-based code review | No |
+| verify | Adversarial testing — tries to BREAK your code | No (runs tests) |
+| build | Full development — read, write, execute, test | Yes |
+| general | Multi-step research + execution | Yes |
+
+### Git Worktree Isolation (V4.4.0)
+
+When a **build** sub-agent runs, V4 protects your workspace:
+
+1. If workspace is a git repo → creates an isolated worktree copy
+2. If workspace is NOT a git repo → auto-initializes git (no credentials needed)
+3. Build agent works in the isolated copy
+4. On success → changes merged back to your workspace
+5. On failure → changes discarded, your workspace is untouched
+
+**You'll see these messages in chat:**
+- `[Worktree] Auto-initialized git for workspace protection` (first time only)
+- `[Worktree] Build agent isolated in: /tmp/_worktree_build_...`
+- `[Worktree] N file(s) merged back to main workspace` (success)
+- `[Worktree] Sub-agent failed — discarding worktree changes` (failure)
+
+**No setup needed.** Works automatically. Your real git config is never touched.
+
+Disable with `"enable_worktree": false` in `agent_config.json` if not wanted.
+
 ### Version History
 
 | Version | Key Changes |

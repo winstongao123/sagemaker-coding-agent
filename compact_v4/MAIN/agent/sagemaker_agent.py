@@ -6330,9 +6330,21 @@ class Agent:
                     capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
                 )
                 if _git_check.returncode != 0:
-                    # Not a git repo — skip worktree (no auto-init, works fine without it)
-                    _worktree_path = None
-                else:
+                    # Auto-init git so worktree isolation works on any workspace.
+                    # -c flags set throwaway name/email (per-command only, never touches global config).
+                    subprocess.run(["git", "init"], capture_output=True, timeout=10, cwd=CONFIG.workspace)
+                    subprocess.run(["git", "add", "-A"], capture_output=True, timeout=30, cwd=CONFIG.workspace)
+                    _init_result = subprocess.run(
+                        ["git", "-c", "user.name=SageAgent", "-c", "user.email=agent@local",
+                         "commit", "-m", "auto-init for worktree isolation", "--allow-empty"],
+                        capture_output=True, text=True, timeout=15, cwd=CONFIG.workspace
+                    )
+                    if _init_result.returncode != 0:
+                        logging.warning(f"Auto-init failed: {_init_result.stderr.strip()}")
+                        _worktree_path = None
+                    else:
+                        output_fn("[Worktree] Auto-initialized git for workspace protection")
+                if _worktree_path is not None:
                     # Review fix [MEDIUM]: UUID suffix prevents name collision on rapid sequential builds
                     import uuid
                     _wt_name = f"_worktree_build_{int(time.time())}_{uuid.uuid4().hex[:8]}"
