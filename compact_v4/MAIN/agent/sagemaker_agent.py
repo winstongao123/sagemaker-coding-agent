@@ -8658,9 +8658,13 @@ def create_chat_ui(mock_mode: bool = None):
     _sep4 = widgets.HTML('<hr style="margin:2px 0;border:none;border-top:1px solid #333;"/>')
 
     # Group 1: Model & Controls
+    # Remove "Model:" label — dropdown is self-explanatory
+    model_dropdown.description = ''
+    model_dropdown.layout = widgets.Layout(width='260px')
     model_row = widgets.HBox([model_dropdown, _sa_toggle])
     model_row.layout = widgets.Layout(align_items='center', gap='10px')
-    toggles_row = widgets.HBox([approval_checkbox, dark_mode_checkbox, plan_mode_toggle, auto_compact_checkbox])
+    # Plan Mode + Approval as grey buttons (aligned), then Auto-Compact + Dark Mode
+    toggles_row = widgets.HBox([plan_mode_toggle, approval_checkbox, auto_compact_checkbox, dark_mode_checkbox])
     toggles_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 12px')
 
     # Group 2: Thinking
