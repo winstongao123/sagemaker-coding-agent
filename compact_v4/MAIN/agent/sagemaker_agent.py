@@ -7015,7 +7015,7 @@ def create_chat_ui(mock_mode: bool = None):
                     score += 2
                 if "|" in s:
                     score += 1
-                if re.search(r"[*#xXoO]{2,}", s):
+                if re.search(r"[xXoO]{2,}", s) and not re.search(r"\*\*|\#\#", s):
                     score += 1
             return score >= 6
 
