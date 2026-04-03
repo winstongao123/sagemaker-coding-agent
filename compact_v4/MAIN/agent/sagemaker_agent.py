@@ -6436,18 +6436,24 @@ class Agent:
                             output_fn("[Cache: restarted after compact — next turn should rebuild cache]")
                             self._cache_broken_by_compact = False  # Only warn once
                 # V4.3 V3-A: Diminishing returns detection (mirrors runnable tokenBudget.ts)
-                # If 3+ consecutive turns produce <500 output tokens, the agent may be stuck/looping.
+                # If 3+ consecutive TEXT-ONLY turns produce <500 output tokens, agent may be stuck.
+                # Skip turns with tool calls — those naturally have short output (the agent is working).
                 # Only warn once per run() call; only for top-level agent.
                 if self.subagent_depth == 0 and not self._diminishing_warned:
-                    _out_toks = response.usage.get("output_tokens", 0)
-                    self._turn_output_tokens.append(_out_toks)
-                    if len(self._turn_output_tokens) > 3:
-                        self._turn_output_tokens = self._turn_output_tokens[-3:]
-                    if (len(self._turn_output_tokens) >= 3 and
-                            all(t < 500 for t in self._turn_output_tokens)):
-                        self._diminishing_warned = True
-                        output_fn("[i] Diminishing returns: 3 consecutive turns with <500 output tokens. "
-                                  "Agent may be stuck — consider stopping and rephrasing.")
+                    _has_tool_calls = bool(response.tool_calls)
+                    if not _has_tool_calls:
+                        _out_toks = response.usage.get("output_tokens", 0)
+                        self._turn_output_tokens.append(_out_toks)
+                        if len(self._turn_output_tokens) > 3:
+                            self._turn_output_tokens = self._turn_output_tokens[-3:]
+                        if (len(self._turn_output_tokens) >= 3 and
+                                all(t < 200 for t in self._turn_output_tokens)):
+                            self._diminishing_warned = True
+                            output_fn("[i] Diminishing returns: 3 consecutive text responses with <200 output tokens. "
+                                      "Agent may be stuck — consider stopping and rephrasing.")
+                    else:
+                        # Tool call turns reset the counter — agent is actively working
+                        self._turn_output_tokens.clear()
 
             # Check stop again after LLM returns (user may have clicked during the call)
             if self.on_stop_check and self.on_stop_check():
