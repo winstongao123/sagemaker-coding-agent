@@ -6317,6 +6317,7 @@ class Agent:
         # Only for 'build' type, only in sequential path (not parallel), only if workspace is a git repo.
         _worktree_path = None
         _original_workspace = None
+        _worktree_head_sha = None  # Review fix [HIGH]: track HEAD for diff against staged/committed changes
         _use_worktree = (
             agent_type == "build"
             and not _skip_cache_isolation  # Sequential path only — parallel builds skip worktree
@@ -6329,13 +6330,21 @@ class Agent:
                     capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
                 )
                 if _git_check.returncode == 0:
-                    _wt_name = f"_worktree_build_{int(time.time())}"
+                    # Review fix [MEDIUM]: UUID suffix prevents name collision on rapid sequential builds
+                    import uuid
+                    _wt_name = f"_worktree_build_{int(time.time())}_{uuid.uuid4().hex[:8]}"
                     _worktree_path = os.path.join(tempfile.gettempdir(), _wt_name)
                     _wt_result = subprocess.run(
                         ["git", "worktree", "add", "--detach", _worktree_path, "HEAD"],
                         capture_output=True, text=True, timeout=30, cwd=CONFIG.workspace
                     )
                     if _wt_result.returncode == 0:
+                        # Review fix [HIGH]: capture HEAD SHA before sub-agent runs
+                        _sha_result = subprocess.run(
+                            ["git", "rev-parse", "HEAD"],
+                            capture_output=True, text=True, timeout=5, cwd=_worktree_path
+                        )
+                        _worktree_head_sha = _sha_result.stdout.strip() if _sha_result.returncode == 0 else None
                         _original_workspace = CONFIG.workspace
                         CONFIG.workspace = _worktree_path
                         output_fn(f"[Worktree] Build agent isolated in: {_worktree_path}")
@@ -6348,6 +6357,7 @@ class Agent:
 
         # V4.4.0: Outer try/finally guarantees CONFIG.workspace is restored even if
         # FILE_CACHE or Agent() constructor throws (worktree path would leak otherwise).
+        _sub_succeeded = False  # Review fix [MEDIUM]: only merge on success
         try:
             # Isolate sub-agent file cache: save parent's context markers, clear for sub-agent
             # When _skip_cache_isolation=True (parallel path), the caller already set up thread-local
@@ -6392,6 +6402,7 @@ class Agent:
                 count_towards_limits=False,
                 max_turns_override=max_turns,
             )
+            _sub_succeeded = True
         finally:
             # Restore parent's context markers only — sub-agent's markers are ephemeral
             # (skipped when called from parallel path — caller handles restoration)
@@ -6401,42 +6412,68 @@ class Agent:
             # V4.4.0: Worktree cleanup — restore workspace, merge changes, remove worktree
             if _worktree_path and _original_workspace:
                 CONFIG.workspace = _original_workspace  # Restore immediately
-                try:
-                    # Detect changed files (modified + untracked)
-                    _diff_out = subprocess.run(
-                        ["git", "diff", "--name-only"],
-                        capture_output=True, text=True, timeout=10, cwd=_worktree_path
-                    )
-                    _new_out = subprocess.run(
-                        ["git", "ls-files", "--others", "--exclude-standard"],
-                        capture_output=True, text=True, timeout=10, cwd=_worktree_path
-                    )
-                    _changed = [f for f in (_diff_out.stdout + "\n" + _new_out.stdout).strip().splitlines() if f.strip()]
 
-                    if _changed:
-                        _copied = 0
-                        for _f in _changed:
-                            _src = os.path.join(_worktree_path, _f)
-                            _dst = os.path.join(_original_workspace, _f)
-                            if os.path.isfile(_src):
-                                os.makedirs(os.path.dirname(_dst), exist_ok=True)
-                                shutil.copy2(_src, _dst)
-                                _copied += 1
-                        output_fn(f"[Worktree] {_copied} file(s) merged back to main workspace")
-                    else:
-                        output_fn("[Worktree] No changes — main workspace unchanged")
-                except Exception as e:
-                    logging.warning(f"Worktree merge failed: {e}")
-                    output_fn(f"[Worktree] Warning: merge failed ({e})")
-                finally:
-                    # Always remove worktree (best-effort)
+                # Review fix [MEDIUM]: only merge on success — discard partial work on failure
+                if _sub_succeeded:
                     try:
-                        subprocess.run(
-                            ["git", "worktree", "remove", "--force", _worktree_path],
-                            capture_output=True, timeout=15, cwd=_original_workspace
+                        # Review fix [HIGH]: diff against captured HEAD SHA to catch staged + committed changes
+                        _diff_cmd = ["git", "diff", "--name-only"]
+                        if _worktree_head_sha:
+                            _diff_cmd.append(_worktree_head_sha)
+                        _diff_out = subprocess.run(
+                            _diff_cmd,
+                            capture_output=True, text=True, timeout=10, cwd=_worktree_path
                         )
-                    except Exception:
-                        pass
+                        _new_out = subprocess.run(
+                            ["git", "ls-files", "--others", "--exclude-standard"],
+                            capture_output=True, text=True, timeout=10, cwd=_worktree_path
+                        )
+                        _changed = [f for f in (_diff_out.stdout + "\n" + _new_out.stdout).strip().splitlines() if f.strip()]
+
+                        if _changed:
+                            _copied = 0
+                            _norm_ws = os.path.normpath(_original_workspace)
+                            for _f in _changed:
+                                _src = os.path.join(_worktree_path, _f)
+                                _dst = os.path.join(_original_workspace, _f)
+                                # Review fix [LOW]: path traversal containment check
+                                if not os.path.normpath(_dst).startswith(_norm_ws):
+                                    logging.warning(f"[Worktree] Skipping out-of-bounds path: {_f}")
+                                    continue
+                                if os.path.isfile(_src):
+                                    os.makedirs(os.path.dirname(_dst), exist_ok=True)
+                                    shutil.copy2(_src, _dst)
+                                    _copied += 1
+                                # Review fix [HIGH]: propagate file deletions from worktree
+                                elif not os.path.exists(_src) and os.path.isfile(_dst):
+                                    os.remove(_dst)
+                                    _copied += 1
+                            output_fn(f"[Worktree] {_copied} file(s) merged back to main workspace")
+                        else:
+                            output_fn("[Worktree] No changes — main workspace unchanged")
+                    except Exception as e:
+                        logging.warning(f"Worktree merge failed: {e}")
+                        output_fn(f"[Worktree] Warning: merge failed ({e})")
+                else:
+                    output_fn("[Worktree] Sub-agent failed — discarding worktree changes (main workspace safe)")
+
+                # Always remove worktree — with fallback cleanup
+                try:
+                    _rm_result = subprocess.run(
+                        ["git", "worktree", "remove", "--force", _worktree_path],
+                        capture_output=True, text=True, timeout=15, cwd=_original_workspace
+                    )
+                    # Review fix [MEDIUM]: fallback if git worktree remove fails
+                    if _rm_result.returncode != 0:
+                        logging.warning(f"git worktree remove failed: {_rm_result.stderr.strip()}")
+                        shutil.rmtree(_worktree_path, ignore_errors=True)
+                        subprocess.run(
+                            ["git", "worktree", "prune"],
+                            capture_output=True, timeout=10, cwd=_original_workspace
+                        )
+                except Exception as e:
+                    logging.warning(f"Worktree cleanup failed: {e}")
+                    shutil.rmtree(_worktree_path, ignore_errors=True)
 
         tail = "\n".join(sub_output[-8:])
         header = f"[Sub-agent: {agent_type} | {description}]"
