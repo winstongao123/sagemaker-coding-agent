@@ -7198,7 +7198,8 @@ def create_chat_ui(mock_mode: bool = None):
         description='Plan Mode',
         indent=False,
         tooltip='When ON: Agent only reads/explores, no file writes. When OFF: Normal execution.',
-        style={'description_width': 'initial'}
+        style={'description_width': 'initial'},
+        layout=widgets.Layout(width='auto')
     )
 
     # Auto-compact checkbox (ON by default - always auto-compact at 90%)
@@ -7206,7 +7207,8 @@ def create_chat_ui(mock_mode: bool = None):
         value=True,
         description='Auto-Compact',
         indent=False,
-        tooltip='Automatically compact when context exceeds 90%'
+        tooltip='Automatically compact when context exceeds 90%',
+        layout=widgets.Layout(width='auto')
     )
 
     # Approval dialog
@@ -7255,7 +7257,8 @@ def create_chat_ui(mock_mode: bool = None):
     thinking_checkbox = widgets.Checkbox(
         value=CONFIG.thinking_enabled,
         description='Extended Thinking',
-        style={'description_width': 'initial'}
+        style={'description_width': 'initial'},
+        layout=widgets.Layout(width='auto')
     )
     thinking_budget_slider = widgets.IntSlider(
         value=CONFIG.thinking_budget,
@@ -7268,13 +7271,15 @@ def create_chat_ui(mock_mode: bool = None):
     dark_mode_checkbox = widgets.Checkbox(
         value=True,  # Default on like GCP
         description='Dark Mode',
-        style={'description_width': 'initial'}
+        style={'description_width': 'initial'},
+        layout=widgets.Layout(width='auto')
     )
     approval_checkbox = widgets.Checkbox(
         value=CONFIG.require_tool_approval,
         description='Require Approval',
         style={'description_width': 'initial'},
-        tooltip='If OFF, tool calls execute without manual Approve/Deny prompt.'
+        tooltip='If OFF, tool calls execute without manual Approve/Deny prompt.',
+        layout=widgets.Layout(width='auto')
     )
 
     def validate_model_connection(model_id: str) -> Tuple[bool, str]:
