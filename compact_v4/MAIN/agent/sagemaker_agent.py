@@ -7240,43 +7240,46 @@ def create_chat_ui(mock_mode: bool = None):
     # Update CONFIG to match selected model
     CONFIG.model_id = default_model
 
-    # Session selector and name input (no description labels — save space)
-    session_dropdown = widgets.Dropdown(description='', options=[('New Session', None)], layout=widgets.Layout(width='180px'))
-    session_name_input = widgets.Text(placeholder='Session name (optional)', layout=widgets.Layout(width='180px'))
+    # Session selector and name input
+    session_dropdown = widgets.Dropdown(description='Session:', options=[('New Session', None)], layout=widgets.Layout(width='250px'))
+    session_name_input = widgets.Text(placeholder='Session name (optional)', layout=widgets.Layout(width='200px'))
     load_btn = widgets.Button(description='Load', button_style='info', icon='folder-open')
     new_btn = widgets.Button(description='New', button_style='success', icon='plus')
 
-    # Live parameter controls (compact widths)
+    # Live parameter controls
     temp_slider = widgets.FloatSlider(
         value=CONFIG.temperature,
         min=0.0, max=1.0, step=0.1,
-        description='Temp:',
-        style={'description_width': '40px'},
-        layout=widgets.Layout(width='180px')
+        description='Temperature:',
+        style={'description_width': '100px'},
+        layout=widgets.Layout(width='250px')
     )
     thinking_checkbox = widgets.Checkbox(
         value=CONFIG.thinking_enabled,
         description='Extended Thinking',
+        indent=False,
         style={'description_width': 'initial'},
         layout=widgets.Layout(width='auto')
     )
     thinking_budget_slider = widgets.IntSlider(
         value=CONFIG.thinking_budget,
         min=1024, max=16000, step=1024,
-        description='Budget:',
-        style={'description_width': '50px'},
-        layout=widgets.Layout(width='200px'),
+        description='Think Budget:',
+        style={'description_width': '100px'},
+        layout=widgets.Layout(width='250px'),
         disabled=not CONFIG.thinking_enabled
     )
     dark_mode_checkbox = widgets.Checkbox(
         value=True,  # Default on like GCP
         description='Dark Mode',
+        indent=False,
         style={'description_width': 'initial'},
         layout=widgets.Layout(width='auto')
     )
     approval_checkbox = widgets.Checkbox(
         value=CONFIG.require_tool_approval,
         description='Require Approval',
+        indent=False,
         style={'description_width': 'initial'},
         tooltip='If OFF, tool calls execute without manual Approve/Deny prompt.',
         layout=widgets.Layout(width='auto')
