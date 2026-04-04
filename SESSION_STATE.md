@@ -22,11 +22,14 @@
 - 7 code review findings fixed (2 HIGH, 3 MEDIUM, 2 LOW)
 - **Tested on SageMaker**: Auto-init fires, build agent creates files, isolation works.
 
-### 4. PS_RUNNABLE_VS_LANGGRAPH.html (NEW)
+### 4. PS_RUNNABLE_VS_LANGGRAPH.html (REBUILT v2)
 - 9-tab comparison: Runnable Claude Code (TypeScript) vs LangGraph (Python)
-- 18 Mermaid flowcharts, side-by-side code examples, decision matrix
+- 15 Mermaid flowcharts, side-by-side code examples, decision matrix
+- Style matches PS_FLOWCHART_RUNNABLE.html exactly (same colors, same info-box, same modal)
+- Each tab: beginner explanation, side-by-side flowcharts, code comparison, practical takeaway for V4
 - Source-verified from gg-claude-code-runnable/src/ and LangGraph 0.2+ API
-- Playwright verified: all tabs, no errors, mobile responsive
+- Pre-render approach for Mermaid in hidden tabs (fixed syntax errors)
+- Playwright verified: 15 SVGs, 9 tabs, mobile responsive, 0 errors
 - Located: PS_ClaudeCode_Insights/PS_RUNNABLE_VS_LANGGRAPH.html
 
 ### 3. Documentation
