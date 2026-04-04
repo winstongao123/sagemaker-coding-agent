@@ -84,6 +84,22 @@
 Every Claude Code pattern mapped to its LangGraph equivalent, with practical takeaways for building chatbots like PS_Agent_Core V4.<br>
 Companion to <a href="PS_FLOWCHART_RUNNABLE.html" style="color:#58a6ff;">PS_FLOWCHART_RUNNABLE.html</a> (complete Claude Code architecture reference).</p>
 
+<div class="info-box" style="border-left-color:#e3b341; background:#1c1c0e;">
+<b>Before you start — key terms you'll see throughout:</b><br>
+<b>LLM</b> = Large Language Model (e.g., Claude, GPT). The AI brain that generates text and decides which tools to use.<br>
+<b>Agent</b> = An LLM plus tools plus a loop. The loop sends messages to the LLM, executes tools the LLM requests, and repeats until done.<br>
+<b>Tool</b> = A function the AI can call (e.g., search a database, read a file, run a command).<br>
+<b>Prompt caching</b> = Storing the system prompt on the server so you don't pay to re-send it every turn. Saves ~90% of input token costs on long conversations.<br>
+<b>Context window</b> = The maximum "memory" an LLM has per conversation (e.g., 200K tokens for Claude). When it fills up, old content must be pruned.<br>
+<b>Streaming</b> = Sending the AI's response word-by-word as it generates, instead of waiting for the full response. Makes the UI feel faster.<br>
+<b>DAG</b> = Directed Acyclic Graph — a flowchart where arrows only go forward (no loops back). LangGraph uses this concept.<br>
+<b>TypedDict</b> = Python's way of defining a dictionary with typed fields. Like a struct in C or an interface in TypeScript.<br>
+<b>Reducer</b> = A function that decides how node outputs merge into state. Example: <code>operator.add</code> means "append new items to the list" instead of replacing it.<br>
+<b>Zod</b> = TypeScript validation library (like Pydantic in Python). Checks that tool inputs have the right shape and types.<br>
+<b>Pydantic</b> = Python validation library. Defines input schemas with automatic type checking and custom validators.<br>
+<b>Super-step</b> = LangGraph term for one complete node execution. The checkpointer saves state after each super-step.
+</div>
+
 <div class="stats">
  <div class="stat"><div class="stat-num">0</div><div class="stat-label">Claude Code Frameworks</div></div>
  <div class="stat"><div class="stat-num">1,438</div><div class="stat-label">TypeScript Files</div></div>
@@ -327,6 +343,16 @@ type Message =
   | { type: 'attachment'; message: AttachmentMessage }
   | { type: 'system_compact_boundary'; message: SystemCompactBoundaryMessage };
 
+// 7 Message Types explained:
+// - UserMessage: what the human typed
+// - AssistantMessage: what the AI responded (text + tool calls)
+// - ProgressMessage: status updates shown in the UI ("thinking...", "running tool...")
+// - TombstoneMessage: placeholder for messages that were removed gracefully
+//   (e.g., after compaction — the message is gone but a marker remains)
+// - ToolUseSummaryMessage: condensed summary of a tool result (saves context space)
+// - AttachmentMessage: files, images, or data attached to the conversation
+// - SystemCompactBoundaryMessage: marks where compaction happened
+
 // The entire "state" is this array
 const messages: Message[] = [];
 
@@ -349,9 +375,15 @@ from typing import TypedDict, Annotated
 import operator
 
 class AgentState(TypedDict):
-    # operator.add = new messages get APPENDED to existing list
+    # WHY Annotated + operator.add?
+    # Without a reducer: if node A returns {"messages": [msg1]} and node B returns
+    # {"messages": [msg2]}, node B's output REPLACES node A's. You lose msg1.
+    # With operator.add as the reducer: msg2 gets APPENDED after msg1. Both kept.
+    # This is critical for chat — you never want to throw away old messages.
     messages: Annotated[list, operator.add]
-    # Custom fields for your domain logic
+
+    # Custom fields for your domain logic — LangGraph advantage over Claude Code
+    # Claude Code can ONLY store messages. LangGraph can store anything typed.
     iteration_count: int
     should_escalate: bool
     user_role: str        # e.g., "customer" or "admin"
@@ -513,7 +545,8 @@ Agent({
 <h3>Code: LangGraph Supervisor (like your V4)</h3>
 <pre>
 # This is essentially what your PS_Agent_Core V4 does
-from langgraph.graph import StateGraph, START, END, Send
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from langgraph.prebuilt import create_react_agent
 
 # Create specialized agents (like your orders/support/returns specialists)
@@ -701,6 +734,62 @@ result = app.invoke(None, config)  # Resume = approve
 - <code>_classify_bash_ro()</code> (auto-approve read-only) = Claude Code's permission system<br>
 - <code>ADMIN_ONLY_TOOLS</code> (role-based access) = Claude Code's permission check<br>
 - What's missing: PostToolUse audit hooks (Claude Code Step 6). Your <code>AgentMonitor</code> partially covers this.
+</div>
+
+<h3>Bonus Claude Code Patterns Not in LangGraph</h3>
+<p class="desc">These patterns exist in Claude Code but have no built-in LangGraph equivalent. They're worth understanding even if you don't implement them all.</p>
+
+<table>
+<tr><th>Pattern</th><th>What It Does (Beginner Explanation)</th><th>Why It Matters</th><th>LangGraph Equivalent</th></tr>
+<tr>
+ <td><b>Tool Auto-Repair (5 layers)</b></td>
+ <td>When the AI calls a tool with the wrong name or wrong arguments, instead of failing, Claude Code tries to FIX the call automatically:<br>1. Case-insensitive name lookup ("Read_File" -> "read_file")<br>2. Fuzzy prefix match ("rea" -> "read_file")<br>3. Argument name auto-fix ("path" -> "file_path")<br>4. Type coercion (string "5" -> number 5)<br>5. Missing required field inference</td>
+ <td>Reduces wasted LLM turns. Instead of the AI seeing "tool not found" and retrying, the system fixes the mistake silently. Saves tokens and time.</td>
+ <td>None built-in. You could add a custom middleware node before ToolNode that attempts to repair malformed tool calls.</td>
+</tr>
+<tr>
+ <td><b>Doom Loop Detection</b></td>
+ <td>Tracks the last 30 tool calls using a hash of each call's target (file path, search pattern, etc.). If the SAME call appears 3 times in a row, it breaks the loop. Think of it as: "Hey, you just tried this exact same thing 3 times. Stop."</td>
+ <td>Without this, an agent can get stuck retrying the same failing action until it burns through the entire context window. Claude Code detects this BEFORE context exhaustion.</td>
+ <td>None built-in. You could add a counter in LangGraph state and check it in a conditional edge: if same tool called 3x -> route to END or human escalation.</td>
+</tr>
+<tr>
+ <td><b>Speculative Pre-Check</b></td>
+ <td>While the CURRENT tool is still running, the permission system starts checking the NEXT tool call in the background. If the classifier says "safe", the approval step is skipped entirely when that tool's turn comes — zero wait time.</td>
+ <td>Eliminates permission-check latency for safe tools. Instead of: tool runs -> check permission -> execute, it becomes: tool runs + check permission IN PARALLEL -> execute immediately.</td>
+ <td>None built-in. You could implement this with <code>asyncio.create_task()</code> to pre-check the next tool while the current one runs.</td>
+</tr>
+<tr>
+ <td><b>ML Bash Classifier</b></td>
+ <td>A lightweight ML model (not the main LLM) that predicts whether a bash command is dangerous. It runs in the background (see speculative pre-check above). If it says "safe" with high confidence, the command auto-approves. If uncertain, it asks the user.<br><br>This is NOT the same as a regex denylist. It LEARNS from patterns — commands users approve/deny feed back into training.</td>
+ <td>Smarter than regex. A regex can catch <code>rm -rf /</code> but might miss creative variants. An ML classifier generalizes from patterns.</td>
+ <td>None built-in. Your V4 uses regex denylist + <code>_classify_bash_ro()</code> which is simpler but adequate for a customer service chatbot (you don't have arbitrary bash commands).</td>
+</tr>
+<tr>
+ <td><b>StreamingToolExecutor</b></td>
+ <td>Normal flow: LLM generates FULL response -> parse tool calls -> execute tools.<br>Claude Code flow: As EACH tool_use block streams in (before the full response is done), it STARTS executing that tool immediately.<br><br>Example: LLM generates 3 tool calls. While it's still generating tool call #3, tool calls #1 and #2 are already running.</td>
+ <td>Significant latency reduction. Instead of waiting for the full response (could be seconds), tools start executing as soon as they're parsed from the stream.</td>
+ <td>None built-in. LangGraph's ToolNode waits for the full response before dispatching. You could implement streaming dispatch with custom code, but it's complex.</td>
+</tr>
+<tr>
+ <td><b>createCacheSafeParams</b></td>
+ <td>When Claude Code spawns a sub-agent (worker), the worker reuses the parent's cached system prompt prefix. This avoids paying ~4K tokens of cache_creation cost per worker spawn.<br><br>Think of it as: "The parent already paid to cache the system prompt. The child reuses that cache instead of paying again."</td>
+ <td>In multi-agent setups, you might spawn 5-10 workers. Without cache sharing, each pays 4K tokens to cache the same system prompt. With it, only the first pays. Saves real money.</td>
+ <td>None built-in. In LangGraph, subgraphs share the same process but don't share prompt cache. You'd need to manage cache control headers at the API level.</td>
+</tr>
+<tr>
+ <td><b>Auto-Dream (Cross-Session Memory Consolidation)</b></td>
+ <td>After 24+ hours AND 5+ sessions, Claude Code automatically reviews ALL memories from recent sessions and consolidates them — removing duplicates, resolving conflicts, updating stale entries.<br><br>Think of it as: "Every night, organize your notes from the past few days."</td>
+ <td>Without consolidation, memories accumulate noise over time. Auto-Dream keeps the memory system clean and current without manual intervention.</td>
+ <td>None built-in. You could schedule a periodic job that reads the LangGraph Store, runs an LLM to consolidate, and writes back cleaned entries.</td>
+</tr>
+</table>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> You don't need ALL of these patterns. For a customer service chatbot, the most valuable ones are:<br>
+1. <b>Tool Auto-Repair</b> — reduces failed tool calls, saves LLM turns (implement as Pydantic validators with fallback logic)<br>
+2. <b>Doom Loop Detection</b> — prevents stuck agents from burning tokens (add a counter in your LangGraph state)<br>
+3. <b>StreamingToolExecutor</b> — nice to have for latency but complex to implement with LangGraph
 </div>
 
 </div><!-- end tab-tools -->
@@ -1078,7 +1167,7 @@ After full compaction, Claude Code clears 10+ caches to prevent stale state:<br>
 <tr><th>Metric</th><th><span class="badge badge-runnable">Claude Code</span></th><th><span class="badge badge-langgraph">LangGraph</span></th><th>Winner</th></tr>
 <tr><td><b>First token latency</b></td><td>Streaming — user sees output as it generates. Tools start BEFORE full response arrives via <code>StreamingToolExecutor.addTool()</code>.</td><td>Streaming available but tools wait for full response. <code>astream_events()</code> for token-level streaming.</td><td style="color:#58a6ff;">Claude Code</td></tr>
 <tr><td><b>Tool execution</b></td><td><code>partitionToolCalls()</code>: safe tools run in parallel (up to 10), unsafe run serially. Streaming starts tools early.</td><td><code>ToolNode</code> executes sequentially by default. Parallel possible with custom node + <code>asyncio.gather()</code>.</td><td style="color:#58a6ff;">Claude Code</td></tr>
-<tr><td><b>Prompt caching</b></td><td>Byte-level cache boundary. Static system+tools cached after turn 1. Immutable messages preserve cache. 90% cost reduction on subsequent turns.</td><td>No built-in cache management. Must handle at API call level manually. Possible with <code>ChatAnthropic(cache_control=...)</code>.</td><td style="color:#58a6ff;">Claude Code</td></tr>
+<tr><td><b>Prompt caching</b></td><td>Byte-level cache boundary. Static system+tools cached after turn 1. Immutable messages preserve cache. Cached input tokens cost 90% less than uncached (Anthropic pricing: cached reads = 10% of base price).</td><td>No built-in cache management. Must handle at API call level manually. Possible with <code>ChatAnthropic(cache_control=...)</code>.</td><td style="color:#58a6ff;">Claude Code</td></tr>
 <tr><td><b>Context cost</b></td><td>4-tier compaction: 3 FREE tiers before expensive LLM summary.</td><td>Developer-built pruning. <code>trim_messages()</code> available but no automatic cost optimization.</td><td style="color:#58a6ff;">Claude Code</td></tr>
 <tr><td><b>Setup time</b></td><td>Build from scratch: weeks. Understanding source: hours.</td><td>Working agent in 20 lines. Production-ready in hours to days.</td><td style="color:#3fb950;">LangGraph</td></tr>
 <tr><td><b>Debugging</b></td><td>Read your own TypeScript. Full control but more code to debug.</td><td>LangGraph Studio visual debugger. Graph visualization. State inspection at any node.</td><td style="color:#3fb950;">LangGraph</td></tr>
