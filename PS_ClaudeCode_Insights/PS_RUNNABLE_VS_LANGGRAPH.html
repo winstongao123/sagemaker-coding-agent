@@ -84,21 +84,23 @@
 Every Claude Code pattern mapped to its LangGraph equivalent, with practical takeaways for building chatbots like PS_Agent_Core V4.<br>
 Companion to <a href="PS_FLOWCHART_RUNNABLE.html" style="color:#58a6ff;">PS_FLOWCHART_RUNNABLE.html</a> (complete Claude Code architecture reference).</p>
 
-<div class="info-box" style="border-left-color:#e3b341; background:#1c1c0e;">
-<b>Before you start — key terms you'll see throughout:</b><br>
+<details>
+<summary>Glossary — key terms used throughout (click to expand)</summary>
+<div style="padding:12px 16px; font-size:13px; line-height:1.8;">
 <b>LLM</b> = Large Language Model (e.g., Claude, GPT). The AI brain that generates text and decides which tools to use.<br>
 <b>Agent</b> = An LLM plus tools plus a loop. The loop sends messages to the LLM, executes tools the LLM requests, and repeats until done.<br>
 <b>Tool</b> = A function the AI can call (e.g., search a database, read a file, run a command).<br>
-<b>Prompt caching</b> = Storing the system prompt on the server so you don't pay to re-send it every turn. Saves ~90% of input token costs on long conversations.<br>
-<b>Context window</b> = The maximum "memory" an LLM has per conversation (e.g., 200K tokens for Claude). When it fills up, old content must be pruned.<br>
-<b>Streaming</b> = Sending the AI's response word-by-word as it generates, instead of waiting for the full response. Makes the UI feel faster.<br>
+<b>Prompt caching</b> = Storing the system prompt on the server so you don't pay to re-send it every turn. Cached tokens cost 90% less (Anthropic pricing).<br>
+<b>Context window</b> = The maximum "memory" an LLM has per conversation (e.g., 200K tokens for Claude). When full, old content must be pruned.<br>
+<b>Streaming</b> = Sending the AI's response word-by-word as it generates, instead of waiting for the full response.<br>
 <b>DAG</b> = Directed Acyclic Graph — a flowchart where arrows only go forward (no loops back). LangGraph uses this concept.<br>
 <b>TypedDict</b> = Python's way of defining a dictionary with typed fields. Like a struct in C or an interface in TypeScript.<br>
-<b>Reducer</b> = A function that decides how node outputs merge into state. Example: <code>operator.add</code> means "append new items to the list" instead of replacing it.<br>
-<b>Zod</b> = TypeScript validation library (like Pydantic in Python). Checks that tool inputs have the right shape and types.<br>
+<b>Reducer</b> = A function that decides how node outputs merge into state. <code>operator.add</code> = "append" instead of "replace".<br>
+<b>Zod</b> = TypeScript validation library (like Pydantic for Python). Checks tool inputs have the right shape and types.<br>
 <b>Pydantic</b> = Python validation library. Defines input schemas with automatic type checking and custom validators.<br>
 <b>Super-step</b> = LangGraph term for one complete node execution. The checkpointer saves state after each super-step.
 </div>
+</details>
 
 <div class="stats">
  <div class="stat"><div class="stat-num">0</div><div class="stat-label">Claude Code Frameworks</div></div>
