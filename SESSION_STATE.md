@@ -22,7 +22,7 @@
 - 7 code review findings fixed (2 HIGH, 3 MEDIUM, 2 LOW)
 - **Tested on SageMaker**: Auto-init fires, build agent creates files, isolation works.
 
-### 4. PS_RUNNABLE_VS_LANGGRAPH.html (REBUILT v5 — validated)
+### 4. PS_RUNNABLE_VS_LANGGRAPH.html (v6 — full coverage)
 - 9-tab comparison: Runnable Claude Code (TypeScript) vs LangGraph (Python)
 - 15 Mermaid flowcharts, side-by-side code examples, decision matrix
 - All visible "Runnable" text renamed to "Claude Code" for clarity

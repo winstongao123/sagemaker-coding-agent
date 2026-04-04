@@ -98,6 +98,7 @@ Companion to <a href="PS_FLOWCHART_RUNNABLE.html" style="color:#58a6ff;">PS_FLOW
 <b>Reducer</b> = A function that decides how node outputs merge into state. <code>operator.add</code> = "append" instead of "replace".<br>
 <b>Zod</b> = TypeScript validation library (like Pydantic for Python). Checks tool inputs have the right shape and types.<br>
 <b>Pydantic</b> = Python validation library. Defines input schemas with automatic type checking and custom validators.<br>
+<b>Fan-out</b> = Running multiple workers/nodes at the same time (in parallel). LangGraph's <code>Send()</code> does this.<br>
 <b>Super-step</b> = LangGraph term for one complete node execution. The checkpointer saves state after each super-step.
 </div>
 </details>
@@ -588,7 +589,9 @@ app = graph.compile()
 1. <b>"Never delegate understanding"</b> — your supervisor should synthesize specialist results before responding, not just pass them through<br>
 2. <b>Worker isolation</b> — each specialist should have ONLY the tools it needs (you already do this with ADMIN_ONLY_TOOLS)<br>
 3. <b>Verification with fresh eyes</b> — for quality-critical responses, send to a second specialist for independent verification (you have this with USE_VERIFICATION flag)<br>
-4. <b>Continue vs spawn fresh</b> — Claude Code's rule: continue a worker when it has useful context, spawn fresh when verifying (to avoid confirmation bias)
+4. <b>Continue vs spawn fresh</b> — Claude Code's rule: continue a worker when it has useful context, spawn fresh when verifying (to avoid confirmation bias)<br>
+5. <b>Extended thinking</b> — your V4 enables <code>budget_tokens=5000</code> for deeper reasoning. Claude Code uses thinking blocks too. The thinking content shows in your left sidebar — this is a quality mechanism not available in basic LangGraph.<br>
+6. <b>USE_REFLECTION + USE_VERIFICATION</b> — your V4 has BOTH quality flags. Reflection = agent reviews its own response. Verification = second specialist checks the first. These map to Claude Code's "verification with fresh eyes" pattern.
 </div>
 
 </div><!-- end tab-multi -->
@@ -785,6 +788,24 @@ result = app.invoke(None, config)  # Resume = approve
  <td>Without consolidation, memories accumulate noise over time. Auto-Dream keeps the memory system clean and current without manual intervention.</td>
  <td>None built-in. You could schedule a periodic job that reads the LangGraph Store, runs an LLM to consolidate, and writes back cleaned entries.</td>
 </tr>
+<tr>
+ <td><b>FILE_UNCHANGED_STUB</b></td>
+ <td>If the agent reads a file it already read, and the file hasn't changed, Claude Code returns a short stub ("file unchanged since last read") instead of the full content. This saves thousands of context tokens on repeated reads of the same file.</td>
+ <td>Agents often re-read files they've already seen. Without this, each re-read wastes context space with identical content. The stub keeps context lean.</td>
+ <td>None built-in. You could track file hashes in LangGraph state and return a stub from your custom read tool if the hash matches.</td>
+</tr>
+<tr>
+ <td><b>Session Budget Enforcement</b></td>
+ <td>Tracks total cost across ALL LLM calls in a session. At 80% of budget: warns. At 100%: stops. <code>session_cost_limit</code> with threshold-based alerts.<br><br>Think of it as: "You've spent $4 of your $5 budget. Warning. $5 reached — stopping."</td>
+ <td>Without a budget guard, a runaway agent (especially with expensive models) can rack up unexpected costs. This is a safety net.</td>
+ <td>None built-in. You could add a cost-tracking node in LangGraph that sums token_usage across turns and routes to END when budget exceeded. Your V4 has <code>CostTracker</code> with <code>set_budget/check_budget</code>.</td>
+</tr>
+<tr>
+ <td><b>Retry Logic (529 + PTL)</b></td>
+ <td>When the API returns errors: 10 retries max, 500ms base delay with exponential backoff. Special handling for HTTP 529 (overloaded): max 3 retries. Prompt-Too-Long: iteratively drops oldest messages and retries up to 3 times.</td>
+ <td>APIs fail. Without retry logic, a transient network blip kills a 30-minute agent session. Exponential backoff prevents hammering the API.</td>
+ <td>LangChain has basic retry via <code>max_retries</code> on the model. But no PTL recovery or 529-specific handling. Your V4 has basic retry; consider adding PTL recovery.</td>
+</tr>
 </table>
 
 <div class="info-box takeaway">
@@ -830,10 +851,10 @@ flowchart TD
     C --> D1["Hook execution<br/>Custom rules in .claude/hooks"]
     C --> D2["ML Bash classifier<br/>Predicts danger level"]
     C --> D3["User dialog<br/>Approve / Deny / Always"]
-    D1 --> E{"claim() atomically<br/>createResolveOnce()"}
+    D1 --> E{"First resolver<br/>to respond wins"}
     D2 --> E
     D3 --> E
-    E -->|"First wins"| F{"Decision"}
+    E -->|"Winner decides"| F{"Decision"}
     F -->|Allow| G["Execute tool"]
     F -->|Always Allow| H["persistPermissions<br/>Save to disk"]
     F -->|Deny| I["Skip tool<br/>Return denied error"]
@@ -1164,6 +1185,35 @@ After full compaction, Claude Code clears 10+ caches to prevent stale state:<br>
 <b>Performance means different things for different use cases.</b> Claude Code optimizes for RUNTIME performance (cache hits, streaming, parallel tools). LangGraph optimizes for DEVELOPER performance (speed to ship, debugging, iteration). The gap widens as conversations get longer.
 </div>
 
+<h3>Where Time Goes: Claude Code vs LangGraph</h3>
+<p class="desc">In a typical agent turn, most time is spent on the LLM call. The difference is what happens AROUND it.</p>
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> Optimized Pipeline</div>
+  <div class="mermaid">
+flowchart TD
+    A(["Turn Start"]) --> B["Build prompt<br/>(cache boundary)"]
+    B --> C["LLM call<br/>(cached = fast)"]
+    C --> D["Stream tool blocks<br/>(start tools EARLY)"]
+    D --> E["Safe tools<br/>run in PARALLEL"]
+    E --> F["Unsafe tools<br/>run serially"]
+    F --> G(["Turn End"])
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> Standard Pipeline</div>
+  <div class="mermaid">
+flowchart TD
+    A(["Turn Start"]) --> B["Build prompt"]
+    B --> C["LLM call"]
+    C --> D["Wait for FULL<br/>response"]
+    D --> E["ToolNode runs<br/>tools sequentially"]
+    E --> F["Checkpoint<br/>save to DB"]
+    F --> G(["Turn End"])
+  </div>
+ </div>
+</div>
+
 <h3>Performance Comparison Matrix</h3>
 <table>
 <tr><th>Metric</th><th><span class="badge badge-runnable">Claude Code</span></th><th><span class="badge badge-langgraph">LangGraph</span></th><th>Winner</th></tr>
@@ -1267,7 +1317,11 @@ flowchart TD
 <code style="color:#58a6ff;">Claude Code patterns</code> = the safety features. Enforcement, validation, caching, curated memory.<br><br>
 Use LangGraph to BUILD your chatbot.<br>
 Use Claude Code patterns to make it RELIABLE.<br>
-Don't rebuild the car frame from scratch.
+Don't rebuild the car frame from scratch.<br><br>
+<b>Your V4 already implements these Claude Code patterns:</b><br>
+R4: <code>CacheBreakDetector</code> — detects prompt cache invalidation (in <code>runnable_patterns.py</code>)<br>
+R7: <code>PermissionPipeline</code> — RBAC enforcement via ADMIN_ONLY_TOOLS (in <code>runnable_patterns.py</code>)<br>
+R9: <code>SessionCompactor</code> — prune long multi-turn conversations (in <code>runnable_patterns.py</code>)
 </div>
 
 </div><!-- end tab-choose -->
