@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runnable Claude Code vs LangGraph - Multi-Agent Architecture Comparison</title>
+<style>
+:root {
+  --bg: #1e1e1e; --surface: #252526; --surface2: #2d2d30; --text: #d4d4d4;
+  --muted: #808080; --accent: #569cd6; --accent2: #4ec9b0; --green: #6a9955;
+  --orange: #ce9178; --red: #f44747; --purple: #c586c0; --yellow: #dcdcaa; --border: #404040;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.shell { max-width: 1400px; margin: 0 auto; padding: 20px; }
+h1 { font-size: clamp(24px, 3vw, 36px); color: var(--accent); margin-bottom: 8px; }
+h2 { color: var(--accent); font-size: 22px; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+h3 { color: var(--accent2); font-size: 17px; margin: 24px 0 12px; }
+h4 { color: var(--yellow); font-size: 15px; margin: 16px 0 8px; }
+p { margin: 8px 0; font-size: 14px; }
+.subtitle { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+
+/* Stats bar */
+.stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0 24px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; text-align: center; }
+.stat-num { font-size: 20px; font-weight: bold; color: var(--accent); }
+.stat-label { font-size: 11px; color: var(--muted); }
+
+/* Chart container */
+.chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; text-align: center; overflow-x: auto; }
+.chart-container .chart-title { color: var(--yellow); font-weight: bold; font-size: 15px; margin-bottom: 8px; }
+.chart-container .chart-desc { color: var(--muted); font-size: 13px; margin-bottom: 16px; max-width: 700px; margin-left: auto; margin-right: auto; }
+.mermaid { display: flex; justify-content: center; align-items: center; min-height: 200px; }
+.mermaid svg { margin: 0 auto !important; max-width: 100%; }
+
+/* Side by side */
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.side-by-side > div { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; }
+.side-label { text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.side-label.runnable { color: var(--accent); }
+.side-label.langgraph { color: var(--green); }
+
+/* Callout types */
+.callout { background: var(--surface2); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 12px 0; font-size: 13px; }
+.callout.beginner { border-left-color: var(--green); }
+.callout.beginner::before { content: "In Simple Terms: "; color: var(--green); font-weight: bold; }
+.callout.warning { border-left-color: var(--orange); }
+.callout.warning::before { content: "Important: "; color: var(--orange); font-weight: bold; }
+.callout.important { border-left-color: var(--red); }
+.callout.important::before { content: "Key Insight: "; color: var(--red); font-weight: bold; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+th { background: var(--surface2); color: var(--accent); text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
+td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+tr:nth-child(even) { background: var(--surface); }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); flex-wrap: wrap; margin-top: 24px; }
+.tab-btn { padding: 12px 18px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+.tab-btn:hover { color: var(--text); background: var(--surface); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; padding: 24px 0; }
+.tab-content.active { display: block; }
+
+/* Code */
+code { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-family: 'Cascadia Code', Consolas, monospace; font-size: 12px; color: var(--accent2); }
+pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; color: var(--text); margin: 10px 0; font-family: 'Cascadia Code', Consolas, monospace; line-height: 1.5; white-space: pre; }
+pre .comment { color: var(--green); }
+pre .keyword { color: var(--purple); }
+pre .string { color: var(--orange); }
+pre .type { color: var(--accent2); }
+
+/* Collapsible details */
+details { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; }
+details summary { padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--accent2); font-size: 14px; }
+details summary:hover { background: var(--surface2); }
+details > div, details > p { padding: 0 16px 16px; }
+
+/* Verdict boxes */
+.verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.verdict > div { padding: 16px; border-radius: 8px; font-size: 13px; }
+.verdict .runnable-wins { background: rgba(86, 156, 214, 0.1); border: 1px solid var(--accent); }
+.verdict .langgraph-wins { background: rgba(106, 153, 85, 0.1); border: 1px solid var(--green); }
+.verdict h4 { margin-top: 0; }
+
+/* Badge */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.badge-ts { background: #1f3a5f; color: var(--accent); }
+.badge-py { background: #2a3a2a; color: var(--green); }
+.badge-file { background: #1f2937; color: #79c0ff; font-family: monospace; font-size: 11px; }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .shell { padding: 10px; }
+  .tab-btn { padding: 10px 8px; font-size: 11px; }
+  .tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .side-by-side { grid-template-columns: 1fr; }
+  .verdict { grid-template-columns: 1fr; }
+  table { display: block; overflow-x: auto; }
+  .mermaid svg { max-width: 100%; height: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<h1>Runnable Claude Code vs LangGraph</h1>
+<p class="subtitle">Pure TypeScript (no frameworks) vs Python framework for multi-agent systems.<br>
+Source-verified from <code>gg-claude-code-runnable/src/</code> (1,438 files) and LangGraph 0.2+ API.</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">0</div><div class="stat-label">Frameworks (Runnable)</div></div>
+  <div class="stat"><div class="stat-num">1,438</div><div class="stat-label">TypeScript Files</div></div>
+  <div class="stat"><div class="stat-num">9</div><div class="stat-label">Comparison Dimensions</div></div>
+  <div class="stat"><div class="stat-num">while</div><div class="stat-label">Runnable Loop</div></div>
+  <div class="stat"><div class="stat-num">DAG</div><div class="stat-label">LangGraph Loop</div></div>
+  <div class="stat"><div class="stat-num">6</div><div class="stat-label">Tool Pipeline Steps</div></div>
+</div>
+
+<!-- ==================== TABS ==================== -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('tab1')" data-tab="tab1">Agent Loop</button>
+  <button class="tab-btn" onclick="showTab('tab2')" data-tab="tab2">State Mgmt</button>
+  <button class="tab-btn" onclick="showTab('tab3')" data-tab="tab3">Multi-Agent</button>
+  <button class="tab-btn" onclick="showTab('tab4')" data-tab="tab4">Tool Dispatch</button>
+  <button class="tab-btn" onclick="showTab('tab5')" data-tab="tab5">Enforcement</button>
+  <button class="tab-btn" onclick="showTab('tab6')" data-tab="tab6">Memory</button>
+  <button class="tab-btn" onclick="showTab('tab7')" data-tab="tab7">Context Mgmt</button>
+  <button class="tab-btn" onclick="showTab('tab8')" data-tab="tab8">Performance</button>
+  <button class="tab-btn" onclick="showTab('tab9')" data-tab="tab9">Which to Choose</button>
+</div>
+
+<!-- ==================== TAB 1: Agent Loop ==================== -->
+<div id="tab1" class="tab-content active">
+<h2>Agent Loop: while(true) vs StateGraph</h2>
+
+<div class="callout beginner">Think of an agent as a person working at a desk. Runnable says: "keep working until you're done" (a simple loop). LangGraph says: "follow this flowchart of steps" (a directed graph). Both get the job done, but the mental model is completely different.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable Claude Code (TypeScript)</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">The While Loop</div>
+      <div class="chart-desc">QueryEngine.ts: async generator, no DAG, no graph.</div>
+      <div class="mermaid">
+flowchart TD
+    A(["User Input"]) --> B["Build System Prompt<br/>+ Tool Schemas"]
+    B --> C["Call Claude API<br/>(streaming)"]
+    C --> D["Parse Response"]
+    D --> E{"tool_use blocks?"}
+    E -->|Yes| F["Dispatch Tools<br/>(6-step pipeline)"]
+    F --> G["Add Results<br/>to Messages"]
+    G --> H{"needsFollowUp?"}
+    H -->|Yes| C
+    H -->|No| I(["Return Response"])
+    E -->|No| I
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph (Python)</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">The StateGraph</div>
+      <div class="chart-desc">Nodes + edges form a compiled directed graph.</div>
+      <div class="mermaid">
+flowchart TD
+    A(["START"]) --> B["agent node<br/>call_model()"]
+    B --> C{"should_continue()"}
+    C -->|tool_calls| D["tools node<br/>ToolNode()"]
+    D --> B
+    C -->|end| E(["END"])
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>What, Why, How</h3>
+<table>
+<tr><th>Aspect</th><th>Runnable (while loop)</th><th>LangGraph (StateGraph)</th></tr>
+<tr><td><strong>What</strong></td><td>A <code>while(true)</code> async generator in <code>QueryEngine.ts</code>. Each iteration = one LLM turn. Loop until <code>stop_reason != tool_use</code>.</td><td>A <code>StateGraph</code> with named nodes (functions) connected by edges. Compiled into a runnable graph with <code>.compile()</code>.</td></tr>
+<tr><td><strong>Why</strong></td><td>Maximum control. No framework abstractions between you and the API. You own every byte of the request/response cycle.</td><td>Declarative structure. The graph IS the documentation. Built-in persistence, streaming, and human-in-the-loop via checkpointers.</td></tr>
+<tr><td><strong>How</strong></td><td>1. Build prompt<br>2. Stream API call<br>3. Parse tool_use blocks<br>4. Execute tools (parallel safe, serial unsafe)<br>5. Check needsFollowUp<br>6. Loop or return</td><td>1. Define State schema (TypedDict)<br>2. Add nodes (functions)<br>3. Add edges (conditional routing)<br>4. Compile with checkpointer<br>5. Invoke/stream</td></tr>
+</table>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> Runnable Agent Loop</div>
+<pre><span class="comment">// QueryEngine.ts — the actual core loop</span>
+<span class="comment">// Source: gg-claude-code-runnable/src/</span>
+<span class="keyword">async function*</span> queryLoop(messages, tools, system) {
+  <span class="keyword">while</span> (<span class="keyword">true</span>) {
+    <span class="comment">// Step 1: Check state (budget, stop signal)</span>
+    <span class="keyword">if</span> (stopRequested || budgetExceeded) <span class="keyword">break</span>;
+
+    <span class="comment">// Step 2: Build prompt + cache headers</span>
+    <span class="keyword">const</span> request = buildApiRequest(system, tools, messages);
+
+    <span class="comment">// Step 3: Context back-pressure (4-tier)</span>
+    <span class="keyword">await</span> manageContext(messages);
+
+    <span class="comment">// Step 4: Call Claude API (streaming)</span>
+    <span class="keyword">const</span> response = <span class="keyword">await</span> streamApiCall(request);
+
+    <span class="comment">// Step 5: Parse response, yield text blocks</span>
+    <span class="keyword">for</span> (<span class="keyword">const</span> block <span class="keyword">of</span> response.content) {
+      <span class="keyword">if</span> (block.type === <span class="string">'text'</span>) <span class="keyword">yield</span> block;
+    }
+
+    <span class="comment">// Step 6: Execute tools</span>
+    <span class="keyword">const</span> toolCalls = response.content
+      .filter(b => b.type === <span class="string">'tool_use'</span>);
+    <span class="keyword">if</span> (toolCalls.length === 0) <span class="keyword">break</span>;
+
+    <span class="comment">// Partition: safe=parallel, unsafe=serial</span>
+    <span class="keyword">const</span> batches = partitionToolCalls(toolCalls);
+    <span class="keyword">const</span> results = <span class="keyword">await</span> executeBatches(batches);
+    messages.push({ role: <span class="string">'user'</span>, content: results });
+  }
+}</pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> LangGraph Agent Loop</div>
+<pre><span class="comment"># LangGraph ReAct agent — actual API</span>
+<span class="keyword">from</span> langgraph.graph <span class="keyword">import</span> StateGraph, START, END
+<span class="keyword">from</span> langgraph.prebuilt <span class="keyword">import</span> ToolNode
+<span class="keyword">from</span> typing <span class="keyword">import</span> TypedDict, Annotated
+<span class="keyword">from</span> langchain_core.messages <span class="keyword">import</span> BaseMessage
+<span class="keyword">import</span> operator
+
+<span class="keyword">class</span> <span class="type">AgentState</span>(TypedDict):
+    messages: Annotated[list[BaseMessage], operator.add]
+
+<span class="keyword">def</span> call_model(state: <span class="type">AgentState</span>):
+    response = model.invoke(state[<span class="string">"messages"</span>])
+    <span class="keyword">return</span> {<span class="string">"messages"</span>: [response]}
+
+<span class="keyword">def</span> should_continue(state: <span class="type">AgentState</span>):
+    last = state[<span class="string">"messages"</span>][-1]
+    <span class="keyword">if</span> last.tool_calls:
+        <span class="keyword">return</span> <span class="string">"tools"</span>
+    <span class="keyword">return</span> END
+
+<span class="comment"># Build the graph</span>
+graph = StateGraph(<span class="type">AgentState</span>)
+graph.add_node(<span class="string">"agent"</span>, call_model)
+graph.add_node(<span class="string">"tools"</span>, ToolNode(tools))
+graph.add_edge(START, <span class="string">"agent"</span>)
+graph.add_conditional_edges(<span class="string">"agent"</span>, should_continue)
+graph.add_edge(<span class="string">"tools"</span>, <span class="string">"agent"</span>)
+
+<span class="comment"># Compile and run</span>
+app = graph.compile(checkpointer=MemorySaver())
+result = app.invoke(
+    {<span class="string">"messages"</span>: [HumanMessage(<span class="string">"Fix the bug"</span>)]},
+    config={<span class="string">"configurable"</span>: {<span class="string">"thread_id"</span>: <span class="string">"1"</span>}}
+)</pre>
+  </div>
+</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">When Runnable's Approach is Better</h4>
+    <ul>
+      <li><strong>Maximum control</strong> over every API call, retry, and error path</li>
+      <li><strong>Streaming-first</strong> — tools start executing BEFORE full response arrives</li>
+      <li><strong>No abstraction tax</strong> — debug by reading your own code, not framework internals</li>
+      <li><strong>Custom enforcement</strong> — 6-step pipeline impossible to express as graph edges</li>
+      <li>When you need to optimize at the byte level (prompt caching, token budgets)</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">When LangGraph's Approach is Better</h4>
+    <ul>
+      <li><strong>Rapid prototyping</strong> — get a working agent in 20 lines of code</li>
+      <li><strong>Visual debugging</strong> — graph structure IS the documentation</li>
+      <li><strong>Built-in persistence</strong> — checkpointer handles state across restarts</li>
+      <li><strong>Human-in-the-loop</strong> — <code>interrupt_before</code> is one line vs custom hook system</li>
+      <li>When your team knows Python but not TypeScript</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout important">Runnable's while loop and LangGraph's StateGraph produce IDENTICAL behavior for simple ReAct agents. The difference only matters when you need custom enforcement, streaming tool execution, or byte-level cache optimization.</div>
+</div>
+
+<!-- ==================== TAB 2: State Management ==================== -->
+<div id="tab2" class="tab-content">
+<h2>State Management: Messages Array vs TypedDict + Checkpointer</h2>
+
+<div class="callout beginner">State = the agent's "memory" during a conversation. Runnable keeps a simple list of messages (like a chat history). LangGraph uses a typed dictionary that can hold any data, and automatically saves snapshots to a database.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable: Messages Array</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="mermaid">
+flowchart TD
+    A(["messages: Message[]"]) --> B["User message"]
+    B --> C["Assistant message<br/>(text + tool_use)"]
+    C --> D["Tool results<br/>(user role)"]
+    D --> E["Next assistant msg"]
+    E --> F{"Context too large?"}
+    F -->|Yes| G["Compaction<br/>(4-tier cascade)"]
+    G --> H["Pruned messages[]"]
+    H --> C
+    F -->|No| C
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph: TypedDict + Checkpointer</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="mermaid">
+flowchart TD
+    A(["AgentState(TypedDict)"]) --> B["messages: list"]
+    A --> C["custom_field: any"]
+    A --> D["iteration: int"]
+    B --> E["Checkpointer"]
+    C --> E
+    D --> E
+    E --> F["SQLite / Postgres<br/>/ MemorySaver"]
+    F --> G["Snapshot per<br/>super-step"]
+    G --> H["Time-travel<br/>replay any state"]
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>What, Why, How</h3>
+<table>
+<tr><th>Aspect</th><th>Runnable</th><th>LangGraph</th></tr>
+<tr><td><strong>State shape</strong></td><td><code>Message[]</code> — flat array of user/assistant/tool messages. That's it.</td><td><code>TypedDict</code> with <code>Annotated</code> reducers. Can hold messages, counters, flags, any typed field.</td></tr>
+<tr><td><strong>Persistence</strong></td><td>Messages live in memory. Session transcript written to disk after conversation. No automatic snapshots.</td><td>Checkpointer saves state after every "super-step" (node execution). SQLite, Postgres, or in-memory. Automatic.</td></tr>
+<tr><td><strong>Time-travel</strong></td><td>Not built in. You'd need to save/restore messages manually.</td><td>Built-in. Replay from any checkpoint. <code>get_state_history()</code> returns all snapshots.</td></tr>
+<tr><td><strong>Reducers</strong></td><td>N/A — messages are appended directly. No merge logic.</td><td><code>Annotated[list, operator.add]</code> — reducers define how node outputs merge into state. Custom reducers possible.</td></tr>
+<tr><td><strong>Pruning</strong></td><td>4-tier compaction: cached microcompact, time-based, snip, full LLM summary.</td><td>Manual. You write a node that trims <code>state["messages"]</code>. Or use <code>trim_messages()</code> utility.</td></tr>
+</table>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> State in Runnable</div>
+<pre><span class="comment">// State = just an array of messages</span>
+<span class="keyword">type</span> <span class="type">Message</span> =
+  | { type: <span class="string">'user'</span>; message: UserMessage }
+  | { type: <span class="string">'assistant'</span>; message: AssistantMessage }
+  | { type: <span class="string">'progress'</span>; message: ProgressMessage }
+  | { type: <span class="string">'tombstone'</span>; message: TombstoneMessage };
+
+<span class="comment">// The entire "state" is this array</span>
+<span class="keyword">const</span> messages: <span class="type">Message</span>[] = [];
+
+<span class="comment">// Adding state = pushing to array</span>
+messages.push({
+  type: <span class="string">'user'</span>,
+  message: createUserMessage(toolResults)
+});
+
+<span class="comment">// Pruning = 4-tier compaction</span>
+<span class="comment">// Tier 1: Cached microcompact (free, cache_edits)</span>
+<span class="comment">// Tier 2: Time-based (no LLM, clear cold cache)</span>
+<span class="comment">// Tier 3: Snip (remove oldest turn, no LLM)</span>
+<span class="comment">// Tier 4: Full autocompact (LLM summarizes)</span></pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> State in LangGraph</div>
+<pre><span class="keyword">from</span> typing <span class="keyword">import</span> TypedDict, Annotated
+<span class="keyword">import</span> operator
+
+<span class="comment"># State = typed dict with reducers</span>
+<span class="keyword">class</span> <span class="type">AgentState</span>(TypedDict):
+    <span class="comment"># operator.add = append new messages</span>
+    messages: Annotated[list, operator.add]
+    <span class="comment"># Custom fields for domain logic</span>
+    iteration_count: int
+    should_escalate: bool
+    scratchpad: str
+
+<span class="comment"># Checkpointer auto-saves after each node</span>
+<span class="keyword">from</span> langgraph.checkpoint.sqlite <span class="keyword">import</span> SqliteSaver
+checkpointer = SqliteSaver.from_conn_string(<span class="string">":memory:"</span>)
+
+app = graph.compile(checkpointer=checkpointer)
+
+<span class="comment"># Time-travel: replay from any snapshot</span>
+<span class="keyword">for</span> state <span class="keyword">in</span> app.get_state_history(config):
+    print(state.values, state.created_at)
+
+<span class="comment"># Pruning: manual node or utility</span>
+<span class="keyword">from</span> langchain_core.messages <span class="keyword">import</span> trim_messages
+trimmed = trim_messages(
+    state[<span class="string">"messages"</span>],
+    max_tokens=4000,
+    token_counter=model
+)</pre>
+  </div>
+</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable Wins When...</h4>
+    <ul>
+      <li>You only need message history (most agent tasks)</li>
+      <li>You want custom compaction tiers that optimize cost</li>
+      <li>Context window management must be byte-precise (cache boundaries)</li>
+      <li>You don't need time-travel or state replay</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph Wins When...</h4>
+    <ul>
+      <li>You need typed state beyond just messages (counters, flags, domain data)</li>
+      <li>You need automatic persistence and crash recovery</li>
+      <li>Time-travel debugging is valuable for your use case</li>
+      <li>Multiple nodes need to read/write shared state atomically</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ==================== TAB 3: Multi-Agent ==================== -->
+<div id="tab3" class="tab-content">
+<h2>Multi-Agent: Coordinator + Workers vs Supervisor + Subgraphs</h2>
+
+<div class="callout beginner">Multi-agent = one "boss" AI coordinates several "worker" AIs. Runnable uses a coordinator that spawns workers with Agent() and talks to them with SendMessage(). LangGraph uses a supervisor node that routes to subgraph nodes, or Send() for dynamic fan-out.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable: Coordinator Mode</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">Agent() + SendMessage() + TaskStop()</div>
+      <div class="mermaid">
+flowchart TD
+    U(["User"]) --> C["Coordinator<br/>(orchestrator mode)"]
+    C -->|"Agent(research)"| W1["Worker 1<br/>read-only"]
+    C -->|"Agent(research)"| W2["Worker 2<br/>read-only"]
+    W1 -->|task-notification| C
+    W2 -->|task-notification| C
+    C -->|"Synthesize findings"| C
+    C -->|"SendMessage(impl)"| W1
+    W1 -->|task-notification| C
+    C -->|"Agent(verify)"| W3["Worker 3<br/>fresh eyes"]
+    W3 -->|task-notification| C
+    C --> U
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph: Supervisor Pattern</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">Supervisor + Subgraphs + Send()</div>
+      <div class="mermaid">
+flowchart TD
+    S(["START"]) --> SUP["supervisor<br/>route()"]
+    SUP -->|researcher| R["researcher<br/>subgraph"]
+    SUP -->|coder| CO["coder<br/>subgraph"]
+    SUP -->|Send fan-out| F1["worker_1"]
+    SUP -->|Send fan-out| F2["worker_2"]
+    R --> SUP
+    CO --> SUP
+    F1 --> SUP
+    F2 --> SUP
+    SUP -->|FINISH| E(["END"])
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>What, Why, How</h3>
+<table>
+<tr><th>Aspect</th><th>Runnable</th><th>LangGraph</th></tr>
+<tr><td><strong>Spawning</strong></td><td><code>Agent({ description, prompt, subagent_type })</code> — spawns isolated Claude instance with own context.</td><td><code>add_node("worker", subgraph)</code> — subgraph is a compiled StateGraph. Or <code>Send("worker", payload)</code> for dynamic.</td></tr>
+<tr><td><strong>Communication</strong></td><td><code>SendMessage({ to: agentId, message })</code> — async message passing. Results arrive as <code>&lt;task-notification&gt;</code> XML.</td><td>Shared state. Supervisor reads <code>state["messages"]</code> after subgraph returns. No explicit messaging.</td></tr>
+<tr><td><strong>Isolation</strong></td><td>Full isolation. Each worker gets own conversation, own tools, optional git worktree. Workers can't see parent context.</td><td>Partial isolation. Subgraphs have own state, but share input/output through parent. No filesystem isolation.</td></tr>
+<tr><td><strong>Parallelism</strong></td><td>Launch multiple Agent() calls in one turn. Read-only workers run in parallel. Write workers serialize.</td><td><code>Send()</code> API for dynamic fan-out. Returns list of <code>Send</code> objects from conditional edge. All run in parallel.</td></tr>
+<tr><td><strong>Phases</strong></td><td>4-phase: Research (parallel) -> Synthesis (coordinator) -> Implementation (serial) -> Verification (fresh).</td><td>Implicit via conditional edges. Supervisor decides routing based on state. No enforced phase structure.</td></tr>
+</table>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> Coordinator Mode</div>
+<pre><span class="comment">// Source: coordinatorMode.ts + AgentTool prompt</span>
+<span class="comment">// Coordinator spawns workers, synthesizes, directs</span>
+
+<span class="comment">// Phase 1: Research (parallel)</span>
+Agent({
+  description: <span class="string">"Investigate auth bug"</span>,
+  subagent_type: <span class="string">"worker"</span>,
+  prompt: <span class="string">"Find null pointers in src/auth/..."</span>
+})
+Agent({
+  description: <span class="string">"Research auth tests"</span>,
+  subagent_type: <span class="string">"worker"</span>,
+  prompt: <span class="string">"Find test gaps in src/auth/..."</span>
+})
+
+<span class="comment">// Results arrive as &lt;task-notification&gt;</span>
+<span class="comment">// Coordinator MUST synthesize before directing</span>
+
+<span class="comment">// Phase 2: Synthesis (coordinator does this)</span>
+<span class="comment">// "Found null pointer at validate.ts:42..."</span>
+
+<span class="comment">// Phase 3: Implementation (continue worker)</span>
+SendMessage({
+  to: <span class="string">"agent-a1b"</span>,
+  message: <span class="string">"Fix null pointer in validate.ts:42..."</span>
+})
+
+<span class="comment">// Phase 4: Verification (fresh worker)</span>
+Agent({
+  description: <span class="string">"Verify auth fix"</span>,
+  subagent_type: <span class="string">"worker"</span>,
+  prompt: <span class="string">"Run auth tests, verify fix..."</span>
+})</pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> Supervisor + Send()</div>
+<pre><span class="keyword">from</span> langgraph.graph <span class="keyword">import</span> StateGraph, Send
+<span class="keyword">from</span> langgraph.prebuilt <span class="keyword">import</span> create_react_agent
+
+<span class="comment"># Create specialized subgraphs</span>
+researcher = create_react_agent(
+    model, tools=[search, read_file]
+)
+coder = create_react_agent(
+    model, tools=[edit_file, bash]
+)
+
+<span class="comment"># Supervisor decides routing</span>
+<span class="keyword">def</span> supervisor(state):
+    response = model.invoke(
+        <span class="string">"Route to: researcher, coder, or FINISH"</span>
+    )
+    <span class="keyword">return</span> {<span class="string">"next"</span>: response.content}
+
+<span class="comment"># Dynamic fan-out with Send()</span>
+<span class="keyword">def</span> route_research(state):
+    <span class="keyword">return</span> [
+        Send(<span class="string">"researcher"</span>, {<span class="string">"query"</span>: <span class="string">"auth bug"</span>}),
+        Send(<span class="string">"researcher"</span>, {<span class="string">"query"</span>: <span class="string">"test gaps"</span>}),
+    ]
+
+<span class="comment"># Build supervisor graph</span>
+graph = StateGraph(<span class="type">SupervisorState</span>)
+graph.add_node(<span class="string">"supervisor"</span>, supervisor)
+graph.add_node(<span class="string">"researcher"</span>, researcher)
+graph.add_node(<span class="string">"coder"</span>, coder)
+graph.add_conditional_edges(
+    <span class="string">"supervisor"</span>, route_to_agent
+)
+graph.add_edge(<span class="string">"researcher"</span>, <span class="string">"supervisor"</span>)
+graph.add_edge(<span class="string">"coder"</span>, <span class="string">"supervisor"</span>)
+graph.add_edge(START, <span class="string">"supervisor"</span>)
+
+app = graph.compile()</pre>
+  </div>
+</div>
+
+<div class="callout important">Runnable's "never delegate understanding" rule is a DESIGN CHOICE, not a limitation. The coordinator MUST read worker results, synthesize, then give specific instructions. LangGraph lets you wire subgraphs directly, which is faster but risks the coordinator becoming a dumb router.</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable Wins When...</h4>
+    <ul>
+      <li>Workers need true isolation (own context, own git worktree)</li>
+      <li>You need async workers with notification-based communication</li>
+      <li>Synthesis between phases is critical (complex multi-step tasks)</li>
+      <li>Workers need different tool sets and permission modes</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph Wins When...</h4>
+    <ul>
+      <li>Workers share state and need to read each other's outputs</li>
+      <li>Dynamic fan-out with Send() for map-reduce patterns</li>
+      <li>You want the graph structure to document the workflow</li>
+      <li>Subgraphs are simple enough that direct wiring works</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ==================== TAB 4: Tool Dispatch ==================== -->
+<div id="tab4" class="tab-content">
+<h2>Tool Dispatch: 6-Step Pipeline vs Tool Nodes</h2>
+
+<div class="callout beginner">When an AI wants to use a tool (read a file, run a command), something needs to validate and execute that request. Runnable runs every tool call through a 6-step security pipeline. LangGraph uses a ToolNode that calls tools directly with minimal validation.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable: 6-Step Validation Pipeline</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">toolExecution.ts</div>
+      <div class="mermaid">
+flowchart TD
+    A(["Tool Call"]) --> B["1. Schema Validation<br/>(Zod parse)"]
+    B -->|Invalid| X1(["Error returned"])
+    B -->|Valid| C["2. Input Validation<br/>(tool.validateInput)"]
+    C -->|Blocked| X2(["Hard block"])
+    C -->|OK| D["3. PreToolUse Hooks<br/>(shell scripts)"]
+    D -->|Block| X3(["Hard block"])
+    D -->|OK| E["4. Permission Check<br/>(rules + user)"]
+    E -->|Denied| X4(["Skip tool"])
+    E -->|Allowed| F["5. Execute<br/>(tool.call)"]
+    F --> G["6. PostToolUse Hooks<br/>(warn only)"]
+    G --> H(["Result to LLM"])
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph: ToolNode</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">Prebuilt ToolNode</div>
+      <div class="mermaid">
+flowchart TD
+    A(["Tool Calls<br/>from LLM"]) --> B["ToolNode<br/>matches by name"]
+    B --> C["Call tool.invoke()<br/>(each tool call)"]
+    C --> D["Return<br/>ToolMessage"]
+    D --> E(["Back to<br/>agent node"])
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>The 6-Step Pipeline Explained</h3>
+<table>
+<tr><th>Step</th><th>What It Does</th><th>Can Block?</th><th>LangGraph Equivalent</th></tr>
+<tr><td><strong>1. Schema Validation</strong></td><td>Zod parses input JSON against tool schema</td><td>Yes (error returned)</td><td>Pydantic model validation (if using structured tools)</td></tr>
+<tr><td><strong>2. Input Validation</strong></td><td>Tool-specific <code>validateInput()</code> method</td><td>Yes (hard block)</td><td>Custom validation in tool function</td></tr>
+<tr><td><strong>3. PreToolUse Hooks</strong></td><td>Shell scripts from <code>.claude/hooks</code>. Exit code 2 = block.</td><td>Yes (hard block)</td><td><code>interrupt_before=["tools"]</code></td></tr>
+<tr><td><strong>4. Permission Check</strong></td><td>Rules in settings.json (allow/deny/ask). 3 resolvers race.</td><td>Yes (user deny)</td><td>No built-in equivalent</td></tr>
+<tr><td><strong>5. Execute</strong></td><td>Tool's <code>call()</code> method runs</td><td>N/A</td><td><code>tool.invoke()</code></td></tr>
+<tr><td><strong>6. PostToolUse Hooks</strong></td><td>Shell scripts fire after execution. Warn only.</td><td>No</td><td>Custom callback handlers</td></tr>
+</table>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> Tool Execution Pipeline</div>
+<pre><span class="comment">// Source: toolExecution.ts — 6-step pipeline</span>
+<span class="keyword">async function</span> executeToolCall(toolCall, context) {
+  <span class="comment">// Step 1: Schema validation (Zod)</span>
+  <span class="keyword">const</span> parsed = tool.inputSchema.safeParse(toolCall.input);
+  <span class="keyword">if</span> (!parsed.success) <span class="keyword">return</span> errorResult(parsed.error);
+
+  <span class="comment">// Step 2: Tool-specific input validation</span>
+  <span class="keyword">const</span> validation = <span class="keyword">await</span> tool.validateInput(parsed.data);
+  <span class="keyword">if</span> (!validation.result) <span class="keyword">return</span> blockResult();
+
+  <span class="comment">// Step 3: PreToolUse hooks (shell scripts)</span>
+  <span class="keyword">const</span> hookResult = <span class="keyword">await</span> runHooks(<span class="string">'PreToolUse'</span>, {
+    tool_name: tool.name, input: parsed.data
+  });
+  <span class="keyword">if</span> (hookResult.decision === <span class="string">'block'</span>) <span class="keyword">return</span> blocked();
+
+  <span class="comment">// Step 4: Permission check (3 resolvers race)</span>
+  <span class="keyword">const</span> perm = <span class="keyword">await</span> checkPermission(tool, parsed.data);
+  <span class="keyword">if</span> (perm === <span class="string">'denied'</span>) <span class="keyword">return</span> deniedResult();
+
+  <span class="comment">// Step 5: Execute</span>
+  <span class="keyword">const</span> output = <span class="keyword">await</span> tool.call(parsed.data, context);
+
+  <span class="comment">// Step 6: PostToolUse hooks (warn only)</span>
+  <span class="keyword">await</span> runHooks(<span class="string">'PostToolUse'</span>, {
+    tool_name: tool.name, output
+  });
+
+  <span class="keyword">return</span> toolResult(toolCall.id, output);
+}</pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> ToolNode + Custom Validation</div>
+<pre><span class="keyword">from</span> langgraph.prebuilt <span class="keyword">import</span> ToolNode
+<span class="keyword">from</span> langchain_core.tools <span class="keyword">import</span> tool
+<span class="keyword">from</span> pydantic <span class="keyword">import</span> BaseModel, validator
+
+<span class="comment"># Pydantic validation (Steps 1-2 equivalent)</span>
+<span class="keyword">class</span> <span class="type">BashInput</span>(BaseModel):
+    command: str
+
+    @validator(<span class="string">"command"</span>)
+    <span class="keyword">def</span> no_dangerous_commands(cls, v):
+        <span class="keyword">if</span> <span class="string">"rm -rf /"</span> <span class="keyword">in</span> v:
+            <span class="keyword">raise</span> ValueError(<span class="string">"Dangerous!"</span>)
+        <span class="keyword">return</span> v
+
+@tool(args_schema=<span class="type">BashInput</span>)
+<span class="keyword">def</span> bash(command: str) -> str:
+    <span class="string">"""Run a shell command."""</span>
+    <span class="keyword">return</span> subprocess.run(command, shell=<span class="keyword">True</span>)
+
+<span class="comment"># Human-in-the-loop (Step 3-4 equivalent)</span>
+app = graph.compile(
+    checkpointer=checkpointer,
+    interrupt_before=[<span class="string">"tools"</span>]  <span class="comment"># Pause here</span>
+)
+
+<span class="comment"># Resume after human approval</span>
+result = app.invoke(<span class="keyword">None</span>, config)
+
+<span class="comment"># ToolNode handles dispatch (Step 5)</span>
+tool_node = ToolNode([bash, read_file, search])
+
+<span class="comment"># No PostToolUse equivalent built-in</span>
+<span class="comment"># Use LangChain callbacks for logging</span></pre>
+  </div>
+</div>
+
+<div class="callout important">Runnable's 6-step pipeline is the KEY differentiator. Steps 1-4 are ALL enforcement — the tool NEVER executes unless all 4 pass. This is how you build reliable agents: not by prompting "please don't do X" but by making X structurally impossible.</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable Wins When...</h4>
+    <ul>
+      <li>Security is paramount — shell hooks can block ANY tool call</li>
+      <li>You need per-tool permission rules (allow/deny/ask per tool per path)</li>
+      <li>Parallel safe + serial unsafe tool partitioning matters</li>
+      <li>Custom validation logic per tool (validateInput)</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph Wins When...</h4>
+    <ul>
+      <li>Simple tool dispatch is sufficient (most prototypes)</li>
+      <li>Pydantic validation covers your needs</li>
+      <li><code>interrupt_before</code> provides enough human-in-the-loop</li>
+      <li>You want tools as simple Python functions with @tool decorator</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ==================== TAB 5: Enforcement ==================== -->
+<div id="tab5" class="tab-content">
+<h2>Enforcement: Hooks (PreToolUse Block) vs interrupt_before</h2>
+
+<div class="callout beginner">Enforcement = stopping the AI from doing something dangerous. Runnable has a hook system where shell scripts run BEFORE each tool and can block it. LangGraph has <code>interrupt_before</code> which pauses the graph and waits for human approval.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable: Hook System</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">PreToolUse = the ONLY hard blocker</div>
+      <div class="mermaid">
+flowchart TD
+    A(["Tool Call"]) --> B["PreToolUse Hook<br/>(shell script)"]
+    B --> C{"Exit code?"}
+    C -->|"0 (pass)"| D["Execute Tool"]
+    C -->|"2 (block)"| E(["BLOCKED<br/>Tool never runs"])
+    C -->|"JSON block"| E
+    D --> F["PostToolUse Hook<br/>(warn only)"]
+    F --> G(["Result"])
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph: interrupt_before</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="chart-title">Graph pauses, human resumes</div>
+      <div class="mermaid">
+flowchart TD
+    A(["Agent Node"]) --> B{"interrupt_before?"}
+    B -->|Yes| C["PAUSE<br/>Save checkpoint"]
+    C --> D["Human reviews<br/>state"]
+    D --> E{"Approve?"}
+    E -->|Yes| F["Resume: invoke(None)"]
+    E -->|No| G["Update state<br/>or abort"]
+    F --> H["Tools Node"]
+    B -->|No| H
+    H --> I(["Back to Agent"])
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>Hook Events in Runnable</h3>
+<table>
+<tr><th>Event</th><th>When</th><th>Can Block?</th><th>Use Case</th></tr>
+<tr><td><code>PreToolUse</code></td><td>BEFORE tool execution</td><td><strong>YES</strong> (exit 2 or JSON block)</td><td>Block dangerous commands, enforce file restrictions, require approval</td></tr>
+<tr><td><code>PostToolUse</code></td><td>AFTER tool execution</td><td>No (warn only)</td><td>Audit logging, notifications, metrics</td></tr>
+<tr><td><code>PreCompact</code></td><td>Before context compaction</td><td>No</td><td>Save state before pruning</td></tr>
+<tr><td><code>PostCompact</code></td><td>After context compaction</td><td>No</td><td>Restore state after pruning</td></tr>
+<tr><td><code>SessionStart</code></td><td>New session begins</td><td>No</td><td>Initialize resources, load config</td></tr>
+<tr><td><code>Stop</code></td><td>Model tries to stop</td><td>No</td><td>Cleanup, save state</td></tr>
+</table>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> Hook Configuration</div>
+<pre><span class="comment">// .claude/settings.json — hook config</span>
+{
+  <span class="string">"hooks"</span>: {
+    <span class="string">"PreToolUse"</span>: [
+      {
+        <span class="string">"matcher"</span>: <span class="string">"Bash"</span>,
+        <span class="string">"hooks"</span>: [
+          {
+            <span class="string">"type"</span>: <span class="string">"command"</span>,
+            <span class="string">"command"</span>: <span class="string">"python guard.py"</span>
+          }
+        ]
+      }
+    ]
+  }
+}
+
+<span class="comment">// guard.py — receives tool input via stdin</span>
+<span class="keyword">import</span> json, sys
+data = json.load(sys.stdin)
+<span class="keyword">if</span> <span class="string">"rm -rf"</span> <span class="keyword">in</span> data[<span class="string">"input"</span>][<span class="string">"command"</span>]:
+    <span class="comment"># Exit 2 = HARD BLOCK</span>
+    print(json.dumps({
+        <span class="string">"decision"</span>: <span class="string">"block"</span>,
+        <span class="string">"reason"</span>: <span class="string">"Dangerous command blocked"</span>
+    }))
+    sys.exit(2)
+<span class="comment"># Exit 0 = allow</span>
+sys.exit(0)</pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> interrupt_before + State Update</div>
+<pre><span class="comment"># Compile with interrupt_before</span>
+app = graph.compile(
+    checkpointer=checkpointer,
+    interrupt_before=[<span class="string">"tools"</span>]
+)
+
+<span class="comment"># First invoke pauses at tools node</span>
+result = app.invoke(
+    {<span class="string">"messages"</span>: [HumanMessage(<span class="string">"Delete the DB"</span>)]},
+    config
+)
+<span class="comment"># Graph is now PAUSED</span>
+
+<span class="comment"># Inspect what the AI wants to do</span>
+state = app.get_state(config)
+pending_tools = state.values[<span class="string">"messages"</span>][-1].tool_calls
+print(pending_tools)
+<span class="comment"># [{'name': 'bash', 'args': {'command': 'DROP TABLE'}}]</span>
+
+<span class="comment"># Option A: Approve (resume)</span>
+result = app.invoke(<span class="keyword">None</span>, config)
+
+<span class="comment"># Option B: Reject (update state)</span>
+app.update_state(
+    config,
+    {<span class="string">"messages"</span>: [
+        ToolMessage(
+            content=<span class="string">"Denied: too dangerous"</span>,
+            tool_call_id=pending_tools[0][<span class="string">"id"</span>]
+        )
+    ]}
+)
+result = app.invoke(<span class="keyword">None</span>, config)</pre>
+  </div>
+</div>
+
+<div class="callout important">Runnable hooks are PROGRAMMATIC enforcement — shell scripts that run automatically. LangGraph's interrupt_before is HUMAN enforcement — the graph pauses and a human must manually approve. Runnable's approach scales to automated pipelines; LangGraph's requires a human in the loop.</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable Wins When...</h4>
+    <ul>
+      <li>You need automated enforcement (no human in the loop)</li>
+      <li>Different tools need different enforcement rules</li>
+      <li>Hooks must be configurable by end users (settings.json)</li>
+      <li>You need both pre and post execution hooks</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph Wins When...</h4>
+    <ul>
+      <li>Human approval is the desired workflow</li>
+      <li>You want to inspect AND modify state before resuming</li>
+      <li>Checkpoint-based pause/resume is sufficient</li>
+      <li>Simple approve/reject is enough (no custom logic)</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ==================== TAB 6: Memory ==================== -->
+<div id="tab6" class="tab-content">
+<h2>Memory: File-Based memdir vs Checkpointer</h2>
+
+<div class="callout beginner">Memory = what the agent remembers between conversations. Runnable stores memories as markdown files on disk (like notes in a folder). LangGraph uses a checkpointer database that saves conversation snapshots. They solve DIFFERENT problems.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable: memdir (File-Based)</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="mermaid">
+flowchart TD
+    A(["Session Start"]) --> B["Load MEMORY.md<br/>(index file)"]
+    B --> C["Load individual .md<br/>files per topic"]
+    C --> D["4 types:<br/>user / feedback<br/>project / reference"]
+    D --> E["Inject into<br/>system prompt"]
+    E --> F(["Session Active"])
+    F --> G{"Session End"}
+    G --> H["Extract new<br/>memories"]
+    H --> I["WHAT_NOT_TO_SAVE<br/>filter"]
+    I --> J["Write .md files<br/>Update MEMORY.md"]
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph: Checkpointer + Store</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="mermaid">
+flowchart TD
+    A(["Graph Invoke"]) --> B["Load checkpoint<br/>by thread_id"]
+    B --> C["Restore full<br/>state dict"]
+    C --> D["Run graph<br/>nodes"]
+    D --> E["Auto-save checkpoint<br/>after each super-step"]
+    E --> F{"More nodes?"}
+    F -->|Yes| D
+    F -->|No| G(["Done"])
+    G --> H["State persisted<br/>in checkpointer DB"]
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>What, Why, How</h3>
+<table>
+<tr><th>Aspect</th><th>Runnable memdir</th><th>LangGraph Checkpointer</th></tr>
+<tr><td><strong>What it stores</strong></td><td>User preferences, feedback, project context, references. Curated, human-readable markdown.</td><td>Full state dict (messages + custom fields). Raw conversation data.</td></tr>
+<tr><td><strong>Persistence</strong></td><td>Plain .md files in <code>~/.claude/projects/</code>. Survives anything — even reinstalls.</td><td>Database (SQLite/Postgres/memory). Tied to checkpointer backend.</td></tr>
+<tr><td><strong>Cross-session</strong></td><td>Yes — MEMORY.md loaded at every session start. Memories accumulate over time.</td><td>Yes — same <code>thread_id</code> resumes conversation. But no cross-thread memory by default.</td></tr>
+<tr><td><strong>Curation</strong></td><td>Aggressive: WHAT_NOT_TO_SAVE rules, staleness detection, 200-line index cap.</td><td>None built-in. All state saved automatically. You manage pruning.</td></tr>
+<tr><td><strong>Format</strong></td><td>YAML frontmatter + markdown body. 4 typed categories.</td><td>Serialized Python dict. Binary in database.</td></tr>
+<tr><td><strong>Cross-thread</strong></td><td>Global <code>~/.claude/CLAUDE.md</code> + per-project memories. Always available.</td><td>LangGraph Store API (namespace + key-value). Separate from checkpointer.</td></tr>
+</table>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> memdir Memory Files</div>
+<pre><span class="comment">// ~/.claude/projects/myproject/memory/</span>
+
+<span class="comment">// MEMORY.md (index — 200 lines max)</span>
+# Claude Memory
+- [User Role](user_role.md) — senior eng, React expert
+- [No Mocks](feedback_no_mocks.md) — integration tests only
+- [Auth Rewrite](project_auth_rewrite.md) — compliance-driven
+
+<span class="comment">// user_role.md (individual memory file)</span>
+---
+name: User Role
+description: Senior engineer, deep React, new to Go
+type: user
+---
+Senior software engineer. 10 years React/TypeScript.
+First time touching Go backend code.
+Frame Go explanations using TypeScript analogues.
+
+<span class="comment">// feedback_no_mocks.md</span>
+---
+name: No Mocks in Tests
+description: Integration tests must hit real DB
+type: feedback
+---
+Integration tests must use real database, not mocks.
+**Why:** Prior incident — mock/prod divergence masked
+a broken migration that hit production.
+**How to apply:** Any test file touching DB models
+must use the test database, never jest.mock().</pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> Checkpointer + Store</div>
+<pre><span class="keyword">from</span> langgraph.checkpoint.sqlite <span class="keyword">import</span> SqliteSaver
+<span class="keyword">from</span> langgraph.store.memory <span class="keyword">import</span> InMemoryStore
+
+<span class="comment"># Checkpointer: conversation persistence</span>
+checkpointer = SqliteSaver.from_conn_string(<span class="string">"agent.db"</span>)
+app = graph.compile(checkpointer=checkpointer)
+
+<span class="comment"># Resume conversation by thread_id</span>
+config = {<span class="string">"configurable"</span>: {<span class="string">"thread_id"</span>: <span class="string">"user-123"</span>}}
+result = app.invoke({<span class="string">"messages"</span>: [msg]}, config)
+
+<span class="comment"># Time-travel: list all checkpoints</span>
+<span class="keyword">for</span> cp <span class="keyword">in</span> app.get_state_history(config):
+    print(cp.created_at, len(cp.values[<span class="string">"messages"</span>]))
+
+<span class="comment"># Store: cross-thread memory (like memdir)</span>
+store = InMemoryStore()
+app = graph.compile(
+    checkpointer=checkpointer,
+    store=store
+)
+
+<span class="comment"># Write memory (namespace + key)</span>
+store.put(
+    (<span class="string">"user"</span>, <span class="string">"preferences"</span>),
+    <span class="string">"testing"</span>,
+    {<span class="string">"rule"</span>: <span class="string">"no mocks, real DB only"</span>,
+     <span class="string">"reason"</span>: <span class="string">"prod migration incident"</span>}
+)
+
+<span class="comment"># Read memory in any thread</span>
+prefs = store.search((<span class="string">"user"</span>, <span class="string">"preferences"</span>))
+
+<span class="comment"># Access store in nodes via context</span>
+<span class="keyword">def</span> my_node(state, config, *, store):
+    memories = store.search((<span class="string">"user"</span>,))
+    <span class="comment"># Use memories in processing...</span></pre>
+  </div>
+</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable Wins When...</h4>
+    <ul>
+      <li>Memory must be human-readable and editable (markdown files)</li>
+      <li>Curated memories matter more than raw conversation replay</li>
+      <li>You want memories to survive tool/platform changes</li>
+      <li>The 4-type taxonomy (user/feedback/project/reference) fits your needs</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph Wins When...</h4>
+    <ul>
+      <li>You need exact conversation replay (time-travel debugging)</li>
+      <li>Automatic persistence with zero manual curation is preferred</li>
+      <li>You need database-backed storage for scale</li>
+      <li>Store API gives cross-thread memory without file system access</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ==================== TAB 7: Context Management ==================== -->
+<div id="tab7" class="tab-content">
+<h2>Context Management: 4-Tier Compaction vs Manual Pruning</h2>
+
+<div class="callout beginner">AI models have limited memory (context window). When the conversation gets too long, you need to shrink it. Runnable has a sophisticated 4-tier system that tries cheap options first. LangGraph leaves this entirely up to you.</div>
+
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable">Runnable: 4-Tier Cascade</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="mermaid">
+flowchart TD
+    A(["Context Growing"]) --> B{"Tier 1:<br/>Cached Microcompact"}
+    B -->|"cache_edits API<br/>Zero cost"| C{"Enough?"}
+    C -->|Yes| D(["Continue"])
+    C -->|No| E{"Tier 2:<br/>Time-Based MC"}
+    E -->|"Clear cold cache<br/>No LLM call"| F{"Enough?"}
+    F -->|Yes| D
+    F -->|No| G{"Tier 3:<br/>Snip Oldest Turn"}
+    G -->|"Remove boundary<br/>No LLM call"| H{"Enough?"}
+    H -->|Yes| D
+    H -->|No| I["Tier 4:<br/>Full AutoCompact"]
+    I -->|"LLM summarizes<br/>Most expensive"| D
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="side-label langgraph">LangGraph: Manual + Utilities</div>
+    <div class="chart-container" style="border:none; padding:10px;">
+      <div class="mermaid">
+flowchart TD
+    A(["State Growing"]) --> B["Check message count<br/>or token count"]
+    B --> C{"Too large?"}
+    C -->|No| D(["Continue"])
+    C -->|Yes| E["trim_messages()<br/>utility"]
+    E --> F["Or: custom<br/>summarize node"]
+    F --> G["Or: RemoveMessage<br/>from state"]
+    G --> D
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>Compaction Tiers Explained</h3>
+<table>
+<tr><th>Tier</th><th>Cost</th><th>How</th><th>When</th></tr>
+<tr><td><strong>1. Cached Microcompact</strong></td><td>Free (zero tokens)</td><td><code>cache_edits</code> API deletes tool results from server cache. Message content unchanged locally.</td><td>Always tried first. Only works when cache is warm.</td></tr>
+<tr><td><strong>2. Time-Based MC</strong></td><td>Free (no LLM)</td><td>If cache is cold (gap > threshold), clear old content and reset cached MC state.</td><td>After idle periods (>30 min).</td></tr>
+<tr><td><strong>3. Snip</strong></td><td>Free (no LLM)</td><td>Remove oldest turn boundary. Relies on <code>HISTORY_SNIP</code> feature flag.</td><td>When tiers 1-2 insufficient.</td></tr>
+<tr><td><strong>4. Full AutoCompact</strong></td><td>Expensive (LLM call)</td><td>Fork agent with compact prompt. Summarize + truncate. Post-compact cleanup.</td><td>Last resort. ~80% context threshold.</td></tr>
+</table>
+
+<h3>Cache Boundary Design</h3>
+<div class="chart-container">
+  <div class="chart-title">Runnable's Cache Boundary Strategy</div>
+  <div class="chart-desc">Static content cached after first turn. Dynamic content never cached. 90% cheaper on subsequent turns.</div>
+  <div class="mermaid">
+flowchart LR
+    A["System Prompt<br/>(static)"] --> B["Tool Schemas<br/>(static)"]
+    B --> C["=== DYNAMIC ===<br/>cache_control: ephemeral"]
+    C --> D["Conversation<br/>Messages"]
+    D --> E["Latest User<br/>Message"]
+  </div>
+</div>
+
+<div class="callout warning">LangGraph has NO built-in context management. You must build your own pruning logic. This is fine for short conversations but becomes critical for long-running agents that process hundreds of tool calls.</div>
+
+<h3>Code Comparison</h3>
+<div class="side-by-side">
+  <div>
+    <div class="side-label runnable"><span class="badge badge-ts">TypeScript</span> 4-Tier Compaction</div>
+<pre><span class="comment">// Context back-pressure cascade</span>
+<span class="keyword">async function</span> manageContext(messages, cache) {
+  <span class="keyword">const</span> usage = estimateTokens(messages);
+
+  <span class="comment">// Tier 1: Free — cache_edits API</span>
+  <span class="keyword">if</span> (cache.isWarm) {
+    <span class="keyword">const</span> freed = <span class="keyword">await</span> cachedMicrocompact(cache);
+    <span class="keyword">if</span> (usage - freed < threshold) <span class="keyword">return</span>;
+  }
+
+  <span class="comment">// Tier 2: Free — time-based clear</span>
+  <span class="keyword">if</span> (cache.idleTime > 30 * 60 * 1000) {
+    clearColdContent(messages);
+    <span class="keyword">if</span> (estimateTokens(messages) < threshold) <span class="keyword">return</span>;
+  }
+
+  <span class="comment">// Tier 3: Free — snip oldest turn</span>
+  <span class="keyword">if</span> (HISTORY_SNIP_ENABLED) {
+    snipOldestTurn(messages);
+    <span class="keyword">if</span> (estimateTokens(messages) < threshold) <span class="keyword">return</span>;
+  }
+
+  <span class="comment">// Tier 4: Expensive — LLM summarizes</span>
+  <span class="keyword">const</span> summary = <span class="keyword">await</span> forkCompactAgent(messages);
+  messages.length = 0;
+  messages.push(summary);
+}</pre>
+  </div>
+  <div>
+    <div class="side-label langgraph"><span class="badge badge-py">Python</span> Manual Context Pruning</div>
+<pre><span class="keyword">from</span> langchain_core.messages <span class="keyword">import</span> (
+    trim_messages, RemoveMessage
+)
+
+<span class="comment"># Option 1: trim_messages utility</span>
+<span class="keyword">def</span> manage_context(state):
+    trimmed = trim_messages(
+        state[<span class="string">"messages"</span>],
+        max_tokens=4000,
+        token_counter=model,
+        strategy=<span class="string">"last"</span>,  <span class="comment"># keep recent</span>
+        start_on=<span class="string">"human"</span>,
+    )
+    <span class="keyword">return</span> {<span class="string">"messages"</span>: trimmed}
+
+<span class="comment"># Option 2: Summarize + prune node</span>
+<span class="keyword">def</span> summarize_if_needed(state):
+    msgs = state[<span class="string">"messages"</span>]
+    <span class="keyword">if</span> len(msgs) > 20:
+        summary = model.invoke(
+            <span class="string">"Summarize this conversation:"</span>
+            + str(msgs[:-5])
+        )
+        <span class="comment"># Remove old, keep summary + recent</span>
+        delete = [RemoveMessage(id=m.id)
+                  <span class="keyword">for</span> m <span class="keyword">in</span> msgs[:-5]]
+        <span class="keyword">return</span> {<span class="string">"messages"</span>: delete + [summary]}
+
+<span class="comment"># Option 3: Prompt caching via API</span>
+<span class="comment"># Anthropic: cache_control on system prompt</span>
+<span class="comment"># Must be done at the API call level</span>
+<span class="comment"># LangGraph has no built-in cache boundary</span></pre>
+  </div>
+</div>
+
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable Wins When...</h4>
+    <ul>
+      <li>Long-running agents that process 100+ tool calls</li>
+      <li>Cost optimization matters (tiers 1-3 are FREE)</li>
+      <li>Prompt caching must be byte-precise (cache boundary marker)</li>
+      <li>Automatic compaction without developer intervention</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph Wins When...</h4>
+    <ul>
+      <li>Short conversations that fit in context window</li>
+      <li>You want custom pruning logic (domain-specific)</li>
+      <li>trim_messages() utility covers your needs</li>
+      <li>State contains non-message data that needs different pruning</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<!-- ==================== TAB 8: Performance ==================== -->
+<div id="tab8" class="tab-content">
+<h2>Performance: Latency, Throughput, Cost</h2>
+
+<div class="callout beginner">Performance matters differently for each approach. Runnable optimizes for cache hits and streaming. LangGraph optimizes for developer speed and checkpoint persistence. The trade-offs are real.</div>
+
+<div class="chart-container">
+  <div class="chart-title">Performance Characteristics Comparison</div>
+  <div class="chart-desc">Where each approach spends its time and money.</div>
+  <div class="mermaid">
+flowchart LR
+    subgraph Runnable
+    R1["Streaming starts<br/>tools early"] --> R2["Cache boundary<br/>90% cheaper turns"]
+    R2 --> R3["Parallel safe<br/>serial unsafe"]
+    R3 --> R4["4-tier compaction<br/>3 free tiers"]
+    end
+    subgraph LangGraph
+    L1["Batch response<br/>then tools"] --> L2["No built-in<br/>cache boundary"]
+    L2 --> L3["All tools<br/>via ToolNode"]
+    L3 --> L4["Checkpoint I/O<br/>per super-step"]
+    end
+  </div>
+</div>
+
+<h3>Performance Comparison Matrix</h3>
+<table>
+<tr><th>Metric</th><th>Runnable</th><th>LangGraph</th><th>Winner</th></tr>
+<tr><td><strong>First token latency</strong></td><td>Streaming — user sees output as it generates. Tools start before response completes.</td><td>Depends on model wrapper. Streaming available but tools wait for full response.</td><td style="color:var(--accent);">Runnable</td></tr>
+<tr><td><strong>Tool execution</strong></td><td>Parallel (safe) + serial (unsafe) partitioning. Up to 10 concurrent. Streaming starts tools early.</td><td>ToolNode executes sequentially by default. Parallel possible with custom node.</td><td style="color:var(--accent);">Runnable</td></tr>
+<tr><td><strong>Prompt caching</strong></td><td>Byte-level cache boundary. Static system+tools cached. 90% cost reduction on subsequent turns.</td><td>No built-in cache management. Must manage at API call level manually.</td><td style="color:var(--accent);">Runnable</td></tr>
+<tr><td><strong>Context cost</strong></td><td>4-tier compaction: 3 free tiers before expensive LLM summary.</td><td>Developer-built pruning. trim_messages() available but no cost optimization.</td><td style="color:var(--accent);">Runnable</td></tr>
+<tr><td><strong>Setup time</strong></td><td>Build from scratch: days to weeks. Understanding source: hours.</td><td>Working agent in 20 lines. Production-ready in hours.</td><td style="color:var(--green);">LangGraph</td></tr>
+<tr><td><strong>Debugging</strong></td><td>Read your own TypeScript code. Full control but more code to debug.</td><td>LangGraph Studio visual debugger. Graph visualization built-in.</td><td style="color:var(--green);">LangGraph</td></tr>
+<tr><td><strong>Checkpoint overhead</strong></td><td>None — no automatic checkpointing.</td><td>Database write after every super-step. Adds latency per node execution.</td><td style="color:var(--accent);">Runnable</td></tr>
+<tr><td><strong>Recovery from crash</strong></td><td>Session lost. Must restart conversation.</td><td>Resume from last checkpoint. Zero data loss.</td><td style="color:var(--green);">LangGraph</td></tr>
+<tr><td><strong>Multi-agent overhead</strong></td><td>Each worker = new Claude instance. Context isolation per worker.</td><td>Subgraphs share process. Lower overhead but shared state.</td><td>Depends on use case</td></tr>
+</table>
+
+<h3>When Each is Faster</h3>
+<div class="verdict">
+  <div class="runnable-wins">
+    <h4 style="color:var(--accent);">Runnable is Faster When...</h4>
+    <ul>
+      <li><strong>Long conversations</strong> — cache boundary + compaction save 60-90% on tokens</li>
+      <li><strong>Many tool calls</strong> — parallel execution + streaming start = significant time savings</li>
+      <li><strong>Production at scale</strong> — no checkpoint I/O overhead per step</li>
+      <li><strong>Cost-sensitive</strong> — 3 free compaction tiers before paying for LLM</li>
+      <li><strong>Streaming UX</strong> — user sees output immediately, not after full generation</li>
+    </ul>
+  </div>
+  <div class="langgraph-wins">
+    <h4 style="color:var(--green);">LangGraph is Faster When...</h4>
+    <ul>
+      <li><strong>Developer velocity</strong> — working agent in minutes, not days</li>
+      <li><strong>Short conversations</strong> — checkpoint overhead is negligible</li>
+      <li><strong>Fault tolerance</strong> — crash recovery from checkpoint is instant</li>
+      <li><strong>Debugging</strong> — LangGraph Studio shows execution visually</li>
+      <li><strong>Iteration speed</strong> — change a node function, recompile, test</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout important">The performance gap between Runnable and LangGraph WIDENS as conversations get longer. For a 5-turn chat, it doesn't matter. For a 200-turn coding session with hundreds of tool calls, Runnable's optimizations save significant time and money.</div>
+</div>
+
+<!-- ==================== TAB 9: Which to Choose ==================== -->
+<div id="tab9" class="tab-content">
+<h2>Decision Matrix: Which Should You Use?</h2>
+
+<div class="callout beginner">There's no universal "better" choice. Runnable is better when you need maximum control and performance at scale. LangGraph is better when you need to ship fast and want built-in persistence. This tab helps you decide based on YOUR situation.</div>
+
+<div class="chart-container">
+  <div class="chart-title">Decision Flowchart</div>
+  <div class="chart-desc">Follow the questions to find your best fit.</div>
+  <div class="mermaid">
+flowchart TD
+    A{"Need production<br/>scale agent?"} -->|Yes| B{"Team knows<br/>TypeScript?"}
+    A -->|No, prototype| C{"Need persistence<br/>out of box?"}
+    B -->|Yes| D{"Need custom<br/>enforcement?"}
+    B -->|No| E["LangGraph"]
+    D -->|Yes| F["Runnable Pattern"]
+    D -->|No| G{"Need prompt<br/>cache optimization?"}
+    G -->|Yes| F
+    G -->|No| H{"Team size?"}
+    H -->|"Small (1-3)"| F
+    H -->|"Large (4+)"| E
+    C -->|Yes| E
+    C -->|No| I{"Just learning?"}
+    I -->|Yes| E
+    I -->|No| J{"Custom tools<br/>and hooks?"}
+    J -->|Yes| F
+    J -->|No| E
+  </div>
+</div>
+
+<h3>Full Decision Matrix</h3>
+<table>
+<tr><th>Criteria</th><th>Choose Runnable When...</th><th>Choose LangGraph When...</th></tr>
+<tr><td><strong>Team expertise</strong></td><td>Strong TypeScript. Comfortable building from scratch.</td><td>Python team. Prefer framework abstractions.</td></tr>
+<tr><td><strong>Time to ship</strong></td><td>Weeks acceptable. Building for long-term.</td><td>Days or hours. Need working prototype fast.</td></tr>
+<tr><td><strong>Enforcement needs</strong></td><td>Custom per-tool validation, shell hooks, permission rules.</td><td>Simple approve/reject via interrupt_before.</td></tr>
+<tr><td><strong>Conversation length</strong></td><td>100+ turns. Cache optimization critical.</td><td>Short conversations. Context window sufficient.</td></tr>
+<tr><td><strong>Persistence</strong></td><td>File-based memory is enough. Don't need time-travel.</td><td>Need checkpoint persistence, crash recovery, time-travel.</td></tr>
+<tr><td><strong>Multi-agent</strong></td><td>Workers need true isolation (own context, own git worktree).</td><td>Shared state between agents is desirable.</td></tr>
+<tr><td><strong>Debugging</strong></td><td>Read code directly. Printf debugging.</td><td>Visual graph debugger (LangGraph Studio).</td></tr>
+<tr><td><strong>Ecosystem</strong></td><td>Self-contained. No external dependencies.</td><td>LangChain ecosystem (tools, embeddings, vector stores).</td></tr>
+<tr><td><strong>Cost sensitivity</strong></td><td>High — need prompt caching and free compaction tiers.</td><td>Low — checkpoint I/O overhead acceptable.</td></tr>
+<tr><td><strong>Vendor lock-in</strong></td><td>Zero. Pure TypeScript, any LLM API.</td><td>Moderate. Tied to LangGraph/LangChain abstractions.</td></tr>
+</table>
+
+<h3>The Hybrid Approach</h3>
+<div class="callout warning">You don't have to choose one exclusively. Many production systems use LangGraph for rapid prototyping and orchestration, then replace performance-critical paths with custom code (the Runnable pattern). Start with LangGraph, optimize with custom code where it matters.</div>
+
+<h3>Real-World Mapping</h3>
+<table>
+<tr><th>Use Case</th><th>Recommendation</th><th>Why</th></tr>
+<tr><td>CLI coding assistant (like Claude Code)</td><td style="color:var(--accent);"><strong>Runnable</strong></td><td>Long sessions, many tools, streaming UX, custom enforcement, cache optimization</td></tr>
+<tr><td>Customer support chatbot</td><td style="color:var(--green);"><strong>LangGraph</strong></td><td>Short conversations, need persistence, multiple routing paths, rapid iteration</td></tr>
+<tr><td>Data analysis pipeline</td><td style="color:var(--green);"><strong>LangGraph</strong></td><td>DAG structure natural, checkpoint for recovery, Send() for parallel processing</td></tr>
+<tr><td>Autonomous coding agent (SWE-bench)</td><td style="color:var(--accent);"><strong>Runnable</strong></td><td>Long-running, needs git worktree isolation, custom tool validation, cost matters</td></tr>
+<tr><td>Multi-agent research system</td><td>Either / Hybrid</td><td>LangGraph for orchestration + custom code for tool execution</td></tr>
+<tr><td>Production SaaS with AI features</td><td style="color:var(--green);"><strong>LangGraph</strong></td><td>Team velocity, built-in persistence, visual debugging, ecosystem integrations</td></tr>
+<tr><td>Security-sensitive enterprise agent</td><td style="color:var(--accent);"><strong>Runnable</strong></td><td>Custom enforcement hooks, per-tool permissions, no framework dependency</td></tr>
+</table>
+
+<h3>Key Takeaways</h3>
+<div class="chart-container">
+  <div class="chart-title">Summary: What Each Approach Optimizes For</div>
+  <div class="mermaid">
+flowchart LR
+    subgraph Runnable
+    direction TB
+    R1["Control"] --> R2["Performance"]
+    R2 --> R3["Security"]
+    R3 --> R4["Cost Efficiency"]
+    end
+    subgraph LangGraph
+    direction TB
+    L1["Developer Speed"] --> L2["Persistence"]
+    L2 --> L3["Debuggability"]
+    L3 --> L4["Ecosystem"]
+    end
+  </div>
+</div>
+
+<div class="callout important">Runnable Claude Code proves you don't NEED frameworks. LangGraph proves frameworks can dramatically accelerate development. The right choice depends on whether you're optimizing for runtime performance (Runnable) or development velocity (LangGraph).</div>
+</div>
+
+</div><!-- end shell -->
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.14.0/dist/mermaid.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Temporarily show ALL tabs for mermaid rendering
+    document.querySelectorAll('.tab-content').forEach(function(t) {
+        t.style.display = 'block';
+    });
+
+    mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'loose',
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+    });
+
+    mermaid.run().then(function() {
+        // After rendering, hide all tabs except active
+        document.querySelectorAll('.tab-content').forEach(function(t) {
+            t.style.display = '';
+        });
+    });
+});
+
+// Tab switching — NO mermaid.run() on switch
+function showTab(id) {
+    document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById(id).classList.add('active');
+    document.querySelector('[data-tab="' + id + '"]').classList.add('active');
+}
+</script>
+</body>
+</html>

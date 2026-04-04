@@ -1,7 +1,7 @@
 # Session State — V4.4.0 Final
 
 > **Last updated**: 2026-04-04 by Claude Opus 4.6
-> **Git state**: Commit `7c0e8e1` pushed to `sageagent`
+> **Git state**: Commit `e70d858` pushed to `sageagent`
 > **V4 version**: 4.4.0 (9,144 lines)
 
 ---
@@ -21,6 +21,13 @@
 - On success: changed files merged back. On failure: discarded.
 - 7 code review findings fixed (2 HIGH, 3 MEDIUM, 2 LOW)
 - **Tested on SageMaker**: Auto-init fires, build agent creates files, isolation works.
+
+### 4. PS_RUNNABLE_VS_LANGGRAPH.html (NEW)
+- 9-tab comparison: Runnable Claude Code (TypeScript) vs LangGraph (Python)
+- 18 Mermaid flowcharts, side-by-side code examples, decision matrix
+- Source-verified from gg-claude-code-runnable/src/ and LangGraph 0.2+ API
+- Playwright verified: all tabs, no errors, mobile responsive
+- Located: PS_ClaudeCode_Insights/PS_RUNNABLE_VS_LANGGRAPH.html
 
 ### 3. Documentation
 - CHANGELOG.md: V4.4.0 section
