@@ -1182,6 +1182,10 @@ After full compaction, Claude Code clears 10+ caches to prevent stale state:<br>
 <h2>8. Performance: Where Each Approach Shines</h2>
 
 <div class="info-box">
+<b>What does "performance" mean for AI agents?</b> Two different things: <b>Runtime performance</b> = how fast the agent responds (measured in seconds per turn). <b>Developer performance</b> = how fast YOU can build and ship the agent (measured in days to production). Claude Code optimizes heavily for runtime (prompt caching, parallel tools, streaming). LangGraph optimizes for developer speed (built-in persistence, visual debugger, ecosystem). Neither is "faster" — they optimize different things.
+</div>
+
+<div class="info-box">
 <b>Performance means different things for different use cases.</b> Claude Code optimizes for RUNTIME performance (cache hits, streaming, parallel tools). LangGraph optimizes for DEVELOPER performance (speed to ship, debugging, iteration). The gap widens as conversations get longer.
 </div>
 
@@ -1228,6 +1232,13 @@ flowchart TD
 <tr><td><b>Multi-agent overhead</b></td><td>Each worker = new Claude instance. Full context isolation. Higher per-worker cost.</td><td>Subgraphs share process. Lower overhead. But less isolated.</td><td>Depends</td></tr>
 </table>
 
+<div class="info-box good">
+<b>Concrete cost example:</b> A 50-turn coding session with ~4,000 token system prompt:<br>
+<b>Without caching:</b> 4,000 × 50 turns × $0.003/1K = $0.60 just for the system prompt<br>
+<b>With caching:</b> 4,000 × 1 turn full + 49 turns × 10% = $0.012 + $0.059 = $0.07<br>
+<b>Savings:</b> $0.53 per session (~88%). Over 10 sessions/day = $5.30/day saved. This is why Claude Code's byte-level cache stability matters.
+</div>
+
 <h3>Where Your V4 Sits</h3>
 <div class="info-box good">
 <b>Your V4 performance profile:</b><br>
@@ -1255,7 +1266,12 @@ What to add next: <code>SessionCompactor</code> (R9 pattern in runnable_patterns
 <h2>9. Decision Matrix: Which Should You Use?</h2>
 
 <div class="info-box">
-<b>Bottom line:</b> You don't choose one OR the other. You use LangGraph to BUILD your agent (the car frame — gets you 90% there fast). Then you add Claude Code patterns to make it RELIABLE (the safety features — enforcement, validation, memory curation). Don't rebuild the car frame from scratch.
+<b>How to think about this decision:</b> Ask yourself these 4 questions in order:<br><br>
+<b>1. What's your deadline?</b> If you need something working in days, use LangGraph — it has batteries included. If you have weeks/months, Claude Code patterns give you more control.<br>
+<b>2. What language does your team know?</b> Python team → LangGraph. TypeScript team → consider Claude Code. Mixed → LangGraph (larger ecosystem).<br>
+<b>3. How long are your conversations?</b> Short (3-20 turns) → LangGraph is fine. Long (50+ turns) → you NEED Claude Code's compaction and caching patterns or costs explode.<br>
+<b>4. How security-sensitive is the use case?</b> If you need per-tool permission control or audit logging, Claude Code's enforcement pipeline is much stronger than LangGraph's interrupt_before.<br><br>
+<b>The practical answer:</b> Most teams should use LangGraph to BUILD their agent (the framework handles the boring stuff), then ADD Claude Code patterns for reliability (caching, enforcement, memory curation). You rarely need to choose just one.
 </div>
 
 <h3>Decision Flowchart</h3>
@@ -1285,6 +1301,20 @@ flowchart TD
 <tr><td><b>Vendor lock-in</b></td><td>Zero. Pure code. Any LLM API.</td><td>Moderate. Tied to LangGraph/LangChain abstractions. But well-maintained ecosystem.</td></tr>
 </table>
 
+<h3>Worked Examples: Real Decisions</h3>
+<div class="info-box">
+<b>Example 1: "I'm a 2-person Python team building a customer support bot. Ship in 2 weeks."</b><br>
+→ <b>Use LangGraph.</b> Small team + Python + tight deadline = framework speed wins. Add Claude Code's 4-type memory pattern and WHAT_NOT_TO_SAVE filter for quality. Skip the caching optimization — short conversations don't need it.
+</div>
+<div class="info-box">
+<b>Example 2: "I'm building an autonomous coding agent that runs for 100+ turns on large repos."</b><br>
+→ <b>Use Claude Code patterns (or build from scratch).</b> Long sessions NEED 4-tier compaction, prompt caching (saves $0.50+/session), parallel tool execution, and worktree isolation. LangGraph's checkpoint system adds overhead you don't need for single-user agents.
+</div>
+<div class="info-box">
+<b>Example 3: "I'm at a large company. We need an internal AI assistant with audit logging, SSO, and compliance."</b><br>
+→ <b>LangGraph + Claude Code enforcement patterns.</b> LangGraph for the framework (persistence, LangSmith monitoring, team velocity). Add Claude Code's hook system for audit logging, permission pipeline for compliance, and CATASTROPHIC_PATTERNS for safety. The hook system is the key — it lets compliance teams add rules without touching agent code.
+</div>
+
 <h3>What You Should Take From Claude Code for ANY LangGraph Chatbot</h3>
 <table>
 <tr><th>Claude Code Pattern</th><th>Apply to Your LangGraph Chatbot</th><th>How (Specifically)</th></tr>
@@ -1310,6 +1340,16 @@ flowchart TD
 <tr><td><b>Enterprise SaaS with AI</b></td><td style="color:#3fb950;"><b>LangGraph</b></td><td>Team velocity, built-in persistence, visual debugging, LangChain ecosystem.</td></tr>
 <tr><td><b>Security-sensitive agent</b></td><td style="color:#58a6ff;"><b>Claude Code</b></td><td>Custom enforcement hooks, per-tool permission pipeline, zero framework dependencies.</td></tr>
 </table>
+
+<div class="info-box warn">
+<b>Common mistakes to avoid:</b><br>
+<ul>
+<li><b>Don't rebuild the car frame:</b> If LangGraph gives you 90% of what you need, don't rewrite it in TypeScript. Add the missing 10% as patterns on top.</li>
+<li><b>Don't skip enforcement:</b> LangGraph's <code>interrupt_before</code> is for human approval. Claude Code's hooks are for AUTOMATED enforcement. You probably need both.</li>
+<li><b>Don't ignore cache invalidation:</b> If you mutate messages after creation (common in Python), you break prompt caching. This can silently 10x your costs.</li>
+<li><b>Don't forget the reducer:</b> In LangGraph, if you forget to set <code>operator.add</code> as the reducer for your messages field, new messages REPLACE old ones instead of appending. Your conversation history disappears.</li>
+</ul>
+</div>
 
 <div class="info-box takeaway">
 <b>Final takeaway:</b><br>
