@@ -82,6 +82,7 @@ Click any flowchart node for implementation details. Cross-referenced with 3 Chi
  <div class="tab" onclick="switchTab('v4missing')">V4 Missing</div>
  <div class="tab" onclick="switchTab('v4better')">V4 Does Better</div>
  <div class="tab" onclick="switchTab('ecosystem')">Tools & Ecosystem</div>
+ <div class="tab" onclick="switchTab('glossary')">Glossary</div>
  <div class="tab" onclick="switchTab('details')">Deep Details</div>
 </div>
 
@@ -600,8 +601,16 @@ flowchart TD
 <!-- ========== TAB 5: Tools & Ecosystem ========== -->
 <div id="tab-ecosystem" class="tab-content">
 
+<div class="info-box">
+<b>What are tools?</b> Tools are functions Claude can call — read files, run commands, search code, fetch web pages. Claude decides which tools to use based on your request. There are 58 built-in tools organized into 8 logical categories. Some are "safe" (read-only, can run in parallel) and some are "unsafe" (write operations, must run one at a time to avoid conflicts).
+</div>
+
 <h2>Complete Tool Inventory (58 Tools)</h2>
 <p class="desc"><span class="badge badge-file">src/tools.ts:getAllBaseTools()</span> 56 directories in <code>src/tools/</code>. Many are feature-gated. No explicit category field in code - logical grouping below based on function.</p>
+
+<div class="info-box">
+<b>Safe vs Unsafe:</b> <span class="badge badge-yes">Safe</span> tools are read-only — they can run up to 10 in parallel because they don't change anything. <span class="badge badge-no">Unsafe</span> tools write or modify — they must run one at a time to prevent conflicts. This parallel/serial split is a key performance optimization.
+</div>
 
 <h3>File Operations (6 tools)</h3>
 <table>
@@ -697,6 +706,10 @@ flowchart TD
 
 <hr style="border-color:#30363d; margin: 30px 0;">
 
+<div class="info-box">
+<b>What are hooks and why do they matter?</b> Hooks let you intercept tool calls with your own scripts — before a tool runs (PreToolUse) or after it finishes (PostToolUse). Use cases: automatically approve safe commands, block dangerous ones, log every action for audit, run a linter after every file edit, track costs. Hooks are external shell commands (Python, Bash, Node — any language) that communicate via JSON. They're the extensibility layer that makes Claude Code customizable without changing its source code.
+</div>
+
 <h2 id="r-hooks">Hook System - 24 Event-Driven Hooks</h2>
 <p class="desc"><span class="badge badge-file">types/hooks.ts + utils/hooks.ts</span> Event-driven interception system. Hooks are shell commands configured in <code>.claude/hooks</code>. Can override permission decisions.</p>
 <div class="mermaid">
@@ -731,6 +744,10 @@ flowchart TD
 
 <hr style="border-color:#30363d; margin: 30px 0;">
 
+<div class="info-box">
+<b>What are Teams and why do they matter?</b> Teams are TRUE multi-agent parallelism — not sub-agents (which share one process), but separate Claude Code processes running in their own tmux terminal panes. A "team lead" coordinates work, "members" execute tasks independently, and they communicate through a file-based mailbox system. Think of it like a group of developers each with their own terminal, passing notes to each other. This is different from sub-agents which are more like one developer switching between tasks.
+</div>
+
 <h2 id="r-teams">Teams System - True Multi-Agent Parallelism</h2>
 <p class="desc"><span class="badge badge-file">utils/swarm/backends/TmuxBackend.ts + teammateMailbox.ts</span> Not sub-agents. Separate agent processes running in tmux panes with file-based messaging.</p>
 <div class="mermaid">
@@ -763,6 +780,10 @@ flowchart TD
 </div>
 
 <hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What is MCP and why does it matter?</b> MCP (Model Context Protocol) is a standard way for external systems to provide tools to Claude at runtime. Instead of hardcoding every tool, MCP lets you plug in databases, APIs, deployment scripts, or any custom service. Claude discovers these tools automatically when a session starts. For example: a company could expose their internal ticketing system via MCP, and Claude would be able to create/read/update tickets without any custom code.
+</div>
 
 <h2 id="r-mcp">MCP Integration - Runtime Tool Extension</h2>
 <p class="desc"><span class="badge badge-file">services/mcp/client.js + tools/MCPTool/MCPTool.ts</span> MCP servers contribute additional tools at runtime. Auto-discovered from project config.</p>
@@ -798,6 +819,10 @@ flowchart TD
 
 <hr style="border-color:#30363d; margin: 30px 0;">
 
+<div class="info-box">
+<b>What is the config hierarchy and why does it matter?</b> Claude Code loads settings from 6 sources, each overriding the previous. This lets you set global defaults (user settings), project-specific rules (project settings), personal overrides that aren't shared (local settings), and enterprise policies that can't be overridden (managed settings). Think of it like CSS specificity — more specific rules win.
+</div>
+
 <h2 id="r-config">Configuration Hierarchy - 5 Sources</h2>
 <p class="desc"><span class="badge badge-file">utils/settings/constants.ts + utils/settings/settings.ts</span> Later sources override earlier ones. Policy settings are highest priority and read-only.</p>
 <div class="mermaid">
@@ -822,6 +847,10 @@ flowchart LR
 </div>
 
 <hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What is proactive mode?</b> Normally Claude waits for you to type a message. In proactive mode, Claude runs autonomously in a loop — it keeps working without waiting for input. This is useful for background monitoring, continuous refactoring, or long-running tasks. It's feature-flagged (not available to everyone) and experimental.
+</div>
 
 <h2 id="r-proactive">Proactive/Autonomous Mode</h2>
 <p class="desc"><span class="badge badge-file">commands/proactive.ts</span> Feature-flagged (<code>feature('PROACTIVE')</code>). Autonomous tick-based loop without user input.</p>
@@ -851,7 +880,95 @@ flowchart LR
 
 </div><!-- end tab-ecosystem -->
 
-<!-- ========== TAB 6: Deep Details ========== -->
+<!-- ========== TAB 6: Glossary ========== -->
+<div id="tab-glossary" class="tab-content">
+
+<h2>Glossary of Key Terms</h2>
+<p class="desc">Plain-English definitions for terms used throughout this reference. If you're new to Claude Code or LLM tooling, start here.</p>
+
+<div class="info-box">
+<b>Token</b> — Unit of text (~4 chars). Claude measures input/output in tokens. 200K token context = ~150K words.
+</div>
+
+<div class="info-box">
+<b>Context window</b> — The total "memory" Claude has per conversation. When full, old content must be pruned (compacted).
+</div>
+
+<div class="info-box">
+<b>Prompt caching</b> — Server stores the system prompt so you don't re-send it every turn. Cached tokens cost 90% less.
+</div>
+
+<div class="info-box">
+<b>Compaction</b> — Shrinking conversation history when context fills up. Like cleaning a desk — summarize old papers, keep recent ones.
+</div>
+
+<div class="info-box">
+<b>Microcompact</b> — Light compaction: clear old tool results without an LLM call. Cheap but limited.
+</div>
+
+<div class="info-box">
+<b>Tool</b> — A function Claude can call (read files, run commands, search code). Claude decides which tools to use.
+</div>
+
+<div class="info-box">
+<b>Safe tool</b> — Read-only tool (grep, glob, read). Can run in parallel because it doesn't change anything.
+</div>
+
+<div class="info-box">
+<b>Unsafe tool</b> — Write tool (bash, edit, write). Must run one at a time to avoid conflicts.
+</div>
+
+<div class="info-box">
+<b>Sub-agent</b> — A separate conversation Claude spawns to handle a specific task. Has its own context window. Returns a summary when done.
+</div>
+
+<div class="info-box">
+<b>Hook</b> — External shell command that intercepts tool calls. Runs before/after tools. Can approve, deny, or modify tool input. Any language.
+</div>
+
+<div class="info-box">
+<b>MCP (Model Context Protocol)</b> — Protocol that lets external systems (databases, APIs) provide tools to Claude at runtime.
+</div>
+
+<div class="info-box">
+<b>Teams</b> — Multiple Claude agents running in parallel tmux panes. Each has its own context. Communicate via file-based mailbox.
+</div>
+
+<div class="info-box">
+<b>Prompt cache boundary</b> — The split between static (cacheable) and dynamic (changes each turn) parts of the system prompt.
+</div>
+
+<div class="info-box">
+<b>cache_edits</b> — Anthropic API to delete tool results from server cache without modifying local messages. Zero cache invalidation.
+</div>
+
+<div class="info-box">
+<b>PTL (Prompt Too Long)</b> — Error when context exceeds model limit. Recovery: drop oldest rounds, retry.
+</div>
+
+<div class="info-box">
+<b>Worktree</b> — Git feature that creates an isolated copy of a repo. Sub-agents can work in a worktree without affecting the main workspace.
+</div>
+
+<div class="info-box">
+<b>Concurrency</b> — Running multiple operations at the same time. Claude Code runs up to 10 safe tools concurrently.
+</div>
+
+<div class="info-box">
+<b>Permission</b> — Approval required before running unsafe tools. Can come from: hooks, ML classifier, user dialog, or settings rules.
+</div>
+
+<div class="info-box">
+<b>Slash command</b> — User-invocable action prefixed with / (e.g., /commit, /review). Claude Code has 112 of these.
+</div>
+
+<div class="info-box">
+<b>Feature flag</b> — Toggle that enables/disables experimental features (e.g., PROACTIVE, HISTORY_SNIP). Not available to all users.
+</div>
+
+</div><!-- end tab-glossary -->
+
+<!-- ========== TAB 7: Deep Details ========== -->
 <div id="tab-details" class="tab-content">
 
 <h2>Deep Architecture Details</h2>

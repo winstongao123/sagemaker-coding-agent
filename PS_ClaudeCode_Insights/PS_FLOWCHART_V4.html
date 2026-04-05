@@ -587,7 +587,7 @@ flowchart TD
     </details>
     <details>
       <summary>What is a security layer?</summary>
-      <p>A security layer is one checkpoint in a pipeline that checks whether a command is safe to run. V4 has 16 of these, stacked like airport security: Layer -1 blocks catastrophic commands (like "delete everything") with no override possible. Layer 0 checks against 70+ known dangerous patterns. Layers 1-5 validate tool names, arguments, file paths, and user permissions. If ANY layer says "no", the command is blocked. This defense-in-depth approach means even if one layer has a gap, the others catch it.</p>
+      <p>A security layer is one checkpoint in a pipeline that checks whether a command is safe to run. V4 has 16 of these, stacked like airport security: Layer -1 blocks catastrophic commands (like "delete everything", 13 patterns) with no override possible. Layers 0-2 check against an allowlist, 75+ dangerous patterns, and network/workspace restrictions. Layers 3-5 validate tool names, arguments, file paths, and user permissions. If ANY layer says "no", the command is blocked. This defense-in-depth approach means even if one layer has a gap, the others catch it.</p>
     </details>
     <details>
       <summary>What is microcompact vs full compact?</summary>
