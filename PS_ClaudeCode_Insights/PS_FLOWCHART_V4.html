@@ -482,6 +482,7 @@ flowchart TD
           <li>Token/cost tracking is local and visible to the SageMaker user.</li>
           <li>Cold-cache detection is practical for notebook sessions with long idle gaps.</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Runnable targets Anthropic's direct API. Bedrock has different validation rules, pricing, and caching behavior. V4 handles these differences natively so you don't hit surprise errors or pay more than necessary.</p>
       </div>
       <div class="card">
         <h3>Safer notebook UX</h3>
@@ -490,6 +491,7 @@ flowchart TD
           <li>Read-only bash auto-classifier avoids annoying approval popups for safe reads.</li>
           <li>Approval reset on compact prevents stale "always allow" decisions from living forever.</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> In a notebook environment, a destructive command (like deleting files) can't be undone with Ctrl+Z. These safety layers prevent accidents before they happen, without annoying you with popups for safe read operations.</p>
       </div>
       <div class="card">
         <h3>Better business-user output</h3>
@@ -498,6 +500,7 @@ flowchart TD
           <li>Designed for Jupyter sharing, demoing, and report-style workflows.</li>
           <li>Useful when the user wants deliverables, not only code diffs.</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Runnable outputs code diffs for developers. V4 outputs reports, charts, and documents for business users who need deliverables they can share with stakeholders, not just code changes.</p>
       </div>
       <div class="card">
         <h3>Practical SageMaker packaging</h3>
@@ -506,6 +509,7 @@ flowchart TD
           <li>Session persistence and audit logs are easier to inspect locally.</li>
           <li>Model override support lets different sub-agent types use different Bedrock models.</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Runnable is a 1,438-file TypeScript project requiring npm and Node.js. V4 is one Python file you can drop into any Jupyter notebook. Simpler to deploy, debug, and inspect.</p>
       </div>
       <div class="card">
         <h3>System prompt at parity (V4.4.0)</h3>
@@ -527,6 +531,7 @@ flowchart TD
           <li style="color:var(--accent-2);">Haiku: 362K→40K tokens (<b>9x improvement</b>), $0.42→$0.06</li>
           <li style="color:var(--accent-2);">Sonnet: 362K→9K tokens (<b>38x improvement</b>), $0.42→$0.05</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Without these optimizations, a single question could cost $0.42 and use 362K tokens. With them, the same question costs $0.05-$0.06. That's the difference between "too expensive to use" and "use it all day."</p>
       </div>
       <div class="card" style="border:2px solid var(--danger);">
         <h3 style="color:var(--danger);">[CRITICAL] Code Quality — Learned from Runnable</h3>
@@ -538,6 +543,7 @@ flowchart TD
           <li><b>Explore thoroughness</b>: quick/medium/very thorough levels.</li>
           <li><b>Prompt-writing</b>: explain what/why, what you've ruled out, include file paths.</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> An agent that claims "done" when tests fail, or silently ignores errors, wastes your time. These rules ensure the agent is honest about what worked and what didn't.</p>
       </div>
       <div class="card">
         <h3>Cost control + verification (V4.4.0)</h3>
@@ -548,6 +554,7 @@ flowchart TD
           <li>Adversarial verify agent: tries to BREAK the code, not just test it.</li>
           <li>Diminishing returns: detects stuck agent (text-only turns, not tool calls).</li>
         </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Without cost visibility, you can accidentally spend $20 on a single session. The budget slider and cache savings display put you in control — you see exactly what you're paying and can adjust in real time.</p>
       </div>
     </div>
   </section>
@@ -573,6 +580,30 @@ flowchart TD
     <details>
       <summary>Why are there still some gaps?</summary>
       <p>Some gaps are worthwhile future upgrades, like snip compaction. Others are not yet worth the complexity in SageMaker, like full streaming tool execution in a notebook UI. And one big item, server-side <code>cache_edits</code>, depends on what Bedrock exposes at the API level, not just on local Python code.</p>
+    </details>
+    <details>
+      <summary>What is a sub-agent?</summary>
+      <p>A sub-agent is like asking a colleague to handle a specific task. The main agent spawns a separate conversation with its own memory, gives it a focused job (like "explore this codebase" or "review this code"), and waits for a summary back. V4 has 6 types: explore (read-only research), plan (design approach), review (check quality), build (write code in isolation), verify (try to break things), and general (anything else). Each type gets different tools and instructions.</p>
+    </details>
+    <details>
+      <summary>What is a security layer?</summary>
+      <p>A security layer is one checkpoint in a pipeline that checks whether a command is safe to run. V4 has 16 of these, stacked like airport security: Layer -1 blocks catastrophic commands (like "delete everything") with no override possible. Layer 0 checks against 70+ known dangerous patterns. Layers 1-5 validate tool names, arguments, file paths, and user permissions. If ANY layer says "no", the command is blocked. This defense-in-depth approach means even if one layer has a gap, the others catch it.</p>
+    </details>
+    <details>
+      <summary>What is microcompact vs full compact?</summary>
+      <p>Think of your conversation as a desk getting cluttered with papers. Microcompact is like clearing old sticky notes you don't need anymore — quick, no effort, just removing stale tool results. Full compact is like stopping work to write a summary of everything on your desk, then throwing away the originals and keeping only the summary. Microcompact triggers at 70% context usage (cheap, no LLM call). Full compact triggers at 80% (expensive, needs an LLM call to summarize). V4 also has a circuit breaker — if compact fails 3 times in a row, it stops trying automatically.</p>
+    </details>
+    <details>
+      <summary>What is tool dispatch?</summary>
+      <p>Tool dispatch is how the agent decides which tools to run and in what order. When Claude returns multiple tool calls in one response, V4 groups consecutive read-only tools (like grep, glob, read_file) into a batch and runs them all at the same time using parallel threads. Write tools (bash, edit_file) always run alone, one at a time, to prevent conflicts. This batching can cut multi-read latency by ~40%. Think of it like a restaurant kitchen — reading orders (safe) can happen simultaneously, but cooking each dish (unsafe) happens one at a time on the stove.</p>
+    </details>
+    <details>
+      <summary>What is prompt caching and why does V4 care so much?</summary>
+      <p>Every turn, V4 sends the system prompt (instructions, tool definitions, rules) to Bedrock. Without caching, you pay full price for these ~4,000+ tokens every single turn. With caching, Bedrock remembers the prompt from last turn and charges 90% less. The catch: caching only works if the prompt is EXACTLY the same — even changing one character breaks the cache. That's why V4 splits the prompt into a "static" part (instructions, rules — never changes) and a "dynamic" part (workspace info, memory — changes each turn). The static part gets cached. On Haiku, the minimum threshold is 4,096 tokens — V4's rich tool descriptions push past this threshold, activating cache and saving ~$0.19 per session.</p>
+    </details>
+    <details>
+      <summary>What is the doom loop detector?</summary>
+      <p>Sometimes the agent gets stuck in a loop — reading the same file over and over, or retrying the same failed command. V4's doom loop detector watches for this: it hashes each tool call's target (file path, search pattern, command) and keeps the last 30 in a queue. If the same target appears 3 times, it warns the agent to try a different approach. Without this, a stuck agent could burn through the entire context window (and your budget) doing nothing useful.</p>
     </details>
   </section>
 
