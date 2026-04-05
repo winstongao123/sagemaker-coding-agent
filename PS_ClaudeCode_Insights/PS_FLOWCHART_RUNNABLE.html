@@ -60,17 +60,19 @@
 <body>
 <h1>Claude Code Runnable - Complete Architecture Reference</h1>
 <p style="color:#8b949e;">Source-verified analysis of the Claude Code CLI v2.1.87 TypeScript codebase (1,438 files, ~75K lines).<br>
-Click any flowchart node for implementation details. Cross-referenced with 3 independent Chinese-language deep-dive analyses.</p>
+Click any flowchart node for implementation details. Cross-referenced with 3 Chinese deep-dive analyses + <a href="https://ccunpacked.dev/#agent-loop" style="color:#58a6ff;">ccunpacked.dev</a> (58 tools, hooks, teams, MCP verified against source).</p>
 
 <div class="stats">
  <div class="stat"><div class="stat-num">1,438</div><div class="stat-label">TypeScript Files</div></div>
- <div class="stat"><div class="stat-num">~40</div><div class="stat-label">Tools</div></div>
+ <div class="stat"><div class="stat-num">58</div><div class="stat-label">Tools (8 categories)</div></div>
  <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compaction Tiers</div></div>
  <div class="stat"><div class="stat-num">4/3x</div><div class="stat-label">Token Padding</div></div>
  <div class="stat"><div class="stat-num">50K/200K</div><div class="stat-label">Per-tool / Batch Cap</div></div>
  <div class="stat"><div class="stat-num">7</div><div class="stat-label">Message Types</div></div>
  <div class="stat"><div class="stat-num">10</div><div class="stat-label">Max Parallel Tools</div></div>
- <div class="stat"><div class="stat-num">4</div><div class="stat-label">Permission Sources</div></div>
+ <div class="stat"><div class="stat-num">7</div><div class="stat-label">Permission Mechanisms</div></div>
+ <div class="stat"><div class="stat-num">24</div><div class="stat-label">Hook Events</div></div>
+ <div class="stat"><div class="stat-num">112</div><div class="stat-label">Slash Commands</div></div>
 </div>
 
 <!-- Tabs -->
@@ -79,6 +81,7 @@ Click any flowchart node for implementation details. Cross-referenced with 3 ind
  <div class="tab" onclick="switchTab('v4has')">V4 Has</div>
  <div class="tab" onclick="switchTab('v4missing')">V4 Missing</div>
  <div class="tab" onclick="switchTab('v4better')">V4 Does Better</div>
+ <div class="tab" onclick="switchTab('ecosystem')">Tools & Ecosystem</div>
  <div class="tab" onclick="switchTab('details')">Deep Details</div>
 </div>
 
@@ -419,6 +422,16 @@ flowchart TD
 <table>
 <tr><th>Feature</th><th>Runnable Implementation</th><th>Why Missing / Priority</th></tr>
 <tr>
+ <td><b>Hook System (24 events)</b></td>
+ <td><code>PreToolUse</code>, <code>PostToolUse</code>, <code>PreCompact</code>, <code>PostCompact</code> + 20 more. External shell commands intercept tool calls. Can override permissions (allow/deny). Any language.</td>
+ <td><span class="badge badge-no">HIGH</span> V4 has no event-driven hook system. All security/interception is hardcoded Python. Adding hooks would enable cost tracking, approval workflows, audit plugins, and linter-on-edit without code changes.</td>
+</tr>
+<tr>
+ <td><b>Teams / Multi-Agent Coordination</b></td>
+ <td><code>TeamCreate</code> / <code>TeamDelete</code> + <code>SendMessage</code>. True parallelism via tmux panes. File-based mailbox at <code>~/.claude/teams/</code>. Lead + members architecture.</td>
+ <td><span class="badge badge-partial">N/A</span> SageMaker is single-user notebook. tmux panes don't apply. V4 has parallel sub-agents via ThreadPoolExecutor which is sufficient.</td>
+</tr>
+<tr>
  <td><b>Parallel Safe Tool Execution</b></td>
  <td><code>partitionToolCalls()</code> groups consecutive read-only tools. Up to 10 run in parallel. <code>StreamingToolExecutor.addTool()</code> starts execution AS blocks stream in.</td>
  <td><span class="badge badge-yes">V4.2.1</span> Closed. V4 now batches consecutive read-only tools and runs them concurrently via <code>ThreadPoolExecutor</code>. Remaining gap is only true streaming execution while the model is still emitting tool blocks.</td>
@@ -584,7 +597,261 @@ flowchart TD
 
 </div><!-- end tab-v4better -->
 
-<!-- ========== TAB 5: Deep Details ========== -->
+<!-- ========== TAB 5: Tools & Ecosystem ========== -->
+<div id="tab-ecosystem" class="tab-content">
+
+<h2>Complete Tool Inventory (58 Tools)</h2>
+<p class="desc"><span class="badge badge-file">src/tools.ts:getAllBaseTools()</span> 56 directories in <code>src/tools/</code>. Many are feature-gated. No explicit category field in code - logical grouping below based on function.</p>
+
+<h3>File Operations (6 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>Read</b></td><td><code>ReadFileTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Read file with offset/limit. Images rendered visually. PDFs with page ranges. Notebooks with outputs.</td></tr>
+<tr><td><b>Write</b></td><td><code>WriteFileTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Overwrite/create file. Must Read first for existing files. Prefers Edit for modifications.</td></tr>
+<tr><td><b>Edit</b></td><td><code>FileEditTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Exact string replacement. Fails if old_string not unique. <code>replace_all</code> for bulk rename.</td></tr>
+<tr><td><b>Glob</b></td><td><code>GlobTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Fast file pattern matching. Returns paths sorted by mtime. Replaces <code>find</code>/<code>ls</code>.</td></tr>
+<tr><td><b>Grep</b></td><td><code>GrepTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Ripgrep-based search. Regex, glob filter, multiline. 3 output modes. Replaces <code>grep</code>/<code>rg</code> in bash.</td></tr>
+<tr><td><b>NotebookEdit</b></td><td><code>NotebookEditTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Edit Jupyter notebook cells by index. Insert, replace, or delete cells.</td></tr>
+</table>
+
+<h3>Execution (3 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>Bash</b></td><td><code>BashTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Execute shell command. Timeout up to 600s. Background mode. Sandbox-aware. ML classifier for danger.</td></tr>
+<tr><td><b>PowerShell</b></td><td><code>PowerShellTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Windows PowerShell execution. Same safety model as Bash.</td></tr>
+<tr><td><b>REPL</b></td><td><code>REPLTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Interactive REPL session for language-specific evaluation.</td></tr>
+</table>
+
+<h3>Search & Fetch (3 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>WebFetch</b></td><td><code>WebFetchTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Fetch URL, convert HTML to markdown, process with small model. 15-min cache.</td></tr>
+<tr><td><b>WebSearch</b></td><td><code>WebSearchTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Web search with domain filtering. Returns markdown hyperlinks.</td></tr>
+<tr><td><b>LSP</b></td><td><code>LSPTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Language Server Protocol queries (go-to-definition, references, diagnostics).</td></tr>
+</table>
+
+<h3>Agents & Tasks (10 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>Agent</b></td><td><code>AgentTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Spawn sub-agent. 7 built-in types (explore, verify, plan, review, general, build, code-reviewer). Worktree isolation option.</td></tr>
+<tr><td><b>SendMessage</b></td><td><code>SendMessageTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Send message to running agent by name/ID. Continues agent with full context preserved.</td></tr>
+<tr><td><b>TaskCreate</b></td><td><code>TaskCreateTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Create background task (bash, agent, remote, workflow, monitor, dream). Typed prefix IDs.</td></tr>
+<tr><td><b>TaskGet</b></td><td><code>TaskGetTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Get task status and output by ID.</td></tr>
+<tr><td><b>TaskList</b></td><td><code>TaskListTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>List all tasks with status filtering.</td></tr>
+<tr><td><b>TaskUpdate</b></td><td><code>TaskUpdateTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Update running task parameters.</td></tr>
+<tr><td><b>TaskOutput</b></td><td><code>TaskOutputTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Read task output stream.</td></tr>
+<tr><td><b>TaskStop</b></td><td><code>TaskStopTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Stop running task.</td></tr>
+<tr><td><b>TeamCreate</b></td><td><code>TeamCreateTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Create multi-agent team with tmux panes. Lead + members with shared mailbox.</td></tr>
+<tr><td><b>TeamDelete</b></td><td><code>TeamDeleteTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Tear down team and cleanup panes.</td></tr>
+</table>
+
+<h3>Planning (4 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>EnterPlanMode</b></td><td><code>EnterPlanModeTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Switch to read-only plan mode. Only safe tools allowed until exit.</td></tr>
+<tr><td><b>ExitPlanMode</b></td><td><code>ExitPlanModeV2Tool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Exit plan mode and resume normal execution.</td></tr>
+<tr><td><b>TodoWrite</b></td><td><code>TodoWriteTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Create/update task checklist for progress tracking.</td></tr>
+<tr><td><b>VerifyPlanExecution</b></td><td><code>VerifyPlanExecution.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Verify plan steps were executed correctly.</td></tr>
+</table>
+
+<h3>MCP - Model Context Protocol (4 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>MCPTool</b></td><td><code>MCPTool.ts</code></td><td>Varies</td><td>Generic MCP server tool interface. Auto-discovered from project config.</td></tr>
+<tr><td><b>McpAuthTool</b></td><td><code>McpAuthTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Authenticate with MCP server (OAuth, API key).</td></tr>
+<tr><td><b>ListMcpResources</b></td><td><code>ListMcpResourcesTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>List available resources from connected MCP servers.</td></tr>
+<tr><td><b>ReadMcpResource</b></td><td><code>ReadMcpResourceTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Read specific resource content from MCP server.</td></tr>
+</table>
+
+<h3>System (8 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>AskUserQuestion</b></td><td><code>AskUserQuestionTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Ask user a question and wait for response. For genuine blockers only.</td></tr>
+<tr><td><b>Skill</b></td><td><code>SkillTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Execute a registered skill (slash command handler).</td></tr>
+<tr><td><b>ToolSearch</b></td><td><code>ToolSearchTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Search for deferred tools by keyword. Returns full schema for matched tools.</td></tr>
+<tr><td><b>RemoteTrigger</b></td><td><code>RemoteTriggerTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Trigger remote agent execution (cron-scheduled).</td></tr>
+<tr><td><b>CronCreate/Delete/List</b></td><td><code>Cron*Tool.ts</code></td><td>Mixed</td><td>Create, delete, list scheduled remote triggers.</td></tr>
+<tr><td><b>Sleep</b></td><td><code>SleepTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Pause execution for specified duration.</td></tr>
+<tr><td><b>Snip</b></td><td><code>SnipTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Manual snip compaction trigger.</td></tr>
+</table>
+
+<h3>Experimental & Stubs (~15 tools)</h3>
+<table>
+<tr><th>Tool</th><th>Status</th><th>What It Does</th></tr>
+<tr><td><b>Workflow</b></td><td>Active</td><td>Execute predefined workflow sequences.</td></tr>
+<tr><td><b>TerminalCapture</b></td><td>Active</td><td>Capture terminal content for analysis.</td></tr>
+<tr><td><b>EnterWorktree / ExitWorktree</b></td><td>Active</td><td>Manual worktree isolation for sub-agents.</td></tr>
+<tr><td><b>SendUserFile</b></td><td>Active</td><td>Send file to user (download).</td></tr>
+<tr><td><b>StructuredOutput</b></td><td>Internal</td><td>Synthetic tool for structured response formatting.</td></tr>
+<tr><td><b>CtxInspect</b></td><td><span class="badge badge-partial">STUB</span></td><td>Context window inspection (not implemented).</td></tr>
+<tr><td><b>DiscoverSkills</b></td><td><span class="badge badge-partial">STUB</span></td><td>Auto-discover available skills.</td></tr>
+<tr><td><b>ListPeers</b></td><td><span class="badge badge-partial">STUB</span></td><td>List peer agents in team.</td></tr>
+<tr><td><b>Monitor</b></td><td><span class="badge badge-partial">STUB</span></td><td>Dashboard monitoring.</td></tr>
+<tr><td><b>PushNotification</b></td><td><span class="badge badge-partial">STUB</span></td><td>Push notification to user device.</td></tr>
+<tr><td><b>ReviewArtifact</b></td><td><span class="badge badge-partial">STUB</span></td><td>Review generated artifacts.</td></tr>
+<tr><td><b>SubscribePR / SuggestBackgroundPR</b></td><td><span class="badge badge-partial">STUB</span></td><td>GitHub PR automation.</td></tr>
+<tr><td><b>WebBrowser</b></td><td><span class="badge badge-partial">STUB</span></td><td>Browser automation.</td></tr>
+<tr><td><b>Tungsten</b></td><td><span class="badge badge-partial">STUB</span></td><td>Unknown experimental feature.</td></tr>
+<tr><td><b>OverflowTest</b></td><td><span class="badge badge-partial">STUB</span></td><td>Testing tool for context overflow behavior.</td></tr>
+</table>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-hooks">Hook System - 24 Event-Driven Hooks</h2>
+<p class="desc"><span class="badge badge-file">types/hooks.ts + utils/hooks.ts</span> Event-driven interception system. Hooks are shell commands configured in <code>.claude/hooks</code>. Can override permission decisions.</p>
+<div class="mermaid">
+flowchart TD
+ A([Tool call requested]) --> B{PreToolUse hooks\nconfigured -}
+ B -->|Yes| C[Execute hook\nshell commands]
+ C --> D{Hook returns\npermission -}
+ D -->|allow| E[Skip user prompt\nAuto-approve]
+ D -->|deny| F[Block tool\nReturn denied]
+ D -->|ask| G[Fall through to\nnormal permission]
+ D -->|no decision| G
+ B -->|No| G
+ G --> H[Normal permission\nresolution]
+ H --> I[Tool executes]
+ I --> J{PostToolUse hooks\nconfigured -}
+ J -->|Yes| K[Execute post hooks\nCan modify output]
+ J -->|No| L([Return result])
+ K --> L
+</div>
+
+<div class="info-box">
+<b>All 24 Hook Events (from <code>HOOK_EVENTS</code>):</b><br><br>
+<b>Tool lifecycle:</b> PreToolUse, PostToolUse, PostToolUseFailure<br>
+<b>Compaction:</b> PreCompact, PostCompact (can preserve custom instructions across compaction)<br>
+<b>Session:</b> PreSessionStart, PostSessionEnd<br>
+<b>Message:</b> PreUserMessage, PostAssistantMessage<br>
+<b>Plus ~15 more:</b> PreBashExec, PostBashExec, PreFileEdit, PostFileEdit, PreAgentSpawn, PostAgentReturn, PreAPICall, PostAPIResponse, etc.<br><br>
+<b>Key design:</b> Hooks are EXTERNAL shell commands, not in-process callbacks. They run in a subprocess and communicate via JSON stdin/stdout. This means any language can implement a hook - Python, Node, Bash scripts, etc.<br><br>
+<b>Permission override:</b> PreToolUse hooks CAN approve tools (skip user dialog), but CANNOT override explicit deny rules. Deny rules always win.<br>
+<b>V4 gap:</b> V4 has no hook system. All security is hardcoded in Python.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-teams">Teams System - True Multi-Agent Parallelism</h2>
+<p class="desc"><span class="badge badge-file">utils/swarm/backends/TmuxBackend.ts + teammateMailbox.ts</span> Not sub-agents. Separate agent processes running in tmux panes with file-based messaging.</p>
+<div class="mermaid">
+flowchart TD
+ A([User or Agent]) --> B[TeamCreate tool\nname + description]
+ B --> C[Create tmux session]
+ C --> D[Spawn team-lead\nin first pane]
+ D --> E[Spawn members\nin separate panes]
+ E --> F[Each member gets\nown context window]
+ F --> G[File-based Mailbox\n~/.claude/teams/]
+ G --> H{Communication}
+ H --> I[SendMessage to agent]
+ H --> J[Members reply back]
+ I --> K[Agent reads inbox]
+ J --> K
+ K --> L[Work in parallel panes]
+ L --> M[TeamDelete cleanup]
+</div>
+
+<div class="info-box">
+<b>Key differences from sub-agents:</b><br>
+<ul>
+<li><b>Sub-agents</b> = recursive query() call, same process, shares parent's cached prompt prefix, returns result when done</li>
+<li><b>Team members</b> = separate OS processes in tmux panes, own context window, persistent, communicate via file-based mailbox</li>
+<li><b>Backend options:</b> TmuxBackend (Linux/Mac), iTerm2Backend (Mac), InProcessBackend (fallback)</li>
+<li><b>Layout manager:</b> Colored pane borders, visual distinction between agents</li>
+<li><b>Race condition prevention:</b> Pane creation lock prevents parallel spawn conflicts</li>
+</ul>
+<b>V4 gap:</b> V4 has parallel sub-agents via ThreadPoolExecutor but no team coordination. Not applicable to SageMaker notebooks.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-mcp">MCP Integration - Runtime Tool Extension</h2>
+<p class="desc"><span class="badge badge-file">services/mcp/client.js + tools/MCPTool/MCPTool.ts</span> MCP servers contribute additional tools at runtime. Auto-discovered from project config.</p>
+<div class="mermaid">
+flowchart TD
+ A([Session Start]) --> B[Load MCP config\nfrom settings]
+ B --> C{MCP servers\nconfigured -}
+ C -->|Yes| D[Initialize MCP clients\nWebSocket or stdio]
+ D --> E[Discover server tools\nvia MCP protocol]
+ E --> F[Register as MCPTool\nin tool registry]
+ F --> G[Available to LLM\nlike built-in tools]
+ C -->|No| G
+ G --> H([Agent Loop])
+ H --> I{LLM calls\nMCP tool -}
+ I -->|Yes| J[Route to MCP server\nvia transport]
+ J --> K[Server executes\nreturns result]
+ K --> H
+ I -->|No| H
+</div>
+
+<div class="info-box">
+<b>4 dedicated MCP tools:</b><br>
+<ul>
+<li><b>MCPTool</b> - Generic interface for any MCP server tool. Name becomes <code>mcp__servername__toolname</code></li>
+<li><b>McpAuthTool</b> - OAuth/API key authentication for MCP servers</li>
+<li><b>ListMcpResources</b> - List available resources (databases, files, APIs) from MCP servers</li>
+<li><b>ReadMcpResource</b> - Read specific resource content</li>
+</ul>
+<b>Transports:</b> stdio (local process), WebSocket (remote), VS Code SDK (IDE integration)<br>
+<b>Supporting infrastructure:</b> mcpValidation.ts, mcpOutputStorage.ts, mcpInstructionsDelta.ts<br>
+<b>V4 status:</b> V4 HAS MCP support via McpManager. Configured in agent_config.json.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-config">Configuration Hierarchy - 5 Sources</h2>
+<p class="desc"><span class="badge badge-file">utils/settings/constants.ts + utils/settings/settings.ts</span> Later sources override earlier ones. Policy settings are highest priority and read-only.</p>
+<div class="mermaid">
+flowchart LR
+ A["1. Plugin Settings\n(lowest priority)"] --> B["2. User Settings\n~/.claude/settings.json"]
+ B --> C["3. Project Settings\n.claude/settings.json"]
+ C --> D["4. Local Settings\n.claude/settings.local.json\n(gitignored)"]
+ D --> E["5. CLI Flag Settings\n--settings flag"]
+ E --> F["6. Policy/Managed\nhighest priority\nRemote then HKLM then plist\nthen managed-settings.json"]
+</div>
+
+<div class="info-box">
+<b>SETTING_SOURCES constant:</b> <code>['userSettings', 'projectSettings', 'localSettings', 'flagSettings', 'policySettings']</code><br><br>
+<b>Key details:</b><br>
+<ul>
+<li>Policy settings are READ-ONLY and cannot be overridden by user/project/local</li>
+<li>Environment variables configure WHERE settings load from (e.g., <code>CLAUDE_CODE_HOME</code>), but are NOT a settings tier</li>
+<li>Merge strategy: later sources override earlier for same keys</li>
+<li>Each source can define: <code>permissions.allow</code>, <code>permissions.deny</code>, <code>permissions.ask</code> with glob patterns</li>
+</ul>
+<b>V4 equivalent:</b> 3 layers (code defaults -> agent_config.json -> runtime UI mutations). No policy tier.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-proactive">Proactive/Autonomous Mode</h2>
+<p class="desc"><span class="badge badge-file">commands/proactive.ts</span> Feature-flagged (<code>feature('PROACTIVE')</code>). Autonomous tick-based loop without user input.</p>
+<div class="info-box">
+<b>How it works:</b><br>
+<ul>
+<li><code>--proactive</code> CLI flag activates autonomous mode</li>
+<li>System prompt switches to: <i>"You are running autonomously"</i></li>
+<li>Tick-based loop: agent keeps executing without waiting for user messages</li>
+<li>Terminal focus awareness: tracks whether user's terminal is focused or unfocused</li>
+<li>Still feature-gated - not available to all users</li>
+</ul>
+<b>V4 gap:</b> Not applicable. SageMaker notebooks are user-driven (cell execution model).
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-buddy">Buddy System - Virtual Pets</h2>
+<p class="desc"><span class="badge badge-file">buddy/CompanionSprite.tsx + buddy/types.ts</span> Terminal virtual pet with 16 species, animations, speech bubbles. The dragon "Perch" sits beside the input box.</p>
+<div class="info-box">
+<b>Species (16):</b> duck, cat, dragon, penguin, capybara, fox, owl, rabbit, turtle, bear, frog, octopus, unicorn, phoenix, robot, alien<br>
+<b>Features:</b> Idle animations, speech bubbles, hearts animation, rarity levels<br>
+<b>Command:</b> <code>/buddy</code> to manage pet<br>
+<b>Integration:</b> Perch responds when user addresses it by name. Main agent stays out of the way.<br>
+<b>V4 gap:</b> Not applicable for SageMaker.
+</div>
+
+</div><!-- end tab-ecosystem -->
+
+<!-- ========== TAB 6: Deep Details ========== -->
 <div id="tab-details" class="tab-content">
 
 <h2>Deep Architecture Details</h2>
@@ -1010,6 +1277,59 @@ Batch 3: [read, grep] -> parallel (2 at once)</pre>`
  This is why skills are NOT reset after compact - resetting would change the static prefix
  and invalidate the shared cache.`
  },
+ hook_execution: {
+ title: "Hook Execution - Shell Subprocess",
+ body: `<b>File:</b> <code>utils/hooks.ts</code><br><br>
+ Hooks are external shell commands, not in-process callbacks.<br>
+ They run in a subprocess and communicate via JSON stdin/stdout.<br><br>
+ <b>Execution flow:</b><br>
+ <ol>
+ <li>System checks hook config for matching event (e.g., PreToolUse + tool name)</li>
+ <li>Spawns shell subprocess with configured command</li>
+ <li>Passes context as JSON to stdin (tool name, input, session info)</li>
+ <li>Reads JSON response from stdout (permission decision, modified input)</li>
+ </ol>
+ <b>Any language works:</b> Python, Node, Bash, Go - as long as it reads stdin JSON and writes stdout JSON.`
+ },
+ hook_allow: {
+ title: "Hook Permission Override - Allow with Limits",
+ body: `PreToolUse hooks CAN approve tools (skip user dialog).<br><br>
+ <b>But cannot override deny rules:</b><br>
+ <pre>// From toolHooks.ts:372-405
+const ruleCheck = await checkRuleBasedPermissions(tool, hookInput, ctx)
+if (ruleCheck?.behavior === 'deny') {
+  logForDebugging('Hook approved but deny rule overrides')
+  return { decision: ruleCheck, input: hookInput }
+}</pre>
+ <b>Security invariant:</b> Deny rules from settings always win over hook approvals.
+ This prevents a rogue hook from bypassing explicit security policies.`
+ },
+ team_create: {
+ title: "TeamCreate - Multi-Agent Coordination",
+ body: `<b>File:</b> <code>tools/TeamCreateTool/TeamCreateTool.ts</code><br><br>
+ Creates a tmux session with multiple Claude Code instances:<br>
+ <ul>
+ <li><b>Team lead</b> (<code>TEAM_LEAD_NAME = 'team-lead'</code>) coordinates work</li>
+ <li><b>Members</b> get separate tmux panes with own context windows</li>
+ <li>Backend registry: TmuxBackend, iTerm2Backend, InProcessBackend</li>
+ <li>Colored pane layout via <code>teammateLayoutManager.ts</code></li>
+ </ul>
+ This is TRUE parallelism - each agent is a separate OS process, not a sub-agent within one process.`
+ },
+ team_mailbox: {
+ title: "File-Based Mailbox System",
+ body: `<b>File:</b> <code>utils/teammateMailbox.ts</code><br><br>
+ Inter-agent communication via JSON files on disk:<br>
+ <code>~/.claude/teams/{team_name}/inboxes/{agent_name}.json</code><br><br>
+ <b>How it works:</b><br>
+ <ul>
+ <li>Each agent has an inbox file it polls</li>
+ <li>SendMessage tool writes to target agent's inbox</li>
+ <li>Messages include sender, content, and timestamp</li>
+ <li>File-based = survives process crashes, no socket overhead</li>
+ </ul>
+ <b>Identity resolution:</b> <code>teammate.ts</code> uses CLI args + AsyncLocalStorage to resolve agent identity.`
+ },
  worktree: {
  title: "Worktree Isolation for Sub-Agents",
  body: `Sub-agents can run in a <b>git worktree</b> - an isolated copy of the repository.<br><br>
@@ -1043,21 +1363,29 @@ function switchTab(tabId) {
  document.getElementById('tab-' + tabId).classList.add('active');
 }
 
+// Show all tabs briefly so mermaid can render in visible context, then hide
 mermaid.initialize({
- startOnLoad: true,
+ startOnLoad: false,
  theme: 'dark',
  securityLevel: 'loose',
  flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+});
+document.addEventListener('DOMContentLoaded', async function() {
+ // Temporarily show all tab panels
+ document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'block');
+ await mermaid.run();
+ // Restore hidden state - only active tab visible
+ document.querySelectorAll('.tab-content').forEach(t => t.style.display = '');
 });
 </script>
 
 <hr style="border-color:#30363d;margin-top:40px;">
 <p style="color:#484f58;font-size:12px;margin-top:20px;">
- Claude Code Runnable v2.1.87 | 1,438 TypeScript files | ~40 tools | 4-tier compaction |
+ Claude Code Runnable v2.1.87 | 1,438 TypeScript files | 58 tools (8 categories) | 24 hook events | 4-tier compaction |
  Source-verified from gg-claude-code-runnable/src/ |
- Cross-referenced with 3 Chinese deep-dive PDFs (accuracy: 85%/90%/75%) |
+ Cross-referenced with 3 Chinese deep-dive PDFs + ccunpacked.dev (all claims verified against source) |
  PS_DEEP_ANALYSIS_V2.md - 583 lines of verified analysis |
- Generated 2026-04-01
+ Updated 2026-04-06 (added Tools &amp; Ecosystem tab: full tool inventory, hooks, teams, MCP, config hierarchy, proactive mode, buddy system)
 </p>
 </body>
 </html>

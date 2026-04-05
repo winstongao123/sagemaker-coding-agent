@@ -1,12 +1,22 @@
-# Session State — V4.4.0 Final
+# Session State — V4.4.0 + Runnable HTML Enhancement
 
-> **Last updated**: 2026-04-04 by Claude Opus 4.6
-> **Git state**: Commit `e70d858` pushed to `sageagent`
-> **V4 version**: 4.4.0 (9,144 lines)
+> **Last updated**: 2026-04-06 by Claude Opus 4.6
+> **Git state**: Pending commit, push to `sageagent`
+> **V4 version**: 4.4.0 (9,144 lines, UNCHANGED — no V4 code changes this session)
 
 ---
 
 ## WHAT WAS DONE THIS SESSION
+
+### 0. [NEW] Runnable HTML — "Tools & Ecosystem" Tab (PS_FLOWCHART_RUNNABLE.html)
+- Verified all ccunpacked.dev claims against actual Runnable source code
+- Added new tab with: full 58-tool inventory (8 categories), hook system (24 events), Teams/Swarm (tmux), MCP (4 tools), config hierarchy (6 sources), proactive mode, buddy system
+- Updated stats bar: 58 tools (was ~40), 24 hook events, 112 slash commands, 7 permission mechanisms
+- Added hooks + teams to V4 Missing tab
+- Fixed Mermaid rendering in hidden tabs (show-all-then-hide init pattern)
+- Playwright verified: all diagrams render, test passes
+- V4 NOT changed — no new Runnable features worth adding (hooks = only candidate, low priority for SageMaker)
+- Claims verified FALSE and excluded: "custom shell scripts before bash", "linter auto-execution", "env vars as config tier", "8 explicit categories"
 
 ### 1. [CRITICAL] Rich Tool Descriptions
 - Rewrote 7 key tools from 2-3 lines to 15-32 lines each (Runnable style)
