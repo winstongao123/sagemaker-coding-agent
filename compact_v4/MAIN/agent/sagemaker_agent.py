@@ -2739,7 +2739,7 @@ _MODEL_PRICING = {
     "au.anthropic.claude-haiku-4-5-20251001-v1:0":     {"input": 0.0011,  "output": 0.0055},
     "global.anthropic.claude-opus-4-5-20251101-v1:0":  {"input": 0.005,   "output": 0.025},
     # Claude 4.6 - AU regional endpoints (10% premium)
-    "au.anthropic.claude-sonnet-4-6-v1:0":             {"input": 0.0033,  "output": 0.0165},   # $3.30/$16.50 per 1M
+    "au.anthropic.claude-sonnet-4-6":             {"input": 0.0033,  "output": 0.0165},   # $3.30/$16.50 per 1M
     "au.anthropic.claude-opus-4-6-v1":                 {"input": 0.0055,  "output": 0.0275},   # $5.50/$27.50 per 1M
 }
 
@@ -7366,7 +7366,7 @@ def escape_html(text: str) -> str:
 # Available Bedrock models (cross-region rates)
 BEDROCK_MODELS = [
     ("Claude 4.5 Haiku (AU) - default", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
-    ("Claude 4.6 Sonnet (AU)", "au.anthropic.claude-sonnet-4-6-v1:0"),
+    ("Claude 4.6 Sonnet (AU)", "au.anthropic.claude-sonnet-4-6"),
     ("Claude 4.5 Sonnet (AU)", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
     ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
     ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
