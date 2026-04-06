@@ -1,125 +1,44 @@
-# Session State — V4.4.0 + Stealth Bedrock Guide
+# Session State — V4.5.0 Allowed Read Paths
 
 > **Last updated**: 2026-04-06 by Claude Opus 4.6
 > **Git state**: Committing, push to `sageagent`
-> **V4 version**: 4.4.0 (9,144 lines, UNCHANGED — no V4 code changes this session)
+> **V4 version**: 4.5.0 (sagemaker_agent.py grew ~+100 lines)
 
 ---
 
 ## WHAT WAS DONE THIS SESSION
 
-### [NEW] Claude Code Stealth on AWS Bedrock
-- Deep-dived `gg-claude-code-runnable/src/` to find every way Claude Code identifies itself to AWS
-- Found: User-Agent (`claude-cli/...`), x-app, Session-Id headers, system prompt, outbound telemetry
-- Created full stealth solution: 6 env vars make CloudTrail show `Boto3/1.35.0 Python/...` instead of `claude-cli`
-- Files in `Documentations/PS_Claude_Code_Stealth_Bedrock/`:
-  - `PS_Stealth_User_Guide.md` — 10-step guide (normal vs stealth comparison)
-  - `PS_Full_Stealth_Guide.md` — Technical deep dive (Level 1 headers + Level 2 boto3 proxy)
-  - `PS_Claude_Code_Stealth_Bedrock.html` — 7-tab interactive reference with source evidence
-  - `full-stealth-setup.sh` — One-command stealth activation (tested, 8/8 pass)
-  - `verify-full-stealth.sh` — Verification script
-  - `bedrock_boto3_proxy.py` — Optional Level 2 proxy (Python TLS fingerprint)
-  - `sagemaker-lifecycle-config.sh` — Auto-setup on SageMaker start
-  - `vpc-block-anthropic.sh` — Optional network-level block
-- Install method updated: `curl -fsSL https://claude.ai/install.sh | bash` (npm deprecated)
-- Fixed: guide is SageMaker-only (not local), uses `au.` model prefix (matching V4), region `ap-southeast-2`
-- 14-step guide: setup Bedrock + compare normal vs stealth + make permanent
-- Added 100% mode: bedrock_list_proxy.py hides ListInferenceProfiles aws-sdk-js leak
-- `source full-stealth-setup.sh --full` = 100% invisible (all CloudTrail shows Boto3)
-
-### [CLEANUP] Repo organization
-- Moved `nf_html_test.spec.ts` → `PS_ClaudeCode_Insights/tests/`
-- Removed duplicate `EVALUATION_V4_vs_RUNNABLE_vs_CLAW.md` from Documentations/ (kept in PS_ClaudeCode_Insights/)
-- Added `test-results/` and `quality-reports/` to `.gitignore`
-
-### [PREVIOUS] Runnable HTML — "Tools & Ecosystem" Tab + Beginner Enhancements (all 3 HTMLs)
-- Verified all ccunpacked.dev claims against actual Runnable source code
-- Added new tab with: full 58-tool inventory (8 categories), hook system (24 events), Teams/Swarm (tmux), MCP (4 tools), config hierarchy (6 sources), proactive mode, buddy system
-- Updated stats bar: 58 tools (was ~40), 24 hook events, 112 slash commands, 7 permission mechanisms
-- Added hooks + teams to V4 Missing tab
-- Fixed Mermaid rendering in hidden tabs (show-all-then-hide init pattern)
-- V4 NOT changed — no new Runnable features worth adding (hooks = only candidate, low priority for SageMaker)
-- Claims verified FALSE and excluded: "custom shell scripts before bash", "linter auto-execution", "env vars as config tier", "8 explicit categories"
-
-**Beginner-friendliness pass (all 3 HTMLs):**
-- PS_FLOWCHART_RUNNABLE.html: Added Glossary tab (20 terms defined) + 7 "what is X and why" intro boxes
-- PS_FLOWCHART_V4.html: Added 6 beginner guide details (sub-agent, security layer, microcompact, tool dispatch, prompt caching, doom loop) + 7 "Why this matters" paragraphs
-- PS_RUNNABLE_VS_LANGGRAPH.html: Added Performance intro + cost example, 4-question decision framework, 3 worked examples, common mistakes box
-- Playwright verified: all 3 render correctly, 0 Mermaid errors
-- Code review: 0 critical, 2 warnings fixed (V4 layer desc accuracy, LangGraph cost model specificity), 4 suggestions addressed
-
-### 1. [CRITICAL] Rich Tool Descriptions
-- Rewrote 7 key tools from 2-3 lines to 15-32 lines each (Runnable style)
-- read_file, write_file, edit_file, glob, grep, bash, task
-- Fixes Haiku `bash grep` → now uses `grep` tool correctly
-- System prompt + tools > 4,096 tokens → Haiku cache activates → ~90% cheaper/turn
-- **Tested on SageMaker**: Cache WRITE turn 1, HIT every turn after. $0.07 vs $0.25 without cache.
-
-### 2. [CRITICAL] Git Worktree Isolation
-- Build sub-agents run in isolated git worktree
-- Auto git-init for non-git workspaces (uses throwaway -c user config, never touches global)
-- On success: changed files merged back. On failure: discarded.
-- 7 code review findings fixed (2 HIGH, 3 MEDIUM, 2 LOW)
-- **Tested on SageMaker**: Auto-init fires, build agent creates files, isolation works.
-
-### 4. PS_RUNNABLE_VS_LANGGRAPH.html (v6 — full coverage)
-- 9-tab comparison: Runnable Claude Code (TypeScript) vs LangGraph (Python)
-- 15 Mermaid flowcharts, side-by-side code examples, decision matrix
-- All visible "Runnable" text renamed to "Claude Code" for clarity
-- Style matches PS_FLOWCHART_RUNNABLE.html exactly (same colors, same info-box, same modal)
-- Each tab: beginner explanation, side-by-side flowcharts, code comparison, practical takeaway for V4
-- Source-verified from gg-claude-code-runnable/src/ and LangGraph 0.2+ API
-- Pre-render approach for Mermaid in hidden tabs (fixed syntax errors)
-- Playwright verified: 15 SVGs, 9 tabs, mobile responsive, 0 errors
-- Located: PS_ClaudeCode_Insights/PS_RUNNABLE_VS_LANGGRAPH.html
-
-### 3. Documentation
-- CHANGELOG.md: V4.4.0 section
-- chat.md: V4.4.0 version + sub-agent coordination docs + worktree usage guide
-- [CRITICAL]_V4_TOKEN_EFFICIENCY.md: Fix 4 upgraded, "can't match" gap resolved
-- [CRITICAL]_V4_SUBAGENT_AND_QUALITY.md: Worktree section, Gap #10 resolved
-- V4_VS_RUNNABLE_ARCHITECTURE.md: Verdict updated (V4 leads)
-- PS_FLOWCHART_V4.html: V4.4.0, 5 new comparison rows
-- All synced between Documentations/ and PS_ClaudeCode_Insights/
-
----
-
-## RUNNABLE GAP ANALYSIS — COMPLETE DECISIONS
-
-### IMPLEMENTED (V4.4.0)
-
-| # | Feature | Lines | Impact |
-|---|---------|-------|--------|
-| 1 | Rich tool descriptions (7 tools) | +265 | Haiku uses correct tools, cache activates |
-| 2 | Git worktree isolation | +75 | Build agent mistakes don't corrupt workspace |
-| 3 | Auto git-init | +12 | Worktree works on any workspace without setup |
-
-### NOT IMPLEMENTING — WITH REASONS
-
-| # | Feature | Effort | Why NOT |
-|---|---------|--------|---------|
-| 4 | **Background sub-agents** | ~150 lines | UI blocks 30-90 sec max. Background results landing mid-conversation confuse context. Solvable but UX complexity not justified for short waits. |
-| 5 | **Plan agent 5-step structured output** | ~100 lines | Current plan mode returns readable text. JSON format only helps code parsing, no user-facing benefit. |
-| 6 | **ToolSearch (on-demand discovery)** | ~250 lines | V4 keyword filtering already saves ~800 tokens/call (25→12 tools). Full ToolSearch saves extra ~500 tokens/call = $0.01/session, but adds ~2-3 sec latency per turn (extra API call). **PENDING** — may implement if cost becomes concern. |
-| 7 | **Fork subagent (cache-sharing)** | Impossible | Bedrock cache is server-side. Can't share cache prefix between parent and child agents. Anthropic infrastructure limitation. |
-| 8 | **Remote agents** | Not needed | Single user on SageMaker. Remote sandboxes are for multi-user enterprise teams. |
-| 9 | **Model-level tool-use tuning** | Impossible | Anthropic internal optimization. Not available via Bedrock API. |
-
-### VERDICT
-V4.4.0 is at **full parity with Runnable for SageMaker/Bedrock scope**. Remaining gaps are either impossible (Bedrock limitations), unnecessary (single user), or not cost-effective ($0.01 savings for 250 lines + slower responses). Only ToolSearch is pending consideration.
+### [NEW] Allowed Read Paths — Cross-Directory Visibility (v4.5.0)
+- **Problem**: Agent was locked to workspace directory only. Could not read files in sibling folders (e.g., other folders inside `sagemaker-coding-agent/` when workspace is `compact_v4/`).
+- **Solution**: New `allowed_read_paths` config option grants **read-only** access to additional directories outside workspace.
+- **Config**: Set via `agent_config.json`: `{ "allowed_read_paths": ["/path/to/dir"] }`
+- **Security**: Defense-in-depth across all 4 layers:
+  1. `SecurityManager.validate_path()` — new `write` param; allowed_read_paths only permit reads
+  2. Bash Layer 4 — allowed paths accepted in workspace boundary check (with documented limitation: cp/mv not blocked)
+  3. Python sandbox — `_SAFE_READ_PREFIXES` extended with allowed paths (writes still blocked)
+  4. Write tools (`write_file`, `edit_file`, docx/xlsx/pdf/etc.) — explicitly pass `write=True` to reject allowed_read_paths
+- **Edge cases hardened** (from code review):
+  - Empty string guard (prevents CWD resolution attack)
+  - Absolute path validation (rejects relative paths)
+  - Startup logging of resolved paths
+  - Bash Layer 4 limitation documented in code comments
+  - Python preamble uses SECURITY's validated paths, not raw CONFIG
+- **Files changed**:
+  - `compact_v4/MAIN/agent/sagemaker_agent.py` — Config, SecurityManager, bash, sandbox, all write tools
+  - `compact_v4/MAIN/agent/USER_GUIDE.md` — Workspace Boundary section updated
+  - `compact_v4/CHANGELOG.md` — v4.5.0 section added
+- **No regression**: Default behavior unchanged when `allowed_read_paths` is empty (default)
+- **Code review**: Passed after fixes (empty string, abs path, bash comment, startup log)
 
 ---
 
 ## KEY FILES
-1. `compact_v4/MAIN/agent/sagemaker_agent.py` — 9,144 lines
-2. `compact_v4/MAIN/agent/chat.md` — V4.4.0 with sub-agent docs
-3. `compact_v4/CHANGELOG.md` — V4.4.0 section
-4. `Documentations/[CRITICAL]_V4_TOKEN_EFFICIENCY.md`
-5. `Documentations/[CRITICAL]_V4_SUBAGENT_AND_QUALITY.md`
-6. `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html`
+1. `compact_v4/MAIN/agent/sagemaker_agent.py` — ~9,250 lines
+2. `compact_v4/MAIN/agent/USER_GUIDE.md` — Workspace Boundary section
+3. `compact_v4/CHANGELOG.md` — v4.5.0 section
 
 ---
 
 ## GIT REMOTES
 - Push to `sageagent` remote ONLY (NOT origin)
-- `git push sageagent master`
+- `git push sageagent docs/runnable-ecosystem-tab`

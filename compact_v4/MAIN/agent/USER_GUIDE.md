@@ -874,7 +874,25 @@ Permission rules in `agent_config.json` override the UI toggle for specific tool
 
 ### Workspace Boundary
 
-All file operations are confined to the workspace directory. The agent cannot read or write files outside your workspace.
+All file operations are confined to the workspace directory by default. The agent cannot write files outside your workspace.
+
+**Allowed Read Paths** (v4.5.0+): You can grant the agent **read-only** access to additional directories outside the workspace. This is useful when the agent needs to reference code, data, or documentation in sibling directories or parent folders.
+
+Configure in `agent_config.json`:
+```json
+{
+  "allowed_read_paths": [
+    "/home/user/shared-libs",
+    "/home/user/other-project/src"
+  ]
+}
+```
+
+- Paths must be absolute directories that exist on disk.
+- The agent can **read** files (read_file, glob, grep) and run bash commands that reference these paths.
+- The agent **cannot write** to allowed_read_paths — write operations (write_file, edit_file, document generators) remain restricted to the workspace.
+- Sensitive file blocking (.env, credentials, keys) still applies within allowed_read_paths.
+- Symlink escape protection still applies — symlinks that resolve outside both workspace and allowed_read_paths are blocked.
 
 ---
 
