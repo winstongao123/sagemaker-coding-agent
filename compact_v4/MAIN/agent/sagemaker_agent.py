@@ -2738,8 +2738,9 @@ _MODEL_PRICING = {
     "au.anthropic.claude-sonnet-4-5-20250929-v1:0":    {"input": 0.0033,  "output": 0.0165},
     "au.anthropic.claude-haiku-4-5-20251001-v1:0":     {"input": 0.0011,  "output": 0.0055},
     "global.anthropic.claude-opus-4-5-20251101-v1:0":  {"input": 0.005,   "output": 0.025},
-    # Claude 4.6 - AU regional endpoint (10% premium: $5.50/$27.50)
-    "au.anthropic.claude-opus-4-6-v1":                 {"input": 0.0055,  "output": 0.0275},
+    # Claude 4.6 - AU regional endpoints (10% premium)
+    "au.anthropic.claude-sonnet-4-6-v1:0":             {"input": 0.0033,  "output": 0.0165},   # $3.30/$16.50 per 1M
+    "au.anthropic.claude-opus-4-6-v1":                 {"input": 0.0055,  "output": 0.0275},   # $5.50/$27.50 per 1M
 }
 
 # Apply user-defined pricing from agent_config.json (deferred from config load)
@@ -3116,6 +3117,27 @@ def _get_git_diff(path: str) -> str:
 
 # ============== FILE OPERATIONS ==============
 
+
+def _resolve_path(raw_path: str) -> str:
+    """Resolve a file path: try workspace first, then search allowed_paths.
+    Returns the resolved absolute path (which may or may not exist)."""
+    if os.path.isabs(raw_path):
+        return raw_path
+    # Try workspace first
+    candidate = os.path.join(CONFIG.workspace, raw_path)
+    if os.path.exists(candidate):
+        return candidate
+    # Search allowed_paths for the file
+    for ap in SECURITY.allowed_paths:
+        alt = os.path.join(str(ap), raw_path)
+        if os.path.exists(alt):
+            ok, _ = SECURITY.validate_path(alt)
+            if ok:
+                return alt
+    # Fall back to workspace-relative (caller handles "not found")
+    return candidate
+
+
 def tool_read_file(args: Dict) -> str:
     """Read a file with line numbers. Uses cache and smart truncation for token efficiency."""
     path = args["file_path"]
@@ -3126,8 +3148,7 @@ def tool_read_file(args: Dict) -> str:
     if not ok:
         return f"Error: {msg}"
 
-    if not os.path.isabs(path):
-        path = os.path.join(CONFIG.workspace, path)
+    path = _resolve_path(path)
 
     if not os.path.exists(path):
         return f"Error: File not found: {path}"
@@ -3419,8 +3440,7 @@ def tool_write_file(args: Dict) -> str:
     if not ok:
         return f"Error: {msg}"
 
-    if not os.path.isabs(path):
-        path = os.path.join(CONFIG.workspace, path)
+    path = _resolve_path(path)
     ok, msg = SECURITY.validate_path(path)
     if not ok:
         return f"Error: {msg}"
@@ -3510,8 +3530,7 @@ def tool_edit_file(args: Dict) -> str:
     if not ok:
         return f"Error: {msg}"
 
-    if not os.path.isabs(path):
-        path = os.path.join(CONFIG.workspace, path)
+    path = _resolve_path(path)
     ok, msg = SECURITY.validate_path(path)
     if not ok:
         return f"Error: {msg}"
@@ -7347,13 +7366,14 @@ def escape_html(text: str) -> str:
 # Available Bedrock models (cross-region rates)
 BEDROCK_MODELS = [
     ("Claude 4.5 Haiku (AU) - default", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
-    ("Claude 4.5 Sonnet (AU) - cache tests / harder turns", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    ("Claude 4.6 Sonnet (AU)", "au.anthropic.claude-sonnet-4-6-v1:0"),
+    ("Claude 4.5 Sonnet (AU)", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
+    ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
     ("Claude 3.5 Sonnet v2", "anthropic.claude-3-5-sonnet-20241022-v2:0"),
     ("Claude 3.5 Sonnet", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
     ("Claude 3 Haiku", "anthropic.claude-3-haiku-20240307-v1:0"),
     ("Claude 3 Sonnet", "anthropic.claude-3-sonnet-20240229-v1:0"),
-    ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
-    ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
 ]
 # Single source of truth: chat.ipynb should import BEDROCK_MODELS instead of duplicating
 

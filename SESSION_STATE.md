@@ -1,4 +1,4 @@
-# Session State — V4.5.0 Allowed Paths + Auto-Detect
+# Session State — V4.5.0
 
 > **Last updated**: 2026-04-06 by Claude Opus 4.6
 > **Git state**: Committing, push to `sageagent`
@@ -8,17 +8,20 @@
 
 ## WHAT WAS DONE THIS SESSION
 
-### [NEW] Allowed Paths + Auto-Detect Environment (v4.5.0)
+### [NEW] Allowed Paths + Auto-Detect + Path Resolution (v4.5.0)
 - `allowed_paths` config: full read+write access to additional directories
-- Auto-detect SageMaker: adds `/home/ec2-user/SageMaker/` or `/home/sagemaker-user/`
-- Auto-detect git repo root: adds parent repo when workspace is a subdirectory
-- No manual config needed — agent can work on any folder when given a path
-- All 4 security layers updated, backward compat with `allowed_read_paths`
-- Code review passed, edge cases hardened
+- Auto-detect SageMaker (`/home/ec2-user/SageMaker/` or `/home/sagemaker-user/`)
+- Auto-detect git repo root when workspace is a subdirectory
+- `_resolve_path()` helper: searches allowed_paths when relative path not found in workspace
+- Fixes "file not found" when user gives relative path to file in sibling folder
 
-### [ANALYSIS] PDF Pipeline — production-ready, Sonnet review was prompt problem
-### [FIX] Cancelled 3 zombie Codex tasks (6h, 29h, 3+ days)
-### [REBUILD] Both zips rebuilt with latest code
+### [NEW] Sonnet 4.6 Support
+- Pricing: $3.30/$16.50 per 1M tokens (AU, 10% premium)
+- Added to model dropdown and pricing table
+- Model ID: `au.anthropic.claude-sonnet-4-6-v1:0`
+
+### [ANALYSIS] PDF Pipeline — production-ready, no enhancement needed
+### [FIX] Cancelled 3 zombie Codex tasks
 
 ---
 

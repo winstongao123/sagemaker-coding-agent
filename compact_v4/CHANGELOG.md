@@ -31,6 +31,15 @@ Base: compact_v4 v4.4.0
 - **No-op when**: Not on SageMaker AND not in a git subdirectory.
 - **Still configurable**: Manual `allowed_paths` in agent_config.json stacks with auto-detect.
 
+### Fix: Relative Path Resolution Across Allowed Paths
+- **Why**: When user gives a relative path like `wins_docs/pipeline.py`, agent only searched workspace. If file is in an allowed_path sibling folder, it returned "file not found".
+- **What**: New `_resolve_path()` helper. If relative path not found in workspace, searches all allowed_paths. Used by `read_file`, `write_file`, `edit_file`.
+- **Example**: Agent workspace = `compact_v4/`, user says "read `pdf_split_merge/pipeline.py`" → found in SageMaker home dir.
+
+### Sonnet 4.6 Support
+- Added `au.anthropic.claude-sonnet-4-6-v1:0` to pricing table ($3.30/$16.50 per 1M tokens, AU 10% premium)
+- Added to model dropdown (UX selector) — ordered: Haiku 4.5, Sonnet 4.6, Sonnet 4.5, Opus 4.6, Opus 4.5, legacy
+
 ### Documentation
 - Updated `USER_GUIDE.md` Workspace Boundary section with allowed_paths usage + auto-detect
 
