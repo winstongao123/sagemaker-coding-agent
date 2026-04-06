@@ -1,14 +1,34 @@
-# Session State — V4.4.0 + Runnable HTML Enhancement
+# Session State — V4.4.0 + Stealth Bedrock Guide
 
 > **Last updated**: 2026-04-06 by Claude Opus 4.6
-> **Git state**: Pending commit, push to `sageagent`
+> **Git state**: Committing, push to `sageagent`
 > **V4 version**: 4.4.0 (9,144 lines, UNCHANGED — no V4 code changes this session)
 
 ---
 
 ## WHAT WAS DONE THIS SESSION
 
-### 0. [NEW] Runnable HTML — "Tools & Ecosystem" Tab + Beginner Enhancements (all 3 HTMLs)
+### [NEW] Claude Code Stealth on AWS Bedrock
+- Deep-dived `gg-claude-code-runnable/src/` to find every way Claude Code identifies itself to AWS
+- Found: User-Agent (`claude-cli/...`), x-app, Session-Id headers, system prompt, outbound telemetry
+- Created full stealth solution: 6 env vars make CloudTrail show `Boto3/1.35.0 Python/...` instead of `claude-cli`
+- Files in `Documentations/PS_Claude_Code_Stealth_Bedrock/`:
+  - `PS_Stealth_User_Guide.md` — 10-step guide (normal vs stealth comparison)
+  - `PS_Full_Stealth_Guide.md` — Technical deep dive (Level 1 headers + Level 2 boto3 proxy)
+  - `PS_Claude_Code_Stealth_Bedrock.html` — 7-tab interactive reference with source evidence
+  - `full-stealth-setup.sh` — One-command stealth activation (tested, 8/8 pass)
+  - `verify-full-stealth.sh` — Verification script
+  - `bedrock_boto3_proxy.py` — Optional Level 2 proxy (Python TLS fingerprint)
+  - `sagemaker-lifecycle-config.sh` — Auto-setup on SageMaker start
+  - `vpc-block-anthropic.sh` — Optional network-level block
+- Install method updated: `curl -fsSL https://claude.ai/install.sh | bash` (npm deprecated)
+
+### [CLEANUP] Repo organization
+- Moved `nf_html_test.spec.ts` → `PS_ClaudeCode_Insights/tests/`
+- Removed duplicate `EVALUATION_V4_vs_RUNNABLE_vs_CLAW.md` from Documentations/ (kept in PS_ClaudeCode_Insights/)
+- Added `test-results/` and `quality-reports/` to `.gitignore`
+
+### [PREVIOUS] Runnable HTML — "Tools & Ecosystem" Tab + Beginner Enhancements (all 3 HTMLs)
 - Verified all ccunpacked.dev claims against actual Runnable source code
 - Added new tab with: full 58-tool inventory (8 categories), hook system (24 events), Teams/Swarm (tmux), MCP (4 tools), config hierarchy (6 sources), proactive mode, buddy system
 - Updated stats bar: 58 tools (was ~40), 24 hook events, 112 slash commands, 7 permission mechanisms

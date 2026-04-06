@@ -34,3 +34,5 @@ truncated_outputs/
 test_*.py
 nul
 _archive/compare_code/gg-claude-code-runnable
+test-results/
+quality-reports/

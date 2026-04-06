@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PS: Claude Code Stealth on AWS Bedrock — Full Analysis</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922; --orange: #db6d28;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 2em; margin: 20px 0 10px; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+  h2 { font-size: 1.5em; margin: 30px 0 15px; color: var(--green); }
+  h3 { font-size: 1.2em; margin: 20px 0 10px; color: var(--purple); }
+  p, li { margin-bottom: 8px; }
+  ul, ol { padding-left: 24px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; margin-top: 20px; flex-wrap: wrap; }
+  .tab { padding: 10px 20px; background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer; color: var(--text-dim); font-weight: 600; transition: all 0.2s; }
+  .tab:hover { color: var(--text); background: #1c2129; }
+  .tab.active { color: var(--accent); background: var(--bg); border-bottom: 2px solid var(--accent); }
+  .tab-content { display: none; padding: 20px; border: 1px solid var(--border); border-radius: 0 8px 8px 8px; background: var(--surface); }
+  .tab-content.active { display: block; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  th, td { padding: 10px 14px; text-align: left; border: 1px solid var(--border); }
+  th { background: #1c2129; color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+  /* Code blocks */
+  pre { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 16px; overflow-x: auto; margin: 12px 0; font-size: 0.9em; }
+  code { font-family: 'Cascadia Code', 'Fira Code', monospace; color: #79c0ff; }
+  .code-comment { color: var(--text-dim); }
+  .code-string { color: #a5d6ff; }
+  .code-keyword { color: #ff7b72; }
+  .code-var { color: #ffa657; }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+  .badge-high { background: rgba(248,81,73,0.2); color: var(--red); border: 1px solid var(--red); }
+  .badge-med { background: rgba(210,153,34,0.2); color: var(--yellow); border: 1px solid var(--yellow); }
+  .badge-low { background: rgba(63,185,80,0.2); color: var(--green); border: 1px solid var(--green); }
+  .badge-none { background: rgba(139,148,158,0.2); color: var(--text-dim); border: 1px solid var(--text-dim); }
+  .badge-blocked { background: rgba(63,185,80,0.2); color: var(--green); border: 1px solid var(--green); }
+
+  /* Callouts */
+  .callout { padding: 16px; border-radius: 8px; margin: 15px 0; border-left: 4px solid; }
+  .callout-warn { background: rgba(210,153,34,0.1); border-color: var(--yellow); }
+  .callout-danger { background: rgba(248,81,73,0.1); border-color: var(--red); }
+  .callout-info { background: rgba(88,166,255,0.1); border-color: var(--accent); }
+  .callout-success { background: rgba(63,185,80,0.1); border-color: var(--green); }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; gap: 10px; margin: 15px 0; flex-wrap: wrap; }
+  .flow-box { padding: 10px 16px; border-radius: 8px; font-weight: 600; text-align: center; min-width: 120px; }
+  .flow-arrow { color: var(--text-dim); font-size: 1.5em; }
+  .flow-visible { background: rgba(248,81,73,0.2); border: 2px solid var(--red); color: var(--red); }
+  .flow-hidden { background: rgba(63,185,80,0.2); border: 2px solid var(--green); color: var(--green); }
+  .flow-neutral { background: rgba(88,166,255,0.1); border: 2px solid var(--accent); color: var(--accent); }
+
+  /* Comparison grid */
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 15px 0; }
+  .compare-card { padding: 16px; border-radius: 8px; border: 1px solid var(--border); }
+  .compare-card h3 { margin-top: 0; }
+  @media (max-width: 768px) { .compare-grid { grid-template-columns: 1fr; } }
+
+  /* Header banner */
+  .banner { background: linear-gradient(135deg, #161b22 0%, #1c2129 100%); border: 1px solid var(--border); border-radius: 12px; padding: 30px; margin-bottom: 20px; }
+  .banner-meta { color: var(--text-dim); font-size: 0.9em; margin-top: 8px; }
+
+  .env-var { color: var(--orange); font-weight: 600; }
+  .file-ref { color: var(--purple); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Banner -->
+<div class="banner">
+  <h1 style="border:none; margin:0; padding:0;">Claude Code Stealth on AWS Bedrock</h1>
+  <p style="font-size:1.1em; margin-top:8px;">How to make Claude Code invisible to AWS when using Bedrock API calls</p>
+  <div class="banner-meta">
+    Source: <code>gg-claude-code-runnable/src/</code> | Date: 2026-04-06 | Author: Claude Code Analysis
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('overview')">1. Overview</div>
+  <div class="tab" onclick="showTab('fingerprints')">2. All Fingerprints</div>
+  <div class="tab" onclick="showTab('settings')">3. Settings Guide</div>
+  <div class="tab" onclick="showTab('script')">4. Setup Script</div>
+  <div class="tab" onclick="showTab('comparison')">5. V4 vs Claude Code</div>
+  <div class="tab" onclick="showTab('verification')">6. Verification</div>
+  <div class="tab" onclick="showTab('source')">7. Source Evidence</div>
+</div>
+
+<!-- Tab 1: Overview -->
+<div id="overview" class="tab-content active">
+  <h2>The Problem</h2>
+  <p>When you install Claude Code on SageMaker and run it with <code>CLAUDE_CODE_USE_BEDROCK=1</code>, AWS can tell you're using <strong>Claude Code specifically</strong> rather than making normal Bedrock API calls.</p>
+
+  <div class="callout callout-warn">
+    <strong>Why does this matter?</strong><br>
+    AWS sees every HTTP header in CloudTrail. If your Bedrock calls say <code>claude-cli/1.0.x</code> in the User-Agent, AWS knows exactly what tool you're running. Some enterprises want their Bedrock usage to look like standard SDK calls.
+  </div>
+
+  <h2>What AWS Can See (Before Stealth)</h2>
+  <div class="flow">
+    <div class="flow-box flow-neutral">Your SageMaker</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box flow-visible">Bedrock API<br><small>Headers: claude-cli/1.0.x</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box flow-visible">CloudTrail<br><small>Logs User-Agent, x-app</small></div>
+  </div>
+  <div class="flow">
+    <div class="flow-box flow-neutral">Your SageMaker</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box flow-visible">api.anthropic.com<br><small>Telemetry, updates, features</small></div>
+  </div>
+
+  <h2>What AWS Sees (After Stealth)</h2>
+  <div class="flow">
+    <div class="flow-box flow-neutral">Your SageMaker</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box flow-hidden">Bedrock API<br><small>Headers: aws-sdk-js/3.x</small></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box flow-hidden">CloudTrail<br><small>Generic SDK headers</small></div>
+  </div>
+  <div class="flow">
+    <div class="flow-box flow-neutral">Your SageMaker</div>
+    <div class="flow-arrow" style="text-decoration: line-through; color: var(--red);">✕</div>
+    <div class="flow-box flow-hidden" style="opacity:0.5">api.anthropic.com<br><small>ALL traffic blocked</small></div>
+  </div>
+
+  <h2>Summary: 6 Environment Variables = Full Stealth</h2>
+  <table>
+    <tr><th>Variable</th><th>Value</th><th>What It Does</th></tr>
+    <tr><td><span class="env-var">CLAUDE_CODE_USE_BEDROCK</span></td><td><code>1</code></td><td>Use Bedrock instead of Anthropic API</td></tr>
+    <tr><td><span class="env-var">CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</span></td><td><code>1</code></td><td>Block ALL outbound to Anthropic servers</td></tr>
+    <tr><td><span class="env-var">DISABLE_TELEMETRY</span></td><td><code>1</code></td><td>Disable analytics (belt + suspenders)</td></tr>
+    <tr><td><span class="env-var">DISABLE_AUTOUPDATER</span></td><td><code>1</code></td><td>Stop update checks</td></tr>
+    <tr><td><span class="env-var">ANTHROPIC_CUSTOM_HEADERS</span></td><td>See Tab 4</td><td>Override identifying HTTP headers</td></tr>
+    <tr><td><span class="env-var">AWS_REGION</span></td><td>Your region</td><td>Target Bedrock region</td></tr>
+  </table>
+</div>
+
+<!-- Tab 2: All Fingerprints -->
+<div id="fingerprints" class="tab-content">
+  <h2>Every Way Claude Code Identifies Itself</h2>
+  <p>Complete inventory from source code analysis:</p>
+
+  <h3>Layer 1: HTTP Headers (on every Bedrock API call)</h3>
+  <table>
+    <tr><th>Header</th><th>Default Value</th><th>Risk</th><th>Fix</th><th>Source File</th></tr>
+    <tr>
+      <td><code>User-Agent</code></td>
+      <td><code>claude-cli/1.0.x (ant, cli)</code></td>
+      <td><span class="badge badge-high">HIGH</span></td>
+      <td>Override via <span class="env-var">ANTHROPIC_CUSTOM_HEADERS</span></td>
+      <td><span class="file-ref">src/utils/http.ts:18-34</span></td>
+    </tr>
+    <tr>
+      <td><code>x-app</code></td>
+      <td><code>cli</code></td>
+      <td><span class="badge badge-med">MEDIUM</span></td>
+      <td>Override via <span class="env-var">ANTHROPIC_CUSTOM_HEADERS</span></td>
+      <td><span class="file-ref">src/services/api/client.ts:106</span></td>
+    </tr>
+    <tr>
+      <td><code>X-Claude-Code-Session-Id</code></td>
+      <td><code>&lt;uuid&gt;</code></td>
+      <td><span class="badge badge-med">MEDIUM</span></td>
+      <td>Override via <span class="env-var">ANTHROPIC_CUSTOM_HEADERS</span></td>
+      <td><span class="file-ref">src/services/api/client.ts:108</span></td>
+    </tr>
+    <tr>
+      <td><code>x-claude-remote-container-id</code></td>
+      <td>Only if <code>CLAUDE_CODE_CONTAINER_ID</code> set</td>
+      <td><span class="badge badge-low">LOW</span></td>
+      <td>Don't set the env var</td>
+      <td><span class="file-ref">src/services/api/client.ts:110</span></td>
+    </tr>
+    <tr>
+      <td><code>x-claude-remote-session-id</code></td>
+      <td>Only if <code>CLAUDE_CODE_REMOTE_SESSION_ID</code> set</td>
+      <td><span class="badge badge-low">LOW</span></td>
+      <td>Don't set the env var</td>
+      <td><span class="file-ref">src/services/api/client.ts:111-112</span></td>
+    </tr>
+    <tr>
+      <td><code>x-client-app</code></td>
+      <td>Only if <code>CLAUDE_AGENT_SDK_CLIENT_APP</code> set</td>
+      <td><span class="badge badge-low">LOW</span></td>
+      <td>Don't set the env var</td>
+      <td><span class="file-ref">src/services/api/client.ts:115</span></td>
+    </tr>
+  </table>
+
+  <div class="callout callout-info">
+    <strong>How header override works (verified in source):</strong><br>
+    <code>client.ts:104-109</code> builds headers like this:
+    <pre><code><span class="code-keyword">const</span> <span class="code-var">customHeaders</span> = getCustomHeaders()  <span class="code-comment">// from ANTHROPIC_CUSTOM_HEADERS</span>
+<span class="code-keyword">const</span> <span class="code-var">defaultHeaders</span> = {
+  <span class="code-string">'x-app'</span>: <span class="code-string">'cli'</span>,                         <span class="code-comment">// set first</span>
+  <span class="code-string">'User-Agent'</span>: getUserAgent(),             <span class="code-comment">// set second</span>
+  <span class="code-string">'X-Claude-Code-Session-Id'</span>: getSessionId(), <span class="code-comment">// set third</span>
+  ...<span class="code-var">customHeaders</span>,                           <span class="code-comment">// SPREAD LAST = overrides all above!</span>
+}</code></pre>
+    Custom headers are spread <strong>after</strong> defaults, so they <strong>win</strong>. This is confirmed at line 109.
+  </div>
+
+  <h3>Layer 2: System Prompt (sent to the model)</h3>
+  <table>
+    <tr><th>What</th><th>Content</th><th>Risk</th><th>Fix</th><th>Source</th></tr>
+    <tr>
+      <td>System prompt</td>
+      <td><code>"You are Claude Code, Anthropic's official CLI for Claude"</code></td>
+      <td><span class="badge badge-low">LOW</span></td>
+      <td>Only visible if <strong>model invocation logging</strong> is ON in your AWS account (OFF by default)</td>
+      <td><span class="file-ref">src/constants/prompts.ts:452</span></td>
+    </tr>
+    <tr>
+      <td>Simple mode prompt</td>
+      <td>Same text but shorter: <code>"You are Claude Code..."</code> + CWD + Date only</td>
+      <td><span class="badge badge-low">LOW</span></td>
+      <td><span class="env-var">CLAUDE_CODE_SIMPLE=1</span> for minimal prompt</td>
+      <td><span class="file-ref">src/constants/prompts.ts:450-453</span></td>
+    </tr>
+    <tr>
+      <td>Subagent prompt</td>
+      <td><code>"You are an agent for Claude Code..."</code></td>
+      <td><span class="badge badge-low">LOW</span></td>
+      <td>Same — only if invocation logging ON</td>
+      <td><span class="file-ref">src/constants/prompts.ts:758</span></td>
+    </tr>
+  </table>
+
+  <h3>Layer 3: Outbound Network Traffic</h3>
+  <table>
+    <tr><th>Destination</th><th>Purpose</th><th>Default (Bedrock)</th><th>With Stealth</th><th>Source</th></tr>
+    <tr>
+      <td><code>api.anthropic.com/api/event_logging/batch</code></td>
+      <td>1P telemetry events</td>
+      <td><span class="badge badge-blocked">AUTO OFF</span></td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/services/analytics/firstPartyEventLoggingExporter.ts:118</span></td>
+    </tr>
+    <tr>
+      <td><code>api.anthropic.com/api/claude_code/metrics</code></td>
+      <td>BigQuery metrics</td>
+      <td><span class="badge badge-blocked">AUTO OFF</span></td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/utils/telemetry/bigqueryExporter.ts:47</span></td>
+    </tr>
+    <tr>
+      <td><code>api.anthropic.com/ (GrowthBook)</code></td>
+      <td>Feature flags</td>
+      <td><span class="badge badge-blocked">AUTO OFF</span></td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/services/analytics/growthbook.ts:505</span></td>
+    </tr>
+    <tr>
+      <td><code>api.anthropic.com/api/claude_code/organizations/metrics_enabled</code></td>
+      <td>Org metrics opt-out check</td>
+      <td>May call</td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/services/api/metricsOptOut.ts:45</span></td>
+    </tr>
+    <tr>
+      <td>Release notes / model capabilities</td>
+      <td>Auto-update, changelog</td>
+      <td>May call</td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/utils/releaseNotes.ts, modelCapabilities.ts</span></td>
+    </tr>
+    <tr>
+      <td>Grove (trust/policy)</td>
+      <td>Policy updates</td>
+      <td>May call</td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/services/api/grove.ts:55</span></td>
+    </tr>
+    <tr>
+      <td>Feedback / transcript share</td>
+      <td>User feedback</td>
+      <td>May call</td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+      <td><span class="file-ref">src/components/Feedback.tsx:523</span></td>
+    </tr>
+  </table>
+
+  <div class="callout callout-success">
+    <strong>Good news:</strong> Analytics are <strong>already auto-disabled</strong> when <code>CLAUDE_CODE_USE_BEDROCK=1</code> is set (see <span class="file-ref">src/services/analytics/config.ts:22</span>). The <code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</code> catches the remaining non-analytics traffic (grove, release notes, model capabilities, etc.).
+  </div>
+
+  <h3>Layer 4: What You CANNOT Hide</h3>
+  <table>
+    <tr><th>What</th><th>Why</th><th>Impact</th></tr>
+    <tr><td>Model ID being called</td><td>AWS always knows which model you invoke (e.g. <code>anthropic.claude-opus-4-6-v1</code>)</td><td><span class="badge badge-none">Normal</span> — this is just "using Bedrock"</td></tr>
+    <tr><td>Token usage</td><td>AWS meters input/output tokens for billing</td><td><span class="badge badge-none">Normal</span></td></tr>
+    <tr><td>Source IP</td><td>AWS sees your SageMaker instance IP</td><td><span class="badge badge-none">Normal</span></td></tr>
+    <tr><td>Call frequency/patterns</td><td>CloudTrail timestamps show API call patterns</td><td><span class="badge badge-none">Normal</span></td></tr>
+  </table>
+
+  <h3>Layer 5: Things That DON'T Exist (Verified)</h3>
+  <table>
+    <tr><th>Concern</th><th>Status</th></tr>
+    <tr><td>License checking / phone-home</td><td><span class="badge badge-blocked">NONE FOUND</span> — no registration, license validation, or heartbeat</td></tr>
+    <tr><td>Hardware fingerprinting</td><td><span class="badge badge-blocked">NONE FOUND</span></td></tr>
+    <tr><td>Beacon / tracking pixel</td><td><span class="badge badge-blocked">NONE FOUND</span></td></tr>
+  </table>
+</div>
+
+<!-- Tab 3: Settings Guide -->
+<div id="settings" class="tab-content">
+  <h2>Complete Settings Reference</h2>
+  <p>Every environment variable that affects visibility, with source code proof:</p>
+
+  <h3>Required (Core)</h3>
+  <table>
+    <tr><th>Variable</th><th>Value</th><th>What It Controls</th><th>Source Code</th></tr>
+    <tr>
+      <td><span class="env-var">CLAUDE_CODE_USE_BEDROCK</span></td>
+      <td><code>1</code></td>
+      <td>Routes all LLM calls through Bedrock instead of api.anthropic.com. Also auto-disables analytics.</td>
+      <td><span class="file-ref">client.ts:153</span> — <code>if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK))</code><br>
+          <span class="file-ref">config.ts:22</span> — <code>isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) → analytics disabled</code></td>
+    </tr>
+    <tr>
+      <td><span class="env-var">AWS_REGION</span></td>
+      <td>e.g. <code>us-east-1</code></td>
+      <td>Which Bedrock region to call. Falls back to <code>AWS_DEFAULT_REGION</code>, then <code>us-east-1</code>.</td>
+      <td><span class="file-ref">bedrock.ts:56</span> — <code>getAWSRegion()</code></td>
+    </tr>
+  </table>
+
+  <h3>Privacy (Block Outbound Traffic)</h3>
+  <table>
+    <tr><th>Variable</th><th>Value</th><th>What It Blocks</th><th>Source</th></tr>
+    <tr>
+      <td><span class="env-var">CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</span></td>
+      <td><code>1</code></td>
+      <td><strong>Everything non-essential:</strong> telemetry, auto-updates, GrowthBook feature flags, release notes, model capabilities fetch, grove policy checks, metrics opt-out API, feedback, referral, overage credit grant, trusted device registration, Claude.ai limits check</td>
+      <td><span class="file-ref">privacyLevel.ts:21</span> — sets privacy to <code>essential-traffic</code><br>
+          Checked by 15+ callsites via <code>isEssentialTrafficOnly()</code></td>
+    </tr>
+    <tr>
+      <td><span class="env-var">DISABLE_TELEMETRY</span></td>
+      <td><code>1</code></td>
+      <td>Analytics only (Datadog, 1P events, feedback survey). Subset of above.</td>
+      <td><span class="file-ref">privacyLevel.ts:23</span> — sets privacy to <code>no-telemetry</code></td>
+    </tr>
+    <tr>
+      <td><span class="env-var">DISABLE_AUTOUPDATER</span></td>
+      <td><code>1</code></td>
+      <td>Prevents npm/GitHub update checks</td>
+      <td><span class="file-ref">main.tsx:330</span> — <code>auto_updater_disabled</code></td>
+    </tr>
+  </table>
+
+  <h3>Header Overrides (Hide Identity in API Calls)</h3>
+  <table>
+    <tr><th>Variable</th><th>Format</th><th>What It Does</th><th>Source</th></tr>
+    <tr>
+      <td><span class="env-var">ANTHROPIC_CUSTOM_HEADERS</span></td>
+      <td>Newline-separated <code>Name: Value</code> pairs (curl style)</td>
+      <td>Custom headers are merged via object spread AFTER defaults, so same-name keys <strong>override</strong>. This is how you replace <code>User-Agent</code>, <code>x-app</code>, and <code>X-Claude-Code-Session-Id</code>.</td>
+      <td><span class="file-ref">client.ts:104-109</span> — <code>...customHeaders</code> spread last<br>
+          <span class="file-ref">client.ts:330-354</span> — <code>getCustomHeaders()</code> parser</td>
+    </tr>
+  </table>
+
+  <div class="callout callout-info">
+    <strong>Header parsing logic</strong> (from <span class="file-ref">client.ts:336-351</span>):<br>
+    <pre><code><span class="code-comment">// Split by newlines to support multiple headers</span>
+<span class="code-keyword">const</span> headerStrings = customHeadersEnv.split(<span class="code-string">/\n|\r\n/</span>)
+<span class="code-comment">// Parse "Name: Value" (curl style). Split on first ':'</span>
+<span class="code-keyword">const</span> colonIdx = headerString.indexOf(<span class="code-string">':'</span>)
+<span class="code-keyword">const</span> name = headerString.slice(0, colonIdx).trim()
+<span class="code-keyword">const</span> value = headerString.slice(colonIdx + 1).trim()</code></pre>
+    So each line is <code>Header-Name: Header-Value</code>, split on the FIRST colon.
+  </div>
+
+  <h3>Optional</h3>
+  <table>
+    <tr><th>Variable</th><th>Value</th><th>What It Does</th></tr>
+    <tr>
+      <td><span class="env-var">CLAUDE_CODE_SIMPLE</span></td>
+      <td><code>1</code></td>
+      <td>Minimal system prompt (still says "Claude Code" but much shorter — less data in model invocation logs)</td>
+    </tr>
+    <tr>
+      <td><span class="env-var">ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION</span></td>
+      <td>e.g. <code>us-west-2</code></td>
+      <td>Override region for the small/fast model (Haiku) specifically</td>
+    </tr>
+    <tr>
+      <td><span class="env-var">ANTHROPIC_BEDROCK_BASE_URL</span></td>
+      <td>URL</td>
+      <td>Custom Bedrock endpoint (if using VPC endpoint or proxy)</td>
+    </tr>
+    <tr>
+      <td><span class="env-var">CLAUDE_CODE_SKIP_BEDROCK_AUTH</span></td>
+      <td><code>1</code></td>
+      <td>Skip auth (for proxy/testing scenarios)</td>
+    </tr>
+  </table>
+
+  <h3>Privacy Level Hierarchy</h3>
+  <pre><code><span class="code-comment">// From src/utils/privacyLevel.ts</span>
+<span class="code-comment">// Levels ordered by restrictiveness:</span>
+
+<span class="code-keyword">default</span>              → Everything enabled
+<span class="code-keyword">no-telemetry</span>         → Analytics disabled (DISABLE_TELEMETRY=1)
+<span class="code-keyword">essential-traffic</span>    → ALL nonessential traffic disabled
+                        (CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
+
+<span class="code-comment">// The resolved level is the MOST restrictive signal.</span>
+<span class="code-comment">// Setting CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 gives you</span>
+<span class="code-comment">// the maximum privacy level.</span></code></pre>
+
+  <h3>AWS Console Setting (Manual)</h3>
+  <div class="callout callout-danger">
+    <strong>Model Invocation Logging — TURN IT OFF</strong><br>
+    <ul>
+      <li>Go to: <strong>AWS Console → Bedrock → Settings → Model invocation logging</strong></li>
+      <li>If this is ON, AWS logs the <strong>full request body</strong> including the system prompt (which says "Claude Code")</li>
+      <li>This is <strong>OFF by default</strong> — but verify it's off</li>
+      <li>CloudTrail logs API metadata (headers, model ID) regardless — that's why the header override matters</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Tab 4: Setup Script -->
+<div id="script" class="tab-content">
+  <h2>Complete Setup Script</h2>
+  <p>Copy this script to your SageMaker instance and <code>source</code> it before running Claude Code.</p>
+
+  <h3>Script 1: Bash Environment Setup (source before launching)</h3>
+  <pre><code><span class="code-comment">#!/bin/bash</span>
+<span class="code-comment"># ============================================================</span>
+<span class="code-comment"># claude-code-stealth-setup.sh</span>
+<span class="code-comment"># Claude Code Stealth Setup for SageMaker / AWS</span>
+<span class="code-comment"># ============================================================</span>
+<span class="code-comment"># PURPOSE: Make Claude Code's Bedrock calls look like normal</span>
+<span class="code-comment">#          AWS SDK calls. No "claude-cli" fingerprint.</span>
+<span class="code-comment">#</span>
+<span class="code-comment"># USAGE:</span>
+<span class="code-comment">#   source claude-code-stealth-setup.sh</span>
+<span class="code-comment">#   claude</span>
+<span class="code-comment"># ============================================================</span>
+
+<span class="code-comment"># --- 1. USE BEDROCK ---</span>
+<span class="code-keyword">export</span> <span class="code-var">CLAUDE_CODE_USE_BEDROCK</span>=<span class="code-string">1</span>
+
+<span class="code-comment"># --- 2. AWS REGION ---</span>
+<span class="code-keyword">export</span> <span class="code-var">AWS_REGION</span>=<span class="code-string">"${AWS_REGION:-us-east-1}"</span>
+
+<span class="code-comment"># --- 3. OVERRIDE IDENTIFYING HEADERS ---</span>
+<span class="code-comment"># These replace claude-cli fingerprints with generic SDK headers.</span>
+<span class="code-comment"># Custom headers OVERRIDE defaults (spread after in client.ts:109).</span>
+<span class="code-keyword">export</span> <span class="code-var">ANTHROPIC_CUSTOM_HEADERS</span>=<span class="code-string">"User-Agent: aws-sdk-js/3.x bedrock-runtime
+x-app: bedrock
+X-Claude-Code-Session-Id: none"</span>
+
+<span class="code-comment"># --- 4. KILL ALL OUTBOUND TO ANTHROPIC ---</span>
+<span class="code-keyword">export</span> <span class="code-var">CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</span>=<span class="code-string">1</span>
+
+<span class="code-comment"># --- 5. DISABLE TELEMETRY ---</span>
+<span class="code-keyword">export</span> <span class="code-var">DISABLE_TELEMETRY</span>=<span class="code-string">1</span>
+
+<span class="code-comment"># --- 6. DISABLE AUTO-UPDATER ---</span>
+<span class="code-keyword">export</span> <span class="code-var">DISABLE_AUTOUPDATER</span>=<span class="code-string">1</span>
+
+<span class="code-comment"># --- VERIFY ---</span>
+echo <span class="code-string">"=== Claude Code Stealth Active ==="</span>
+echo <span class="code-string">"Bedrock:     ON  | Region: $AWS_REGION"</span>
+echo <span class="code-string">"Outbound:    BLOCKED"</span>
+echo <span class="code-string">"Telemetry:   DISABLED"</span>
+echo <span class="code-string">"Auto-update: DISABLED"</span>
+echo <span class="code-string">"Headers:     OVERRIDDEN (generic SDK)"</span>
+echo <span class="code-string">"==================================="</span></code></pre>
+
+  <h3>Script 2: SageMaker Lifecycle Configuration (auto-run on start)</h3>
+  <pre><code><span class="code-comment">#!/bin/bash</span>
+<span class="code-comment"># lifecycle-config.sh — Add to SageMaker Notebook Lifecycle Configuration</span>
+<span class="code-comment"># This runs automatically every time your SageMaker instance starts.</span>
+
+<span class="code-comment"># Install Claude Code (native installer — no Node.js needed)</span>
+<span class="code-keyword">if</span> ! command -v claude &amp;&gt; /dev/null; then
+    curl -fsSL https://claude.ai/install.sh | bash
+<span class="code-keyword">fi</span>
+
+<span class="code-comment"># Write stealth config to .bashrc so it's always active</span>
+cat &gt;&gt; /home/ec2-user/.bashrc &lt;&lt; 'STEALTH_EOF'
+
+<span class="code-comment"># === Claude Code Stealth Config ===</span>
+<span class="code-keyword">export</span> CLAUDE_CODE_USE_BEDROCK=1
+<span class="code-keyword">export</span> AWS_REGION="${AWS_REGION:-us-east-1}"
+<span class="code-keyword">export</span> CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+<span class="code-keyword">export</span> DISABLE_TELEMETRY=1
+<span class="code-keyword">export</span> DISABLE_AUTOUPDATER=1
+<span class="code-keyword">export</span> ANTHROPIC_CUSTOM_HEADERS="User-Agent: aws-sdk-js/3.x bedrock-runtime
+x-app: bedrock
+X-Claude-Code-Session-Id: none"
+
+STEALTH_EOF
+
+echo <span class="code-string">"Claude Code stealth config installed."</span></code></pre>
+
+  <h3>Script 3: Verification Script (run after setup)</h3>
+  <pre><code><span class="code-comment">#!/bin/bash</span>
+<span class="code-comment"># verify-stealth.sh — Check all stealth settings are active</span>
+
+echo <span class="code-string">"=== Claude Code Stealth Verification ==="</span>
+echo
+
+<span class="code-comment"># Check each variable</span>
+check() {
+    <span class="code-keyword">local</span> var=$1
+    <span class="code-keyword">local</span> val=${!var}
+    <span class="code-keyword">if</span> [ -n "$val" ]; then
+        echo <span class="code-string">"[PASS] $var = $val"</span>
+    <span class="code-keyword">else</span>
+        echo <span class="code-string">"[FAIL] $var is NOT SET"</span>
+    <span class="code-keyword">fi</span>
+}
+
+check CLAUDE_CODE_USE_BEDROCK
+check AWS_REGION
+check CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+check DISABLE_TELEMETRY
+check DISABLE_AUTOUPDATER
+
+echo
+<span class="code-keyword">if</span> [ -n "$ANTHROPIC_CUSTOM_HEADERS" ]; then
+    echo <span class="code-string">"[PASS] ANTHROPIC_CUSTOM_HEADERS is set"</span>
+    echo <span class="code-string">"       Headers being overridden:"</span>
+    echo <span class="code-string">"$ANTHROPIC_CUSTOM_HEADERS"</span> | <span class="code-keyword">while</span> IFS= read -r line; do
+        header_name=$(echo "$line" | cut -d: -f1)
+        echo <span class="code-string">"       - $header_name"</span>
+    <span class="code-keyword">done</span>
+<span class="code-keyword">else</span>
+    echo <span class="code-string">"[FAIL] ANTHROPIC_CUSTOM_HEADERS is NOT SET — headers will leak claude-cli identity!"</span>
+<span class="code-keyword">fi</span>
+
+echo
+echo <span class="code-string">"=== Network Test ==="</span>
+<span class="code-comment"># Try to reach api.anthropic.com — should timeout/fail if properly blocked</span>
+<span class="code-keyword">if</span> curl -s --max-time 3 https://api.anthropic.com &gt; /dev/null 2&gt;&amp;1; then
+    echo <span class="code-string">"[WARN] api.anthropic.com is reachable — outbound not network-blocked"</span>
+    echo <span class="code-string">"       (This is OK — env vars prevent the app from calling it)"</span>
+    echo <span class="code-string">"       For extra security, block at VPC security group level"</span>
+<span class="code-keyword">else</span>
+    echo <span class="code-string">"[PASS] api.anthropic.com is NOT reachable (network-level block)"</span>
+<span class="code-keyword">fi</span>
+
+echo
+echo <span class="code-string">"=== AWS Console Reminder ==="</span>
+echo <span class="code-string">"Verify: Bedrock > Settings > Model invocation logging = OFF"</span>
+echo <span class="code-string">"(If ON, AWS logs full prompts including system prompt)"</span></code></pre>
+
+  <h3>Script 4: Optional — VPC Network Block (maximum stealth)</h3>
+  <pre><code><span class="code-comment">#!/bin/bash</span>
+<span class="code-comment"># vpc-block-anthropic.sh</span>
+<span class="code-comment"># Block outbound to api.anthropic.com at the network level</span>
+<span class="code-comment"># Run this on SageMaker (requires iptables permissions)</span>
+<span class="code-comment"># This is OPTIONAL — env vars already prevent the calls,</span>
+<span class="code-comment"># but this adds a network-level guarantee.</span>
+
+<span class="code-comment"># Resolve api.anthropic.com IPs and block them</span>
+<span class="code-keyword">for</span> ip <span class="code-keyword">in</span> $(dig +short api.anthropic.com); <span class="code-keyword">do</span>
+    sudo iptables -A OUTPUT -d "$ip" -j DROP
+    echo <span class="code-string">"Blocked: $ip (api.anthropic.com)"</span>
+<span class="code-keyword">done</span>
+
+echo <span class="code-string">"Network-level block active for api.anthropic.com"</span>
+echo <span class="code-string">"NOTE: Bedrock endpoints (bedrock-runtime.*.amazonaws.com) are NOT blocked"</span></code></pre>
+</div>
+
+<!-- Tab 5: V4 vs Claude Code Comparison -->
+<div id="comparison" class="tab-content">
+  <h2>Compact V4 (Your SageMaker Agent) vs Hidden Claude Code</h2>
+  <p>Comparing traceability and visibility when running on SageMaker:</p>
+
+  <div class="compare-grid">
+    <div class="compare-card" style="border-color: var(--green);">
+      <h3 style="color: var(--green);">Compact V4 (sagemaker-coding-agent)</h3>
+      <ul>
+        <li><strong>API calls:</strong> Uses <code>boto3</code> directly → standard AWS SDK User-Agent (<code>Boto3/1.x Python/3.x</code>)</li>
+        <li><strong>Headers:</strong> Only standard AWS SDK headers — no custom identifiers</li>
+        <li><strong>System prompt:</strong> Your own custom prompt — no "Claude Code" branding</li>
+        <li><strong>Outbound traffic:</strong> ZERO calls to api.anthropic.com (no telemetry system exists)</li>
+        <li><strong>CloudTrail:</strong> Looks like any boto3 Bedrock call</li>
+        <li><strong>Traceability:</strong> <span class="badge badge-low">MINIMAL</span> — AWS sees standard SDK calls</li>
+      </ul>
+    </div>
+    <div class="compare-card" style="border-color: var(--yellow);">
+      <h3 style="color: var(--yellow);">Claude Code (Hidden/Stealth)</h3>
+      <ul>
+        <li><strong>API calls:</strong> Uses <code>@anthropic-ai/bedrock-sdk</code> → needs header override to hide</li>
+        <li><strong>Headers:</strong> 3 identifying headers need override via env var</li>
+        <li><strong>System prompt:</strong> Says "Claude Code" — hidden only if model invocation logging is OFF</li>
+        <li><strong>Outbound traffic:</strong> Blocked by env vars (not by design)</li>
+        <li><strong>CloudTrail:</strong> Generic after header override, but uses Anthropic's Bedrock SDK (different request pattern)</li>
+        <li><strong>Traceability:</strong> <span class="badge badge-med">MODERATE</span> — hidden but detectable with effort</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Side-by-Side: What AWS Sees in CloudTrail</h3>
+  <table>
+    <tr><th>Attribute</th><th>Compact V4</th><th>Claude Code (Default)</th><th>Claude Code (Stealth)</th></tr>
+    <tr>
+      <td>User-Agent</td>
+      <td><code>Boto3/1.35.x Python/3.11</code></td>
+      <td><code style="color:var(--red)">claude-cli/1.0.18 (ant, cli)</code></td>
+      <td><code>aws-sdk-js/3.x bedrock-runtime</code></td>
+    </tr>
+    <tr>
+      <td>x-app header</td>
+      <td>(none)</td>
+      <td><code style="color:var(--red)">cli</code></td>
+      <td><code>bedrock</code></td>
+    </tr>
+    <tr>
+      <td>Session tracking</td>
+      <td>(none)</td>
+      <td><code style="color:var(--red)">X-Claude-Code-Session-Id: abc-123</code></td>
+      <td><code>none</code></td>
+    </tr>
+    <tr>
+      <td>SDK library</td>
+      <td><code>boto3</code> (Python)</td>
+      <td><code>@anthropic-ai/bedrock-sdk</code> (Node.js)</td>
+      <td>Same Node.js SDK — <span class="badge badge-med">detectable</span></td>
+    </tr>
+    <tr>
+      <td>API pattern</td>
+      <td><code>InvokeModel</code> via boto3</td>
+      <td><code>InvokeModel</code> via Anthropic SDK</td>
+      <td>Same — slightly different HTTP patterns</td>
+    </tr>
+    <tr>
+      <td>Outbound to Anthropic</td>
+      <td><span class="badge badge-blocked">NONE</span></td>
+      <td><span class="badge badge-high">YES</span> (telemetry auto-off, but other calls)</td>
+      <td><span class="badge badge-blocked">BLOCKED</span></td>
+    </tr>
+    <tr>
+      <td>System prompt</td>
+      <td>Your custom prompt</td>
+      <td>"You are Claude Code..."</td>
+      <td>"You are Claude Code..." (hidden if logging OFF)</td>
+    </tr>
+  </table>
+
+  <div class="callout callout-warn">
+    <strong>Key Difference: SDK Fingerprint</strong><br>
+    Even with stealth mode, Claude Code uses <code>@anthropic-ai/bedrock-sdk</code> (Node.js) while V4 uses <code>boto3</code> (Python).
+    The HTTP request patterns differ slightly — an advanced analyst comparing TLS fingerprints or HTTP/2 frame ordering could potentially distinguish them.
+    However, this requires deep packet inspection which is <strong>not standard</strong> and <strong>not available in CloudTrail</strong>.
+    <br><br>
+    <strong>Bottom line:</strong> V4 is naturally invisible. Claude Code can be made <em>practically</em> invisible with the stealth config, but it's never as clean as a native boto3 call.
+  </div>
+
+  <h3>When to Use Which?</h3>
+  <table>
+    <tr><th>Scenario</th><th>Best Choice</th><th>Why</th></tr>
+    <tr>
+      <td>Maximum stealth required</td>
+      <td><strong>Compact V4</strong></td>
+      <td>Native boto3 = zero fingerprint. No config needed.</td>
+    </tr>
+    <tr>
+      <td>Need Claude Code's full toolset (agents, MCP, skills, etc.)</td>
+      <td><strong>Claude Code + Stealth</strong></td>
+      <td>V4 doesn't have file editing, git, web search, subagents, etc.</td>
+    </tr>
+    <tr>
+      <td>Enterprise compliance audit</td>
+      <td><strong>Compact V4</strong></td>
+      <td>Simpler story: "we use boto3 to call Bedrock"</td>
+    </tr>
+    <tr>
+      <td>Rapid prototyping / development</td>
+      <td><strong>Claude Code + Stealth</strong></td>
+      <td>Full development environment, much faster iteration</td>
+    </tr>
+    <tr>
+      <td>Production agent pipeline</td>
+      <td><strong>Compact V4</strong></td>
+      <td>Lighter, no Node.js dependency, Python-native</td>
+    </tr>
+  </table>
+</div>
+
+<!-- Tab 6: Verification -->
+<div id="verification" class="tab-content">
+  <h2>How to Verify It's Working</h2>
+
+  <h3>Test 1: Check Environment Variables</h3>
+  <pre><code><span class="code-comment"># Run verify-stealth.sh (Script 3 from Tab 4)</span>
+bash verify-stealth.sh</code></pre>
+  <p>Expected: All [PASS]</p>
+
+  <h3>Test 2: Check CloudTrail (After Making a Bedrock Call)</h3>
+  <pre><code><span class="code-comment"># In AWS Console: CloudTrail → Event history → Filter by:</span>
+<span class="code-comment"># - Event source: bedrock.amazonaws.com</span>
+<span class="code-comment"># - Event name: InvokeModel</span>
+<span class="code-comment">#</span>
+<span class="code-comment"># Look at the userAgent field in the event:</span>
+<span class="code-comment">#   Before stealth: "claude-cli/1.0.18 (ant, cli)"</span>
+<span class="code-comment">#   After stealth:  "aws-sdk-js/3.x bedrock-runtime"</span></code></pre>
+
+  <h3>Test 3: Monitor Outbound Network (Optional)</h3>
+  <pre><code><span class="code-comment"># Watch for any connections to api.anthropic.com</span>
+<span class="code-comment"># Run this in a separate terminal while using Claude Code:</span>
+sudo tcpdump -i any host api.anthropic.com -c 10
+
+<span class="code-comment"># Expected: No packets captured (timeout after ~30s)</span></code></pre>
+
+  <h3>Test 4: Check Model Invocation Logging</h3>
+  <pre><code><span class="code-comment"># AWS CLI check:</span>
+aws bedrock get-model-invocation-logging-configuration \
+    --region us-east-1
+
+<span class="code-comment"># Expected output should show loggingConfig is empty/disabled:</span>
+<span class="code-comment"># { "loggingConfig": {} }</span>
+<span class="code-comment">#</span>
+<span class="code-comment"># If it shows S3/CloudWatch destinations, logging is ON — disable it!</span></code></pre>
+
+  <h3>Verification Checklist</h3>
+  <table>
+    <tr><th>Check</th><th>Command</th><th>Expected</th></tr>
+    <tr><td>Env vars set</td><td><code>env | grep -E "CLAUDE_CODE|DISABLE_"</code></td><td>All 5 vars present</td></tr>
+    <tr><td>Custom headers set</td><td><code>echo "$ANTHROPIC_CUSTOM_HEADERS"</code></td><td>3 header overrides</td></tr>
+    <tr><td>CloudTrail User-Agent</td><td>AWS Console → CloudTrail</td><td><code>aws-sdk-js/3.x</code></td></tr>
+    <tr><td>No outbound to Anthropic</td><td><code>tcpdump</code> or <code>netstat</code></td><td>Zero connections</td></tr>
+    <tr><td>Model logging OFF</td><td>AWS CLI or Console</td><td>Empty/disabled config</td></tr>
+  </table>
+</div>
+
+<!-- Tab 7: Source Evidence -->
+<div id="source" class="tab-content">
+  <h2>Source Code Evidence</h2>
+  <p>Every claim in this document traced to exact source files and line numbers.</p>
+
+  <h3>File Map</h3>
+  <table>
+    <tr><th>File</th><th>Purpose</th><th>Key Lines</th></tr>
+    <tr>
+      <td><code>src/utils/http.ts</code></td>
+      <td>User-Agent generation</td>
+      <td>L18-34: <code>getUserAgent()</code> → <code>claude-cli/VERSION</code></td>
+    </tr>
+    <tr>
+      <td><code>src/services/api/client.ts</code></td>
+      <td>API client creation, header injection</td>
+      <td>L104-109: Default headers + custom spread<br>L153-189: Bedrock client setup<br>L330-354: Custom header parser</td>
+    </tr>
+    <tr>
+      <td><code>src/utils/model/bedrock.ts</code></td>
+      <td>Bedrock SDK configuration</td>
+      <td>L50-94: BedrockClient creation<br>L56: Region from env</td>
+    </tr>
+    <tr>
+      <td><code>src/utils/privacyLevel.ts</code></td>
+      <td>Privacy level hierarchy</td>
+      <td>L20-28: 3 levels (default/no-telemetry/essential-traffic)<br>L34-36: <code>isEssentialTrafficOnly()</code></td>
+    </tr>
+    <tr>
+      <td><code>src/services/analytics/config.ts</code></td>
+      <td>Analytics auto-disable for Bedrock</td>
+      <td>L19-27: <code>isAnalyticsDisabled()</code> → true when <code>CLAUDE_CODE_USE_BEDROCK</code></td>
+    </tr>
+    <tr>
+      <td><code>src/constants/prompts.ts</code></td>
+      <td>System prompt content</td>
+      <td>L450-453: Simple mode check<br>L452: "You are Claude Code" text</td>
+    </tr>
+    <tr>
+      <td><code>src/services/analytics/growthbook.ts</code></td>
+      <td>Feature flags (GrowthBook)</td>
+      <td>L422-425: Enabled only if 1P logging enabled<br>L505: api.anthropic.com endpoint</td>
+    </tr>
+    <tr>
+      <td><code>src/services/analytics/firstPartyEventLogger.ts</code></td>
+      <td>1P event telemetry</td>
+      <td>L141-144: Disabled when analytics disabled</td>
+    </tr>
+    <tr>
+      <td><code>src/services/analytics/firstPartyEventLoggingExporter.ts</code></td>
+      <td>Event export to Anthropic</td>
+      <td>L118: api.anthropic.com/api/event_logging/batch</td>
+    </tr>
+    <tr>
+      <td><code>src/utils/telemetry/bigqueryExporter.ts</code></td>
+      <td>Metrics export</td>
+      <td>L47: api.anthropic.com/api/claude_code/metrics</td>
+    </tr>
+    <tr>
+      <td><code>src/services/api/metricsOptOut.ts</code></td>
+      <td>Org metrics opt-out check</td>
+      <td>L45: api.anthropic.com endpoint<br>L57: Respects essential-traffic-only</td>
+    </tr>
+    <tr>
+      <td><code>src/utils/telemetryAttributes.ts</code></td>
+      <td>What telemetry data is collected</td>
+      <td>L29-71: user.id, session.id, org, email (only when analytics enabled)</td>
+    </tr>
+    <tr>
+      <td><code>src/services/api/grove.ts</code></td>
+      <td>Trust/policy checks</td>
+      <td>L55: Respects essential-traffic-only</td>
+    </tr>
+    <tr>
+      <td><code>src/utils/releaseNotes.ts</code></td>
+      <td>Changelog/update checks</td>
+      <td>L89: Respects essential-traffic-only</td>
+    </tr>
+    <tr>
+      <td><code>src/utils/model/modelCapabilities.ts</code></td>
+      <td>Model capability refresh</td>
+      <td>L87: Respects essential-traffic-only</td>
+    </tr>
+  </table>
+
+  <h3>Critical Code Path: How Headers Get Sent to Bedrock</h3>
+  <pre><code><span class="code-comment">// 1. getCustomHeaders() reads ANTHROPIC_CUSTOM_HEADERS</span>
+<span class="code-comment">//    Source: client.ts:330-354</span>
+<span class="code-keyword">function</span> getCustomHeaders(): Record&lt;string, string&gt; {
+    <span class="code-keyword">const</span> customHeadersEnv = process.env.<span class="code-var">ANTHROPIC_CUSTOM_HEADERS</span>
+    <span class="code-comment">// Parses "Name: Value" lines → { Name: Value }</span>
+}
+
+<span class="code-comment">// 2. getAnthropicClient() builds headers with custom LAST (wins)</span>
+<span class="code-comment">//    Source: client.ts:104-109</span>
+<span class="code-keyword">const</span> customHeaders = getCustomHeaders()
+<span class="code-keyword">const</span> defaultHeaders = {
+    <span class="code-string">'x-app'</span>: <span class="code-string">'cli'</span>,                 <span class="code-comment">// ← overridden by custom</span>
+    <span class="code-string">'User-Agent'</span>: getUserAgent(),   <span class="code-comment">// ← overridden by custom</span>
+    <span class="code-string">'X-Claude-Code-Session-Id'</span>: id, <span class="code-comment">// ← overridden by custom</span>
+    ...<span class="code-var">customHeaders</span>,               <span class="code-comment">// ← SPREAD LAST = WINS</span>
+}
+
+<span class="code-comment">// 3. Headers passed to AnthropicBedrock SDK</span>
+<span class="code-comment">//    Source: client.ts:153-189</span>
+<span class="code-keyword">const</span> bedrockArgs = {
+    ...ARGS,    <span class="code-comment">// includes defaultHeaders above</span>
+    awsRegion,
+}
+<span class="code-keyword">return new</span> AnthropicBedrock(bedrockArgs)
+
+<span class="code-comment">// 4. AnthropicBedrock SDK sends headers on every InvokeModel call</span>
+<span class="code-comment">//    → AWS CloudTrail records them</span></code></pre>
+
+  <h3>Critical Code Path: How Analytics Get Disabled</h3>
+  <pre><code><span class="code-comment">// 1. isAnalyticsDisabled() — auto-true for Bedrock</span>
+<span class="code-comment">//    Source: config.ts:19-27</span>
+<span class="code-keyword">function</span> isAnalyticsDisabled(): boolean {
+    <span class="code-keyword">return</span> (
+        process.env.NODE_ENV === <span class="code-string">'test'</span> ||
+        isEnvTruthy(process.env.<span class="code-var">CLAUDE_CODE_USE_BEDROCK</span>) ||  <span class="code-comment">// ← AUTO OFF</span>
+        isEnvTruthy(process.env.<span class="code-var">CLAUDE_CODE_USE_VERTEX</span>) ||
+        isEnvTruthy(process.env.<span class="code-var">CLAUDE_CODE_USE_FOUNDRY</span>) ||
+        isTelemetryDisabled()
+    )
+}
+
+<span class="code-comment">// 2. is1PEventLoggingEnabled() → false → no events sent</span>
+<span class="code-comment">//    Source: firstPartyEventLogger.ts:141-144</span>
+<span class="code-keyword">function</span> is1PEventLoggingEnabled(): boolean {
+    <span class="code-keyword">return</span> !isAnalyticsDisabled()  <span class="code-comment">// false for Bedrock</span>
+}
+
+<span class="code-comment">// 3. isGrowthBookEnabled() → false → no feature flag calls</span>
+<span class="code-comment">//    Source: growthbook.ts:422-425</span>
+<span class="code-keyword">function</span> isGrowthBookEnabled(): boolean {
+    <span class="code-keyword">return</span> is1PEventLoggingEnabled()  <span class="code-comment">// false for Bedrock</span>
+}
+
+<span class="code-comment">// 4. Remaining traffic blocked by CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</span>
+<span class="code-comment">//    Source: privacyLevel.ts:20-28</span>
+<span class="code-comment">//    Checked by: grove.ts, releaseNotes.ts, modelCapabilities.ts,</span>
+<span class="code-comment">//    metricsOptOut.ts, Feedback.tsx, referral.ts, bootstrap.ts, etc.</span></code></pre>
+</div>
+
+</div><!-- /container -->
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>
