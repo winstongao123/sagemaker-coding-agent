@@ -21,8 +21,15 @@ Base: compact_v4 v4.4.0
 - **Sensitive files**: `.env`, credentials, keys still blocked even within allowed_paths.
 - **Backward compat**: `allowed_read_paths` key still accepted in agent_config.json.
 
+### Auto-Detect Git Repo Root
+- **Why**: User shouldn't need to manually configure `agent_config.json` just to access sibling folders in the same git repo.
+- **What**: At startup, runs `git rev-parse --show-toplevel`. If workspace is a subdirectory of a git repo, automatically adds the repo root to allowed_paths.
+- **Example**: Workspace = `compact_v4/` → auto-detects `sagemaker-coding-agent/` as repo root → agent can access entire repo.
+- **No-op when**: workspace IS the repo root, or not in a git repo, or git not available.
+- **Still configurable**: Manual `allowed_paths` in agent_config.json still works and stacks with auto-detect.
+
 ### Documentation
-- Updated `USER_GUIDE.md` Workspace Boundary section with allowed_paths usage
+- Updated `USER_GUIDE.md` Workspace Boundary section with allowed_paths usage + auto-detect
 
 ---
 

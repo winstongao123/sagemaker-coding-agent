@@ -894,6 +894,8 @@ Configure in `agent_config.json`:
 - Symlink escape protection still applies — symlinks that resolve outside both workspace and allowed_paths are blocked.
 - Backward compatible: `allowed_read_paths` key is also accepted.
 
+**Auto-Detect Git Repo Root**: If your workspace is a subdirectory of a git repository, the agent automatically adds the repo root to allowed_paths at startup. This means if you run the agent from `compact_v4/`, it automatically has access to the entire `sagemaker-coding-agent/` repo — no configuration needed.
+
 ---
 
 ## Cost Tracking

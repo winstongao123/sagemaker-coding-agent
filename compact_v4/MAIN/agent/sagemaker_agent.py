@@ -1674,12 +1674,38 @@ AWS access tiers (SageMaker execution role):
                 return output
             return output[:max_size] + f"\n[Truncated - {len(output):,} chars total]"
 
+# Auto-detect git repo root: if workspace is a subdirectory of a git repo,
+# automatically add the repo root as an allowed_path so the agent can access
+# sibling directories (e.g., compact_v4/ can access sagemaker-coding-agent/).
+def _auto_detect_repo_root(workspace: str, existing_paths: list) -> list:
+    """If workspace is inside a git repo, return repo root as additional allowed path."""
+    extra = list(existing_paths or [])
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5, cwd=workspace,
+        )
+        if result.returncode == 0:
+            repo_root = result.stdout.strip()
+            repo_root_resolved = os.path.realpath(repo_root)
+            ws_resolved = os.path.realpath(workspace)
+            # Only add if repo root is a PARENT of workspace (not the same dir)
+            if ws_resolved.startswith(repo_root_resolved + os.sep) and repo_root_resolved not in extra:
+                extra.append(repo_root_resolved)
+                logging.info(f"Auto-detected git repo root: {repo_root_resolved} (added to allowed_paths)")
+    except Exception:
+        pass  # No git, or not a repo — skip silently
+    return extra
+
+_auto_allowed = _auto_detect_repo_root(CONFIG.workspace, CONFIG.allowed_paths)
+
 # Initialize security
 SECURITY = SecurityManager(
     CONFIG.workspace,
     allow_interpreters=CONFIG.bash_allow_interpreters,
     allow_docker=CONFIG.bash_allow_docker,
-    allowed_paths=CONFIG.allowed_paths,
+    allowed_paths=_auto_allowed,
 )
 
 
