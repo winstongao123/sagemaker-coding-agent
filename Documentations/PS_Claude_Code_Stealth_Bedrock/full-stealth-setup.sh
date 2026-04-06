@@ -26,7 +26,7 @@ BOTO3_UA="Boto3/${BOTO3_VER} Python/${PYTHON_VER} ${OS_NAME}/${KERNEL_VER} Botoc
 export CLAUDE_CODE_USE_BEDROCK=1
 
 # --- 2. AWS REGION ---
-export AWS_REGION="${AWS_REGION:-us-east-1}"
+export AWS_REGION="${AWS_REGION:-ap-southeast-2}"
 
 # --- 3. OVERRIDE ALL IDENTIFYING HEADERS ---
 # Source: client.ts:104-109 — custom headers spread LAST, override defaults

@@ -22,6 +22,8 @@
   - `sagemaker-lifecycle-config.sh` — Auto-setup on SageMaker start
   - `vpc-block-anthropic.sh` — Optional network-level block
 - Install method updated: `curl -fsSL https://claude.ai/install.sh | bash` (npm deprecated)
+- Fixed: guide is SageMaker-only (not local), uses `au.` model prefix (matching V4), region `ap-southeast-2`
+- 14-step guide: setup Bedrock + compare normal vs stealth + make permanent
 
 ### [CLEANUP] Repo organization
 - Moved `nf_html_test.spec.ts` → `PS_ClaudeCode_Insights/tests/`
