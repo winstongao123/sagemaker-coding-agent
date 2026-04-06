@@ -1,27 +1,28 @@
 # Compact V4 Changelog
 
-## v4.5.0 — Allowed Read Paths: Cross-Directory Visibility (2026-04-06)
+## v4.5.0 — Allowed Paths: Cross-Directory Read+Write Access (2026-04-06)
 
 Base: compact_v4 v4.4.0
 
-### Allowed Read Paths
-- **Why**: Agent was locked to workspace directory only. Could not read files in sibling folders (e.g., other folders inside `sagemaker-coding-agent/` when workspace is `compact_v4/`).
-- **What**: New `allowed_read_paths` config option grants **read-only** access to additional directories outside workspace.
+### Allowed Paths
+- **Why**: Agent was locked to workspace directory only. Could not access files in sibling folders (e.g., other folders inside `sagemaker-coding-agent/` when workspace is `compact_v4/`).
+- **What**: New `allowed_paths` config option grants **full read+write** access to additional directories outside workspace.
 - **Config**: Set via `agent_config.json`:
   ```json
-  { "allowed_read_paths": ["/path/to/other/dir"] }
+  { "allowed_paths": ["/path/to/other/dir"] }
   ```
 - **Security model**: Defense-in-depth across all 4 layers:
-  1. `SecurityManager.validate_path()` — new `write` param; allowed_read_paths only permit reads
+  1. `SecurityManager.validate_path()` — checks both workspace and allowed_paths
   2. Bash Layer 4 — allowed paths accepted in workspace boundary check
-  3. Python sandbox — `_SAFE_READ_PREFIXES` extended with allowed paths (writes still blocked)
-  4. Write tools (`write_file`, `edit_file`, docx/xlsx/pdf/etc.) — explicitly pass `write=True` to reject allowed_read_paths
-- **No regression**: Workspace-only behavior unchanged when `allowed_read_paths` is empty (default).
-- **Validation**: Paths must be absolute, existing directories. Invalid paths logged and skipped at init.
-- **Sensitive files**: `.env`, credentials, keys still blocked even within allowed_read_paths.
+  3. Python sandbox — both `_SAFE_READ_PREFIXES` and `_SAFE_WRITE_PREFIXES` extended
+  4. All tools (read, write, glob, grep, bash, document generators) work with allowed_paths
+- **No regression**: Workspace-only behavior unchanged when `allowed_paths` is empty (default).
+- **Validation**: Paths must be absolute, existing directories. Empty strings and relative paths rejected. Invalid paths logged and skipped at init.
+- **Sensitive files**: `.env`, credentials, keys still blocked even within allowed_paths.
+- **Backward compat**: `allowed_read_paths` key still accepted in agent_config.json.
 
 ### Documentation
-- Updated `USER_GUIDE.md` Workspace Boundary section with allowed_read_paths usage
+- Updated `USER_GUIDE.md` Workspace Boundary section with allowed_paths usage
 
 ---
 

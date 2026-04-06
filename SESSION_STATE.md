@@ -1,41 +1,43 @@
-# Session State — V4.5.0 Allowed Read Paths
+# Session State — V4.5.0 Allowed Paths
 
 > **Last updated**: 2026-04-06 by Claude Opus 4.6
-> **Git state**: Committing, push to `sageagent`
-> **V4 version**: 4.5.0 (sagemaker_agent.py grew ~+100 lines)
+> **Git state**: Pending commit + push to `sageagent`
+> **V4 version**: 4.5.0
 
 ---
 
 ## WHAT WAS DONE THIS SESSION
 
-### [NEW] Allowed Read Paths — Cross-Directory Visibility (v4.5.0)
-- **Problem**: Agent was locked to workspace directory only. Could not read files in sibling folders (e.g., other folders inside `sagemaker-coding-agent/` when workspace is `compact_v4/`).
-- **Solution**: New `allowed_read_paths` config option grants **read-only** access to additional directories outside workspace.
-- **Config**: Set via `agent_config.json`: `{ "allowed_read_paths": ["/path/to/dir"] }`
-- **Security**: Defense-in-depth across all 4 layers:
-  1. `SecurityManager.validate_path()` — new `write` param; allowed_read_paths only permit reads
-  2. Bash Layer 4 — allowed paths accepted in workspace boundary check (with documented limitation: cp/mv not blocked)
-  3. Python sandbox — `_SAFE_READ_PREFIXES` extended with allowed paths (writes still blocked)
-  4. Write tools (`write_file`, `edit_file`, docx/xlsx/pdf/etc.) — explicitly pass `write=True` to reject allowed_read_paths
-- **Edge cases hardened** (from code review):
-  - Empty string guard (prevents CWD resolution attack)
-  - Absolute path validation (rejects relative paths)
-  - Startup logging of resolved paths
-  - Bash Layer 4 limitation documented in code comments
-  - Python preamble uses SECURITY's validated paths, not raw CONFIG
+### [NEW] Allowed Paths — Cross-Directory Read+Write Access (v4.5.0)
+- **Problem**: Agent was locked to workspace directory only. Could not access files in sibling folders.
+- **Solution**: New `allowed_paths` config grants **full read+write** access to additional directories.
+- **Config**: `agent_config.json`: `{ "allowed_paths": ["/path/to/dir"] }`
+- **Security**: All 4 layers updated (validate_path, bash Layer 4, Python sandbox, all tools)
+- **Edge cases**: Empty string guard, absolute path validation, startup logging
+- **Backward compat**: `allowed_read_paths` key still accepted
+- **Initially was read-only** (`allowed_read_paths` with `write=True` restrictions), then upgraded to full read+write (`allowed_paths`) per user request
+- **Code review**: Passed self-review. Codex review pending.
 - **Files changed**:
-  - `compact_v4/MAIN/agent/sagemaker_agent.py` — Config, SecurityManager, bash, sandbox, all write tools
-  - `compact_v4/MAIN/agent/USER_GUIDE.md` — Workspace Boundary section updated
-  - `compact_v4/CHANGELOG.md` — v4.5.0 section added
-- **No regression**: Default behavior unchanged when `allowed_read_paths` is empty (default)
-- **Code review**: Passed after fixes (empty string, abs path, bash comment, startup log)
+  - `compact_v4/MAIN/agent/sagemaker_agent.py`
+  - `compact_v4/MAIN/agent/USER_GUIDE.md`
+  - `compact_v4/CHANGELOG.md`
+
+### [REBUILD] Zips
+- `compact_v4/compact_v4.zip` — 295KB, 31 files
+- `PDF/wins_docs.zip` — 328KB, 37 files
+
+### [ANALYSIS] PDF Pipeline Robustness
+- Reviewed `D:\Github\PDF\main\pipeline.py` (830 lines)
+- Sonnet's "not robust" claim was exaggerated — treated internal CLI as public web API
+- Pipeline has: cost caps, retries, human review flags, validation, encryption
+- Verdict: production-ready for its use case, no enhancement needed
 
 ---
 
 ## KEY FILES
-1. `compact_v4/MAIN/agent/sagemaker_agent.py` — ~9,250 lines
-2. `compact_v4/MAIN/agent/USER_GUIDE.md` — Workspace Boundary section
-3. `compact_v4/CHANGELOG.md` — v4.5.0 section
+1. `compact_v4/MAIN/agent/sagemaker_agent.py` — ~9,200 lines
+2. `compact_v4/MAIN/agent/USER_GUIDE.md`
+3. `compact_v4/CHANGELOG.md`
 
 ---
 

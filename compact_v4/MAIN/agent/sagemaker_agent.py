@@ -851,7 +851,7 @@ class Config:
     mock_mode: bool = False  # Set True to test without Bedrock API
 
     # Security policy
-    allowed_read_paths: list = None  # Additional directories the agent can READ (not write). Paths outside workspace that should be accessible. Set via agent_config.json.
+    allowed_paths: list = None  # Additional directories the agent can read AND write. Paths outside workspace that should be accessible. Set via agent_config.json.
     bash_allow_interpreters: bool = False  # Block python/node via bash (use python_exec instead; enable in agent_config.json if needed)
     bash_allow_docker: bool = False        # If True, allow docker/docker-compose via bash tool
 
@@ -1016,13 +1016,15 @@ def _apply_config_file(config: 'Config') -> None:
     if "agents" in ext and isinstance(ext["agents"], dict):
         config.agent_overrides = ext["agents"]
 
-    # Allowed read paths — list of absolute directory paths the agent can read (but not write) outside workspace
-    if "allowed_read_paths" in ext:
-        val = ext["allowed_read_paths"]
+    # Allowed paths — list of absolute directory paths the agent can read AND write outside workspace
+    # Also accepts legacy key "allowed_read_paths" for backward compatibility
+    _ap_key = "allowed_paths" if "allowed_paths" in ext else ("allowed_read_paths" if "allowed_read_paths" in ext else None)
+    if _ap_key:
+        val = ext[_ap_key]
         if isinstance(val, list) and all(isinstance(p, str) for p in val):
-            config.allowed_read_paths = val
+            config.allowed_paths = val
         else:
-            logging.warning("Config: 'allowed_read_paths' must be a list of strings — skipped")
+            logging.warning(f"Config: '{_ap_key}' must be a list of strings — skipped")
 
     # User-defined model pricing — deferred until _MODEL_PRICING exists (see _apply_pricing_overrides)
     if "model_pricing" in ext and isinstance(ext["model_pricing"], dict):
@@ -1338,41 +1340,37 @@ AWS access tiers (SageMaker execution role):
         allow_network: bool = False,
         allow_interpreters: bool = False,
         allow_docker: bool = False,
-        allowed_read_paths: list = None,
+        allowed_paths: list = None,
     ):
         self.workspace = Path(workspace).resolve()
         self.allow_network = allow_network
         # Resolve allowed read paths to absolute canonical form at init time
-        self.allowed_read_paths: list[Path] = []
-        for p in (allowed_read_paths or []):
+        self.allowed_paths: list[Path] = []
+        for p in (allowed_paths or []):
             if not p or not p.strip():
-                logging.warning("SecurityManager: empty allowed_read_path — skipped")
+                logging.warning("SecurityManager: empty allowed_path — skipped")
                 continue
             if not os.path.isabs(p):
-                logging.warning(f"SecurityManager: allowed_read_path '{p}' is not absolute — skipped")
+                logging.warning(f"SecurityManager: allowed_path '{p}' is not absolute — skipped")
                 continue
             try:
                 resolved = Path(p).resolve()
                 if resolved.is_dir():
-                    self.allowed_read_paths.append(resolved)
+                    self.allowed_paths.append(resolved)
                 else:
-                    logging.warning(f"SecurityManager: allowed_read_path '{p}' is not a directory — skipped")
+                    logging.warning(f"SecurityManager: allowed_path '{p}' is not a directory — skipped")
             except Exception:
-                logging.warning(f"SecurityManager: allowed_read_path '{p}' is invalid — skipped")
-        if self.allowed_read_paths:
-            logging.info(f"SecurityManager: allowed_read_paths = {[str(p) for p in self.allowed_read_paths]}")
+                logging.warning(f"SecurityManager: allowed_path '{p}' is invalid — skipped")
+        if self.allowed_paths:
+            logging.info(f"SecurityManager: allowed_paths = {[str(p) for p in self.allowed_paths]}")
         self.ALLOWED_COMMANDS = set(self.BASE_ALLOWED_COMMANDS)
         if allow_interpreters:
             self.ALLOWED_COMMANDS.update(self.INTERPRETER_COMMANDS)
         if allow_docker:
             self.ALLOWED_COMMANDS.update(self.CONTAINER_COMMANDS)
 
-    def validate_path(self, path: str, write: bool = False) -> Tuple[bool, str]:
-        """Check if path is within workspace or allowed read paths.
-        Args:
-            path: The path to validate.
-            write: If True, only workspace is allowed (not allowed_read_paths).
-        """
+    def validate_path(self, path: str) -> Tuple[bool, str]:
+        """Check if path is within workspace or allowed_paths (both read and write)."""
         try:
             if not os.path.isabs(path):
                 resolved = (self.workspace / path).resolve()
@@ -1387,10 +1385,10 @@ AWS access tiers (SageMaker execution role):
             except ValueError:
                 pass
 
-            # If not in workspace, check allowed_read_paths (read-only)
+            # If not in workspace, check allowed_paths (full read+write access)
             in_allowed = False
-            if not in_workspace and not write:
-                for allowed in self.allowed_read_paths:
+            if not in_workspace:
+                for allowed in self.allowed_paths:
                     try:
                         resolved.relative_to(allowed)
                         in_allowed = True
@@ -1399,8 +1397,6 @@ AWS access tiers (SageMaker execution role):
                         continue
 
             if not in_workspace and not in_allowed:
-                if write and self.allowed_read_paths:
-                    return False, f"Write blocked: '{path}' is outside workspace (allowed_read_paths are read-only)"
                 return False, f"Path outside workspace: {path}"
 
             if resolved.name in self.SENSITIVE_FILES:
@@ -1489,11 +1485,11 @@ AWS access tiers (SageMaker execution role):
         # Block absolute paths outside workspace (prevents reading /etc/passwd etc.)
         workspace = os.path.realpath(CONFIG.workspace)
         workspace_prefix = workspace + os.sep  # Prevent sibling-dir bypass (e.g. workspace_evil/)
-        # Build allowed read prefixes from allowed_read_paths
-        _extra_read_prefixes = []
-        for ap in self.allowed_read_paths:
+        # Build allowed path prefixes from allowed_paths
+        _extra_prefixes = []
+        for ap in self.allowed_paths:
             rp = os.path.realpath(str(ap))
-            _extra_read_prefixes.append((rp, rp + os.sep))
+            _extra_prefixes.append((rp, rp + os.sep))
         # Find absolute paths in command arguments
         for token in re.findall(r'(?:^|\s)(/[^\s;|&>]+)', command):
             real_token = os.path.realpath(token)
@@ -1502,11 +1498,8 @@ AWS access tiers (SageMaker execution role):
                 continue
             if real_token.startswith(("/usr/bin/", "/usr/local/bin/", "/bin/", "/opt/", "/tmp/")):
                 continue
-            # Allow paths in allowed_read_paths.
-            # NOTE: This permits bash commands to reference these paths for reads AND writes
-            # (e.g. cp/mv). Redirections are blocked separately via _validate_shell_redirections(write=True).
-            # Full write prevention would require command-specific argument parsing.
-            if any(real_token == rp or real_token.startswith(rp_sep) for rp, rp_sep in _extra_read_prefixes):
+            # Allow paths in allowed_paths (full read+write access)
+            if any(real_token == rp or real_token.startswith(rp_sep) for rp, rp_sep in _extra_prefixes):
                 continue
             return False, f"Path outside workspace: '{token}'. Use relative paths within {workspace}"
 
@@ -1686,7 +1679,7 @@ SECURITY = SecurityManager(
     CONFIG.workspace,
     allow_interpreters=CONFIG.bash_allow_interpreters,
     allow_docker=CONFIG.bash_allow_docker,
-    allowed_read_paths=CONFIG.allowed_read_paths,
+    allowed_paths=CONFIG.allowed_paths,
 )
 
 
@@ -3384,13 +3377,13 @@ def tool_write_file(args: Dict) -> str:
     content = args["content"]
     mode = args.get("mode", "write")
 
-    ok, msg = SECURITY.validate_path(path, write=True)
+    ok, msg = SECURITY.validate_path(path)
     if not ok:
         return f"Error: {msg}"
 
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
-    ok, msg = SECURITY.validate_path(path, write=True)
+    ok, msg = SECURITY.validate_path(path)
     if not ok:
         return f"Error: {msg}"
 
@@ -3475,13 +3468,13 @@ def tool_edit_file(args: Dict) -> str:
     new_string = args["new_string"]
     replace_all = args.get("replace_all", False)
 
-    ok, msg = SECURITY.validate_path(path, write=True)
+    ok, msg = SECURITY.validate_path(path)
     if not ok:
         return f"Error: {msg}"
 
     if not os.path.isabs(path):
         path = os.path.join(CONFIG.workspace, path)
-    ok, msg = SECURITY.validate_path(path, write=True)
+    ok, msg = SECURITY.validate_path(path)
     if not ok:
         return f"Error: {msg}"
 
@@ -3825,7 +3818,7 @@ def _validate_shell_redirections(command: str) -> Tuple[bool, str]:
         if any(sym in target for sym in ["$", "*", "?", "~"]):
             return False, f"dynamic redirection target not allowed: {target}"
 
-        ok, msg = SECURITY.validate_path(target, write=True)
+        ok, msg = SECURITY.validate_path(target)
         if not ok:
             return False, f"redirection target blocked: {msg}"
 
@@ -4007,10 +4000,10 @@ def _build_python_preamble() -> str:
     """Build runtime sandbox preamble. Injected into every python_exec script.
     Uses closures so sandbox internals are NOT accessible to user code."""
     workspace = os.path.realpath(CONFIG.workspace)
-    # Use SECURITY's already-validated allowed_read_paths (resolved Path objects)
-    _extra_read = [os.path.realpath(str(p)) for p in SECURITY.allowed_read_paths]
+    # Use SECURITY's already-validated allowed_paths (resolved Path objects)
+    _extra_paths = [os.path.realpath(str(p)) for p in SECURITY.allowed_paths]
     # repr() of a tuple of strings produces a valid Python literal with proper escaping.
-    extra_read_repr = repr(tuple(_extra_read))
+    extra_paths_repr = repr(tuple(_extra_paths))
     return f'''
 # === RUNTIME SANDBOX (closure-based, not accessible to user code) ===
 def _install_sandbox():
@@ -4059,13 +4052,13 @@ def _install_sandbox():
     _WORKSPACE = {repr(workspace)}
     _WORKSPACE_SEP = _WORKSPACE + _os.sep  # Prevent sibling-dir bypass
     _orig_open = _b.open
-    # Allowed read paths: additional directories the agent can read (not write)
-    _EXTRA_READ_PATHS = {extra_read_repr}
-    _EXTRA_READ_PREFIXES = tuple(p + _os.sep for p in _EXTRA_READ_PATHS)
-    _SAFE_READ_PREFIXES = (_WORKSPACE_SEP, "/tmp/") + _EXTRA_READ_PREFIXES
-    _SAFE_WRITE_PREFIXES = (_WORKSPACE_SEP,)
-    _SAFE_READ_EXACT = (_WORKSPACE, "/tmp") + _EXTRA_READ_PATHS
-    _SAFE_WRITE_EXACT = (_WORKSPACE,)
+    # Allowed paths: additional directories the agent can read AND write
+    _EXTRA_PATHS = {extra_paths_repr}
+    _EXTRA_PREFIXES = tuple(p + _os.sep for p in _EXTRA_PATHS)
+    _SAFE_READ_PREFIXES = (_WORKSPACE_SEP, "/tmp/") + _EXTRA_PREFIXES
+    _SAFE_WRITE_PREFIXES = (_WORKSPACE_SEP,) + _EXTRA_PREFIXES
+    _SAFE_READ_EXACT = (_WORKSPACE, "/tmp") + _EXTRA_PATHS
+    _SAFE_WRITE_EXACT = (_WORKSPACE,) + _EXTRA_PATHS
     def _safe_open(file, mode="r", *args, **kwargs):
         if isinstance(file, (str, _os.PathLike)):
             real = _os.path.realpath(str(file))
@@ -4366,7 +4359,7 @@ def tool_create_word(args: Dict) -> str:
     if not filepath.endswith(".docx"):
         filepath += ".docx"
 
-    ok, msg = SECURITY.validate_path(filepath, write=True)
+    ok, msg = SECURITY.validate_path(filepath)
     if not ok:
         return f"Error: {msg}"
 
@@ -4455,7 +4448,7 @@ def tool_create_excel(args: Dict) -> str:
     if not filepath.endswith(".xlsx"):
         filepath += ".xlsx"
 
-    ok, msg = SECURITY.validate_path(filepath, write=True)
+    ok, msg = SECURITY.validate_path(filepath)
     if not ok:
         return f"Error: {msg}"
 
@@ -4533,7 +4526,7 @@ def tool_create_markdown(args: Dict) -> str:
     if not filepath.endswith(".md"):
         filepath += ".md"
 
-    ok, msg = SECURITY.validate_path(filepath, write=True)
+    ok, msg = SECURITY.validate_path(filepath)
     if not ok:
         return f"Error: {msg}"
 
@@ -4558,7 +4551,7 @@ def tool_create_notebook(args: Dict) -> str:
     if not filepath.endswith(".ipynb"):
         filepath += ".ipynb"
 
-    ok, msg = SECURITY.validate_path(filepath, write=True)
+    ok, msg = SECURITY.validate_path(filepath)
     if not ok:
         return f"Error: {msg}"
 
@@ -4641,7 +4634,7 @@ def tool_create_chart(args: Dict) -> str:
     if not filepath.lower().endswith(('.png', '.jpg', '.jpeg', '.svg', '.pdf')):
         filepath += ".png"
 
-    ok, msg = SECURITY.validate_path(filepath, write=True)
+    ok, msg = SECURITY.validate_path(filepath)
     if not ok:
         return f"Error: {msg}"
 
@@ -4896,7 +4889,7 @@ def tool_create_pdf(args: Dict) -> str:
     if not filepath.lower().endswith('.pdf'):
         filepath += ".pdf"
 
-    ok, msg = SECURITY.validate_path(filepath, write=True)
+    ok, msg = SECURITY.validate_path(filepath)
     if not ok:
         return f"Error: {msg}"
 
@@ -6103,7 +6096,7 @@ def _extract_and_append_memories(agent: "Agent", output_fn: Callable = None) -> 
 
         # Append to memory.md (create if missing)
         # Security: validate path before write (defense-in-depth; path is workspace-relative)
-        path_ok, path_msg = SECURITY.validate_path(memory_path, write=True)
+        path_ok, path_msg = SECURITY.validate_path(memory_path)
         if not path_ok:
             logging.warning(f"Memory extraction: path rejected: {path_msg}")
             return None
