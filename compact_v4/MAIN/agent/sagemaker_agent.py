@@ -1674,12 +1674,24 @@ AWS access tiers (SageMaker execution role):
                 return output
             return output[:max_size] + f"\n[Truncated - {len(output):,} chars total]"
 
-# Auto-detect git repo root: if workspace is a subdirectory of a git repo,
-# automatically add the repo root as an allowed_path so the agent can access
-# sibling directories (e.g., compact_v4/ can access sagemaker-coding-agent/).
-def _auto_detect_repo_root(workspace: str, existing_paths: list) -> list:
-    """If workspace is inside a git repo, return repo root as additional allowed path."""
+# Auto-detect environment: expand allowed_paths based on where we're running.
+# 1. SageMaker: add /home/ec2-user/SageMaker/ so agent can access any folder on the instance
+# 2. Git repo: if workspace is a subdirectory, add the repo root
+def _auto_detect_allowed_paths(workspace: str, existing_paths: list) -> list:
+    """Auto-detect additional allowed paths based on environment."""
     extra = list(existing_paths or [])
+
+    # --- SageMaker detection ---
+    # SageMaker notebook instances use /home/ec2-user/SageMaker/ as the root.
+    # SageMaker Studio uses /home/sagemaker-user/.
+    # Allow the entire SageMaker home so the agent can work on any project.
+    for sm_root in ["/home/ec2-user/SageMaker", "/home/sagemaker-user"]:
+        if os.path.isdir(sm_root) and sm_root not in extra:
+            extra.append(sm_root)
+            logging.info(f"Auto-detected SageMaker environment: {sm_root} (added to allowed_paths)")
+            break  # Only add one
+
+    # --- Git repo root detection ---
     try:
         import subprocess
         result = subprocess.run(
@@ -1687,18 +1699,18 @@ def _auto_detect_repo_root(workspace: str, existing_paths: list) -> list:
             capture_output=True, text=True, timeout=5, cwd=workspace,
         )
         if result.returncode == 0:
-            repo_root = result.stdout.strip()
-            repo_root_resolved = os.path.realpath(repo_root)
+            repo_root = os.path.realpath(result.stdout.strip())
             ws_resolved = os.path.realpath(workspace)
             # Only add if repo root is a PARENT of workspace (not the same dir)
-            if ws_resolved.startswith(repo_root_resolved + os.sep) and repo_root_resolved not in extra:
-                extra.append(repo_root_resolved)
-                logging.info(f"Auto-detected git repo root: {repo_root_resolved} (added to allowed_paths)")
+            if ws_resolved.startswith(repo_root + os.sep) and repo_root not in extra:
+                extra.append(repo_root)
+                logging.info(f"Auto-detected git repo root: {repo_root} (added to allowed_paths)")
     except Exception:
         pass  # No git, or not a repo — skip silently
+
     return extra
 
-_auto_allowed = _auto_detect_repo_root(CONFIG.workspace, CONFIG.allowed_paths)
+_auto_allowed = _auto_detect_allowed_paths(CONFIG.workspace, CONFIG.allowed_paths)
 
 # Initialize security
 SECURITY = SecurityManager(
