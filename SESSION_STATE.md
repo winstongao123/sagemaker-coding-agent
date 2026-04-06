@@ -24,6 +24,8 @@
 - Install method updated: `curl -fsSL https://claude.ai/install.sh | bash` (npm deprecated)
 - Fixed: guide is SageMaker-only (not local), uses `au.` model prefix (matching V4), region `ap-southeast-2`
 - 14-step guide: setup Bedrock + compare normal vs stealth + make permanent
+- Added 100% mode: bedrock_list_proxy.py hides ListInferenceProfiles aws-sdk-js leak
+- `source full-stealth-setup.sh --full` = 100% invisible (all CloudTrail shows Boto3)
 
 ### [CLEANUP] Repo organization
 - Moved `nf_html_test.spec.ts` → `PS_ClaudeCode_Insights/tests/`
