@@ -66,3 +66,5 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - V4.6.0 complete with post-release fixes. Review system near-parity with Runnable.
 - Remaining gaps: Runnable has remote review sessions (ultrareview/CCR), fork semantics, auto-invocation, Playwright browser automation. These are infrastructure, not prompt quality.
 - **Weighted average: ~85% of Runnable** (up from ~70% before fixes)
+- 7 gaps documented in `compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md`
+- Ceiling without architecture rework: ~97% (gaps #1-5 fixable, #6-7 need fork/discovery)

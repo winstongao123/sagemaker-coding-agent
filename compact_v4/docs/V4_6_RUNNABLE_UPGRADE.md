@@ -117,15 +117,148 @@ V4.6 REVIEW ARCHITECTURE:
   review agent type → specialized parallel reviewer
 ```
 
-## Remaining Differences (V4 vs Runnable)
+## Remaining Gaps — Full Honest Audit (7 Items)
 
-| Feature | Runnable Has | V4.6 Status |
-|---------|-------------|-------------|
-| Remote review sessions (ultrareview) | Yes — CCR bughunter | No — local only |
-| Fork semantics (cheap context-inheriting agents) | Yes | No — fresh sub-agents only |
-| Auto-invocation via trigger phrases | Yes — when_to_use field | No — manual /skill use |
-| Billing/quota gating | Yes — overage dialog | No — Bedrock pricing only |
-| Browser automation (Playwright, Chrome MCP) | Yes — verification agent | No — CLI/curl only |
-| Reactive compaction | Yes — microcompaction | V4 has basic compaction |
+Deep audit conducted 2026-04-10 comparing every behavioral pattern in Runnable's codebase against V4.6.0.
 
-These are infrastructure differences, not prompt quality. The prompt patterns (which drive actual review quality) are now at parity.
+### Gap Summary
+
+| # | Gap | Type | Fixable? | Effort | Impact |
+|---|-----|------|---------|--------|--------|
+| 1 | Verification contract in system prompt | PROMPT | Yes | 5 min | HIGH — model doesn't know it MUST verify after 3+ edits |
+| 2 | `when_to_use` guidance for agent types | PROMPT | Yes | 10 min | MEDIUM — model doesn't know which agent to pick |
+| 3 | Multi-agent false-positive filtering | SKILL | Yes | 15 min | MEDIUM — security review relies on single agent's judgment |
+| 4 | Auto-nudge after 3+ task completions | CODE | Yes (Python) | Medium | HIGH — model forgets to verify unless reminded |
+| 5 | `criticalSystemReminder` injection | CODE | Yes (Python) | Medium | MEDIUM — verify sub-agents can drift from format |
+| 6 | Fork semantics (context-inheriting agents) | ARCHITECTURE | No | High | MEDIUM — sub-agents are expensive and context-blind |
+| 7 | Skill discovery auto-surfacing | CODE | No | High | MEDIUM — model can't use skills it doesn't know about |
+
+### Gap 1: Verification Contract in System Prompt (PROMPT fix)
+
+**What Runnable does**: System prompt at `prompts.ts:394` states: "When non-trivial implementation happens (3+ file edits, backend/API changes, infrastructure changes), independent adversarial verification MUST happen before reporting completion. Spawn Agent with subagent_type=verification."
+
+**What V4 has**: System prompt says "After 3+ file edits: spawn a verify sub-agent before reporting completion." But it's buried in "Doing Tasks" section, not a standalone contract.
+
+**Fix**: Move to a dedicated `# Verification Contract` section in SYSTEM_PROMPT with stronger language.
+
+### Gap 2: `when_to_use` Guidance for Agent Types (PROMPT fix)
+
+**What Runnable does**: Each agent definition has a `whenToUse` field displayed in the Agent tool description:
+- `explore`: "Fast agent for exploring codebases. Use when you need to find files, search code..."
+- `verification`: "Use to verify implementation is correct. Invoke after 3+ file edits, backend/API changes..."
+- `plan`: "Software architect agent for designing implementation plans..."
+
+**What V4 has**: Agent types have `description` but it's only shown in the task tool's enum, not as guidance. The model sees "build, plan, explore, verify, general, review" but not WHEN to use each.
+
+**Fix**: Expand the task tool description to include `when_to_use` for each agent type.
+
+### Gap 3: Multi-Agent False-Positive Filtering (SKILL fix)
+
+**What Runnable does**: Security review spawns parallel sub-agents, each independently verifying one finding. Only findings where confidence >= 0.8 survive. This is a 3-stage pipeline:
+```
+Stage 1: Agent A finds all potential vulnerabilities
+Stage 2: Agents B, C, D (parallel) each verify 2-3 findings independently
+Stage 3: Only findings verified with confidence >= 0.8 kept
+```
+
+**What V4 has**: Single agent does find + filter + report. Works, but single agents are more likely to confirm their own findings.
+
+**Fix**: Update security-review skill to use 2-stage pattern with parallel verification agents.
+
+### Gap 4: Auto-Nudge After 3+ Task Completions (CODE fix)
+
+**What Runnable does**: `TodoWriteTool.ts:104-107` detects when 3+ tasks are marked complete without a verification step. Injects a NOTE into the tool result: "You just closed out 3+ tasks and none was a verification step. Before writing your final summary, spawn the verification agent..."
+
+**What V4 has**: No automatic detection. Model must remember on its own.
+
+**Fix**: Add nudge injection in `tool_todo_write()` when 3+ tasks move to "completed" status and none has "verif" in the name.
+
+### Gap 5: `criticalSystemReminder` Injection (CODE fix)
+
+**What Runnable does**: Agent definitions can set `criticalSystemReminder_EXPERIMENTAL` — a short string that's injected as a `<system-reminder>` attachment at EVERY user turn during the sub-agent's conversation. Example for verification agent: "CRITICAL: This is a VERIFICATION-ONLY task. You CANNOT edit, write, or create files IN THE PROJECT DIRECTORY."
+
+**What V4 has**: The reminder is appended to `prompt_suffix` (seen once at start), not re-injected every turn.
+
+**Fix**: Add `critical_reminder` field to AGENT_TYPES. In the agent loop, inject it as a system-level message before each LLM call.
+
+### Gap 6: Fork Semantics — Context-Inheriting Agents (ARCHITECTURE — cannot fix)
+
+**What it is**: Runnable can "fork" an agent — the fork inherits the parent's full conversation history and shares the prompt cache.
+
+```
+FRESH SUB-AGENT (V4):
+  Parent has 50 messages of context
+  Sub-agent starts with messages = [] (zero context)
+  Must explain everything in the prompt text
+  Pays full price for new prompt cache
+  
+FORK (Runnable):
+  Parent has 50 messages
+  Fork starts with all 50 messages pre-loaded
+  Prompt is just a short directive ("now review what we discussed")
+  Reuses parent's prompt cache (~$0 startup cost)
+  Knows everything the parent knows
+```
+
+**Why it matters**:
+- **Cost**: Forks share cache (nearly free). V4 sub-agents build new cache (~$0.01-0.05 each).
+- **Quality**: Forks know the full conversation context. V4 sub-agents only know what's in their prompt.
+- **Speed**: Forks skip re-uploading system prompt. V4 sub-agents re-upload everything.
+
+**Why V4 can't add it**: V4's `Agent.__init__` creates `self.messages = []`. Fork would require:
+1. Shared message history (reference, not copy — or efficient copy)
+2. Shared cache tokens (BedrockClient would need to pass cache state)
+3. Thread-safe branching (fork modifies messages without corrupting parent)
+4. Bedrock API support for cache sharing across requests (may not exist)
+
+This is a fundamental architecture change to `Agent`, `BedrockClient`, and the threading model.
+
+**Impact**: Medium. For review/verify work (short-lived sub-agents with focused tasks), fresh sub-agents work fine because the prompt contains all needed context. Forks matter more for long research tasks where context accumulation is valuable.
+
+### Gap 7: Skill Discovery Auto-Surfacing (CODE — cannot fix easily)
+
+**What it is**: Runnable automatically searches "which skills match the current task?" and injects suggestions into the conversation.
+
+```
+MANUAL (V4):
+  User types "fix this bug"
+  Agent has NO IDEA that verify/simplify skills exist
+  Never runs verification unless user explicitly says "/skill use verify"
+
+AUTO-SURFACING (Runnable):
+  User types "fix this bug"
+  System searches: "which skills match 'fix bug'?"
+  Finds: verify (when_to_use: "after implementation"), simplify (when_to_use: "review changes")
+  Injects: "<system-reminder>Skills relevant to your task: verify, simplify</system-reminder>"
+  Model sees suggestion → decides to use verify after fixing
+```
+
+**How Runnable implements it**: `prefetch.ts` calls a remote HTTP skill search service during query execution. Results are injected as `skill_discovery` attachments into the conversation. Feature-gated behind `EXPERIMENTAL_SKILL_SEARCH`.
+
+**Why V4 can't easily add it**:
+- Option A: Remote service — V4 has no HTTP service infrastructure for skill search.
+- Option B: Keyword matching in Python — fragile, high false positive rate.
+- Option C: Use LLM to decide — costs an extra API call per turn ($$$).
+- Option D: Static mapping (skill → trigger keywords) — works but limited.
+
+**Practical alternative for V4**: Option D is viable. Add a `triggers` field to skill YAML frontmatter listing keywords. In the agent loop, scan the user message for matches and inject a reminder. Example:
+```yaml
+---
+name: verify
+triggers: ["verify", "check", "test", "after edits", "before commit"]
+---
+```
+This is ~30 lines of Python and covers 80% of cases.
+
+**Impact**: Medium. Users who know V4's skills invoke them manually. New users miss skills entirely.
+
+### Capability Rating After All Gaps Documented
+
+| State | Weighted Rating | What's Included |
+|-------|----------------|-----------------|
+| V4.5 (before this session) | ~40% | Basic checklist review, confirmatory verification |
+| V4.6.0 (current) | ~85% | Parallel review, adversarial verify, security review, evidence format |
+| V4.6.0 + gaps #1-3 fixed | ~92% | + verification contract, agent guidance, FP filtering |
+| V4.6.0 + gaps #1-5 fixed | ~97% | + auto-nudge, critical reminder injection |
+| Theoretical maximum (no fork/discovery) | ~97% | Ceiling without architecture rework |
+| Runnable | 100% | Fork semantics + skill discovery + infrastructure |
