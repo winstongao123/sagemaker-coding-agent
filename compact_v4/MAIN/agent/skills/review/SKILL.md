@@ -1,13 +1,26 @@
 ---
 name: code-review
-description: Conduct a thorough code review checking security, quality, performance, architecture, and testing
+description: Comprehensive code review — parallel agents for reuse, quality, efficiency + security checklist + iterative feedback
 ---
 
-# Code Review Skill
+# Code Review
 
-When reviewing code, analyze all changed files systematically using this checklist.
+Systematic code review using parallel specialized analysis. This review both identifies issues AND fixes them.
 
-## 1. Security (CRITICAL — must fix before merge)
+## Phase 1: Identify Scope
+
+Determine what to review:
+
+```bash
+git diff --stat
+git diff
+```
+
+If no git changes, review files the user specified or most recently modified files.
+
+## Phase 2: Security Check (CRITICAL — must fix before merge)
+
+Review ALL changed files for these security issues. Any finding here blocks the review:
 
 - [ ] No hardcoded secrets (API keys, passwords, tokens, connection strings)
 - [ ] No SQL injection (string concatenation in queries → use parameterized queries)
@@ -17,49 +30,50 @@ When reviewing code, analyze all changed files systematically using this checkli
 - [ ] No path traversal risks (user-controlled file paths → validate and sanitize)
 - [ ] Authentication and authorization checks present on protected routes
 - [ ] Sensitive data not logged or exposed in error messages
-- [ ] Dependencies checked for known vulnerabilities
 
-## 2. Code Quality (HIGH — should fix)
+If ANY security issue is found, report it immediately as **[CRITICAL]** and fix it before proceeding.
 
-- [ ] Functions are focused and do one thing well (<50 lines)
-- [ ] No unnecessary complexity or over-engineering
-- [ ] Nesting depth <4 levels (use early returns to simplify)
-- [ ] Error handling is specific (not bare `except:`, not swallowed)
-- [ ] Variable and function names are clear and descriptive
-- [ ] No dead code, unused imports, or commented-out blocks
-- [ ] No debug statements left (print(), console.log, pdb, debugger)
-- [ ] No duplicated logic (DRY violations — extract to shared function)
-- [ ] Consistent code style with surrounding codebase
-- [ ] Magic numbers replaced with named constants
+## Phase 3: Launch Three Review Agents in Parallel
 
-## 3. Performance (MEDIUM — consider fixing)
+Use the `task` tool to launch all three agents concurrently in a single message. Pass each agent the full diff and the list of changed files. Use `subagent_type: "review"` for all three.
 
-- [ ] No N+1 queries or unnecessary database/API calls
-- [ ] No O(n^2) algorithms where O(n log n) or O(n) is possible
-- [ ] Expensive operations cached or memoized
-- [ ] No unnecessary memory allocation or deep copies
-- [ ] Large collections processed lazily (generators, iterators) where appropriate
-- [ ] Database queries select only needed columns/fields
+### Agent 1: Code Reuse Review
 
-## 4. Architecture (MEDIUM — consider fixing)
+1. **Search for existing utilities and helpers** that could replace newly written code. Look in utility directories, shared modules, and files adjacent to the changed ones.
+2. **Flag any new function that duplicates existing functionality.** Suggest the existing function.
+3. **Flag inline logic that could use an existing utility** — hand-rolled string manipulation, manual path handling, custom environment checks, ad-hoc type guards.
 
-- [ ] Separation of concerns (business logic not mixed with I/O or UI)
-- [ ] New code follows existing patterns and conventions
-- [ ] No circular dependencies introduced
-- [ ] Configuration externalized (not hardcoded paths, URLs, or values)
+### Agent 2: Code Quality Review
 
-## 5. Testing (MEDIUM — should fix for critical paths)
+1. **Redundant state**: state duplicating existing state, cached values that could be derived
+2. **Parameter sprawl**: adding new parameters instead of restructuring
+3. **Copy-paste with variation**: near-duplicate code blocks → unify with shared abstraction
+4. **Leaky abstractions**: exposing internal details, breaking abstraction boundaries
+5. **Stringly-typed code**: raw strings where constants/enums/typed alternatives exist
+6. **Dead code**: unused imports, commented-out blocks, unreachable branches
+7. **Complexity**: functions >50 lines, nesting >4 levels, bare except/catch
+8. **Naming**: unclear variables, misleading function names, magic numbers without constants
 
-- [ ] Critical paths have test coverage (auth, payments, data processing)
-- [ ] Edge cases handled (empty input, null, boundaries, duplicates)
-- [ ] Tests test behavior, not implementation details
-- [ ] Tests are independent (no shared mutable state between tests)
-- [ ] Error paths tested (what happens when things fail?)
+### Agent 3: Efficiency Review
 
-## Output Format
+1. **Unnecessary work**: redundant computations, repeated file reads, duplicate API calls, N+1 patterns
+2. **Missed concurrency**: independent operations running sequentially
+3. **Hot-path bloat**: blocking work added to startup or per-request paths
+4. **No-op updates**: state updates in loops that fire unconditionally
+5. **TOCTOU**: pre-checking existence before operating (operate directly, handle error)
+6. **Memory**: unbounded data structures, missing cleanup, listener leaks
+7. **Overly broad operations**: reading entire files when a portion suffices
+
+## Phase 4: Aggregate and Fix
+
+Wait for all three agents. Aggregate findings. Fix each issue directly:
+- If a finding is a false positive, note it and skip — do not argue with the finding.
+- For each fix, verify it doesn't break existing functionality.
+
+## Phase 5: Report
 
 ### 1. Summary
-One paragraph overview of overall code quality and readiness.
+One paragraph overview of code quality and readiness.
 
 ### 2. Issues Found
 List each issue with severity and location:
@@ -68,16 +82,27 @@ List each issue with severity and location:
 - **[MEDIUM]** `file.py:123` — Description of the improvement
 - **[LOW]** `file.py:156` — Minor style or readability note
 
-### 3. Positive Observations
+### 3. Issues Fixed
+List what was fixed in this review pass (with file:line references).
+
+### 4. Positive Observations
 Note what was done well (good patterns, clean abstractions, thorough error handling).
 
-### 4. Suggestions
+### 5. Suggestions
 Non-blocking improvements for future consideration.
 
-### 5. Rating
-**X/10** — with brief justification. Criteria:
+### 6. Rating
+**X/10** — with brief justification:
 - 9-10: Production-ready, well-tested, no issues
 - 7-8: Good quality, minor issues only
 - 5-6: Functional but needs improvements before production
 - 3-4: Significant issues that must be addressed
 - 1-2: Major security or correctness problems
+
+## Feedback Refinement
+
+If the user provides feedback on review findings:
+1. Re-examine the specific areas mentioned
+2. Search for additional evidence supporting or refuting the feedback
+3. Update the review with revised findings
+4. Apply fixes if the feedback identifies real issues

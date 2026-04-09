@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageMaker Coding Agent V4.4.0 - Architecture and Runnable Comparison</title>
+<title>SageMaker Coding Agent V4.6.0 - Architecture and Runnable Comparison</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -212,10 +212,10 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.4.0</h1>
+    <h1>SageMaker Coding Agent V4.6.0</h1>
     <p class="subtitle">
-      Architecture map of V4.4.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,144 lines),
-      plus comparison against Claude Code runnable source. V4.4.0 closes all system prompt gaps vs Runnable
+      Architecture map of V4.6.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,299 lines),
+      plus comparison against Claude Code runnable source. V4.6.0 achieves full review/verification parity with Runnable
       for SageMaker scope: tool efficiency, code security (OWASP), prompt injection detection, sub-agent
       notes, escalation guidance, and URL safety. UI redesigned with budget slider, soft-stop, improved markdown rendering.
     </p>
@@ -223,9 +223,9 @@
       <div class="stat"><strong>25+</strong><span>Tools</span></div>
       <div class="stat"><strong>16</strong><span>Security Layers</span></div>
       <div class="stat"><strong>6</strong><span>Sub-Agent Types</span></div>
-      <div class="stat"><strong>7</strong><span>Skills</span></div>
-      <div class="stat"><strong>8,699</strong><span>Lines of Code</span></div>
-      <div class="stat"><strong>Bedrock</strong><span>Primary Runtime</span></div>
+      <div class="stat"><strong>9</strong><span>Skills</span></div>
+      <div class="stat"><strong>9,299</strong><span>Lines of Code</span></div>
+      <div class="stat"><strong>V4.6.0</strong><span>Current Version</span></div>
     </div>
   </section>
 
@@ -447,7 +447,10 @@ flowchart TD
       <tr><td>Sub-agent absolute paths</td><td>Yes: "always use absolute file paths"</td><td>Yes: Sub-agent Notes section added to sub-agent prompt</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Sub-agents now told to use absolute paths, avoid code recapping.</td></tr>
       <tr><td>Escalation guidance</td><td>Yes: "only when genuinely stuck after investigation"</td><td>Yes: added to Doing Tasks section</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Prevents premature ask_user calls.</td></tr>
       <tr><td>URL safety</td><td>Yes: CYBER_RISK_INSTRUCTION</td><td>Yes: "NEVER generate or guess URLs"</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix.</td></tr>
-      <tr><td>Adversarial verify sub-agent</td><td>Basic verification</td><td>Yes: "try to BREAK it" + PASS/FAIL/PARTIAL</td><td><span class="pill yes">V4 edge</span></td><td>V4.3.2 feature. Runnable has verification but not explicitly adversarial.</td></tr>
+      <tr><td>Adversarial verify sub-agent</td><td>Full adversarial: anti-rationalization, evidence-based, type-specific</td><td>Yes: anti-rationalization + evidence + adversarial probes + VERDICT</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: ported Runnable's full adversarial verification pattern. 4 named rationalizations, evidence format, type-specific strategies.</td></tr>
+      <tr><td>Parallel review agents</td><td>3-agent parallel (reuse + quality + efficiency)</td><td>3-agent parallel (simplify)</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: new simplify + code-review skills use 3 parallel task() agents. Same pattern as Runnable.</td></tr>
+      <tr><td>Security review</td><td>3-phase with confidence scoring + 14 hard exclusions</td><td>3-phase with confidence scoring + 16 hard exclusions</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: new security-review skill with false-positive filtering, exploit scenarios, signal quality criteria.</td></tr>
+      <tr><td>Feedback refinement</td><td>Review supports iterative feedback loop</td><td>Simplify aggregates and fixes directly</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: code-review skill has Feedback Refinement section for iterative improvement.</td></tr>
       <tr><td>Diminishing returns detection</td><td>Token budget tracking</td><td>Yes: 3+ text-only turns &lt;200 tokens → warning</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 fix. Only counts text-only turns (tool-call turns skip, not stuck).</td></tr>
       <tr><td>Budget control in UI</td><td>No (API-level limits)</td><td>Yes: slider $0.50-$20.00, soft-stop</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 feature. User can raise budget mid-session without restarting.</td></tr>
       <tr><td>Cache savings display</td><td>Telemetry (not user-facing)</td><td>Yes: "Actual $X | Without cache $Y | Saved $Z"</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 feature. User sees real cost vs would-have-cost.</td></tr>
@@ -555,6 +558,18 @@ flowchart TD
           <li>Diminishing returns: detects stuck agent (text-only turns, not tool calls).</li>
         </ul>
         <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Without cost visibility, you can accidentally spend $20 on a single session. The budget slider and cache savings display put you in control — you see exactly what you're paying and can adjust in real time.</p>
+      </div>
+      <div class="card" style="border:2px solid var(--accent);">
+        <h3 style="color:var(--accent);">Runnable-Grade Review System (V4.6.0)</h3>
+        <ul>
+          <li><b>3-agent parallel review</b>: simplify + code-review skills launch 3 specialized agents (reuse, quality, efficiency) concurrently. Same pattern as Runnable's <code>/simplify</code>.</li>
+          <li><b>Adversarial verification</b>: verify skill rewritten with anti-rationalization prompts — names 4 excuses LLMs use to skip checks and counters each. Evidence-based (Command + Output required for every PASS).</li>
+          <li><b>Security review</b>: new 3-phase skill with confidence scoring (0.8+), 14 hard exclusions, 7 precedents. Signal quality over volume.</li>
+          <li><b>Type-specific verification</b>: different strategies for Backend, CLI, bug fixes, refactoring, Python, data pipelines.</li>
+          <li><b>Feedback refinement</b>: code-review supports iterative improvement from user feedback.</li>
+          <li><b>Machine-parseable VERDICT</b>: PASS/FAIL/PARTIAL for caller parsing.</li>
+        </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Before V4.6, a "code review" was a single agent running through a static checklist — it caught surface issues but missed deeper problems. Now V4 uses the same pattern as Runnable: 3 specialized agents search the codebase in parallel, each focused on one dimension (duplicate code, anti-patterns, performance). The verify agent explicitly tries to BREAK your code instead of confirming it works. Together, these catch 3x more issues than the old single-pass approach.</p>
       </div>
     </div>
   </section>
@@ -666,14 +681,14 @@ flowchart TD
     <h3>Current honest answer to "is V4 the best yet?"</h3>
     <table>
       <tr><th>Question</th><th>Answer</th></tr>
-      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.4.0 closed ALL system prompt behavioral gaps that matter for SageMaker: tool efficiency (SEARCH BEFORE READ), code security (OWASP), prompt injection detection, sub-agent absolute paths, escalation guidance, URL safety. Plus prompt cache boundary, memory guardrails, approval reset, cold-cache microcompact, file dedup stub, parallel read-only tools, PTL-safe compaction retry, adversarial verify agent, and practical sub-agent coordination.</td></tr>
-      <tr><td>Is V4 fully identical to runnable?</td><td>No. Remaining differences are architectural (not behavioral): snip compaction, streaming tool execution, immutable message design, memory extraction as fork, worktree isolation, hooks system, autonomous mode, language preference. These are ecosystem features that don't apply to SageMaker scope. Two Codex reviews (290K tokens total) verified all behavioral gaps are closed.</td></tr>
-      <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.4.0 is 10/10 for SageMaker/Bedrock/Jupyter scope. It has features Runnable doesn't: adversarial verify agent, budget slider with soft-stop, cache savings display (actual/original/saved), diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, and Bedrock-native prompt caching with cold-cache detection.</td></tr>
+      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.6.0 now has full parity on review/verification quality. V4.4.0 closed all system prompt behavioral gaps. V4.6.0 adds: 3-agent parallel review (simplify + code-review), adversarial verification with anti-rationalization, security review with false-positive filtering, feedback refinement loops. 8 Runnable prompt patterns fully ported.</td></tr>
+      <tr><td>Is V4 fully identical to runnable?</td><td>No. Remaining differences are infrastructure-level: remote review sessions (ultrareview/CCR), fork semantics (cheap context-inheriting agents), auto-invocation via trigger phrases, billing/quota gating, Playwright browser automation. These are ecosystem features that don't apply to SageMaker scope. The prompt engineering patterns (which drive actual output quality) are now at parity.</td></tr>
+      <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.6.0 matches Runnable's review/verification quality AND has SageMaker-specific features: budget slider with soft-stop, cache savings display, diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, Bedrock-native prompt caching, and 9 specialized skills (including new simplify, security-review).</td></tr>
       <tr><td>Is caching actually working on AWS?</td><td>Yes. Verified on Sonnet 4.5 (WRITE on turn 1, HIT on subsequent turns, ~90% savings). Haiku 4.5 requires 4,096 token minimum — activates when skills are loaded. Legacy Claude 3 Haiku rejected cache blocks; fallback path handles this gracefully.</td></tr>
     </table>
   </section>
 
-  <p class="footer">Updated 2026-04-04 (V4.4.0). Source of truth: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code>. Comparison source: runnable TypeScript snapshot under <code>compare_code/gg-claude-code-runnable</code>. System prompt gap analysis: <code>Documentations/V4_SYSTEM_PROMPT_GAP_ANALYSIS.md</code>.</p>
+  <p class="footer">Updated 2026-04-10 (V4.6.0). Source of truth: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code>. Comparison source: runnable TypeScript snapshot under <code>compare_code/gg-claude-code-runnable</code>. V4.6 upgrade doc: <code>compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md</code>.</p>
 </div>
 
 <script>

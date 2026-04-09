@@ -298,7 +298,7 @@ flowchart TD
 <div id="tab-v4has" class="tab-content">
 
 <h2>Runnable Features That V4 Has Implemented</h2>
-<p class="desc">Everything below exists in V4 v4.2.0 - matching or exceeding the runnable.</p>
+<p class="desc">Everything below exists in V4 v4.6.0 - matching or exceeding the runnable. V4.6.0 adds review system parity (simplify, security-review, adversarial verify, feedback refinement).</p>
 
 <table>
 <tr><th>Feature</th><th>Runnable</th><th>V4 Implementation</th><th>Version</th></tr>
@@ -593,6 +593,11 @@ flowchart TD
  <td><b>Compact Circuit Breaker</b></td>
  <td>After 3 consecutive compact failures, auto-compact paused. Manual button still works. Pre-send also tracked.</td>
  <td>No circuit breaker. Failed compacts retry indefinitely.</td>
+</tr>
+<tr>
+ <td><b>Review System Parity (V4.6.0)</b></td>
+ <td>9 skills including: simplify (3-agent parallel review+fix), security-review (3-phase with false-positive filtering), adversarial verify (anti-rationalization), code-review (parallel+feedback). All ported from Runnable's prompt engineering patterns.</td>
+ <td>Has same patterns in TypeScript (simplify.ts, verificationAgent.ts, security-review.ts). V4 now matches via skills/sub-agent system.</td>
 </tr>
 </table>
 

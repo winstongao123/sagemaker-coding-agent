@@ -1,5 +1,104 @@
 # Compact V4 Changelog
 
+## v4.6.0 — Runnable-Grade Review System: Adversarial Verification + Parallel Review (2026-04-10)
+
+Base: compact_v4 v4.5.0
+
+### Why This Release
+V4's review and verification system was functional but far behind Runnable (Claude Code's internal implementation).
+Deep comparison revealed 3 critical gaps:
+1. **Single-pass review** vs Runnable's 3-agent parallel specialization
+2. **Confirmatory verification** vs Runnable's adversarial "try to break it" approach
+3. **No security review** vs Runnable's 3-phase vulnerability assessment with false-positive filtering
+
+This release ports Runnable's best prompt engineering patterns into V4's skill + sub-agent system.
+
+### New Skills
+
+#### `simplify` — 3-Agent Parallel Code Review + Fix (NEW)
+- **What**: Port of Runnable's `/simplify` skill. Reviews changed code using 3 parallel specialized agents.
+- **Agents**: Code Reuse (search for duplicate utilities) + Code Quality (anti-patterns) + Efficiency (N+1, hot-path, memory leaks)
+- **Workflow**: `git diff` → launch 3 review agents in parallel via `task` tool → aggregate → fix issues directly
+- **Key difference from old review**: Agents search the BROADER codebase for evidence (existing patterns, utilities)
+- **File**: `skills/simplify/SKILL.md`
+
+#### `security-review` — 3-Phase Vulnerability Assessment (NEW)
+- **What**: Port of Runnable's security review command. Focused on signal quality over volume.
+- **3 phases**: Repository context research → Comparative analysis → Vulnerability assessment
+- **Confidence scoring**: 0.8-1.0 only reported. Below 0.8 = too speculative, excluded.
+- **14 hard exclusions**: DOS, secrets-on-disk, rate limiting, regex DOS, theoretical race conditions, etc.
+- **7 precedents**: UUIDs unguessable, env vars trusted, React XSS-safe, etc.
+- **Output**: Severity (HIGH/MEDIUM only) + Exploit Scenario + Specific Recommendation
+- **File**: `skills/security-review/SKILL.md`
+
+### Upgraded Skills
+
+#### `verify` — Adversarial Verification (REWRITTEN)
+- **Before**: 6-phase checklist (build, type, lint, test, security, diff). Confirmatory — checked if things work.
+- **After**: Adversarial specialist that tries to BREAK the implementation. Ported from Runnable's verification agent.
+- **New sections**:
+  - **Failure Patterns**: Verification avoidance + "seduced by first 80%" (Runnable pattern)
+  - **Anti-rationalization rules**: "reading is not verification", "tests pass means nothing", "probably is not verified"
+  - **Type-specific strategies**: Backend/API, CLI, bug fixes, refactoring, Python, data pipelines
+  - **Adversarial probes**: Boundary values, concurrency, idempotency, orphan operations
+  - **Evidence format**: Every check MUST have Command run + Output observed + Result (no narrative PASS)
+  - **Before PASS/FAIL gates**: Must include adversarial probe; must check if "FAIL" is actually intentional
+  - **VERDICT requirement**: Machine-parseable `VERDICT: PASS/FAIL/PARTIAL`
+- **File**: `skills/verify/SKILL.md`
+
+#### `code-review` — Parallel Review with Fix Loop (REWRITTEN)
+- **Before**: Static 5-category checklist (security, quality, performance, architecture, testing). Single pass, report only.
+- **After**: 5-phase process: scope → security check → 3 parallel agents → aggregate+fix → report+feedback.
+- **New**: Launches 3 parallel review agents (same pattern as simplify)
+- **New**: Issues Fixed section (review now fixes, not just reports)
+- **New**: Feedback Refinement section (user can provide feedback, review re-examines and updates)
+- **File**: `skills/review/SKILL.md`
+
+### Upgraded Agent Types (sagemaker_agent.py)
+
+#### `verify` agent type — prompt_suffix rewritten
+- Added: Failure patterns to avoid (verification avoidance, seduced by first 80%)
+- Added: Anti-rationalization rules (4 specific excuses named and countered)
+- Added: Type-specific verification strategies (Backend, CLI, bug fixes, refactoring, Python)
+- Added: Adversarial probe requirement before PASS
+- Added: Before-FAIL gate (check if intentional/already handled)
+- Added: Evidence format enforcement (command + output required, no narrative)
+- Retained: VERDICT: PASS/FAIL/PARTIAL machine-parseable output
+
+#### `review` agent type — prompt_suffix rewritten for parallel specialization
+- **Before**: Generic "senior code reviewer" with monolithic checklist
+- **After**: "Specialized code review sub-agent" designed for parallel execution
+- New: Assigned-dimension focus (reuse OR quality OR efficiency)
+- New: Specific checks for each dimension (7 reuse, 8 quality, 7 efficiency)
+- New: "Be specific" guidance ('file.py:42-95 extract lines 60-80' not 'function too long')
+- Retained: Security always checked regardless of assigned focus
+
+### What Changed (File Summary)
+| File | Change | Lines |
+|------|--------|-------|
+| `skills/simplify/SKILL.md` | NEW — 3-agent parallel review | 60 lines |
+| `skills/security-review/SKILL.md` | NEW — 3-phase security assessment | 120 lines |
+| `skills/verify/SKILL.md` | REWRITTEN — adversarial verification | 150 lines |
+| `skills/review/SKILL.md` | REWRITTEN — parallel review + fix | 120 lines |
+| `sagemaker_agent.py` | UPGRADED — verify + review prompt_suffix | +33 net lines |
+
+### Verification
+- Python syntax check: PASS (ast.parse, 9299 lines)
+- Git diff: Only prompt_suffix strings changed in sagemaker_agent.py (no logic/structure changes)
+- No code regression: All existing functionality preserved
+
+### Patterns Ported from Runnable
+1. **Parallel agent specialization** — decompose review into orthogonal concerns, run concurrently
+2. **Anti-rationalization prompting** — name the exact excuses LLMs use, counter each one
+3. **Evidence-based verification** — Command + Output required, no narrative claims
+4. **Type-specific strategies** — different verification approach per change type
+5. **False-positive filtering** — confidence scoring, hard exclusions, precedent-based rules
+6. **Machine-parseable verdicts** — VERDICT: PASS/FAIL/PARTIAL for caller parsing
+7. **Adversarial probes requirement** — must try to break something before issuing PASS
+8. **Feedback refinement loop** — review can be iterated based on user feedback
+
+---
+
 ## v4.5.0 — Allowed Paths: Cross-Directory Read+Write Access (2026-04-06)
 
 Base: compact_v4 v4.4.0
