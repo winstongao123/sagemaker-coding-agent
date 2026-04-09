@@ -35,7 +35,9 @@ If ANY security issue is found, report it immediately as **[CRITICAL]** and fix 
 
 ## Phase 3: Launch Three Review Agents in Parallel
 
-Use the `task` tool to launch all three agents concurrently in a single message. Pass each agent the full diff and the list of changed files. Use `subagent_type: "review"` for all three.
+Use the `task` tool to launch all three agents concurrently in a single message. Use `subagent_type: "review"` for all three.
+
+**CRITICAL**: You MUST include the full diff output from Phase 1 in each agent's prompt. Sub-agents cannot run `git diff` themselves (they may not have bash access or may be in a different working directory). Copy-paste the diff into each agent's prompt text. Also include the list of changed file paths (absolute paths) so agents can `read_file` to explore further.
 
 ### Agent 1: Code Reuse Review
 

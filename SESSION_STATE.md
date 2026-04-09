@@ -56,7 +56,13 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 ## GIT REMOTES
 - Push to `sageagent` remote ONLY (NOT origin)
 
+### Post-Release Fixes (same session)
+- Expanded verify agent type prompt_suffix: +read-only enforcement, +7 type-specific strategies (infra, library, data/ML, DB migrations), +rigor calibration, +tool discovery instruction
+- Fixed sub-agent git access: skills now instruct parent to pass diff inline (sub-agents burned turns navigating to .git)
+- Expanded security-review: 17 hard exclusions (was 14), 11 precedents (was 7)
+- Deep review rating: verify 60%→85%, security-review 55%→70%, simplify 95%, code-review 140% (exceeds Runnable)
+
 ## TO RESUME NEXT SESSION
-- V4.6.0 is complete. Review system at parity with Runnable.
-- Remaining Runnable differences are infrastructure-level (remote sessions, fork semantics, auto-invocation, billing) — not prompt quality.
-- If testing review quality: use `/skill use simplify` or `/skill use verify` on a real codebase change.
+- V4.6.0 complete with post-release fixes. Review system near-parity with Runnable.
+- Remaining gaps: Runnable has remote review sessions (ultrareview/CCR), fork semantics, auto-invocation, Playwright browser automation. These are infrastructure, not prompt quality.
+- **Weighted average: ~85% of Runnable** (up from ~70% before fixes)

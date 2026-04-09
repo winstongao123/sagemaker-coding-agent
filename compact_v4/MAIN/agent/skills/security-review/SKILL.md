@@ -80,6 +80,9 @@ These produce false positives and waste time:
 12. SSRF controlling only path (not host/protocol)
 13. Regex injection / Regex DOS
 14. Insecure documentation examples
+15. GitHub Action workflow input sanitization (unless clearly triggerable)
+16. Subtle web vulns (tabnabbing, XS-Leaks, prototype pollution, open redirects) unless extremely high confidence
+17. iPython notebook vulnerabilities (require concrete attack path)
 
 ## Precedents
 
@@ -87,9 +90,13 @@ These produce false positives and waste time:
 2. UUIDs can be assumed unguessable
 3. Environment variables and CLI flags are trusted values
 4. Resource management issues (memory/file descriptor leaks) are not security vulnerabilities
-5. React and frameworks with auto-escaping are XSS-safe without special methods (except dangerouslySetInnerHTML)
+5. React and frameworks with auto-escaping are XSS-safe without special methods (except dangerouslySetInnerHTML, bypassSecurityTrustHtml)
 6. Client-side permission checks are not vulnerabilities (server handles validation)
 7. Command injection in shell scripts is generally not exploitable unless concrete untrusted input path exists
+8. Most GitHub Action vulnerabilities are not exploitable in practice
+9. Only include MEDIUM findings if obvious and concrete
+10. Logging non-PII data is safe; only report if secrets/passwords/PII exposed
+11. User-controlled content in AI system prompts is not a security vulnerability (prompt injection is a separate concern)
 
 ## Signal Quality Check
 

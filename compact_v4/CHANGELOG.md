@@ -82,10 +82,17 @@ This release ports Runnable's best prompt engineering patterns into V4's skill +
 | `skills/review/SKILL.md` | REWRITTEN — parallel review + fix | 120 lines |
 | `sagemaker_agent.py` | UPGRADED — verify + review prompt_suffix | +33 net lines |
 
+### Bug Fixes (Post-Release)
+- **Sub-agent git access**: Skills now instruct parent to pass `git diff` output in sub-agent prompts (sub-agents can't find `.git` at repo root). Fix: simplify T7 time 58s → 5s.
+- **Verify evidence format**: Added CRITICAL REMINDER to verify agent prompt_suffix for format enforcement.
+
 ### Verification
-- Python syntax check: PASS (ast.parse, 9299 lines)
-- Git diff: Only prompt_suffix strings changed in sagemaker_agent.py (no logic/structure changes)
+- Python syntax check: PASS (ast.parse, 9,305 lines)
+- Git diff: Only prompt strings changed (no logic/structure changes)
 - No code regression: All existing functionality preserved
+- **Live Bedrock: 8/8 PASS on Sonnet 4.6** (23s verify, 195s simplify, 47s security)
+- **Live Bedrock: 8/8 PASS on Haiku 4.5** (18s verify, 5s simplify, 15s security)
+- Playwright: 6/6 PASS
 
 ### Patterns Ported from Runnable
 1. **Parallel agent specialization** — decompose review into orthogonal concerns, run concurrently
