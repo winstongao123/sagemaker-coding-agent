@@ -37,6 +37,8 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - Python syntax: PASS (ast.parse, 9,299 lines)
 - Git diff: Only prompt strings changed in sagemaker_agent.py (no logic/structure changes)
 - Playwright: 6/6 tests PASS (hero, review card, comparison, bedrock, runnable, mermaid)
+- **Live Bedrock: 8/8 PASS on Sonnet 4.6** (23s verify, 195s simplify, 47s security)
+- **Live Bedrock: 8/8 PASS on Haiku 4.5** (18s verify, 58s simplify, 14s security)
 - No code regression
 
 ### 8 Runnable Patterns Ported
