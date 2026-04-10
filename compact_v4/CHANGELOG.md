@@ -82,6 +82,40 @@ This release ports Runnable's best prompt engineering patterns into V4's skill +
 | `skills/review/SKILL.md` | REWRITTEN — parallel review + fix | 120 lines |
 | `sagemaker_agent.py` | UPGRADED — verify + review prompt_suffix | +33 net lines |
 
+### Gap Closure: 6 of 7 Runnable Gaps Closed
+Deep audit identified 7 remaining gaps vs Runnable. 6 closed in this release (Gap #7 skill discovery skipped — not relevant to SageMaker workflow).
+
+**Gap #1 — Verification Contract (PROMPT)**
+- New `# Verification Contract` section in SYSTEM_PROMPT
+- MUST verify after 3+ non-trivial file edits (logic, API, data flow)
+- Explicitly excludes docs-only, config tweaks, single-file obvious fixes
+
+**Gap #2 — USE WHEN Guidance (PROMPT)**
+- Each of 6 agent types now has `USE WHEN:` in task tool description
+- Model knows: explore for search, plan for design, verify after edits, build for multi-file, review for code review
+
+**Gap #3 — Multi-Agent False-Positive Filtering (SKILL)**
+- Security-review skill gets new Step 4: independent verification pipeline
+- 2+ findings → spawn parallel review agents, each verifies ONE finding
+- Only findings with confidence >= 0.8 survive
+
+**Gap #4 — Auto-Nudge (CODE)**
+- `tool_todo_write()` detects 3+ completed tasks without verification
+- Injects NOTE: "Per Verification Contract, spawn verify sub-agent"
+- Mirrors Runnable's TodoWriteTool.ts:104-107 nudge pattern
+
+**Gap #5 — Critical Reminder Injection (CODE)**
+- New `critical_reminder` field in AGENT_TYPES (verify + review)
+- Injected LAST in sub-agent system prompt (closest to model attention)
+- Verify: "VERIFICATION-ONLY. Command run + Output observed required."
+- Review: "READ-ONLY. Every finding needs file:line + severity + fix."
+
+**Gap #6 — Fork Semantics (CODE)**
+- New `fork` agent type with `fork: True` flag
+- `Agent.__init__` accepts `initial_messages` (deep-copied from parent)
+- Fork child inherits full conversation context — directive-style prompts
+- Prompt cache sharing automatic (same system prompt)
+
 ### Bug Fixes (Post-Release)
 - **Sub-agent git access**: Skills now instruct parent to pass `git diff` output in sub-agent prompts (sub-agents can't find `.git` at repo root). Fix: simplify T7 time 58s → 5s.
 - **Verify evidence format**: Added CRITICAL REMINDER to verify agent prompt_suffix for format enforcement.

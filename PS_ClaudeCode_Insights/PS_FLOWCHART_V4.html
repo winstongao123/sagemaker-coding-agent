@@ -222,9 +222,9 @@
     <div class="stats">
       <div class="stat"><strong>25+</strong><span>Tools</span></div>
       <div class="stat"><strong>16</strong><span>Security Layers</span></div>
-      <div class="stat"><strong>6</strong><span>Sub-Agent Types</span></div>
+      <div class="stat"><strong>7</strong><span>Sub-Agent Types</span></div>
       <div class="stat"><strong>9</strong><span>Skills</span></div>
-      <div class="stat"><strong>9,299</strong><span>Lines of Code</span></div>
+      <div class="stat"><strong>9,381</strong><span>Lines of Code</span></div>
       <div class="stat"><strong>V4.6.0</strong><span>Current Version</span></div>
     </div>
   </section>
@@ -682,7 +682,7 @@ flowchart TD
     <table>
       <tr><th>Question</th><th>Answer</th></tr>
       <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.6.0 now has full parity on review/verification quality. V4.4.0 closed all system prompt behavioral gaps. V4.6.0 adds: 3-agent parallel review (simplify + code-review), adversarial verification with anti-rationalization, security review with false-positive filtering, feedback refinement loops. 8 Runnable prompt patterns fully ported.</td></tr>
-      <tr><td>Is V4 fully identical to runnable?</td><td>No. 7 gaps remain after deep audit. 3 fixable via prompt/skill changes (verification contract, agent guidance, FP filtering → 92%). 2 fixable via Python code (auto-nudge, critical reminder → 97%). 2 unfixable without architecture rework (fork semantics = context-inheriting agents, skill discovery auto-surfacing). Current: ~85%. Ceiling without architecture: ~97%. See <code>compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md</code> for full gap analysis.</td></tr>
+      <tr><td>Is V4 fully identical to runnable?</td><td>~98%. Deep audit found 7 gaps — 6 now closed (verification contract, USE WHEN guidance, FP filtering, auto-nudge, critical reminder, fork semantics). Only Gap #7 (skill discovery auto-surfacing) remains — skipped because SageMaker users invoke skills manually. See <code>compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md</code> for full audit.</td></tr>
       <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.6.0 matches Runnable's review/verification quality AND has SageMaker-specific features: budget slider with soft-stop, cache savings display, diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, Bedrock-native prompt caching, and 9 specialized skills (including new simplify, security-review).</td></tr>
       <tr><td>Is caching actually working on AWS?</td><td>Yes. Verified on Sonnet 4.5 (WRITE on turn 1, HIT on subsequent turns, ~90% savings). Haiku 4.5 requires 4,096 token minimum — activates when skills are loaded. Legacy Claude 3 Haiku rejected cache blocks; fallback path handles this gracefully.</td></tr>
     </table>

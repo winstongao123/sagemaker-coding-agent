@@ -257,8 +257,10 @@ This is ~30 lines of Python and covers 80% of cases.
 | State | Weighted Rating | What's Included |
 |-------|----------------|-----------------|
 | V4.5 (before this session) | ~40% | Basic checklist review, confirmatory verification |
-| V4.6.0 (current) | ~85% | Parallel review, adversarial verify, security review, evidence format |
-| V4.6.0 + gaps #1-3 fixed | ~92% | + verification contract, agent guidance, FP filtering |
-| V4.6.0 + gaps #1-5 fixed | ~97% | + auto-nudge, critical reminder injection |
-| Theoretical maximum (no fork/discovery) | ~97% | Ceiling without architecture rework |
-| Runnable | 100% | Fork semantics + skill discovery + infrastructure |
+| V4.6.0 (initial release) | ~85% | Parallel review, adversarial verify, security review, evidence format |
+| V4.6.0 + gaps #1-3 | ~92% | + verification contract, agent guidance, FP filtering |
+| V4.6.0 + gaps #1-5 | ~97% | + auto-nudge, critical reminder injection |
+| **V4.6.0 + gaps #1-6 (CURRENT)** | **~98%** | **+ fork semantics (context-inheriting agents)** |
+| Runnable | 100% | + skill discovery auto-surfacing + remote review sessions |
+
+**Gap #7 (skill discovery) skipped** — not relevant to SageMaker workflow where user knows and invokes skills manually.
