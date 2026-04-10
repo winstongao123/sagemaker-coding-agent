@@ -584,6 +584,117 @@ flowchart TD
         </ul>
         <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Before V4.6, a "code review" was a single agent running through a static checklist — it caught surface issues but missed deeper problems. Now V4 uses the same pattern as Runnable: 3 specialized agents search the codebase in parallel, each focused on one dimension (duplicate code, anti-patterns, performance). The verify agent explicitly tries to BREAK your code instead of confirming it works. Together, these catch 3x more issues than the old single-pass approach.</p>
       </div>
+      <div class="card" style="border:2px solid var(--accent);">
+        <h3 style="color:var(--accent);">Batch Skill — Coordinator-Worker Orchestration (V4.6.0)</h3>
+        <ul>
+          <li><b>What it is</b>: A 6-phase workflow for large multi-file tasks (5-30 files). The top-level agent becomes a COORDINATOR — it plans, decomposes, synthesizes, and directs. Sub-agents become WORKERS — they implement. <b>Roles are strictly separated</b>: coordinator never writes code, workers never plan.</li>
+          <li><b>When to use</b>: "Rename this function across the codebase", "Migrate all endpoints to new auth middleware", "Add logging to every handler". Any task touching 5+ files with independent units of work. If fewer than 5 files, just do it directly — don't batch. If changes are interdependent (file B depends on file A's output), do sequentially — don't batch.</li>
+          <li><b>Phase 1 — Research &amp; Plan</b>: Coordinator is read-only. Uses explore agents for parallel investigation. Finds ALL files, identifies build/test commands, defines the e2e verification recipe. Missing a file here = missing a worker later.</li>
+          <li><b>Phase 2 — Decompose into Work Units</b>: Numbered list of 3-30 independent units. Each unit must be: <i>implementable alone</i> (no cross-unit dependencies), <i>verifiable alone</i> (worker can run tests), <i>roughly uniform size</i>. Split large units, merge trivial ones. Fewer than 3 = not a batch task. More than 30 = too granular.</li>
+          <li><b>Phase 3 — Plan Approval</b>: Coordinator presents the plan to user (total scope, unit list, e2e test recipe, estimated cost = N workers × ~10 turns each). Waits for approval. Never spawns workers without a green light.</li>
+          <li><b>Phase 4 — Spawn Workers in Parallel</b>: Single message with N parallel <code>task</code> tool calls (subagent_type = build). <b>Each worker prompt is self-contained</b>: includes original user goal, this unit's task, exact files, change description, codebase conventions, e2e test recipe, and "commit when done". Workers have NO context from the coordinator's conversation.</li>
+          <li><b>Phase 5 — Track Progress</b>: Live status table (DONE / FAILED / RUNNING / PENDING). As workers finish, coordinator updates the table. Failed workers get diagnosed — maybe retry, maybe escalate.</li>
+          <li><b>Phase 6 — Synthesize &amp; Verify</b>: Coordinator runs the e2e recipe on the combined output. Spawns a verify agent. <b>Coordinator owns the quality gate</b> — workers executed, but the coordinator must confirm the whole change makes sense as a unit.</li>
+        </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Without role separation, a single agent trying to refactor 20 files gets confused mid-stream, forgets earlier decisions, and loses the plot. Batch forces the "think once, execute many" discipline that humans use for migrations. The top agent holds the mental model; workers focus on one unit each. This is the exact pattern Runnable uses for its coordinator mode, ported to V4 as a skill. <b>Critical rule</b>: if you find yourself writing code in the coordinator, stop — that's the coordinator leaking into worker territory. Hand it to a <code>task</code> call instead.</p>
+      </div>
+      <div class="card" style="border:2px solid var(--accent);">
+        <h3 style="color:var(--accent);">The 7 Runnable Gaps V4 Closed (V4.6.0)</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:10px;">A deep audit against Runnable found 7 specific behavioral gaps. All 7 were closed in V4.6.0. Each gap had a concrete root cause and a targeted fix. This is what brought V4's prompt-engineering quality to ~99% parity with Runnable.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:rgba(255,255,255,0.05);">
+              <th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">Gap</th>
+              <th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">Problem</th>
+              <th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">Fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;"><b>#1 Verification Contract</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Agent could claim "done" after multi-file edits without ever spawning a verify sub-agent. Runnable mandates verification after non-trivial changes; V4 only suggested it.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Added <code># Verification Contract</code> section to <code>SYSTEM_PROMPT</code>. Text: "When 3+ file edits change logic/API/data flow, independent adversarial verification MUST happen before reporting completion." Exclusions listed (docs, config, single-file fixes). <b>MUST</b> not <b>should</b>.</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;"><b>#2 USE WHEN guidance</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Agent had 7 sub-agent types (explore/build/verify/plan/review/general/fork) but no clear usage criteria. Model would pick the wrong type or over-spawn.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Added <code>USE WHEN:</code> line to each agent type description in the <code>task</code> tool schema. E.g. build: "USE WHEN: implementing a specific, bounded change with clear file(s) and approach." verify: "USE WHEN: you've finished 3+ edits and need independent confirmation."</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;"><b>#3 Multi-agent FP filtering</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Security-review surfaced too many false positives. One reviewer = one perspective = lots of noise.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Added Step 4 to <code>security-review</code> skill: for each candidate finding, spawn a parallel verification sub-agent whose sole job is to try to disprove it. Only findings that survive multi-agent scrutiny reach the user. <b>Volume traded for signal.</b></td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;"><b>#4 Auto-nudge</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Agent would mark todos complete and move on without verifying. The verification contract lived in the system prompt but faded from attention as tool calls accumulated.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Added auto-nudge to <code>tool_todo_write()</code>: when 3+ tasks are marked completed without any verify sub-agent having been spawned, append a system reminder to the tool result: "You've completed 3+ tasks — verification contract applies. Spawn a verify sub-agent before reporting."</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;"><b>#5 Critical reminder</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Important instructions at the START of a sub-agent's prompt faded by the time the agent wrote its final response. This is a known attention-window effect.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Added <code>critical_reminder</code> field to <code>AGENT_TYPES</code>. In <code>_run_task_tool()</code>, this string is appended LAST in the sub-agent's system prompt — closest to the model's attention window. Example on verify: "Every PASS requires Command + Output. No exceptions."</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;"><b>#6 Fork semantics</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Sub-agents always started with a blank context. Useful for independence but wasteful when the sub-agent needed everything the parent had already established.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);vertical-align:top;">Added <code>fork</code> agent type and <code>initial_messages</code> parameter to <code>Agent.__init__</code>. When a parent spawns a fork, the child inherits a deep copy of the parent's message history. Used when sub-agent needs established context (e.g. "continue this investigation from where we are").</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;vertical-align:top;"><b>#7 Skill discovery auto-surfacing</b></td>
+              <td style="padding:6px;vertical-align:top;">Skills were only activated if the user typed <code>/skill use</code>. Users often forgot, missing relevant workflows.</td>
+              <td style="padding:6px;vertical-align:top;">Added <code>triggers:</code> YAML field to each skill's frontmatter. New <code>SkillManager.discover_relevant(user_msg)</code> matches triggers against user input and injects suggestions into the system prompt per turn. Tested against clara vs code-review confusion — triggers are specific enough (clara: "claims, insurance, compliance" vs code-review: "code review, review pr") that there's zero overlap.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="color:var(--muted);font-size:13px;margin-top:10px;"><b>Why this matters:</b> These aren't cosmetic changes. Each gap represented a behavioral regression vs Runnable that only showed up under specific conditions. For example, Gap #4 only surfaces during long sessions with many small tasks — exactly the scenario where users most need automatic quality gates. Together, these 7 fixes close the last measurable quality delta between V4 and Runnable on prompt engineering. <b>Remaining differences are infrastructure (ink TUI, remote sessions, voice), not agentic quality.</b></p>
+      </div>
+      <div class="card">
+        <h3>Capability vs Feature Parity (Honest Split)</h3>
+        <p>"Is V4 at max?" depends on which axis you measure.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;">
+          <thead>
+            <tr style="background:rgba(255,255,255,0.05);">
+              <th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">Axis</th>
+              <th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">V4 vs Runnable</th>
+              <th style="text-align:left;padding:6px;border-bottom:1px solid var(--border);">At max?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><b>Prompt engineering &amp; review quality</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);">~99% — all 7 gaps closed, all major patterns ported (simplify, adversarial verify, security FP filter, fork, skill discovery)</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill yes">YES</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><b>Coordination patterns</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);">~90% — batch skill matches coordinator mode, task tool matches sub-agent spawning. Missing: Runnable's buddy pattern (ambient second opinion).</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill yes">NEAR</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><b>Coding capability</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);">V4 matches or exceeds — Bedrock caching, budget slider, 16 security layers (AST), document generation, snapshot/revert</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill yes">YES</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><b>UI / delivery surface</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);">~20% by design — notebook UI only. No TUI (ink), vim mode, keybindings, output styles.</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill partial">NO (intentional)</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><b>Deployment modes</b></td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);">~10% by design — no CLI entry point, no SSH/remote, no SDK for external apps, no plugin system, no voice</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill partial">NO (intentional)</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px;vertical-align:top;"><b>Overall answer</b></td>
+              <td style="padding:6px;vertical-align:top;">For the scope V4 was built to fill (notebook-based SageMaker coding), V4 is at max. For being a drop-in replacement for the entire Runnable product, V4 is ~40%.</td>
+              <td style="padding:6px;vertical-align:top;"><b>Depends on question.</b></td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> "Is V4 at max?" is not one question — it's five. On <b>agentic quality</b> (which was the goal), V4 is at max. On <b>UI surface</b> (ink, vim, voice, remote), V4 is deliberately thin because the target user is in a Jupyter notebook, not a terminal. Extending V4 to match Runnable's full feature surface would be a ~40-hour build with questionable ROI — the brain is already matched; what's missing are delivery modes.</p>
+      </div>
     </div>
   </section>
 

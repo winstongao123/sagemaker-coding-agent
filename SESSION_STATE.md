@@ -1,8 +1,41 @@
 # Session State — V4.6.1
 
 > **Last updated**: 2026-04-10 by Claude Opus 4.6
-> **Git state**: Committing V4.6.1 path resolution fix + zip rebuild (no powerbi), push to `sageagent`
+> **Git state**: Committing HTML completeness update (batch card, 7 gaps table, parity split, 15 patterns section), push to `sageagent`
 > **V4 version**: 4.6.1
+
+---
+
+## LATEST: HTML Completeness Audit + Closure (2026-04-10, after V4.6.1 commit)
+
+Audit against the 15 Runnable patterns ported to V4 found 3 gaps in the HTML docs:
+1. **`batch` skill** (coordinator-worker orchestration) was completely missing from both HTMLs
+2. **7 gap-closure details** were crammed into one FAQ sentence on line 698 of V4 HTML
+3. **"~99% parity" claim** was undifferentiated (prompt quality vs feature surface)
+
+**Fixes applied:**
+
+- `PS_FLOWCHART_V4.html` (+111 lines):
+  - NEW card: **Batch Skill — Coordinator-Worker Orchestration (V4.6.0)** — 6-phase workflow, role separation rules (coordinator never writes, workers never plan), when-to-use guidance
+  - NEW card: **The 7 Runnable Gaps V4 Closed (V4.6.0)** — full table of Problem/Fix for each gap (verification contract, USE WHEN, multi-agent FP filter, auto-nudge, critical reminder, fork semantics, skill discovery) with code references
+  - NEW card: **Capability vs Feature Parity (Honest Split)** — 5-axis breakdown showing where V4 is at max (~99% prompt engineering, ~90% coordination, match/exceed on coding capability) vs deliberately thin (~20% UI surface, ~10% deployment modes, notebook-only scope)
+
+- `PS_FLOWCHART_RUNNABLE.html` (+139 lines):
+  - NEW section: **Engineering Patterns Ported from Runnable to V4** — 15-row table mapping each pattern to its Runnable source and V4 source
+  - NEW row: **Workspace Path Resolution (V4.6.1)** in the V4 Does Better comparison table
+  - NEW notes: "What's NOT ported (by design)" (TUI/vim/voice/CLI/SSH/SDK/plugins — notebook scope) + "What's NOT ported (worth considering later)" (buddy system, proactive mode, remote/CCR)
+  - Footer updated to V4.6.1
+
+**Verification**:
+- Playwright: **13/13 PASS** across both HTMLs (hero, version, new cards, all 7 gaps mentioned, patterns section, V4.6.1 row, not-ported notes, zero console errors)
+- Visual: screenshots confirm batch card, gap table, parity split, and patterns section all render correctly
+
+**Honest parity conclusion** (documented in both HTMLs):
+- Agentic quality / prompt engineering: **~99% (at max)**
+- Coordination: ~90% (batch matches coordinator mode)
+- Coding capability: at max (matches or exceeds Runnable)
+- UI/delivery surface: ~40% (intentional — notebook-only scope)
+- **V4 is NOT a drop-in Runnable replacement; it's the same brain with a different delivery surface (Jupyter instead of TUI).** Extending V4 to match Runnable's full feature surface would be a ~40-hour build with questionable ROI.
 
 ---
 

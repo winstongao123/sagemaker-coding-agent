@@ -599,7 +599,144 @@ flowchart TD
  <td>9 skills including: simplify (3-agent parallel review+fix), security-review (3-phase with false-positive filtering), adversarial verify (anti-rationalization), code-review (parallel+feedback). All ported from Runnable's prompt engineering patterns.</td>
  <td>Has same patterns in TypeScript (simplify.ts, verificationAgent.ts, security-review.ts). V4 now matches via skills/sub-agent system.</td>
 </tr>
+<tr>
+ <td><b>Workspace Path Resolution (V4.6.1)</b></td>
+ <td>Workspace info injected into cached system prompt. glob falls through to allowed_paths. Informative errors (workspace root + allowed roots + glob recovery template). Startup announcement [Workspace: /path]. Unit test: 11/11 PASS.</td>
+ <td>Runnable has implicit workspace awareness via CLI cwd and persistent terminal context. V4 had to make it explicit because notebook kernels don't have a stable cwd, and the sandbox check was silently filtering valid paths.</td>
+</tr>
 </table>
+
+<h2>Engineering Patterns Ported from Runnable to V4</h2>
+<p class="desc">This section lists the 15 prompt-engineering and coordination patterns V4 learned from Runnable, with pointers to both codebases. If you're building your own agent, these are the load-bearing ideas.</p>
+
+<table>
+<tr><th>#</th><th>Pattern</th><th>What it is</th><th>Runnable source</th><th>V4 source</th></tr>
+
+<tr>
+ <td>1</td>
+ <td><b>Parallel 3-agent review</b></td>
+ <td>/simplify spawns 3 specialized agents concurrently — Code Reuse (find duplicate utilities), Code Quality (anti-patterns), Efficiency (N+1, hot-path, memory leaks). Each does one thing well. Coordinator merges findings and fixes.</td>
+ <td><code>src/skills/simplify/</code></td>
+ <td><code>skills/simplify/SKILL.md</code> — 3 parallel task() agents with distinct prompts</td>
+</tr>
+
+<tr>
+ <td>2</td>
+ <td><b>Anti-rationalization prompting</b></td>
+ <td>Names 4 specific excuses LLMs use to skip verification — "the code looks right", "this is a simple change", "I already tested a similar thing", "the existing tests cover it" — and counters each with an explicit instruction. Prevents satisficing.</td>
+ <td><code>src/verificationAgent.ts</code> + verify prompts</td>
+ <td><code>skills/verify/SKILL.md</code> prompt_suffix in <code>AGENT_TYPES["verify"]</code></td>
+</tr>
+
+<tr>
+ <td>3</td>
+ <td><b>Evidence-based verification</b></td>
+ <td>Every PASS claim must include the exact Command that was run and the exact Output observed. No "looks good" without evidence. Makes it impossible to fake a green verification.</td>
+ <td><code>src/verificationAgent.ts</code></td>
+ <td><code>skills/verify/SKILL.md</code> Evidence Format section + critical_reminder field</td>
+</tr>
+
+<tr>
+ <td>4</td>
+ <td><b>Type-specific verification strategies</b></td>
+ <td>Different verification approaches for different change types: Backend (curl endpoints), CLI (run with inputs), Bug fix (reproduce bug first, then confirm gone), Python (pytest + lint), Data pipelines (run on sample data, check output schema), DB migrations (dry-run, rollback test).</td>
+ <td><code>src/verificationAgent.ts</code></td>
+ <td>verify agent prompt_suffix (lines 6857-6900 in sagemaker_agent.py) — 7 type-specific strategies</td>
+</tr>
+
+<tr>
+ <td>5</td>
+ <td><b>False-positive filtering</b></td>
+ <td>Security review uses a 3-phase workflow: (1) scan for candidates, (2) assess each with confidence scoring (≥0.8 threshold), (3) spawn parallel verify agents to try to DISPROVE each finding. Only survivors reach the user. 14 hard exclusions + precedent library prevent common false alarms.</td>
+ <td><code>src/skills/security-review/</code></td>
+ <td><code>skills/security-review/SKILL.md</code> — 3 phases + multi-agent Step 4</td>
+</tr>
+
+<tr>
+ <td>6</td>
+ <td><b>Machine-parseable VERDICT</b></td>
+ <td>Verify agents end with a specific token: <code>VERDICT: PASS</code>, <code>VERDICT: FAIL</code>, or <code>VERDICT: PARTIAL</code>. The coordinator can parse this programmatically to decide next action (ship, fix, or report limitations). No ambiguity, no interpretation.</td>
+ <td><code>src/verificationAgent.ts</code></td>
+ <td><code>AGENT_TYPES["verify"]["critical_reminder"]</code> enforces VERDICT line</td>
+</tr>
+
+<tr>
+ <td>7</td>
+ <td><b>Adversarial verification</b></td>
+ <td>Verify agent's job is to BREAK the code, not confirm it works. Given a fresh context and the list of changes, it runs builds/tests/linters AND tries adversarial probes: concurrency edge cases, boundary values (0, empty, max), idempotency, malformed input. "Can I find a way to make this fail?"</td>
+ <td><code>src/verificationAgent.ts</code> adversarial probes</td>
+ <td>verify skill's Adversarial Probes section + prompt_suffix</td>
+</tr>
+
+<tr>
+ <td>8</td>
+ <td><b>Feedback refinement loop</b></td>
+ <td>After reviewer produces findings, user can respond with feedback ("no that's wrong", "focus on X", "we already decided Y"). Reviewer refines its analysis rather than restarting. Preserves context across iteration.</td>
+ <td><code>src/skills/code-review/</code></td>
+ <td><code>skills/review/SKILL.md</code> Feedback Refinement section</td>
+</tr>
+
+<tr>
+ <td>9</td>
+ <td><b>Skill discovery auto-surfacing</b></td>
+ <td>Skills declare <code>triggers:</code> in YAML frontmatter — short phrases that, when matched against the user message, cause the system prompt to suggest relevant skills. No manual <code>/skill use</code> needed. Prevents users forgetting tools exist.</td>
+ <td><code>src/skills/</code> proactive discovery</td>
+ <td><code>SkillManager.discover_relevant()</code> + injection in <code>Agent.run()</code></td>
+</tr>
+
+<tr>
+ <td>10</td>
+ <td><b>Fork semantics</b></td>
+ <td>Sub-agents normally start with blank context (independence). Fork is the opposite: child inherits a deep copy of parent's full message history. Used when sub-agent needs everything the parent knows ("continue this investigation from where we are").</td>
+ <td><code>src/Task.ts</code> fork mode</td>
+ <td><code>Agent.__init__(initial_messages=...)</code> + <code>fork</code> agent type</td>
+</tr>
+
+<tr>
+ <td>11</td>
+ <td><b>Verification contract</b></td>
+ <td>System-level mandate: "When 3+ file edits change logic/API/data flow, independent adversarial verification MUST happen before reporting completion." Not "should" — MUST. Exclusions listed (docs, config, single-file fixes) to prevent over-triggering.</td>
+ <td>Runnable core system prompt</td>
+ <td><code># Verification Contract</code> section in <code>SYSTEM_PROMPT</code></td>
+</tr>
+
+<tr>
+ <td>12</td>
+ <td><b>Critical reminder pattern</b></td>
+ <td>Important instructions at the START of a prompt fade from attention as the agent generates its response. Critical reminders are appended LAST in the sub-agent's system prompt — closest to the attention window at generation time. Used for "no exceptions" rules.</td>
+ <td>Runnable sub-agent prompt assembly</td>
+ <td><code>critical_reminder</code> field in <code>AGENT_TYPES</code> + injection in <code>_run_task_tool()</code></td>
+</tr>
+
+<tr>
+ <td>13</td>
+ <td><b>USE WHEN guidance</b></td>
+ <td>Each agent type description in the task tool schema ends with <code>USE WHEN: [specific criteria]</code>. Prevents wrong-type selection and over-spawning. Example: "verify USE WHEN you've finished 3+ edits and need independent confirmation."</td>
+ <td><code>src/tools/TaskTool.ts</code> agent type descriptions</td>
+ <td><code>AGENT_TYPES[name]["description"]</code> with USE WHEN lines</td>
+</tr>
+
+<tr>
+ <td>14</td>
+ <td><b>Auto-nudge in todo_write</b></td>
+ <td>When 3+ tasks are marked completed without a verify sub-agent having been spawned, the todo_write tool response appends a reminder: "You've completed 3+ tasks — verification contract applies." Keeps the contract alive even when the system prompt has drifted out of attention.</td>
+ <td>Runnable TodoWrite tool + hooks</td>
+ <td><code>tool_todo_write()</code> completion-count auto-nudge</td>
+</tr>
+
+<tr>
+ <td>15</td>
+ <td><b>Coordinator-worker orchestration</b></td>
+ <td>For 5-30 file tasks: top-level agent becomes COORDINATOR (plan, decompose, synthesize, verify), sub-agents become WORKERS (implement one unit each). Strict role separation — coordinator never writes code, workers never plan. 6-phase workflow with user approval gate.</td>
+ <td><code>src/coordinator/</code> directory</td>
+ <td><code>skills/batch/SKILL.md</code> — 6-phase workflow with role rules</td>
+</tr>
+
+</table>
+
+<p style="margin-top:14px;font-size:13px;color:var(--muted);"><b>What's NOT ported (by design):</b> Runnable's ink TUI, vim mode, keybindings, voice input, SSH/remote sessions, SDK for external apps, plugin system. These are delivery-surface features, not agentic patterns. V4 is notebook-only and deliberately doesn't duplicate Runnable's CLI/TUI surface. If you need a CLI, use Runnable directly — V4 isn't trying to replace it.</p>
+
+<p style="margin-top:10px;font-size:13px;color:var(--muted);"><b>What's NOT ported (worth considering later):</b> Runnable has a <code>buddy</code> system (ambient second-opinion agent that watches the main agent and can interrupt), a <code>proactive</code> mode (agent that surfaces relevant info without being asked), and a <code>remote</code> review session (ultrareview/CCR cloud infrastructure). These are agentic features — V4 could add them if needed. They weren't prioritized because the notebook use case doesn't demand them yet.</p>
 
 </div><!-- end tab-v4better -->
 
@@ -1507,7 +1644,7 @@ document.addEventListener('DOMContentLoaded', async function() {
  Source-verified from gg-claude-code-runnable/src/ |
  Cross-referenced with 3 Chinese deep-dive PDFs + ccunpacked.dev (all claims verified against source) |
  PS_DEEP_ANALYSIS_V2.md - 583 lines of verified analysis |
- Updated 2026-04-10 (V4.6.0 parity: all 7 gaps closed, review system parity, fork semantics, skill discovery. Full tool inventory, hooks, teams, MCP, config hierarchy, proactive mode, buddy system)
+ Updated 2026-04-10 (V4.6.1: workspace path fix added. V4.6.0 parity: all 7 gaps closed, review system parity, fork semantics, skill discovery. Engineering Patterns section added with 15 patterns ported. Full tool inventory, hooks, teams, MCP, config hierarchy, proactive mode, buddy system)
 </p>
 </body>
 </html>
