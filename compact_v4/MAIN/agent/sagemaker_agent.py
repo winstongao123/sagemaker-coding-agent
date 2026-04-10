@@ -5459,6 +5459,18 @@ def tool_todo_write(args: Dict) -> str:
     for t in _TODOS:
         icon = {"pending": "⬜", "in_progress": "🔄", "completed": "✅"}.get(t.get("status"), "❓")
         lines.append(f"  {icon} {t.get('content', 'Unknown')}")
+
+    # V4.6: Auto-nudge — if 3+ tasks completed and none is verification, remind the agent.
+    # Mirrors Runnable's TodoWriteTool.ts:104-107 verification nudge.
+    completed = [t for t in _TODOS if t.get("status") == "completed"]
+    has_verify = any("verif" in t.get("content", "").lower() for t in completed)
+    if len(completed) >= 3 and not has_verify:
+        lines.append("")
+        lines.append("NOTE: You have completed 3+ tasks and none was a verification step. "
+                      "Per the Verification Contract, if these tasks involved non-trivial code changes "
+                      "(3+ file edits to logic/API/data flow), you should spawn a verify sub-agent "
+                      "before reporting completion.")
+
     return "\n".join(lines)
 
 

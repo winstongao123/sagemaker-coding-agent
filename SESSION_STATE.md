@@ -66,7 +66,8 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - **Gap #1**: Added `# Verification Contract` to SYSTEM_PROMPT — MUST verify after 3+ non-trivial edits, with exclusions for docs/config/single-file fixes
 - **Gap #2**: Added `USE WHEN:` guidance to each agent type in task tool description
 - **Gap #3**: Added Step 4 (multi-agent FP filtering) to security-review skill — parallel verification agents per finding
-- Gap #4-#6: In progress
+- **Gap #4**: Auto-nudge in `tool_todo_write()` — reminds agent to verify when 3+ tasks completed without verification
+- Gap #5-#6: In progress
 
 ## TO RESUME NEXT SESSION
 - V4.6.0 complete with post-release fixes. Review system near-parity with Runnable.
