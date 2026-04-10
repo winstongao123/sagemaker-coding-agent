@@ -109,6 +109,23 @@ Before including a finding, answer ALL of these:
 
 If any answer is NO, do not include the finding.
 
+## Step 4: Independent Verification (Multi-Agent False-Positive Filtering)
+
+If Step 3 produces 2+ findings, verify them independently:
+
+1. For each finding, spawn a `review` sub-agent via the `task` tool. Launch them in parallel (one message, multiple tool calls).
+2. Each agent receives ONE finding and the relevant code context. Its job: independently determine if the finding is a real exploitable vulnerability.
+3. Each agent must answer:
+   - "Is this actually exploitable? Describe the attack path."
+   - "Is there defensive code elsewhere that prevents this?"
+   - "Confidence: 0.0-1.0"
+4. Only keep findings where the verification agent's confidence is >= 0.8.
+5. If a verification agent fails (timeout, error), keep the finding with a NOTE that it was not independently verified.
+
+**Why this step matters**: A single agent finding AND verifying its own findings has confirmation bias — it's likely to agree with itself. Independent verification by a fresh agent catches false positives.
+
+**If Step 3 produces 0-1 findings**: Skip this step (not enough findings to justify parallel agents). Apply your own Signal Quality Check instead.
+
 ## Final Report
 
 ```
