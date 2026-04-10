@@ -5662,6 +5662,13 @@ AGENT_TYPES = {
             "Every finding MUST have file:line, severity, and specific fix suggestion."),
         "max_turns": 10,
     },
+    "fork": {
+        "description": "Lightweight fork — inherits parent's full conversation context for cheap background work",
+        "tools": None,  # All tools (same as parent)
+        "prompt_suffix": "",  # No suffix needed — fork uses directive-style prompts
+        "fork": True,  # V4.6: signals _run_task_tool to pass parent messages
+        "max_turns": 15,
+    },
 }
 
 # Merge user-defined agent overrides from config
@@ -5904,7 +5911,9 @@ TOOLS = {
         "Tries to BREAK the code. MANDATORY per Verification Contract. Cannot modify source.\n"
         "- build: Full development. USE WHEN: implementing features spanning 3+ files. Can read, write, execute, test. "
         "Isolated in git worktree if enabled.\n"
-        "- general: Multi-step research + execution. USE WHEN: none of the above fit. All tools. Default.\n\n"
+        "- general: Multi-step research + execution. USE WHEN: none of the above fit. All tools. Default.\n"
+        "- fork: Lightweight child that inherits YOUR full conversation context. USE WHEN: you need background research "
+        "on something you've been discussing — fork knows everything you know. Directive-style prompt (short, no context needed).\n\n"
         "WHEN to use:\n"
         "- Multi-file research or exploration requiring 5+ tool calls\n"
         "- Code review that needs evidence gathering across the codebase\n"
@@ -6434,10 +6443,13 @@ class Agent:
         on_compact_fn: Callable = None,
         tool_allowlist: Optional[Set[str]] = None,
         subagent_depth: int = 0,
+        initial_messages: Optional[List[Dict]] = None,
     ):
         self.client = client
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.messages = []
+        # V4.6: Fork semantics — if initial_messages provided, child inherits parent's context.
+        # Uses deep copy so child's modifications don't corrupt parent's history.
+        self.messages = [dict(m) for m in initial_messages] if initial_messages else []
         self.on_approval = on_approval
         self.on_ask_user = on_ask_user  # Callback for ask_user tool (text input)
         self.on_tokens = on_tokens  # Callback for token updates
@@ -6612,6 +6624,11 @@ class Agent:
                     return True
                 return False
 
+            # V4.6: Fork semantics — if agent type has fork=True, pass parent's messages
+            # so the child inherits full conversation context (like Runnable's fork primitive).
+            _is_fork = agent_cfg.get("fork", False)
+            _fork_messages = list(self.messages) if _is_fork else None
+
             sub = Agent(
                 sub_client,
                 session_id=f"{self.session_id}_sub_{agent_type}_{int(time.time())}",
@@ -6623,6 +6640,7 @@ class Agent:
                 on_compact_fn=self.on_compact_fn,  # V4.2 V2-D: propagate to sub-agents
                 tool_allowlist=allow,
                 subagent_depth=self.subagent_depth + 1,
+                initial_messages=_fork_messages,
             )
             sub_output = []
             is_plan_mode = agent_type == "plan"
