@@ -4,13 +4,28 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4
+# SageAgent V4.6.1
 
-AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, verify agent, git worktree isolation. v4.4.0.
+AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, 10 skills, Runnable-grade review/verification, workspace path resolution fix. **v4.6.1**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
-**Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results.
+**Core files:** `sagemaker_agent.py` (9,505 lines) + this notebook + `memory.md` (auto-populated) + `skills/` (10 skills).
+
+**Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What is new in v4.6.1 — Workspace Path Resolution Fix
+
+Real-session bug: agent launched in a subfolder could not find files that lived in the parent git repo. `glob "**/name.py"` returned "No files found" even though the file was readable via `read_file`. Four architectural blind spots closed:
+
+1. **Workspace info injected into cached system prompt** — agent always knows its Root + Also-accessible paths.
+2. **`tool_glob` falls through to `allowed_paths`** when workspace search is empty and no explicit `path` arg is given.
+3. **Informative error messages** — `validate_path`, `read_file`, and `glob` all now include workspace root + allowed roots + a `glob "**/filename"` recovery template.
+4. **Startup announcement** — top-level agent prints `[Workspace: /path] [Also accessible: /other]` on the first turn.
+
+Verified with `test_v461_path_fix.py` — **11/11 PASS** (fresh-git-repo reproduction of the exact failure scenario).
+
+**Troubleshooting:** If you see "file not found" or empty glob results, check the `[Workspace: ...]` line at session start. Your target file must live under that Root or under one of the `Also accessible` roots (auto-detected: git repo root, SageMaker home). Otherwise add it explicitly via `agent_config.json` → `allowed_paths`.
 
 ---
 

@@ -1,14 +1,42 @@
-# Session State — V4.6.0
+# Session State — V4.6.1
 
 > **Last updated**: 2026-04-10 by Claude Opus 4.6
-> **Git state**: Committing V4.6.0, push to `sageagent`
-> **V4 version**: 4.6.0
+> **Git state**: Committing V4.6.1 path resolution fix + zip rebuild (no powerbi), push to `sageagent`
+> **V4 version**: 4.6.1
 
 ---
 
-## WHAT WAS DONE THIS SESSION
+## WHAT WAS DONE THIS SESSION (V4.6.1 — added 2026-04-10 after V4.6.0 release)
 
-### [NEW] V4.6.0 — Runnable-Grade Review System
+### [NEW] V4.6.1 — Workspace Path Resolution Fix
+Real-session bug triggered the release: agent launched in a subfolder could not find files that lived in the parent git repo. `glob "**/file.py"` returned "No files found" even though `read_file` could reach the file via `allowed_paths`. Sonnet 4.6 blamed itself for "habit failure" — the real cause was architectural: the tools gave it no way to know where it was.
+
+**Four fixes (all in `compact_v4/MAIN/agent/sagemaker_agent.py`)**:
+1. `_build_workspace_info()` helper injected into the cached system prompt before `# === DYNAMIC ===` marker. Agent always knows Root + Also-accessible paths. ~125 tokens, cached, zero per-turn cost.
+2. `tool_glob` falls through to `SECURITY.allowed_paths` when workspace search is empty and no explicit `path` arg given. Appends `[Searched N roots]` to output.
+3. Informative errors in `validate_path`, `tool_read_file`, `tool_glob` — all include workspace root + allowed roots + `glob "**/filename"` recovery template.
+4. Startup announcement: `[Workspace: /path] [Also accessible: /other]` on first `run()` call.
+
+**Verification**:
+- Python syntax: PASS
+- `test_v461_path_fix.py` — **11/11 PASS** (fresh git repo, workspace in subfolder, target in parent)
+- Playwright HTML render: **8/8 PASS** (hero, stats, new V4.6.1 card, troubleshooting tip)
+- Live Bedrock confirmation by user: workspace announcement visible, cache WRITE grew exactly 5,919 → 6,039 tokens (+120, matches estimate), agent now correctly identifies BOTH Bedrock prompt caching AND FileCache (previously missed Bedrock), tolerated typo'd double-path `wins_docs/wins_docs/...` via glob fall-through
+
+**Distribution bundles rebuilt (without powerbi)**:
+- `compact_v4/compact_v4.zip` — 46 files (was 59). Excludes `skills/powerbi-dashboard/` + `skills/powerbi-dashboard-v2/`
+- `D:/Github/PDF/wins_docs.zip` — 26 files. Same skill filter
+- Ship bundles: 8 skills (batch, clara, coding-standards, report, review, security-review, simplify, verify). Source repo still has all 10 for AIPower sync path.
+
+**Docs updated**:
+- `compact_v4/CHANGELOG.md` — v4.6.1 entry with full fix details + distribution bundle section
+- `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html` — new V4.6.1 card in "What V4 Does Better" tab (problem/root-cause/4 fixes/troubleshooting tip), stats updated to 9,505 LoC, version V4.6.1
+- `compact_v4/MAIN/agent/chat.ipynb` + `chat.md` — intro cell updated to v4.6.1 with fix summary + troubleshooting
+- `D:/Github/PDF/wins_docs/compact_v4/sagemaker_agent.py` + `chat.ipynb` — synced to V4.6.1 (note: PDF repo's working wins_docs/ tree was deleted by something external during session; the .zip was rebuilt directly from canonical source, independent of the working tree)
+
+---
+
+## PRIOR: V4.6.0 — Runnable-Grade Review System
 Ported Runnable's (Claude Code internal) best prompt engineering patterns into V4's skill + sub-agent system, closing 3 critical capability gaps:
 
 1. **Single-pass review → 3-agent parallel review**

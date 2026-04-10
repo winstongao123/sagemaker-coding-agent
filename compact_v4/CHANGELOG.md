@@ -1,5 +1,57 @@
 # Compact V4 Changelog
 
+## v4.6.1 — Workspace Path Resolution Fix (2026-04-10)
+
+Base: compact_v4 v4.6.0
+
+### Why This Release
+Real-session bug: agent launched in a subfolder could not find files that lived in the parent repo even though `allowed_paths` had auto-detected the repo root. Symptoms:
+- `glob "**/sagemaker_agent.py"` returned `"No files found"` (only searched workspace)
+- `read_file wins_docs/compact_v4/sagemaker_agent.py` worked (via `_resolve_path` → allowed_paths) but the agent trusted glob's negative result first and gave up
+- Error messages didn't show the workspace root or allowed roots, so the agent had no way to self-correct
+- Agent never announced its workspace, so users couldn't spot CWD mismatches
+
+Sonnet 4.6 blamed itself for "habit failure" — but the real cause was architectural: the tools gave it no way to know where it was.
+
+### Fixes
+
+#### 1. `_build_workspace_info()` injected into cached system prompt
+New helper emits a workspace block (Root + allowed paths + recovery instructions). Injected BEFORE the `# === DYNAMIC ===` marker in `Agent.run()`, so it's part of the cached block — zero per-turn cost.
+
+#### 2. `tool_glob` falls through to `allowed_paths`
+When the workspace search returns empty AND no explicit `path` arg was given, glob retries against every root in `SECURITY.allowed_paths`. Previously it returned `"No files found"` even though `read_file` could reach the file. Result lines now append `[Searched N roots (workspace + allowed_paths): ...]` when fall-through was used.
+
+#### 3. Informative error messages (self-correcting)
+- `validate_path` "outside workspace" — now includes resolved path, workspace root, allowed roots, and a `glob "**/<filename>"` suggestion
+- `tool_read_file` "file not found" — now includes raw requested path, resolved path, workspace root, allowed roots, and `glob`/`bash find` recovery templates
+- `tool_glob` "no files found" — now lists searched roots and suggests a broader pattern
+
+#### 4. Workspace announcement on first `run()` call
+Top-level agent prints `[Workspace: /path] [Also accessible: /other]` on first turn of the session. Users can spot CWD mismatches before the first file operation.
+
+### Files Changed
+- `compact_v4/MAIN/agent/sagemaker_agent.py` — 4 tool impls, 1 new helper, 1 `Agent.run()` injection, 1 `Agent.__init__` field
+- `compact_v4/MAIN/agent/test_v461_path_fix.py` — NEW unit test (11 checks, all PASS)
+
+### Verification
+- Python syntax: PASS (`ast.parse`)
+- Unit test: **11/11 PASS**
+  - Fresh git repo created in tempdir
+  - Workspace set to `<repo>/subproj/agent/` (subfolder, mirrors real failure scenario)
+  - Target file at `<repo>/wins_docs/compact_v4/sagemaker_agent.py` (outside workspace, inside repo)
+  - All 4 code paths verified: workspace info block, glob fall-through, read_file via allowed_paths, rich error messages
+- No behavior regressions — all changes are additive and gated behind `not all_raw and not explicit_path` or trigger only in error paths
+
+### Cost
+Workspace info block ≈ 125 tokens added to cached static portion. One-time cache WRITE premium per session; cache HITs unchanged. Effective cost increase: ~$0.0001 per session.
+
+### Distribution Bundle Changes
+- `compact_v4.zip`: rebuilt, 46 files (was 59). Excludes `skills/powerbi-dashboard/` and `skills/powerbi-dashboard-v2/` — these remain in the source repo but are not shipped in the distribution bundle. Ship bundle now contains 8 skills: batch, clara, coding-standards, report, review, security-review, simplify, verify.
+- `wins_docs.zip`: rebuilt, 26 files. Same skill filter applied. Same 8 skills.
+- Reason: Power BI skills are AIPower-specific and not relevant to general SageMaker coding tasks. Source repo keeps them for the AIPower sync path.
+
+---
+
 ## v4.6.0 — Runnable-Grade Review System: Adversarial Verification + Parallel Review (2026-04-10)
 
 Base: compact_v4 v4.5.0

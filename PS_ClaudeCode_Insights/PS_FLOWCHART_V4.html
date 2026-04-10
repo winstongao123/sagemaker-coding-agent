@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageMaker Coding Agent V4.6.0 - Architecture and Runnable Comparison</title>
+<title>SageMaker Coding Agent V4.6.1 - Architecture, Runnable Comparison, Path Resolution Fix</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -212,10 +212,10 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.6.0</h1>
+    <h1>SageMaker Coding Agent V4.6.1</h1>
     <p class="subtitle">
-      Architecture map of V4.6.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,299 lines),
-      plus comparison against Claude Code runnable source. V4.6.0 achieves full review/verification parity with Runnable
+      Architecture map of V4.6.1 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,505 lines),
+      plus comparison against Claude Code runnable source. V4.6.1 adds a workspace path resolution fix on top of V4.6.0's full review/verification parity with Runnable
       for SageMaker scope: tool efficiency, code security (OWASP), prompt injection detection, sub-agent
       notes, escalation guidance, and URL safety. UI redesigned with budget slider, soft-stop, improved markdown rendering.
     </p>
@@ -224,8 +224,8 @@
       <div class="stat"><strong>16</strong><span>Security Layers</span></div>
       <div class="stat"><strong>7</strong><span>Sub-Agent Types</span></div>
       <div class="stat"><strong>10</strong><span>Skills</span></div>
-      <div class="stat"><strong>9,381</strong><span>Lines of Code</span></div>
-      <div class="stat"><strong>V4.6.0</strong><span>Current Version</span></div>
+      <div class="stat"><strong>9,505</strong><span>Lines of Code</span></div>
+      <div class="stat"><strong>V4.6.1</strong><span>Current Version</span></div>
     </div>
   </section>
 
@@ -447,10 +447,10 @@ flowchart TD
       <tr><td>Sub-agent absolute paths</td><td>Yes: "always use absolute file paths"</td><td>Yes: Sub-agent Notes section added to sub-agent prompt</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Sub-agents now told to use absolute paths, avoid code recapping.</td></tr>
       <tr><td>Escalation guidance</td><td>Yes: "only when genuinely stuck after investigation"</td><td>Yes: added to Doing Tasks section</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix. Prevents premature ask_user calls.</td></tr>
       <tr><td>URL safety</td><td>Yes: CYBER_RISK_INSTRUCTION</td><td>Yes: "NEVER generate or guess URLs"</td><td><span class="pill yes">Closed</span></td><td>V4.4.0 fix.</td></tr>
-      <tr><td>Adversarial verify sub-agent</td><td>Full adversarial: anti-rationalization, evidence-based, type-specific</td><td>Yes: anti-rationalization + evidence + adversarial probes + VERDICT</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: ported Runnable's full adversarial verification pattern. 4 named rationalizations, evidence format, type-specific strategies.</td></tr>
-      <tr><td>Parallel review agents</td><td>3-agent parallel (reuse + quality + efficiency)</td><td>3-agent parallel (simplify)</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: new simplify + code-review skills use 3 parallel task() agents. Same pattern as Runnable.</td></tr>
-      <tr><td>Security review</td><td>3-phase with confidence scoring + 14 hard exclusions</td><td>3-phase with confidence scoring + 16 hard exclusions</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: new security-review skill with false-positive filtering, exploit scenarios, signal quality criteria.</td></tr>
-      <tr><td>Feedback refinement</td><td>Review supports iterative feedback loop</td><td>Simplify aggregates and fixes directly</td><td><span class="pill yes">Parity</span></td><td>V4.6.0: code-review skill has Feedback Refinement section for iterative improvement.</td></tr>
+      <tr><td>Adversarial verify sub-agent</td><td>Full adversarial: anti-rationalization, evidence-based, type-specific</td><td>Yes: anti-rationalization + evidence + adversarial probes + VERDICT</td><td><span class="pill yes">Parity</span></td><td>V4.6.1: ported Runnable's full adversarial verification pattern. 4 named rationalizations, evidence format, type-specific strategies.</td></tr>
+      <tr><td>Parallel review agents</td><td>3-agent parallel (reuse + quality + efficiency)</td><td>3-agent parallel (simplify)</td><td><span class="pill yes">Parity</span></td><td>V4.6.1: new simplify + code-review skills use 3 parallel task() agents. Same pattern as Runnable.</td></tr>
+      <tr><td>Security review</td><td>3-phase with confidence scoring + 14 hard exclusions</td><td>3-phase with confidence scoring + 16 hard exclusions</td><td><span class="pill yes">Parity</span></td><td>V4.6.1: new security-review skill with false-positive filtering, exploit scenarios, signal quality criteria.</td></tr>
+      <tr><td>Feedback refinement</td><td>Review supports iterative feedback loop</td><td>Simplify aggregates and fixes directly</td><td><span class="pill yes">Parity</span></td><td>V4.6.1: code-review skill has Feedback Refinement section for iterative improvement.</td></tr>
       <tr><td>Diminishing returns detection</td><td>Token budget tracking</td><td>Yes: 3+ text-only turns &lt;200 tokens → warning</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 fix. Only counts text-only turns (tool-call turns skip, not stuck).</td></tr>
       <tr><td>Budget control in UI</td><td>No (API-level limits)</td><td>Yes: slider $0.50-$20.00, soft-stop</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 feature. User can raise budget mid-session without restarting.</td></tr>
       <tr><td>Cache savings display</td><td>Telemetry (not user-facing)</td><td>Yes: "Actual $X | Without cache $Y | Saved $Z"</td><td><span class="pill yes">V4 edge</span></td><td>V4.4.0 feature. User sees real cost vs would-have-cost.</td></tr>
@@ -558,6 +558,19 @@ flowchart TD
           <li>Diminishing returns: detects stuck agent (text-only turns, not tool calls).</li>
         </ul>
         <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Why this matters:</b> Without cost visibility, you can accidentally spend $20 on a single session. The budget slider and cache savings display put you in control — you see exactly what you're paying and can adjust in real time.</p>
+      </div>
+      <div class="card" style="border:2px solid var(--accent);">
+        <h3 style="color:var(--accent);">Workspace Path Resolution Fix (V4.6.1)</h3>
+        <ul>
+          <li><b>Problem observed</b>: Agent launched in a subfolder couldn't find files that lived in the parent git repo. <code>glob "**/name.py"</code> returned <code>No files found</code> even though the file WAS readable via <code>read_file</code> (which walks <code>allowed_paths</code>). The model trusted the negative glob result and gave up.</li>
+          <li><b>Root cause</b>: Four architectural blind spots — (1) agent had no way to know its workspace root, (2) error messages didn't reveal workspace or allowed roots, (3) <code>glob</code> only searched workspace while <code>read_file</code> also searched <code>allowed_paths</code>, (4) no startup announcement.</li>
+          <li><b>Fix 1 — Workspace info in cached prompt</b>: New <code>_build_workspace_info()</code> helper injects <code># Workspace</code> block (Root + Also accessible + path rules) before the <code># === DYNAMIC ===</code> marker in <code>Agent.run()</code>. Cached = zero per-turn cost (~125 tokens one-time).</li>
+          <li><b>Fix 2 — <code>tool_glob</code> fall-through</b>: When workspace search returns empty and no explicit <code>path</code> arg was given, glob retries against every root in <code>SECURITY.allowed_paths</code>. Result lines append <code>[Searched N roots]</code> when fall-through was used.</li>
+          <li><b>Fix 3 — Informative errors</b>: <code>validate_path</code>, <code>tool_read_file</code>, and <code>tool_glob</code> all now include workspace root + allowed roots + a <code>glob "**/filename"</code> or <code>bash find</code> recovery template. The agent self-corrects without user help.</li>
+          <li><b>Fix 4 — Startup announcement</b>: Top-level agent prints <code>[Workspace: /path] [Also accessible: /other]</code> on the first turn. Users spot CWD mismatches before the first file operation.</li>
+          <li><b>Verification</b>: Unit test <code>test_v461_path_fix.py</code> — <b>11/11 PASS</b>. Reproduces the exact failure (fresh git repo, workspace in subfolder, target file in parent) and verifies all 4 code paths.</li>
+        </ul>
+        <p style="color:var(--muted);font-size:13px;margin-top:8px;"><b>Troubleshooting tip:</b> If the agent says "file not found" or glob returns empty, check the <code>[Workspace: ...]</code> line printed at session start. If your target file is outside that path, it must be in an <code>Also accessible</code> root (auto-added: git repo root, SageMaker home). Otherwise add it explicitly via <code>agent_config.json</code> → <code>allowed_paths</code>. Why this matters: before this fix, Sonnet blamed itself for "habit failure" — but the real cause was that the tools gave it no way to know where it was. V4.6.1 closes that blind spot.</p>
       </div>
       <div class="card" style="border:2px solid var(--accent);">
         <h3 style="color:var(--accent);">Runnable-Grade Review System (V4.6.0)</h3>
@@ -681,14 +694,14 @@ flowchart TD
     <h3>Current honest answer to "is V4 the best yet?"</h3>
     <table>
       <tr><th>Question</th><th>Answer</th></tr>
-      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.6.0 now has full parity on review/verification quality. V4.4.0 closed all system prompt behavioral gaps. V4.6.0 adds: 3-agent parallel review (simplify + code-review), adversarial verification with anti-rationalization, security review with false-positive filtering, feedback refinement loops. 8 Runnable prompt patterns fully ported.</td></tr>
+      <tr><td>Did V4 learn the high-value runnable lessons?</td><td>Yes. V4.6.1 now has full parity on review/verification quality. V4.4.0 closed all system prompt behavioral gaps. V4.6.1 adds: 3-agent parallel review (simplify + code-review), adversarial verification with anti-rationalization, security review with false-positive filtering, feedback refinement loops. 8 Runnable prompt patterns fully ported.</td></tr>
       <tr><td>Is V4 fully identical to runnable?</td><td>~99%. All 7 gaps from deep audit closed: verification contract, USE WHEN guidance, FP filtering, auto-nudge, critical reminder, fork semantics, skill discovery auto-surfacing. Only remaining difference: Runnable has remote review sessions (ultrareview/CCR cloud infrastructure) — not applicable to SageMaker. See <code>compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md</code>.</td></tr>
-      <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.6.0 matches Runnable's review/verification quality AND has SageMaker-specific features: budget slider with soft-stop, cache savings display, diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, Bedrock-native prompt caching, and 9 specialized skills (including new simplify, security-review).</td></tr>
+      <tr><td>Is V4 better than Runnable for SageMaker?</td><td>Yes. V4.6.1 matches Runnable's review/verification quality AND has SageMaker-specific features: budget slider with soft-stop, cache savings display, diminishing returns detection, document generation (Word/Excel/PDF/charts), 16 security layers with AST validation, Bedrock-native prompt caching, and 9 specialized skills (including new simplify, security-review).</td></tr>
       <tr><td>Is caching actually working on AWS?</td><td>Yes. Verified on Sonnet 4.5 (WRITE on turn 1, HIT on subsequent turns, ~90% savings). Haiku 4.5 requires 4,096 token minimum — activates when skills are loaded. Legacy Claude 3 Haiku rejected cache blocks; fallback path handles this gracefully.</td></tr>
     </table>
   </section>
 
-  <p class="footer">Updated 2026-04-10 (V4.6.0). Source of truth: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code>. Comparison source: runnable TypeScript snapshot under <code>compare_code/gg-claude-code-runnable</code>. V4.6 upgrade doc: <code>compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md</code>.</p>
+  <p class="footer">Updated 2026-04-10 (V4.6.1). Source of truth: <code>compact_v4/MAIN/agent/sagemaker_agent.py</code>. Comparison source: runnable TypeScript snapshot under <code>compare_code/gg-claude-code-runnable</code>. V4.6 upgrade doc: <code>compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md</code>.</p>
 </div>
 
 <script>

@@ -1397,7 +1397,14 @@ AWS access tiers (SageMaker execution role):
                         continue
 
             if not in_workspace and not in_allowed:
-                return False, f"Path outside workspace: {path}"
+                # V4.6.1: richer error so the agent can self-correct.
+                ws_str = str(self.workspace).replace("\\", "/")
+                allowed_str = ", ".join(str(p).replace("\\", "/") for p in self.allowed_paths) or "(none)"
+                return False, (
+                    f"Path outside workspace: {path} (resolved: {str(resolved).replace(chr(92), '/')}). "
+                    f"Workspace root: {ws_str}. Allowed roots: {allowed_str}. "
+                    f"Use a path under one of those, or run `glob \"**/<filename>\"` to locate the file."
+                )
 
             if resolved.name in self.SENSITIVE_FILES:
                 return False, f"Access to sensitive file blocked: {resolved.name}"
@@ -3161,6 +3168,32 @@ def _resolve_path(raw_path: str) -> str:
     return candidate
 
 
+def _build_workspace_info() -> str:
+    """V4.6.1: Build workspace info block for system prompt.
+    Tells agent where it is + what paths it can access, so relative paths
+    resolve correctly and file-finding tools target the right roots."""
+    ws = os.path.realpath(CONFIG.workspace)
+    ws_norm = ws.replace("\\", "/")
+    extras = []
+    for p in SECURITY.allowed_paths:
+        s = str(p).replace("\\", "/")
+        if s != ws_norm and s not in extras:
+            extras.append(s)
+    lines = [
+        "# Workspace",
+        f"Root: {ws_norm}",
+    ]
+    if extras:
+        lines.append(f"Also accessible (read+write): {', '.join(extras)}")
+    lines.append(
+        "Path rules: relative paths resolve against Root first, then Also-accessible paths. "
+        "If a file isn't found, run `glob` with pattern `**/<filename>` (glob falls through to allowed paths). "
+        "As a last resort run `bash find <root> -name <filename>` to locate it. "
+        "Use the ABSOLUTE path from glob/find output for subsequent read_file/edit_file calls — never guess."
+    )
+    return "\n".join(lines)
+
+
 def tool_read_file(args: Dict) -> str:
     """Read a file with line numbers. Uses cache and smart truncation for token efficiency."""
     path = args["file_path"]
@@ -3171,10 +3204,19 @@ def tool_read_file(args: Dict) -> str:
     if not ok:
         return f"Error: {msg}"
 
+    raw_requested = path
     path = _resolve_path(path)
 
     if not os.path.exists(path):
-        return f"Error: File not found: {path}"
+        # V4.6.1: informative error — show workspace root + allowed_paths + recovery hint.
+        ws = str(CONFIG.workspace).replace("\\", "/")
+        extras = [str(p).replace("\\", "/") for p in SECURITY.allowed_paths
+                  if str(p).replace("\\", "/") != ws]
+        hint = (f"Workspace root: {ws}. "
+                f"Allowed roots: {', '.join(extras) if extras else '(none)'}. "
+                f"Try `glob \"**/{os.path.basename(raw_requested)}\"` to locate it, "
+                f"or `bash find / -name {os.path.basename(raw_requested)}` as a last resort.")
+        return f"Error: File not found: {raw_requested} (resolved to {path}). {hint}"
 
     abs_path = os.path.abspath(path)
 
@@ -3652,8 +3694,10 @@ def tool_edit_file(args: Dict) -> str:
 
 
 def tool_glob(args: Dict) -> str:
-    """Find files by glob pattern."""
+    """Find files by glob pattern. V4.6.1: falls through to allowed_paths when
+    no path arg is given and the workspace search is empty."""
     pattern = args["pattern"]
+    explicit_path = "path" in args and args.get("path") not in (None, "")
     path = args.get("path", CONFIG.workspace)
 
     if not os.path.isabs(path):
@@ -3661,10 +3705,25 @@ def tool_glob(args: Dict) -> str:
 
     ok, msg = SECURITY.validate_path(path)
     if not ok:
-        return f"Error: {msg}"
+        return f"Error: {msg}. Workspace root: {CONFIG.workspace}"
 
+    # Primary search: the requested path (default = workspace)
     full_pattern = os.path.join(path, pattern)
     all_raw = glob_module.glob(full_pattern, recursive=True)
+    searched_roots = [path]
+
+    # V4.6.1: If no match in workspace and no explicit path given, also search
+    # allowed_paths (e.g. git repo root auto-detected above workspace).
+    if not all_raw and not explicit_path:
+        for ap in SECURITY.allowed_paths:
+            ap_str = str(ap)
+            if ap_str == path or ap_str in searched_roots:
+                continue
+            extra = glob_module.glob(os.path.join(ap_str, pattern), recursive=True)
+            if extra:
+                all_raw.extend(extra)
+                searched_roots.append(ap_str)
+
     total_raw = len(all_raw)
     raw_matches = all_raw[:200]
     # Per-file boundary check (symlink escape protection)
@@ -3673,8 +3732,13 @@ def tool_glob(args: Dict) -> str:
     matches = all_valid[:100]
     matches = sorted(matches, key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0, reverse=True)
     if not matches:
-        return "No files found"
+        roots_str = ", ".join(r.replace("\\", "/") for r in searched_roots)
+        return (f"No files found. Searched: {roots_str}. "
+                f"Try a broader pattern (e.g. **/{os.path.basename(pattern) or pattern}) "
+                f"or `bash find <root> -name <filename>`.")
     output = "\n".join(matches)
+    if len(searched_roots) > 1:
+        output += f"\n\n[Searched {len(searched_roots)} roots (workspace + allowed_paths): {', '.join(r.replace(chr(92), '/') for r in searched_roots)}]"
     if total_raw > 200 or total_valid > 100:
         output += f"\n\n[WARNING: Showing {len(matches)} of {total_raw} total matches. Narrow your pattern for complete results.]"
     return output
@@ -6493,6 +6557,8 @@ class Agent:
         self._diminishing_warned: bool = False  # Only warn once per run() call
         # V4.3.2: Cache-breakage detection (from Runnable analysis — postCompactCleanup pattern)
         self._cache_broken_by_compact: bool = False  # Set True after compact, reset on next API call (cache HIT or miss-with-warning)
+        # V4.6.1: Workspace announcement — print root once per session so user can spot CWD mismatches immediately
+        self._workspace_announced: bool = False
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
         """Ask the user a question and wait for response via text input widget."""
@@ -6774,12 +6840,34 @@ class Agent:
         # V4.3 V3-A: Reset diminishing-returns state at start of each run() call
         self._turn_output_tokens = []
         self._diminishing_warned = False
+        # V4.6.1: Announce workspace once per session (top-level agent only). Catches CWD mismatches early.
+        if not self._workspace_announced and self.subagent_depth == 0:
+            try:
+                _ws = str(CONFIG.workspace).replace("\\", "/")
+                _extras = [str(p).replace("\\", "/") for p in SECURITY.allowed_paths
+                           if str(p).replace("\\", "/") != _ws]
+                _msg = f"[Workspace: {_ws}]"
+                if _extras:
+                    _msg += f" [Also accessible: {', '.join(_extras)}]"
+                output_fn(_msg)
+            except Exception:
+                pass
+            self._workspace_announced = True
         # Use provided system prompt or default.
         # NOTE: Skill injection is handled ONLY by the UI send flow (on_send),
         # which appends active skill content before calling agent.run().
         # Do NOT inject skills here — it would cause double-injection.
         # Inject persistent memory into system prompt (only for top-level agent, not sub-agents)
         _base_prompt = system_prompt or SYSTEM_PROMPT
+        # V4.6.1: Inject workspace info BEFORE the dynamic marker so it's part of
+        # the cached block (doesn't change during session). Helps agent find files
+        # that live in allowed_paths outside the workspace root.
+        _ws_info = _build_workspace_info()
+        _DYN_MARK = "\n\n# === DYNAMIC ==="
+        if _DYN_MARK in _base_prompt:
+            _base_prompt = _base_prompt.replace(_DYN_MARK, f"\n\n{_ws_info}{_DYN_MARK}", 1)
+        else:
+            _base_prompt += f"\n\n{_ws_info}"
         if self.subagent_depth == 0:
             _base_prompt += _load_persistent_memory()
             # V4.6 Gap #7: Skill discovery auto-surfacing.
