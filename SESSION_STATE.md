@@ -77,5 +77,6 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - **Weighted average: ~99% of Runnable** (all 7 gaps closed)
 - Final audit: Runnable HTML footer fixed. Zip rebuilt.
 - **Batch skill**: NEW coordinator-worker orchestration for complex multi-file tasks. 6-phase workflow with role separation. 10 skills total now.
+- **Complex integration test**: 6/6 PASS on both Haiku (60s) and Sonnet (131s). Caching (15 HITs), tool orchestration (18 calls), multi-turn context (36 messages), skill discovery all verified working together.
 - All 7 gaps documented in `compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md`
 - Live Bedrock: 8/8 PASS after all gap closures (no regression)
