@@ -5603,6 +5603,9 @@ AGENT_TYPES = {
             "You are VERIFICATION-ONLY. Do NOT modify project files. "
             "Every PASS check MUST have Command run + Output observed + Result. "
             "You MUST end with VERDICT: PASS, VERDICT: FAIL, or VERDICT: PARTIAL."),
+        "critical_reminder": (
+            "CRITICAL: VERIFICATION-ONLY. Do NOT modify project files. "
+            "Every PASS needs Command run + Output observed. End with VERDICT: PASS/FAIL/PARTIAL."),
         "max_turns": 15,
     },
     "general": {
@@ -5654,6 +5657,9 @@ AGENT_TYPES = {
             "3. **Summary**: one paragraph assessment\n"
             "Always use ABSOLUTE file paths."
         ),
+        "critical_reminder": (
+            "CRITICAL: READ-ONLY review agent. Do NOT modify files. "
+            "Every finding MUST have file:line, severity, and specific fix suggestion."),
         "max_turns": 10,
     },
 }
@@ -6507,6 +6513,11 @@ class Agent:
         sub_prompt = SYSTEM_PROMPT + "\n\n# Sub-agent Notes\n- Always use ABSOLUTE file paths (cwd may reset between bash calls).\n- In your final response, share relevant file paths (absolute, never relative).\n- Include code snippets only when exact text is load-bearing (a bug, a signature). Do not recap code you merely read.\n- Do NOT use emojis."
         if prompt_suffix:
             sub_prompt = sub_prompt + "\n\n" + prompt_suffix
+        # V4.6: Critical reminder injection (mirrors Runnable's criticalSystemReminder_EXPERIMENTAL).
+        # Appended LAST so it's closest to the model's attention window.
+        _critical_reminder = agent_cfg.get("critical_reminder", "")
+        if _critical_reminder:
+            sub_prompt = sub_prompt + "\n\n" + _critical_reminder
 
         # Check for model override from agent config
         sub_client = self.client
