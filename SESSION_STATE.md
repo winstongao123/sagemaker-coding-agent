@@ -62,6 +62,10 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - Expanded security-review: 17 hard exclusions (was 14), 11 precedents (was 7)
 - Deep review rating: verify 60%→85%, security-review 55%→70%, simplify 95%, code-review 140% (exceeds Runnable)
 
+### Gap Closure (same session, closing 6 of 7 gaps)
+- **Gap #1**: Added `# Verification Contract` to SYSTEM_PROMPT — MUST verify after 3+ non-trivial edits, with exclusions for docs/config/single-file fixes
+- Gap #2-#6: In progress
+
 ## TO RESUME NEXT SESSION
 - V4.6.0 complete with post-release fixes. Review system near-parity with Runnable.
 - Remaining gaps: Runnable has remote review sessions (ultrareview/CCR), fork semantics, auto-invocation, Playwright browser automation. These are infrastructure, not prompt quality.
