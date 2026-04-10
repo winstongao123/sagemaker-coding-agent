@@ -1,6 +1,7 @@
 ---
 name: security-review
 description: 3-phase security vulnerability assessment with false-positive filtering and confidence scoring
+triggers: security review, vulnerability, injection, xss, auth bypass, owasp, penetration test, security audit
 ---
 
 # Security Review

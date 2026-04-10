@@ -1,6 +1,7 @@
 ---
 name: clara-review
 description: ClaRA codebase review methodology - evidence labeling, output rules, sub-agent coordination for 5-phase production readiness assessment
+triggers: clara, claims, insurance claim, claims processing, evidence labeling, rag scoring, compliance check, pii detection
 ---
 
 # ClaRA Review Skill

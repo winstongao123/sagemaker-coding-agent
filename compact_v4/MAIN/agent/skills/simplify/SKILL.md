@@ -1,6 +1,7 @@
 ---
 name: simplify
 description: Review changed code for reuse, quality, and efficiency using 3 parallel agents, then fix issues found
+triggers: simplify, clean up code, review my changes, code cleanup, refactor check, fix issues in code
 ---
 
 # Simplify: Code Review and Cleanup

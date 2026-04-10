@@ -1,6 +1,7 @@
 ---
 name: verify
 description: Adversarial verification — tries to BREAK the implementation, not confirm it works. Evidence-based with VERDICT requirement.
+triggers: verify, before commit, check if it works, test the implementation, does it break, pre-merge check, after edits
 ---
 
 # Adversarial Verification

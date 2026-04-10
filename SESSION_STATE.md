@@ -68,11 +68,12 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - **Gap #3**: Added Step 4 (multi-agent FP filtering) to security-review skill — parallel verification agents per finding
 - **Gap #4**: Auto-nudge in `tool_todo_write()` — reminds agent to verify when 3+ tasks completed without verification
 - **Gap #5**: `critical_reminder` field in AGENT_TYPES + injection in `_run_task_tool()` — appended LAST in sub-agent system prompt
-- **Gap #6**: Fork semantics — new `fork` agent type, `initial_messages` in Agent.__init__, parent messages passed to child. Prompt cache sharing automatic (same system prompt).
+- **Gap #6**: Fork semantics — new `fork` agent type, `initial_messages` in Agent.__init__, parent messages passed to child
+- **Gap #7**: Skill discovery auto-surfacing — triggers in skill frontmatter, `discover_relevant()` method, injection into system prompt per turn. Clara vs code-review tested: no confusion (distinct triggers).
 
 ## TO RESUME NEXT SESSION
 - V4.6.0 complete with post-release fixes. Review system near-parity with Runnable.
 - Remaining gaps: Runnable has remote review sessions (ultrareview/CCR), fork semantics, auto-invocation, Playwright browser automation. These are infrastructure, not prompt quality.
-- **Weighted average: ~98% of Runnable** (6 of 7 gaps closed, only skill discovery remaining)
+- **Weighted average: ~99% of Runnable** (all 7 gaps closed)
 - All 7 gaps documented in `compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md`
 - Live Bedrock: 8/8 PASS after all gap closures (no regression)

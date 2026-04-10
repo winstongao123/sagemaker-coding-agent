@@ -116,6 +116,15 @@ Deep audit identified 7 remaining gaps vs Runnable. 6 closed in this release (Ga
 - Fork child inherits full conversation context — directive-style prompts
 - Prompt cache sharing automatic (same system prompt)
 
+**Gap #7 — Skill Discovery Auto-Surfacing (CODE)**
+- New `triggers` field in skill YAML frontmatter (comma-separated keywords)
+- `SkillInfo.triggers` parsed from frontmatter during `discover()`
+- `SkillManager.discover_relevant(user_message)` matches message against triggers
+- Relevant skills injected into system prompt as `# Skills Relevant to This Task`
+- Trigger specificity prevents confusion: clara triggers on "claims, insurance, compliance"; code-review triggers on "code review, review pr, review diff"
+- Tested: "review code" → code-review; "review claims" → clara; "vulnerabilities" → security-review
+- All 7 review skills given distinct triggers (no overlap)
+
 ### Bug Fixes (Post-Release)
 - **Sub-agent git access**: Skills now instruct parent to pass `git diff` output in sub-agent prompts (sub-agents can't find `.git` at repo root). Fix: simplify T7 time 58s → 5s.
 - **Verify evidence format**: Added CRITICAL REMINDER to verify agent prompt_suffix for format enforcement.

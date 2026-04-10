@@ -1,6 +1,7 @@
 ---
 name: report
 description: Create professional Word/PDF reports with embedded charts. Orchestrates the chart-first workflow to prevent missing graphs and ugly layouts.
+triggers: create report, generate report, write report, word document, pdf document, create document
 ---
 
 # Professional Report Generator

@@ -260,7 +260,8 @@ This is ~30 lines of Python and covers 80% of cases.
 | V4.6.0 (initial release) | ~85% | Parallel review, adversarial verify, security review, evidence format |
 | V4.6.0 + gaps #1-3 | ~92% | + verification contract, agent guidance, FP filtering |
 | V4.6.0 + gaps #1-5 | ~97% | + auto-nudge, critical reminder injection |
-| **V4.6.0 + gaps #1-6 (CURRENT)** | **~98%** | **+ fork semantics (context-inheriting agents)** |
-| Runnable | 100% | + skill discovery auto-surfacing + remote review sessions |
+| V4.6.0 + gaps #1-6 | ~98% | + fork semantics (context-inheriting agents) |
+| **V4.6.0 + gaps #1-7 (CURRENT)** | **~99%** | **+ skill discovery auto-surfacing with trigger specificity** |
+| Runnable | 100% | + remote review sessions (ultrareview/CCR infrastructure) |
 
-**Gap #7 (skill discovery) skipped** — not relevant to SageMaker workflow where user knows and invokes skills manually.
+**All 7 gaps closed.** Only remaining difference: Runnable has remote review sessions (cloud infrastructure) — not applicable to SageMaker.

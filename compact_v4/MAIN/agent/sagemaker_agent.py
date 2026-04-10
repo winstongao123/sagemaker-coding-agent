@@ -2134,6 +2134,7 @@ class SkillInfo:
     description: str
     location: str  # full path to SKILL.md
     base_dir: str  # directory containing the skill
+    triggers: List[str] = None  # V4.6: keywords that trigger auto-discovery
 
 
 class SkillManager:
@@ -2189,9 +2190,13 @@ class SkillManager:
                             if line.startswith("#"):
                                 desc = line.lstrip("#").strip()
                                 break
+                    # V4.6: Parse triggers from frontmatter (comma-separated or YAML list)
+                    _triggers_raw = meta.get("triggers", "")
+                    _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if _triggers_raw else None
                     self._cache[name] = SkillInfo(
                         name=name, description=desc,
                         location=str(fp), base_dir=str(fp.parent),
+                        triggers=_triggers,
                     )
                 except Exception:
                     continue
@@ -2244,6 +2249,24 @@ class SkillManager:
             return ""
         skill = self._cache.get(self.active_skill)
         return f"\n\n## Active Skill: {self.active_skill}\nBase directory: {skill.base_dir if skill else 'unknown'}\n\n{content}"
+
+    def discover_relevant(self, user_message: str) -> List[str]:
+        """V4.6: Auto-discover skills relevant to the user's message.
+        Matches user message against skill triggers (from frontmatter).
+        Returns list of skill names that match, excluding the active skill.
+        Mirrors Runnable's skill discovery auto-surfacing pattern."""
+        if not self._cache:
+            self.discover()
+        msg_lower = user_message.lower()
+        relevant = []
+        for name, skill in self._cache.items():
+            if name == self.active_skill:
+                continue  # Don't suggest what's already active
+            if not skill.triggers:
+                continue  # No triggers defined — skip
+            if any(trigger in msg_lower for trigger in skill.triggers):
+                relevant.append(name)
+        return relevant
 
     def list_for_prompt(self) -> str:
         """Compact skill list for LLM tool description (token-efficient)."""
@@ -6759,6 +6782,19 @@ class Agent:
         _base_prompt = system_prompt or SYSTEM_PROMPT
         if self.subagent_depth == 0:
             _base_prompt += _load_persistent_memory()
+            # V4.6 Gap #7: Skill discovery auto-surfacing.
+            # Match user message against skill triggers, suggest relevant skills.
+            # Only for top-level agent (sub-agents don't need discovery).
+            _relevant = SKILLS.discover_relevant(user_message)
+            if _relevant:
+                _skill_names = ", ".join(_relevant)
+                _descriptions = "; ".join(
+                    f"{s}: {SKILLS._cache[s].description}" for s in _relevant if s in SKILLS._cache
+                )
+                _base_prompt += (f"\n\n# Skills Relevant to This Task\n"
+                                 f"Consider using: {_skill_names}\n"
+                                 f"({_descriptions})\n"
+                                 f"Use the skill tool to activate one if it matches your task.")
         self._system_prompt = _base_prompt
         self._plan_mode = plan_mode  # Store for tool execution check
 
