@@ -125,6 +125,16 @@ Deep audit identified 7 remaining gaps vs Runnable. 6 closed in this release (Ga
 - Tested: "review code" → code-review; "review claims" → clara; "vulnerabilities" → security-review
 - All 7 review skills given distinct triggers (no overlap)
 
+### Coordinator-Worker Orchestration (Batch Skill)
+- **NEW `batch` skill** — coordinator-worker pattern for large multi-file tasks (5+ files)
+- 6 phases: Research → Decompose into 3-30 units → Present plan → Spawn parallel workers → Track progress → Synthesize
+- **Role separation enforced**: coordinator NEVER writes code, workers NEVER plan
+- Each worker gets self-contained prompt with: goal, task, files, conventions, test recipe
+- Workers use `build` agent type (isolated in git worktree)
+- Coordinator tracks status table (DONE/FAILED/RUNNING) and runs final verification
+- Mirrors Runnable's `batch.ts` + `coordinatorMode.ts` pattern
+- Auto-discovered via triggers: "large refactor", "migrate all", "bulk change", "many files"
+
 ### Bug Fixes (Post-Release)
 - **Sub-agent git access**: Skills now instruct parent to pass `git diff` output in sub-agent prompts (sub-agents can't find `.git` at repo root). Fix: simplify T7 time 58s → 5s.
 - **Verify evidence format**: Added CRITICAL REMINDER to verify agent prompt_suffix for format enforcement.

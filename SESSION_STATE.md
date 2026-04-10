@@ -75,6 +75,7 @@ Ported Runnable's (Claude Code internal) best prompt engineering patterns into V
 - V4.6.0 complete with post-release fixes. Review system near-parity with Runnable.
 - Remaining gaps: Runnable has remote review sessions (ultrareview/CCR), fork semantics, auto-invocation, Playwright browser automation. These are infrastructure, not prompt quality.
 - **Weighted average: ~99% of Runnable** (all 7 gaps closed)
-- Final audit: no remaining Runnable patterns to port. Runnable HTML footer fixed. Zip rebuilt (470K).
+- Final audit: Runnable HTML footer fixed. Zip rebuilt.
+- **Batch skill**: NEW coordinator-worker orchestration for complex multi-file tasks. 6-phase workflow with role separation. 10 skills total now.
 - All 7 gaps documented in `compact_v4/docs/V4_6_RUNNABLE_UPGRADE.md`
 - Live Bedrock: 8/8 PASS after all gap closures (no regression)
