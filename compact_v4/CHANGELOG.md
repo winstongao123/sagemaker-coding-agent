@@ -1,5 +1,114 @@
 # Compact V4 Changelog
 
+## v4.7.1 — Local-git baseline + compact-survives-TODOs + /regression (2026-04-12)
+
+Base: compact_v4 v4.7.0
+
+### Why This Release (and what was deliberately NOT added)
+v4.7.0 shipped six UX features, most of which turned out to be polish. This release is the opposite — **three targeted fixes to real problems**, nothing more. We explicitly rejected auto-test-on-edit, block-on-lint-error, test-framework detection, and test-baseline tracking as overcomplication for a solo coding+review workflow where `/verify`, `/done`, and manual test runs already cover the need.
+
+### 1. Compact now preserves TODO list (real bug fix)
+**Before:** When v4 auto-compacted at 80% context, `_TODOS` survived as a sidebar widget but was **not injected into the post-compact message history**. The agent literally lost its task plan across compaction unless the user manually retyped it.
+
+**After:** [`Compactor.compact()`](compact_v4/MAIN/agent/sagemaker_agent.py) now calls a new helper `build_todo_restoration_message()` and merges its output into the post-compact user message alongside the existing file-restoration block. The agent wakes up from compaction seeing:
+
+```
+[POST-COMPACT TODO RESTORATION — your task plan from before compaction]
+
+**In progress:**
+  🔄 Fix the auth bug
+
+**Pending:**
+  ⬜ Write tests
+  ⬜ Deploy to staging
+
+**Completed (10):**
+  ✅ Refactor tokens  ... and 7 earlier
+
+[Continue from where you left off. Use todo_write to update status.]
+```
+
+In-progress shown first (most actionable), pending next, completed truncated to the last 3 (context without bloat). Handles empty todos cleanly (returns `None`, no wasted tokens).
+
+### 2. Auto-commit checkpoint (local-git baseline maintenance)
+**Problem:** v4 already shows `git diff HEAD` after every edit — but only if HEAD is recent. If you don't `git commit` for two hours, the diff grows unbounded and stops being useful for "what did this edit change".
+
+**Fix:** New `Config.auto_commit_every: int = 0` (default disabled). When set to N > 0, every N successful edits runs `git commit -am "agent-checkpoint HH:MM:SS (auto)"` locally. **Never pushes.** Keeps `git diff HEAD` always showing only the latest change set.
+
+Silently skipped when:
+- Not inside a git repo
+- Nothing staged (no changes since last commit)
+- Threshold not yet reached
+
+Integrated into both [`tool_write_file`](compact_v4/MAIN/agent/sagemaker_agent.py) and [`tool_edit_file`](compact_v4/MAIN/agent/sagemaker_agent.py) after auto-lint. Non-blocking — any failure is swallowed so it can never break an edit.
+
+### 3. `/regression` thin-wrapper command
+Wraps three existing signals into one command for a fast "did I break anything" check:
+- `git diff HEAD --stat` (uncommitted files since last commit)
+- Session diff summary from `_RECENT_DIFFS` (per-file edit counts this session)
+- Suggested test command (`pytest -x -q` if pytest config exists, else `python -m unittest discover -v`)
+
+**Explicitly does NOT:**
+- Run tests automatically (user decides)
+- Track baseline / detect regressions (use `/verify` for that)
+- Parse test output (trust bash + pytest)
+
+~30 lines. Pure convenience over existing primitives. No new state, no new deps.
+
+### Files Changed
+- `compact_v4/MAIN/agent/sagemaker_agent.py` — +147 lines (9,719 → 9,866)
+  - `Config.auto_commit_every: int = 0` field added
+  - `_AUTO_COMMIT_COUNTER`, `_AUTO_COMMIT_LOCK`, `_maybe_auto_checkpoint()` helpers added
+  - `build_todo_restoration_message()` helper added
+  - `Compactor.compact()` extended to merge TODO restoration into post-compact user message
+  - `tool_write_file` + `tool_edit_file` call `_maybe_auto_checkpoint()` after auto-lint
+  - New `/regression` slash command handler
+  - System-prompt commands line updated with `/regression`
+- `compact_v4/MAIN/agent/test_v471_enhancements.py` — **NEW**, 9 real tests (see Verification)
+- `compact_v4/CHANGELOG.md` — this entry
+
+### Verification — real tests, not just py_compile
+`test_v471_enhancements.py` creates temp git repos and calls real functions. **9/9 PASS:**
+
+```
+[auto-commit checkpoint]
+  ✓ auto_commit disabled by default
+  ✓ auto_commit fires at threshold
+  ✓ auto_commit no-op when nothing staged
+  ✓ auto_commit no-op outside git repo
+
+[todo restoration helper]
+  ✓ empty todos returns None
+  ✓ mixed statuses render correctly
+  ✓ long completed list is truncated
+
+[compact integration]
+  ✓ compact includes todo restoration
+  ✓ compact works fine without todos
+
+Result: 9/9 passed
+```
+
+Static checks also PASS:
+- `py_compile` clean
+- `ast.parse` clean
+- Warnings-as-errors clean
+- Module import succeeds (confirmed `CONFIG.auto_commit_every`, `_maybe_auto_checkpoint`, `build_todo_restoration_message`, `Compactor.compact` all load)
+
+**NOT tested:** Jupyter UI render of `/regression` output (requires live SageMaker kernel). The command handler was verified statically.
+
+### Explicitly rejected (documented so future releases don't re-litigate)
+
+| Feature | Why rejected |
+|---|---|
+| `auto_test_on_edit` | Runs tests on every edit — slow, noisy, breaks flow. `/verify` already covers user-invoked testing. |
+| `block_on_lint_error` | Auto-lint already warns on syntax errors. Blocking is annoying and rarely the right move (sometimes you edit mid-refactor). |
+| `_detect_test_framework` / `_run_tests_quick` / `_check_test_regression` / `_LAST_TEST_STATE` | All ~200 lines of framework detection and baseline tracking were in service of auto_test_on_edit. Removing the feature removed the need for all of this. |
+| `Config.test_timeout_seconds` / `Config.test_target` | Only useful with auto_test_on_edit. Dropped with it. |
+| Module split | Violates "one file SageMaker" constraint. |
+
+---
+
 ## v4.7.0 — Coding UX Enhancements: /done gate, /diffs, phase display, budget bar, revert preview, checkpoint restore (2026-04-12)
 
 Base: compact_v4 v4.6.1

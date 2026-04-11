@@ -1,12 +1,76 @@
-# Session State — V4.7.0
+# Session State — V4.7.1
 
 > **Last updated**: 2026-04-12 by Claude Opus 4.6
-> **Git state**: Committing v4.7.0 coding UX enhancements (`/done` gate, `/diffs`, `/phase`, `/revert` preview, budget bar, `/checkpoint restore`), push to `sageagent`
-> **V4 version**: 4.7.0
+> **Git state**: Committing v4.7.1 (auto-commit baseline + compact-preserves-TODOs + /regression), push to `sageagent`
+> **V4 version**: 4.7.1
 
 ---
 
-## LATEST: V4.7.0 Coding UX Enhancements (2026-04-12)
+## LATEST: V4.7.1 — Three targeted fixes (2026-04-12)
+
+After v4.7.0 shipped six UX features, user flagged overcomplication risk. v4.7.1 is the minimal scope response: **three fixes, all tested, nothing else.**
+
+### What changed (and what was explicitly rejected)
+
+1. **Compact now preserves TODO list** (real bug fix — agent was losing task plan across compaction)
+   - New helper: `build_todo_restoration_message()`
+   - Integrated into `Compactor.compact()` — merges with existing file-restoration block
+   - Groups by status, shows in_progress first, truncates completed to last 3
+   - Returns None (no tokens) when there are no todos
+
+2. **Auto-commit checkpoint** — `Config.auto_commit_every: int = 0` (default off)
+   - When set to N > 0, runs `git commit -am "agent-checkpoint ... (auto)"` locally every N edits
+   - **Never pushes** — local only, keeps `git diff HEAD` baseline fresh
+   - Silently no-ops outside git repos, when nothing staged, or below threshold
+   - Integrated into `tool_write_file` and `tool_edit_file` after auto-lint
+
+3. **`/regression` thin-wrapper command** — prints `git diff HEAD --stat` + session edit summary + suggested test command. Does NOT run tests itself. Does NOT track baselines. Pure convenience over existing primitives.
+
+### Explicitly rejected as overcomplication
+- `auto_test_on_edit` — runs tests on every edit, slow and noisy
+- `block_on_lint_error` — auto-lint already warns; blocking is annoying
+- `_detect_test_framework` / `_run_tests_quick` / `_check_test_regression` / `_LAST_TEST_STATE` — ~200 lines of test framework detection and baseline tracking, all in service of auto_test_on_edit; removed when that feature was dropped
+- `Config.test_timeout_seconds` / `Config.test_target` — only useful with auto_test_on_edit
+
+### Files changed
+- `compact_v4/MAIN/agent/sagemaker_agent.py` — +147 lines (9,719 → 9,866)
+- `compact_v4/MAIN/agent/test_v471_enhancements.py` — **NEW**, 9 real tests (not static)
+- `compact_v4/CHANGELOG.md` — v4.7.1 section + explicit rejected list
+- `compact_v4/MAIN/agent/USER_GUIDE.md` — `/regression` row + three new notes
+
+### Verification — real tests
+Unlike v4.7.0 (which was only static-verified), v4.7.1 ships with a proper test suite that creates temp git repos and calls real functions:
+
+```
+[auto-commit checkpoint]
+  ✓ auto_commit disabled by default
+  ✓ auto_commit fires at threshold
+  ✓ auto_commit no-op when nothing staged
+  ✓ auto_commit no-op outside git repo
+
+[todo restoration helper]
+  ✓ empty todos returns None
+  ✓ mixed statuses render correctly
+  ✓ long completed list is truncated
+
+[compact integration]
+  ✓ compact includes todo restoration
+  ✓ compact works fine without todos
+
+Result: 9/9 passed
+```
+
+Also PASSING:
+- `py_compile` clean
+- `ast.parse` clean
+- warnings-as-errors clean
+- Module imports cleanly with all new helpers accessible
+
+**NOT tested:** Jupyter UI render of `/regression` output (no live SageMaker kernel in this environment). Command handler was verified statically.
+
+---
+
+## PREVIOUS: V4.7.0 Coding UX Enhancements (2026-04-12)
 
 Audit against Learning Factory patterns found six UX gaps in solo-developer flow that were costing trust and cycles. All six + one bonus (`/diffs`) implemented inline in `sagemaker_agent.py` — pure Python, no new files, no Codex CLI, no git hooks.
 

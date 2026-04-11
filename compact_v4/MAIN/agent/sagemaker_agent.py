@@ -454,16 +454,26 @@ Format as a comprehensive summary that preserves all context needed to continue 
 
         # V4: append file restoration, guarding Bedrock role alternation (SR-5)
         restoration_text = build_file_restoration_message(recently_read)
-        if restoration_text:
+        # V4.7.1: also re-inject the TODO list so the agent remembers its work plan
+        todo_text = build_todo_restoration_message()
+        combined_restore = None
+        if restoration_text and todo_text:
+            combined_restore = todo_text + "\n\n" + restoration_text
+        elif restoration_text:
+            combined_restore = restoration_text
+        elif todo_text:
+            combined_restore = todo_text
+
+        if combined_restore:
             last_role = compacted[-1].get("role") if compacted else None
             if last_role == "assistant":
-                compacted.append({"role": "user", "content": restoration_text})
+                compacted.append({"role": "user", "content": combined_restore})
             elif last_role == "user":
                 last_content = compacted[-1].get("content", "")
                 if isinstance(last_content, str):
-                    compacted[-1]["content"] = last_content + "\n\n" + restoration_text
+                    compacted[-1]["content"] = last_content + "\n\n" + combined_restore
                 elif isinstance(last_content, list):
-                    compacted[-1]["content"].append({"type": "text", "text": restoration_text})
+                    compacted[-1]["content"].append({"type": "text", "text": combined_restore})
 
         return compacted
 
@@ -484,6 +494,40 @@ POST_COMPACT_TOTAL_BUDGET: int = 32000          # ~8K tokens total
 # and replaced with a preview + file pointer. Prevents large bash/read outputs from
 # flooding the context window (mirrors runnable's 50K char / 200K batch caps).
 MAX_TOOL_RESULT_CHARS: int = 50_000
+
+
+def build_todo_restoration_message() -> Optional[str]:
+    """V4.7.1: Reads _TODOS global and builds a post-compact restoration text block.
+    Returns None if there are no todos (nothing to restore).
+    Called from Compactor.compact() so the agent remembers its work plan after compaction."""
+    todos = globals().get("_TODOS", [])
+    if not todos:
+        return None
+    lines = ["[POST-COMPACT TODO RESTORATION — your task plan from before compaction]"]
+    # Group by status for clarity
+    status_groups = {"in_progress": [], "pending": [], "completed": []}
+    for t in todos:
+        st = t.get("status", "pending")
+        if st in status_groups:
+            status_groups[st].append(t)
+    if status_groups["in_progress"]:
+        lines.append("\n**In progress:**")
+        for t in status_groups["in_progress"]:
+            lines.append(f"  🔄 {t.get('content', '?')}")
+    if status_groups["pending"]:
+        lines.append("\n**Pending:**")
+        for t in status_groups["pending"]:
+            lines.append(f"  ⬜ {t.get('content', '?')}")
+    if status_groups["completed"]:
+        done_count = len(status_groups["completed"])
+        last_done = status_groups["completed"][-3:]  # show last 3 completed for context
+        lines.append(f"\n**Completed ({done_count}):**")
+        for t in last_done:
+            lines.append(f"  ✅ {t.get('content', '?')}")
+        if done_count > 3:
+            lines.append(f"  ... and {done_count - 3} earlier")
+    lines.append("\n[Continue from where you left off. Use todo_write to update status.]")
+    return "\n".join(lines)
 
 
 def get_recently_read_files(messages: List[Dict], n: int = POST_COMPACT_MAX_FILES) -> List[str]:
@@ -879,6 +923,9 @@ class Config:
     aws_bedrock_only: bool = False  # Set True to block all boto3 except bedrock-runtime
     # Stealth: disable all local file traces (sessions, audit, snapshots, code index)
     disable_local_traces: bool = False  # Set True for zero local footprint
+
+    # V4.7.1 local-git baseline maintenance (keeps `git diff HEAD` always recent)
+    auto_commit_every: int = 0  # If > 0: run `git commit -am "agent-checkpoint"` every N successful edits. Local only, never pushes.
 
     # V4 capabilities
     load_claude_md: bool = True   # Auto-load CLAUDE.md from workspace + parent dirs into system prompt
@@ -3480,6 +3527,57 @@ def _auto_lint_python(filepath: str) -> Optional[str]:
         return None  # Don't block on lint failure
 
 
+# ============== V4.7.1 LOCAL-GIT BASELINE MAINTENANCE ==============
+# Solo coding+review workflow needs `git diff HEAD` to always show ONLY the
+# latest change — not an hour of accumulated edits. Auto-commit every N edits
+# keeps HEAD fresh. Local-only, never pushes.
+
+_AUTO_COMMIT_COUNTER = 0
+_AUTO_COMMIT_LOCK = threading.Lock()
+
+
+def _maybe_auto_checkpoint(workspace: str) -> Optional[str]:
+    """Increment edit counter. If threshold reached, run `git commit -am 'agent-checkpoint'`.
+    Local-only, never pushes. Returns commit summary or None."""
+    every = CONFIG.auto_commit_every
+    if every <= 0:
+        return None
+    global _AUTO_COMMIT_COUNTER
+    with _AUTO_COMMIT_LOCK:
+        _AUTO_COMMIT_COUNTER += 1
+        if _AUTO_COMMIT_COUNTER < every:
+            return None
+        _AUTO_COMMIT_COUNTER = 0
+    # Threshold reached — try a checkpoint commit (must be in a git repo)
+    try:
+        check = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=5, cwd=workspace
+        )
+        if check.returncode != 0:
+            return None  # Not a git repo — silently skip
+        # Stage everything tracked + untracked non-ignored
+        subprocess.run(["git", "add", "-A"], capture_output=True, text=True, timeout=10, cwd=workspace)
+        # Check if anything is staged
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            capture_output=True, text=True, timeout=5, cwd=workspace
+        )
+        if not staged.stdout.strip():
+            return None  # Nothing to commit
+        ts = time.strftime("%H:%M:%S")
+        commit = subprocess.run(
+            ["git", "commit", "-m", f"agent-checkpoint {ts} (auto)", "--no-verify"],
+            capture_output=True, text=True, timeout=15, cwd=workspace
+        )
+        if commit.returncode == 0:
+            files = [l for l in staged.stdout.strip().split("\n") if l]
+            return f"📌 auto-checkpoint {ts}: {len(files)} file(s) committed locally"
+        return None
+    except Exception:
+        return None
+
+
 def _scan_output_secrets(text: str) -> Optional[str]:
     """Scan tool output for leaked secrets. Returns warning or None."""
     SECRET_PATTERNS = [
@@ -3579,6 +3677,14 @@ def tool_write_file(args: Dict) -> str:
         lint_err = _auto_lint_python(abs_path)
         if lint_err:
             result += f"\n{lint_err}"
+
+        # V4.7.1: auto-commit checkpoint (local only, never pushes) — keeps `git diff HEAD` baseline fresh
+        try:
+            cp = _maybe_auto_checkpoint(CONFIG.workspace)
+            if cp:
+                result += f"\n{cp}"
+        except Exception:
+            pass
         return result
     except Exception as e:
         return f"Error writing file: {e}"
@@ -3684,6 +3790,14 @@ def tool_edit_file(args: Dict) -> str:
         lint_err = _auto_lint_python(abs_path)
         if lint_err:
             result += f"\n{lint_err}"
+
+        # V4.7.1: auto-commit checkpoint (local only, never pushes) — keeps `git diff HEAD` baseline fresh
+        try:
+            cp = _maybe_auto_checkpoint(CONFIG.workspace)
+            if cp:
+                result += f"\n{cp}"
+        except Exception:
+            pass
 
         # V4.1 #10: Prepend partial view warning if file was only partially read
         if partial_warning:
@@ -6454,7 +6568,7 @@ WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create
 MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Prefer MCP tools when available.
 
 # Commands
-`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/commands` (custom).
+`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/commands` (custom).
 
 # === DYNAMIC ===
 """
@@ -8941,6 +9055,39 @@ def create_chat_ui(mock_mode: bool = None):
                         rel = os.path.relpath(d["file"], CONFIG.workspace) if d["file"].startswith(CONFIG.workspace) else d["file"]
                         chunks.append(f'**{rel}**\n```diff\n{diff_text}\n```')
                     add_message('system', f'Showing last {len(chunks)} of {len(matches)} diffs matching "{arg}":\n\n' + "\n\n".join(chunks))
+            input_box.value = ""
+            _release_lock()
+            return
+        # /regression command - thin wrapper: git diff HEAD + session diff summary + suggested test cmd
+        if msg == "/regression" or msg.startswith("/regression "):
+            try:
+                gd = subprocess.run(
+                    ["git", "diff", "HEAD", "--stat"],
+                    capture_output=True, text=True, timeout=5, cwd=CONFIG.workspace
+                )
+                git_stat = gd.stdout.strip() if gd.returncode == 0 else f"(not a git repo or no HEAD: {gd.stderr.strip()[:200]})"
+            except Exception as e:
+                git_stat = f"(git unavailable: {e})"
+            with _RECENT_DIFFS_LOCK:
+                diffs = list(_RECENT_DIFFS)
+            if diffs:
+                counts = {}
+                for d in diffs:
+                    f = d.get("file", "?")
+                    counts[f] = counts.get(f, 0) + 1
+                sess_lines = [f"- `{os.path.relpath(f, CONFIG.workspace) if f.startswith(CONFIG.workspace) else f}` — {n} edit(s)" for f, n in sorted(counts.items())]
+                session_block = f"**Session edits:** {len(diffs)} total across {len(counts)} file(s)\n" + "\n".join(sess_lines)
+            else:
+                session_block = "**Session edits:** none yet"
+            has_pytest = any(os.path.isfile(os.path.join(CONFIG.workspace, m)) for m in ("pytest.ini", "pyproject.toml", "conftest.py"))
+            test_suggest = "pytest -x -q" if has_pytest else "python -m unittest discover -v"
+            add_message('system',
+                f"**Regression check:**\n\n"
+                f"**git diff HEAD --stat:**\n```\n{git_stat or '(no uncommitted changes)'}\n```\n\n"
+                f"{session_block}\n\n"
+                f"**Suggested test command:** `bash {test_suggest}`\n"
+                f"Run it via bash to verify nothing broke. Or run `/verify` for adversarial testing + skill-driven report."
+            )
             input_box.value = ""
             _release_lock()
             return

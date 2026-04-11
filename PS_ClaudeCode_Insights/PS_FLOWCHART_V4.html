@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageMaker Coding Agent V4.7.0 - Architecture, Runnable Comparison, Coding UX Enhancements</title>
+<title>SageMaker Coding Agent V4.7.1 - Architecture, Runnable Comparison, Local-git Baseline + Compact Fix</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -212,23 +212,146 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.7.0</h1>
+    <h1>SageMaker Coding Agent V4.7.1</h1>
     <p class="subtitle">
-      Architecture map of V4.7.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,719 lines),
-      plus comparison against Claude Code runnable source. V4.7.0 adds six coding-UX enhancements ported from Learning Factory:
-      <b>/done gate</b>, <b>/diffs history</b>, <b>/phase indicator</b>, <b>/revert diff preview</b>, <b>budget visual bar</b>,
-      and <b>/checkpoint restore</b>. V4.6.1 added workspace path resolution fix on top of V4.6.0's full review/verification parity with Runnable
-      for SageMaker scope: tool efficiency, code security (OWASP), prompt injection detection, sub-agent
-      notes, escalation guidance, and URL safety. UI redesigned with budget slider, soft-stop, improved markdown rendering.
+      Architecture map of V4.7.1 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,866 lines),
+      plus comparison against Claude Code runnable source. <b>V4.7.1 is the anti-bloat release</b> — after v4.7.0 shipped six
+      UX features, v4.7.1 ships exactly three targeted fixes and explicitly rejects five features as overcomplication.
+      Changes: <b>compact now preserves TODO list</b> (real bug fix — agent was losing its task plan across auto-compaction),
+      <b>auto-commit checkpoint</b> for local-git baseline maintenance, and <b>/regression</b> thin-wrapper command. All three
+      verified by 9/9 passing real tests (temp git repos, live function calls — not static checks).
+      v4.7.0 added six coding-UX enhancements; v4.6.1 added workspace path resolution fix on top of v4.6.0's full
+      review/verification parity with Runnable.
     </p>
     <div class="stats">
       <div class="stat"><strong>25+</strong><span>Tools</span></div>
       <div class="stat"><strong>16</strong><span>Security Layers</span></div>
       <div class="stat"><strong>7</strong><span>Sub-Agent Types</span></div>
       <div class="stat"><strong>10</strong><span>Skills</span></div>
-      <div class="stat"><strong>9,719</strong><span>Lines of Code</span></div>
-      <div class="stat"><strong>V4.7.0</strong><span>Current Version</span></div>
+      <div class="stat"><strong>9,866</strong><span>Lines of Code</span></div>
+      <div class="stat"><strong>V4.7.1</strong><span>Current Version</span></div>
     </div>
+  </section>
+
+  <section class="panel active" style="border-left:4px solid #3b82f6;">
+    <h2 style="color:#3b82f6;">V4.7.1 — Anti-bloat release (2026-04-12)</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">
+      After v4.7.0 shipped six UX features, user raised overcomplication risk.
+      v4.7.1 is the minimal-scope response: <b>three targeted fixes, all tested with real tests (not just py_compile),
+      nothing else</b>. Five candidate features were explicitly rejected and documented below so the decision doesn't get re-litigated.
+    </p>
+
+    <h3 style="margin-top:16px;color:#10b981;">What shipped (3 fixes)</h3>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead>
+        <tr style="background:var(--bg-card);">
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Fix</th>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Why it matters</th>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Where</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>Compact preserves TODO list</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            <b>Real bug fix.</b> When v4 auto-compacts at 80% context, <code>_TODOS</code> survived as a sidebar widget but was
+            <b>not injected into the post-compact message history</b> — the agent literally lost its task plan across compaction unless the user retyped it.
+            New helper <code>build_todo_restoration_message()</code> renders todos grouped by status (in-progress first, pending next, completed truncated to last 3),
+            and <code>Compactor.compact()</code> merges it into the post-compact user message alongside the existing file-restoration block.
+            Returns None when no todos exist (no wasted tokens).
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            new <code>build_todo_restoration_message()</code>,<br>
+            <code>Compactor.compact()</code> extended
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>Auto-commit checkpoint</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            <b>Makes existing diff check actually useful.</b> v4 already shows <code>git diff HEAD</code> after every edit — but only useful if HEAD is recent.
+            Without auto-commit, HEAD can be hours stale and the diff grows unbounded.
+            New <code>Config.auto_commit_every: int = 0</code> (default off). When set to N &gt; 0, runs <code>git commit -am "agent-checkpoint ... (auto)"</code>
+            locally every N edits. <b>Never pushes.</b> Silently no-ops outside git repos, when nothing staged, or below threshold. Non-blocking — any failure is swallowed.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            <code>Config.auto_commit_every</code>,<br>
+            <code>_maybe_auto_checkpoint()</code>,<br>
+            integrated in write+edit
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>/regression command</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Thin wrapper over existing signals — <code>git diff HEAD --stat</code>, session edit counts from <code>_RECENT_DIFFS</code>, and a suggested test command.
+            <b>Does NOT run tests itself</b> (you run them via bash when you want) and <b>does NOT track baselines</b> (use <code>/verify</code> for that).
+            Pure convenience. ~30 lines. No new state, no new deps.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">new command handler</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:20px;color:#ef4444;">What was explicitly rejected</h3>
+    <p style="color:var(--muted);font-size:13px;">Documented so future releases don't re-litigate the decision:</p>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead>
+        <tr style="background:var(--bg-card);">
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Feature</th>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Why rejected</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>auto_test_on_edit</code></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">Runs tests on every edit — slow, noisy, breaks flow. <code>/verify</code> already covers user-invoked testing. <code>/regression</code> covers the "did I break anything" check without the cost.</td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>block_on_lint_error</code></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">Auto-lint already warns on syntax errors. Blocking is annoying — sometimes you edit mid-refactor and can't yet satisfy the linter.</td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>_detect_test_framework</code> / <code>_run_tests_quick</code> / <code>_check_test_regression</code> / <code>_LAST_TEST_STATE</code></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">~200 lines of framework detection and baseline tracking, all in service of <code>auto_test_on_edit</code>. Removing the feature removed the need for all of this.</td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>Config.test_timeout_seconds</code> / <code>Config.test_target</code></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">Only useful with <code>auto_test_on_edit</code>. Dropped with it.</td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">Module split (9.8K lines → multiple files)</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">Violates user's "one file SageMaker" constraint. The single-file delivery surface is a feature, not a bug.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:20px;color:#10b981;">Verification — real tests, not static</h3>
+    <p style="color:var(--muted);font-size:13px;">
+      Unlike v4.7.0 which was only static-verified, v4.7.1 ships with
+      <code>compact_v4/MAIN/agent/test_v471_enhancements.py</code> — 9 tests that create temp git repos and call real functions.
+      <b>9/9 PASS.</b>
+    </p>
+    <pre style="background:var(--bg-card);padding:10px;border-radius:6px;font-size:12px;overflow-x:auto;">
+[auto-commit checkpoint]
+  ✓ auto_commit disabled by default
+  ✓ auto_commit fires at threshold
+  ✓ auto_commit no-op when nothing staged
+  ✓ auto_commit no-op outside git repo
+
+[todo restoration helper]
+  ✓ empty todos returns None
+  ✓ mixed statuses render correctly
+  ✓ long completed list is truncated
+
+[compact integration]
+  ✓ compact includes todo restoration
+  ✓ compact works fine without todos
+
+Result: 9/9 passed
+</pre>
+    <p style="color:var(--muted);font-size:13px;">
+      Also passing: <code>py_compile</code>, <code>ast.parse</code>, warnings-as-errors, module import with all new helpers accessible.
+      <b>Not tested:</b> Jupyter UI render of <code>/regression</code> output — requires live SageMaker kernel.
+    </p>
   </section>
 
   <section class="panel active" style="border-left:4px solid #10b981;">

@@ -360,6 +360,7 @@ Slash commands are typed directly in the chat input box (not as natural language
 | `/diffs` | Summary of session edits per file | `/diffs` |
 | `/diffs last` | Show most recent unified diff | `/diffs last` |
 | `/diffs <file>` | Show last 3 diffs matching filename substring | `/diffs app.py` |
+| `/regression` | **Fast "did I break anything" check** — prints `git diff HEAD --stat` + session edit summary + suggested test command | `/regression` |
 | `/done [full\|quick]` | **Pre-ship gate:** runs simplify → verify, produces READY-TO-SHIP / NEEDS-WORK / BLOCKED verdict | `/done full` |
 | `/phase <text>` | Set current work phase shown in status bar and token display | `/phase refactoring auth` |
 | `/phase clear` | Clear the phase indicator | `/phase clear` |
@@ -374,6 +375,12 @@ Slash commands are typed directly in the chat input box (not as natural language
 **Note on `/revert` safety:** All revert operations now show a diff preview first. The `--yes` flag is required to actually write files. This prevents accidental loss of current work.
 
 **Note on cost budget:** If `CONFIG.session_cost_limit > 0`, a 4px budget bar appears under the context bar in the token display. Green <80%, orange 80–99%, red ≥100%. Agent auto-stops at 100%.
+
+**Note on auto-commit checkpoint (v4.7.1):** Set `CONFIG.auto_commit_every = N` (e.g. 5) in agent_config.json to have v4 run `git commit -am "agent-checkpoint HH:MM:SS (auto)"` locally every N successful edits. **Never pushes** — local only. Keeps `git diff HEAD` always showing just the latest change set so you (and the agent) get a clean "what just changed" read-out. Default is 0 (disabled).
+
+**Note on compact + todos (v4.7.1):** When v4 auto-compacts at 80% context, the TODO list is now re-injected into the post-compact message so the agent remembers its task plan. In-progress tasks shown first, completed tasks truncated to last 3. Previously the agent would lose this across compaction and need re-briefing.
+
+**Note on `/regression`:** Thin wrapper — prints git diff stat, session edit counts, and a suggested test command. Does NOT run tests itself (you run them via bash) and does NOT track baselines. For automated adversarial testing use `/verify`. For a full ship gate use `/done`.
 
 ---
 
