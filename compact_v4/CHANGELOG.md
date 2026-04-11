@@ -1,5 +1,76 @@
 # Compact V4 Changelog
 
+## v4.7.0 — Coding UX Enhancements: /done gate, /diffs, phase display, budget bar, revert preview, checkpoint restore (2026-04-12)
+
+Base: compact_v4 v4.6.1
+
+### Why This Release
+Audit against Learning Factory patterns found five gaps in solo-developer UX: no pre-ship gate, no session-diff browsing, no task/phase indicator, no visual budget warning, no diff preview before revert, no checkpoint restore. All five (plus `/diffs`) now implemented inline in `sagemaker_agent.py` — no new files, no new dependencies, no Codex CLI, no git hooks. Pure Python additions fit the SageMaker notebook + Bedrock runtime.
+
+### New Commands
+
+#### `/done [full|quick]` — Pre-ship gate
+Chains `simplify` → `verify` skills with a mandatory final verdict. Agent must produce:
+- **SIMPLIFY:** what was changed or "nothing"
+- **VERIFY:** PASS / FAIL / PARTIAL with command+output evidence
+- **FINAL:** READY-TO-SHIP / NEEDS-WORK / BLOCKED
+
+Refuses to claim "done" unless VERIFY = PASS. Auto-loads both skills, sets phase to `done-gate:<scope>`.
+
+#### `/diffs [summary|last|<file>]` — Session edit history
+Exposes the existing `_RECENT_DIFFS` buffer (50-entry rolling window, populated on every Write/Edit).
+- `/diffs` or `/diffs summary` — per-file edit counts
+- `/diffs last` — show most recent diff
+- `/diffs <filename-substring>` — last 3 matching diffs with truncation at 3K each
+
+#### `/phase <text>` / `/phase clear` — Work phase label
+Sets a free-form phase shown in both the mode row and the token display. Defaults to `skill:<active>` when no phase is set but a skill is active. 80-char cap.
+
+### Enhancements
+
+#### `/revert` — Diff preview before destructive action
+Previously: `/revert <file>` blindly restored the latest snapshot. Now shows a unified diff (current → snapshot) and requires `--yes` to execute. `/revert all` also gated behind `--yes` and lists every affected file first. Early-exit when current already matches snapshot.
+
+#### `/checkpoint restore <name>` — Restore todos from checkpoint
+Previously: `/checkpoint list` showed saved checkpoints but no restore path. Now restores `_TODOS` from the named checkpoint and lists which files had been modified at checkpoint time. File-level restore is explicitly NOT auto-applied — user reviews the file list and uses `/revert <file>` per file (safer than blind batch revert).
+
+#### Status bar — Phase indicator
+`update_mode_display()` (mode row) now shows `Phase: <text>` after the cost indicator, color-coded cyan. Falls back to `skill:<name>` when no manual phase set.
+
+#### Token display — Budget progress bar
+`update_tokens_display()` now renders a 4px progress bar under the context bar when `CONFIG.session_cost_limit > 0`. Green <80%, orange 80–99%, red ≥100%. The backend alert logic (warn at 80%, stop at 100%) already existed at line 2858 — this adds the missing visual.
+
+Also adds `🎯 Phase: <text>` line above the token stats when a phase is set.
+
+### Files Changed
+- `compact_v4/MAIN/agent/sagemaker_agent.py` — +214 lines (9505 → 9719)
+  - `ui_state["session_phase"]` key added
+  - `update_mode_display()` phase part
+  - `update_tokens_display()` budget_block + phase_block
+  - `/revert` handler: diff preview + `--yes` gate
+  - `/checkpoint` handler: new `restore` branch
+  - `/done`, `/diffs`, `/phase` handlers added before custom-commands dispatch
+  - System-prompt commands line updated
+
+### Verification
+- Python syntax: PASS (`py_compile` + `ast.parse`)
+- Warnings-as-errors: CLEAN
+- Feature markers: 9/9 present
+- Not tested: Jupyter UI render (requires SageMaker kernel)
+
+### What Was NOT Ported From Learning Factory
+Explicitly evaluated and rejected as unfit for SageMaker+Bedrock solo runtime:
+- `codex-judge-gate.sh` / `pre-commit-diff-review.sh` — require local Codex CLI + git pre-commit; v4 already auto-diffs on every Edit at line 3658 and routes review through inline `simplify`/`verify` skills
+- `auto-push.sh` / main-push gates — SageMaker notebooks don't commit from the kernel
+- `rollback.sh` (shadow-git) — v4's `SnapshotManager` (line 3357) already provides this natively in Python
+- Claude Code `settings.json` hooks infrastructure — enforced via `Config.permission_rules` and `ban_patterns`, not bash hooks
+- Windows-specific paths in hook scripts — Linux-only SageMaker env
+
+### Design Note: Why `/done` Over Auto-Run-On-Stop
+Considered auto-running verify on every "done" intent detection but rejected: too noisy, burns tokens on trivial turns, hides cost. Explicit `/done` command is user-driven — ships only when the user signals intent, matches the existing `/verify` pattern, and produces a named verdict the user can act on.
+
+---
+
 ## v4.6.1 — Workspace Path Resolution Fix (2026-04-10)
 
 Base: compact_v4 v4.6.0

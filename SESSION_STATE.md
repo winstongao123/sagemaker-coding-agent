@@ -1,12 +1,61 @@
-# Session State — V4.6.1
+# Session State — V4.7.0
 
-> **Last updated**: 2026-04-10 by Claude Opus 4.6
-> **Git state**: Committing HTML completeness update (batch card, 7 gaps table, parity split, 15 patterns section), push to `sageagent`
-> **V4 version**: 4.6.1
+> **Last updated**: 2026-04-12 by Claude Opus 4.6
+> **Git state**: Committing v4.7.0 coding UX enhancements (`/done` gate, `/diffs`, `/phase`, `/revert` preview, budget bar, `/checkpoint restore`), push to `sageagent`
+> **V4 version**: 4.7.0
 
 ---
 
-## LATEST: HTML Completeness Audit + Closure (2026-04-10, after V4.6.1 commit)
+## LATEST: V4.7.0 Coding UX Enhancements (2026-04-12)
+
+Audit against Learning Factory patterns found six UX gaps in solo-developer flow that were costing trust and cycles. All six + one bonus (`/diffs`) implemented inline in `sagemaker_agent.py` — pure Python, no new files, no Codex CLI, no git hooks.
+
+### What changed
+
+1. **`/done [full|quick]`** — Pre-ship gate that chains `simplify` → `verify` skills with mandatory SIMPLIFY / VERIFY / FINAL verdict. Refuses to claim done unless VERIFY = PASS.
+
+2. **`/diffs [summary|last|<file>]`** — Exposes existing `_RECENT_DIFFS` 50-entry buffer (already populated on every Write/Edit at line 3568/3661). v4 was recording but had no retrieval command.
+
+3. **`/phase <text>`** — Free-form work phase shown in both mode row and token display. Auto-set to `done-gate:<scope>` when `/done` runs. Falls back to `skill:<name>`.
+
+4. **`/revert` diff preview** — Now shows unified diff before destructive restore. Requires `--yes` to execute. `/revert all` also gated. Early-exit when current already matches snapshot.
+
+5. **Budget progress bar** — Backend alert already existed (line 2858); added missing 4px visual bar when `CONFIG.session_cost_limit > 0`. Green/orange/red at 80/100%.
+
+6. **`/checkpoint restore <name>`** — Restores `_TODOS` from named checkpoint + lists files that had been modified at checkpoint time. Files NOT auto-reverted (safer — user uses `/revert <file>` per file).
+
+### Files changed
+- `compact_v4/MAIN/agent/sagemaker_agent.py` — +214 lines (9505 → 9719)
+- `compact_v4/CHANGELOG.md` — v4.7.0 section prepended
+- `compact_v4/MAIN/agent/USER_GUIDE.md` — commands table extended
+- `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html` — title/stats → v4.7.0, new release section added (positioned before tabbar so it's always visible)
+
+### What was NOT ported from Learning Factory
+- `codex-judge-gate` / `pre-commit-diff-review` — require Codex CLI + git pre-commit; v4 already auto-diffs on every Edit and uses inline `simplify`/`verify` skills
+- `auto-push` / main-push gates — SageMaker notebooks don't commit from kernel
+- `rollback.sh` shadow-git — `SnapshotManager` at line 3357 already provides this natively in Python
+- Claude Code `settings.json` hooks — enforced via `Config.permission_rules` / `ban_patterns`
+- Windows-specific hook scripts — Linux-only SageMaker env
+
+### Diff self-review (pre-commit gate)
+
+**Regressions:** None. Only one existing-code path rewritten (`/revert` handler): all original paths preserved (no-snapshots, list, revert-all, revert-file), just added preview gate behind `--yes` flag. Falls back to original behavior when `--yes` passed.
+
+**Unintended changes:** None. Grep-verified 9/9 feature markers present. `py_compile` + `ast.parse` PASS. Warnings-as-errors CLEAN.
+
+**CHANGELOG:** Updated with v4.7.0 section including rationale, new commands, enhancements, verification status, and explicit non-ported list. v4.6.1 section preserved below.
+
+**STATE.md:** This file — reflects current work.
+
+**Not tested:** Jupyter UI render (requires live SageMaker kernel). Will be verified on next notebook run. Playwright HTML check also not run — user should spot-check `PS_FLOWCHART_V4.html` renders the new green-border v4.7.0 section.
+
+---
+
+## PREVIOUS: V4.6.1 HTML Completeness (2026-04-10)
+
+---
+
+### HTML Completeness Audit + Closure
 
 Audit against the 15 Runnable patterns ported to V4 found 3 gaps in the HTML docs:
 1. **`batch` skill** (coordinator-worker orchestration) was completely missing from both HTMLs

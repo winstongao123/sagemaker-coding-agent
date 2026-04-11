@@ -6454,7 +6454,7 @@ WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create
 MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Prefer MCP tools when available.
 
 # Commands
-`/cost`, `/revert <file|all>`, `/verify [full|quick|pre-commit]`, `/checkpoint [name|list]`, `/commands` (custom).
+`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/commands` (custom).
 
 # === DYNAMIC ===
 """
@@ -7656,6 +7656,7 @@ def create_chat_ui(mock_mode: bool = None):
         "model_connection_ok": None,  # True/False/None(unknown)
         "model_connection_msg": "Not validated yet",
         "active_skills": [],
+        "session_phase": "",  # Current work phase, shown in status bar. Set via /phase <text>.
     }
     ui_state["model_change_lock"] = False
 
@@ -8207,6 +8208,12 @@ def create_chat_ui(mock_mode: bool = None):
         # Cost tracking
         cost_str = TOKENS.get_cost()
         cost_part = f' | Cost: <b>{cost_str}</b>' if TOKENS.session_cost > 0 else ''
+        # Session phase (from /phase <text>, falls back to active skill)
+        phase_text = ui_state.get("session_phase", "")
+        if not phase_text and active_skill_names:
+            phase_text = f"skill:{active_skill_names}"
+        phase_color = "#4fc3f7" if dark else "#0277bd"
+        phase_part = f' | <span style="color:{phase_color}">Phase: <b>{escape_html(phase_text)}</b></span>' if phase_text else ''
 
         mode_html.value = (
             f'<div style="font-size:12px;color:{text_color};margin:4px 0;">'
@@ -8216,7 +8223,7 @@ def create_chat_ui(mock_mode: bool = None):
             f'Plan: <b>{plan}</b> | '
             f'Thinking: <b>{thinking}</b> (budget {CONFIG.thinking_budget}) | '
             f'Auth: <b>{auth}</b> | '
-            f'Approval: <b>{approval}</b>{skill_part}{mcp_part}{cmd_part}{cost_part} | '
+            f'Approval: <b>{approval}</b>{skill_part}{mcp_part}{cmd_part}{cost_part}{phase_part} | '
             f'Exec: <b>{escape_html(CONFIG.execution_mode)}</b>'
             f'</div>'
         )
@@ -8292,8 +8299,40 @@ def create_chat_ui(mock_mode: bool = None):
             if TOKENS.session_input > 0:
                 cost_line += ' | Cache: <span style="color:#ff9800;">inactive</span>'
 
+        # Budget bar: only shown when session_cost_limit > 0
+        budget_block = ""
+        budget_limit = CONFIG.session_cost_limit
+        if budget_limit > 0:
+            budget_pct = min(100, (session_cost / budget_limit * 100)) if budget_limit > 0 else 0
+            if budget_pct >= 100:
+                budget_color = "#f44336"  # red - over
+            elif budget_pct >= 80:
+                budget_color = "#ff9800"  # orange - warn
+            else:
+                budget_color = "#4caf50"  # green - ok
+            budget_fmt = f"${budget_limit:.4f}" if budget_limit < 0.01 else f"${budget_limit:.2f}"
+            budget_block = (
+                f'<div style="margin-top:3px;">'
+                f'<span style="color:{budget_color}">Budget: {budget_pct:.0f}% ({cost_fmt} / {budget_fmt})</span>'
+                f'</div>'
+                f'<div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">'
+                f'<div style="background:{budget_color};width:{min(budget_pct,100)}%;height:100%;border-radius:2px;"></div>'
+                f'</div>'
+            )
+
+        # Phase line (above cost so users see current task first)
+        phase_text = ui_state.get("session_phase", "")
+        phase_block = ""
+        if phase_text:
+            phase_block = (
+                f'<div style="margin-top:2px;color:#4fc3f7;">'
+                f'🎯 Phase: <b>{escape_html(phase_text)}</b>'
+                f'</div>'
+            )
+
         tokens_html.value = f'''
         <div style="font-size:11px;color:{c["fg_muted"]};line-height:1.5;">
+            {phase_block}
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;">
                 <span>📊 In <b>{stats["session_input"]:,}</b> | Out <b>{stats["session_output"]:,}</b> | Calls {stats["api_calls"]}</span>
             </div>
@@ -8304,6 +8343,7 @@ def create_chat_ui(mock_mode: bool = None):
             <div style="background:{c["bar_bg"]};height:4px;border-radius:2px;margin-top:2px;">
                 <div style="background:{ctx_color};width:{bar_width}%;height:100%;border-radius:2px;"></div>
             </div>
+            {budget_block}
         </div>
         '''
         # Also refresh status line so cost stays in sync
@@ -8671,11 +8711,58 @@ def create_chat_ui(mock_mode: bool = None):
             _release_lock()
             return
         if msg == "/revert" or msg.startswith("/revert "):
-            target = msg[len("/revert"):].strip()
+            raw = msg[len("/revert"):].strip()
+            # Support "--yes" flag for confirmed revert (skip preview)
+            force = False
+            if raw.endswith(" --yes") or raw == "--yes":
+                force = True
+                raw = raw[:-len("--yes")].strip()
+            target = raw
             if target == "all":
-                result = SNAPSHOTS.revert_all()
+                if not force:
+                    snaps = SNAPSHOTS.list_snapshots()
+                    files = sorted(set(e["rel"] for e in snaps))
+                    result = (
+                        f"⚠ /revert all would restore {len(files)} file(s) to earliest snapshot:\n"
+                        + "\n".join(f"- {f}" for f in files)
+                        + "\n\nThis is destructive. Confirm with `/revert all --yes`."
+                    )
+                else:
+                    result = SNAPSHOTS.revert_all()
             elif target:
-                ok, result = SNAPSHOTS.revert(os.path.join(CONFIG.workspace, target))
+                abs_path = os.path.join(CONFIG.workspace, target) if not os.path.isabs(target) else target
+                matching = [e for e in SNAPSHOTS.list_snapshots() if e["file"] == abs_path]
+                if not matching:
+                    result = f"No snapshots for {target}"
+                elif not force:
+                    # Show diff preview between current file and snapshot
+                    latest = matching[-1]
+                    snap_time = time.strftime('%H:%M:%S', time.localtime(latest['time']))
+                    try:
+                        with open(abs_path, 'r', encoding='utf-8', errors='replace') as f:
+                            current = f.read()
+                    except Exception:
+                        current = ""
+                    try:
+                        with open(latest['snapshot'], 'r', encoding='utf-8', errors='replace') as f:
+                            snapshot = f.read()
+                    except Exception:
+                        snapshot = ""
+                    if current == snapshot:
+                        result = f"✓ {target} already matches snapshot from {snap_time}. Nothing to revert."
+                    else:
+                        # Diff is FROM current TO snapshot (showing what revert will undo)
+                        diff_text = _generate_unified_diff(abs_path, current, snapshot)
+                        # Truncate very long diffs
+                        if len(diff_text) > 6000:
+                            diff_text = diff_text[:6000] + "\n... (diff truncated)"
+                        result = (
+                            f"**Preview:** `/revert {target}` will restore snapshot from {snap_time}.\n"
+                            f"Diff (current → snapshot):\n```diff\n{diff_text}\n```\n"
+                            f"Confirm with `/revert {target} --yes`"
+                        )
+                else:
+                    ok, result = SNAPSHOTS.revert(abs_path)
             else:
                 snaps = SNAPSHOTS.list_snapshots()
                 if not snaps:
@@ -8683,7 +8770,7 @@ def create_chat_ui(mock_mode: bool = None):
                 else:
                     files = set(e["rel"] for e in snaps)
                     result = f"Files with snapshots ({len(files)}):\n" + "\n".join(f"- {f}" for f in sorted(files))
-                    result += "\n\nUse `/revert <file>` or `/revert all`"
+                    result += "\n\nUse `/revert <file>` (shows preview) then `/revert <file> --yes` to confirm, or `/revert all --yes`."
             add_message('system', result)
             input_box.value = ""
             _release_lock()
@@ -8728,7 +8815,7 @@ def create_chat_ui(mock_mode: bool = None):
                 input_box.value = ""
                 _release_lock()
                 return
-        # /checkpoint command - save/list named checkpoints
+        # /checkpoint command - save/list/restore named checkpoints
         if msg == "/checkpoint" or msg.startswith("/checkpoint "):
             parts = msg.split(None, 2)
             action = parts[1] if len(parts) > 1 else "create"
@@ -8740,6 +8827,35 @@ def create_chat_ui(mock_mode: bool = None):
                     add_message('system', f"Checkpoints ({len(cps)}):\n" + "\n".join(lines))
                 else:
                     add_message('system', 'No checkpoints saved. Use `/checkpoint create <name>`')
+            elif action == "restore":
+                # /checkpoint restore <name> — restore todos from a named checkpoint
+                target_name = parts[2].strip() if len(parts) > 2 else ""
+                cps = ui_state.get("checkpoints", [])
+                if not target_name:
+                    add_message('system', 'Usage: `/checkpoint restore <name>` — see `/checkpoint list`')
+                else:
+                    match = next((c for c in reversed(cps) if c.get("name") == target_name), None)
+                    if not match:
+                        add_message('system', f'No checkpoint named "{target_name}". Use `/checkpoint list`.')
+                    else:
+                        try:
+                            global _TODOS
+                            _TODOS = copy.deepcopy(match.get("todos", []))
+                            ui_state["todos"] = list(_TODOS)
+                        except Exception as _e:
+                            add_message('system', f'Restore partial failure: {_e}')
+                        files_mod = match.get("files_modified", [])
+                        files_list = "\n".join(f"- {f}" for f in files_mod) if files_mod else "(none)"
+                        add_message('system',
+                            f'✓ Restored todos from checkpoint **{target_name}** ({match.get("time","")[:16]}).\n'
+                            f'- Todos restored: {len(match.get("todos", []))}\n'
+                            f'- Files that had been modified at checkpoint time:\n{files_list}\n\n'
+                            f'Files are NOT auto-reverted. Review and use `/revert <file>` per file if needed.'
+                        )
+                        try:
+                            render_chat()
+                        except Exception:
+                            pass
             else:  # "create" or any other word treated as checkpoint name
                 if action not in ("list", "create"):
                     cp_name = action  # /checkpoint my-milestone → name = "my-milestone"
@@ -8767,6 +8883,104 @@ def create_chat_ui(mock_mode: bool = None):
             input_box.value = ""
             _release_lock()
             return
+
+        # /phase command - set current work phase shown in status bar
+        if msg == "/phase" or msg.startswith("/phase "):
+            new_phase = msg[len("/phase"):].strip()
+            if not new_phase:
+                current = ui_state.get("session_phase", "")
+                add_message('system', f'Current phase: **{current or "(none)"}**\nUsage: `/phase <text>` or `/phase clear`')
+            elif new_phase.lower() == "clear":
+                ui_state["session_phase"] = ""
+                add_message('system', 'Phase cleared.')
+            else:
+                ui_state["session_phase"] = new_phase[:80]
+                add_message('system', f'Phase set: **{new_phase[:80]}**')
+            update_mode_display()
+            update_tokens_display()
+            input_box.value = ""
+            _release_lock()
+            return
+        # /diffs command - show recent edit diffs this session
+        if msg == "/diffs" or msg.startswith("/diffs "):
+            arg = msg[len("/diffs"):].strip()
+            with _RECENT_DIFFS_LOCK:
+                diffs = list(_RECENT_DIFFS)
+            if not diffs:
+                add_message('system', 'No edits yet this session. Diffs are recorded on every Write/Edit.')
+            elif arg == "summary" or not arg:
+                # Per-file summary: file -> count
+                counts = {}
+                for d in diffs:
+                    f = d.get("file", "?")
+                    counts[f] = counts.get(f, 0) + 1
+                lines = [f"- `{os.path.relpath(f, CONFIG.workspace) if f.startswith(CONFIG.workspace) else f}` — {n} edit(s)" for f, n in sorted(counts.items())]
+                add_message('system',
+                    f'**Session edits:** {len(diffs)} total across {len(counts)} file(s)\n'
+                    + "\n".join(lines)
+                    + "\n\nUse `/diffs <file>` to see full diff, `/diffs last` for the most recent."
+                )
+            elif arg == "last":
+                d = diffs[-1]
+                diff_text = d.get("diff", "(empty)")
+                if len(diff_text) > 6000:
+                    diff_text = diff_text[:6000] + "\n... (truncated)"
+                rel = os.path.relpath(d["file"], CONFIG.workspace) if d["file"].startswith(CONFIG.workspace) else d["file"]
+                add_message('system', f'**Last edit:** `{rel}`\n```diff\n{diff_text}\n```')
+            else:
+                # Filter by filename substring
+                matches = [d for d in diffs if arg in d.get("file", "")]
+                if not matches:
+                    add_message('system', f'No diffs matching "{arg}". Try `/diffs summary`.')
+                else:
+                    chunks = []
+                    for d in matches[-3:]:  # last 3 matching
+                        diff_text = d.get("diff", "")
+                        if len(diff_text) > 3000:
+                            diff_text = diff_text[:3000] + "\n... (truncated)"
+                        rel = os.path.relpath(d["file"], CONFIG.workspace) if d["file"].startswith(CONFIG.workspace) else d["file"]
+                        chunks.append(f'**{rel}**\n```diff\n{diff_text}\n```')
+                    add_message('system', f'Showing last {len(chunks)} of {len(matches)} diffs matching "{arg}":\n\n' + "\n\n".join(chunks))
+            input_box.value = ""
+            _release_lock()
+            return
+        # /done command - chain simplify → verify → gate verdict before declaring complete
+        if msg == "/done" or msg.startswith("/done "):
+            scope = msg[len("/done"):].strip() or "full"
+            simplify_ok, _ = SKILLS.read_skill("simplify")
+            verify_ok, _ = SKILLS.read_skill("verify")
+            if not (simplify_ok and verify_ok):
+                missing = []
+                if not simplify_ok: missing.append("skills/simplify/SKILL.md")
+                if not verify_ok: missing.append("skills/verify/SKILL.md")
+                add_message('system', f'/done requires skills: missing {", ".join(missing)}')
+                input_box.value = ""
+                _release_lock()
+                return
+            active = ui_state.get("active_skills", [])
+            for s in ("simplify", "verify"):
+                if s not in active:
+                    active.append(s)
+            ui_state["active_skills"] = active
+            with SKILLS._pending_lock:
+                SKILLS.active_skill = "verify"
+            ui_state["session_phase"] = f"done-gate:{scope}"
+            update_mode_display()
+            update_tokens_display()
+            msg = (
+                f"Run the DONE gate ({scope}) on the current project. Two phases, do NOT skip:\n\n"
+                f"**Phase 1 — SIMPLIFY:** Follow skills/simplify/SKILL.md. Review all files edited this session "
+                f"(use `/diffs summary` mental model) for reuse opportunities, dead code, unnecessary complexity, and over-engineering. "
+                f"Auto-fix what you find. Report what was changed or confirm 'nothing to simplify'.\n\n"
+                f"**Phase 2 — VERIFY:** Follow skills/verify/SKILL.md exactly. Run BUILD, BASELINE tests, TYPE-SPECIFIC tests, "
+                f"and ADVERSARIAL PROBES. Try to BREAK the implementation, not confirm it works.\n\n"
+                f"**Final verdict:** Produce a DONE REPORT at the end with:\n"
+                f"- SIMPLIFY: <what was changed, or 'nothing'>\n"
+                f"- VERIFY: PASS / FAIL / PARTIAL with evidence (command + output)\n"
+                f"- FINAL: READY-TO-SHIP / NEEDS-WORK / BLOCKED\n\n"
+                f"If FINAL is not READY-TO-SHIP, list specific next actions. Do NOT claim done unless VERIFY = PASS."
+            )
+            # Fall through to normal send flow
 
         # Custom commands from agent_config.json
         if msg.startswith("/") and not msg.startswith("/auth"):

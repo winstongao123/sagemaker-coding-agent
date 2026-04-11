@@ -355,10 +355,25 @@ Slash commands are typed directly in the chat input box (not as natural language
 | `/skill clear` | Deactivate all skills | `/skill clear` |
 | `/commands` | List custom slash commands from `agent_config.json` | `/commands` |
 | `/cost` | Show token usage and cost breakdown | `/cost` |
-| `/revert <file>` | Restore a file to its state before the agent edited it | `/revert app.py` |
-| `/revert all` | Restore all files the agent modified | `/revert all` |
+| `/revert <file>` | **Preview diff** first (current → snapshot). Use `--yes` to confirm. | `/revert app.py` then `/revert app.py --yes` |
+| `/revert all --yes` | Restore all files the agent modified (destructive, requires `--yes`) | `/revert all --yes` |
+| `/diffs` | Summary of session edits per file | `/diffs` |
+| `/diffs last` | Show most recent unified diff | `/diffs last` |
+| `/diffs <file>` | Show last 3 diffs matching filename substring | `/diffs app.py` |
+| `/done [full\|quick]` | **Pre-ship gate:** runs simplify → verify, produces READY-TO-SHIP / NEEDS-WORK / BLOCKED verdict | `/done full` |
+| `/phase <text>` | Set current work phase shown in status bar and token display | `/phase refactoring auth` |
+| `/phase clear` | Clear the phase indicator | `/phase clear` |
+| `/checkpoint create <name>` | Save todos + file list + token stats as a named checkpoint | `/checkpoint create phase-1-complete` |
+| `/checkpoint list` | List all saved checkpoints in session | `/checkpoint list` |
+| `/checkpoint restore <name>` | Restore todos from checkpoint (files NOT auto-reverted — review list then `/revert` per file) | `/checkpoint restore phase-1-complete` |
 | `/compact` | Compress conversation history to free up context window | `/compact` |
 | `/save` | Save current session to disk | `/save` |
+
+**Note on `/done`:** Chains `simplify` (reuse/quality/efficiency auto-fix) then `verify` (adversarial build/test/type/security) with a mandatory verdict. Refuses to claim "done" unless VERIFY = PASS. Use instead of manually running `/simplify` then `/verify`.
+
+**Note on `/revert` safety:** All revert operations now show a diff preview first. The `--yes` flag is required to actually write files. This prevents accidental loss of current work.
+
+**Note on cost budget:** If `CONFIG.session_cost_limit > 0`, a 4px budget bar appears under the context bar in the token display. Green <80%, orange 80–99%, red ≥100%. Agent auto-stops at 100%.
 
 ---
 

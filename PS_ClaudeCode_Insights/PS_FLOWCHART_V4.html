@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageMaker Coding Agent V4.6.1 - Architecture, Runnable Comparison, Path Resolution Fix</title>
+<title>SageMaker Coding Agent V4.7.0 - Architecture, Runnable Comparison, Coding UX Enhancements</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -212,10 +212,12 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.6.1</h1>
+    <h1>SageMaker Coding Agent V4.7.0</h1>
     <p class="subtitle">
-      Architecture map of V4.6.1 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,505 lines),
-      plus comparison against Claude Code runnable source. V4.6.1 adds a workspace path resolution fix on top of V4.6.0's full review/verification parity with Runnable
+      Architecture map of V4.7.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,719 lines),
+      plus comparison against Claude Code runnable source. V4.7.0 adds six coding-UX enhancements ported from Learning Factory:
+      <b>/done gate</b>, <b>/diffs history</b>, <b>/phase indicator</b>, <b>/revert diff preview</b>, <b>budget visual bar</b>,
+      and <b>/checkpoint restore</b>. V4.6.1 added workspace path resolution fix on top of V4.6.0's full review/verification parity with Runnable
       for SageMaker scope: tool efficiency, code security (OWASP), prompt injection detection, sub-agent
       notes, escalation guidance, and URL safety. UI redesigned with budget slider, soft-stop, improved markdown rendering.
     </p>
@@ -224,9 +226,112 @@
       <div class="stat"><strong>16</strong><span>Security Layers</span></div>
       <div class="stat"><strong>7</strong><span>Sub-Agent Types</span></div>
       <div class="stat"><strong>10</strong><span>Skills</span></div>
-      <div class="stat"><strong>9,505</strong><span>Lines of Code</span></div>
-      <div class="stat"><strong>V4.6.1</strong><span>Current Version</span></div>
+      <div class="stat"><strong>9,719</strong><span>Lines of Code</span></div>
+      <div class="stat"><strong>V4.7.0</strong><span>Current Version</span></div>
     </div>
+  </section>
+
+  <section class="panel active" style="border-left:4px solid #10b981;">
+    <h2 style="color:#10b981;">V4.7.0 — Coding UX Enhancements (2026-04-12)</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">
+      Audit against Learning Factory patterns found six gaps in solo-developer UX that cost the user trust and cycles.
+      All six are now inline in <code>sagemaker_agent.py</code> — no new files, no new dependencies, no Codex CLI, no git hooks.
+      Pure Python additions that fit the SageMaker + Bedrock runtime.
+    </p>
+    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+      <thead>
+        <tr style="background:var(--bg-card);">
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Enhancement</th>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">What &amp; Why</th>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid var(--border);">Where in code</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>/done gate</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Chains <code>simplify</code> → <code>verify</code> skills with a mandatory verdict:
+            SIMPLIFY report, VERIFY PASS/FAIL/PARTIAL with evidence, FINAL READY-TO-SHIP / NEEDS-WORK / BLOCKED.
+            <b>Refuses to claim done unless VERIFY = PASS.</b> Replaces ad-hoc "I think we're done" with a gated verdict.
+            Why: stop premature ship claims.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>sagemaker_agent.py</code><br>new handler before <code>/</code>-custom dispatch (~line 8858)</td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>/diffs</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Exposes the existing <code>_RECENT_DIFFS</code> 50-entry rolling buffer (already populated on every Write/Edit at line 3568/3661).
+            Subcommands: <code>/diffs summary</code> (per-file counts), <code>/diffs last</code>, <code>/diffs &lt;file-substring&gt;</code> (last 3 matches).
+            Why: v4 was recording diffs but had no retrieval command.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">new handler, uses existing <code>_RECENT_DIFFS_LOCK</code></td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>/phase indicator</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Free-form work-phase label (80 char cap) shown in both the mode row and token display. Defaults to <code>skill:&lt;name&gt;</code>
+            when no manual phase is set but a skill is active. Auto-set to <code>done-gate:&lt;scope&gt;</code> when <code>/done</code> runs.
+            Why: status bar showed cost but not "what are you doing right now" — caused drift during long sessions.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            <code>ui_state["session_phase"]</code>,<br>
+            <code>update_mode_display()</code>,<br>
+            <code>update_tokens_display()</code>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>/revert diff preview</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Previously <code>/revert &lt;file&gt;</code> blindly restored the latest snapshot. Now shows a unified diff
+            (current → snapshot) and requires <code>--yes</code> to execute. <code>/revert all</code> also gated behind
+            <code>--yes</code> and lists all affected files first. Early-exit when current already matches snapshot.
+            Why: destructive action should show the destruction first.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            <code>/revert</code> handler rewrite,<br>
+            reuses <code>_generate_unified_diff()</code> at line 3452
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>Budget progress bar</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Backend cost alert already existed (warn at 80% / stop at 100%, line 2858). Added the <b>visual</b> — a 4px
+            progress bar under the context bar when <code>CONFIG.session_cost_limit &gt; 0</code>. Green &lt;80%, orange 80–99%,
+            red ≥100%. Why: users missed the stdout warning because they were reading the chat pane.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>update_tokens_display()</code> <code>budget_block</code></td>
+        </tr>
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><b>/checkpoint restore</b></td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;">
+            Previously <code>/checkpoint list</code> showed saved checkpoints but no restore path. Now restores
+            <code>_TODOS</code> from the named checkpoint and lists which files had been modified at checkpoint time.
+            <b>File-level restore is explicitly NOT auto-applied</b> — user reviews list and uses <code>/revert &lt;file&gt;</code>
+            per file. Safer than blind batch revert. Why: the data was being saved but never read.
+          </td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);vertical-align:top;"><code>/checkpoint</code> handler new <code>restore</code> branch</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:20px;">What was NOT ported from Learning Factory</h3>
+    <p style="color:var(--muted);font-size:13px;">Evaluated and rejected as unfit for SageMaker+Bedrock solo runtime:</p>
+    <ul style="font-size:13px;color:var(--text-secondary);">
+      <li><b>codex-judge-gate / pre-commit-diff-review hooks</b> — require local Codex CLI + git pre-commit. v4 already auto-diffs on every Edit at line 3658 and routes review through inline <code>simplify</code>/<code>verify</code> skills.</li>
+      <li><b>auto-push / main-push gates</b> — SageMaker notebooks don't commit from the kernel.</li>
+      <li><b>rollback.sh (shadow-git)</b> — v4's <code>SnapshotManager</code> at line 3357 already provides this natively in Python.</li>
+      <li><b>Claude Code settings.json hooks infrastructure</b> — enforced via <code>Config.permission_rules</code> and <code>ban_patterns</code>, not bash hooks.</li>
+      <li><b>Windows-specific paths in hook scripts</b> — Linux-only SageMaker env.</li>
+    </ul>
+
+    <h3 style="margin-top:20px;">Verification</h3>
+    <ul style="font-size:13px;color:var(--text-secondary);">
+      <li>Python syntax: PASS (<code>py_compile</code> + <code>ast.parse</code>)</li>
+      <li>Warnings-as-errors: CLEAN</li>
+      <li>Feature markers: 9/9 present via source grep</li>
+      <li>Line delta: 9,505 → 9,719 (+214 lines)</li>
+      <li>Not tested: Jupyter UI render (requires live SageMaker kernel — will be verified on next notebook run)</li>
+    </ul>
   </section>
 
   <div class="tabbar">
