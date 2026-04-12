@@ -4,15 +4,22 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.7.1
+# SageAgent V4.7.2
 
-AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, 10 skills, Runnable-grade review/verification, local-git regression protection. **v4.7.1**.
+AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, 11 skills, Runnable-grade review/verification, local-git regression protection, auto self-review at checkpoints. **v4.7.2**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
-**Core files:** `sagemaker_agent.py` (9,866 lines) + this notebook + `memory.md` (auto-populated) + `skills/` (10 skills).
+**Core files:** `sagemaker_agent.py` (~9,900 lines) + this notebook + `memory.md` (auto-populated) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.7.2
+
+**v4.7.2 — Self-review + design-first workflow:**
+1. **`/design` skill** — NEW. Option analysis before coding. Produces Problem / Constraints / 2-3 Options with tradeoffs / Recommendation / Validation. Waits for user to pick before implementing. Triggers on `/design`, "compare approaches", "should I use", "tradeoff". **No extra token cost — only fires when invoked.**
+2. **Auto diff-review at checkpoint** — CODE-LEVEL enforcement. After every auto-commit checkpoint, the agent now sees a diff-stat + 3-point self-review checklist (drift check / bugs / plan alignment). Fires deterministically (~95% reliable), survives compaction. **Minimal token cost — ~200 tokens per checkpoint, using cached system prompt.**
+3. **Auto `/done quick` before completion** — system prompt rule: agent MUST run `/done quick` (simplify → verify → SHIP verdict) before declaring any task complete. ~80% reliable (prompt-level), but the checkpoint diff-review is the code-level backup. **Uses Bedrock prompt caching — review sub-agent calls reuse the cached system prompt.**
 
 ### What's new in v4.7.0 + v4.7.1
 
@@ -175,6 +182,7 @@ Auto-extracted at session end. Stored in `memory.md`. Capped at 200 lines / 25KB
 
 | Skill | Lines | What it does |
 |-------|-------|-------------|
+| design | 66 | Option analysis before coding — 2-3 approaches with tradeoffs, wait for user pick (v4.7.2) |
 | review | 83 | 5-category code review with severity ratings |
 | verify | 147 | 6-phase verification + structured report |
 | coding-standards | 153 | KISS, DRY, YAGNI, naming, function design |
