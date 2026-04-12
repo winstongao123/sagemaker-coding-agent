@@ -3538,7 +3538,12 @@ _AUTO_COMMIT_LOCK = threading.Lock()
 
 def _maybe_auto_checkpoint(workspace: str) -> Optional[str]:
     """Increment edit counter. If threshold reached, run `git commit -am 'agent-checkpoint'`.
-    Local-only, never pushes. Returns commit summary or None."""
+    Local-only, never pushes. Returns commit summary + diff review prompt or None.
+
+    v4.7.2: after checkpoint, inject a brief diff-stat and self-review reminder into
+    the tool output. The agent sees this in its conversation history and will review
+    its own recent changes. This is CODE-LEVEL enforcement (not just a prompt rule),
+    so it fires reliably even after compaction."""
     every = CONFIG.auto_commit_every
     if every <= 0:
         return None
@@ -3565,6 +3570,12 @@ def _maybe_auto_checkpoint(workspace: str) -> Optional[str]:
         )
         if not staged.stdout.strip():
             return None  # Nothing to commit
+        # Capture diff stat BEFORE commit for review injection
+        diff_stat = subprocess.run(
+            ["git", "diff", "--cached", "--stat"],
+            capture_output=True, text=True, timeout=5, cwd=workspace
+        )
+        diff_stat_text = (diff_stat.stdout.strip() or "")[:500]
         ts = time.strftime("%H:%M:%S")
         commit = subprocess.run(
             ["git", "commit", "-m", f"agent-checkpoint {ts} (auto)", "--no-verify"],
@@ -3572,7 +3583,18 @@ def _maybe_auto_checkpoint(workspace: str) -> Optional[str]:
         )
         if commit.returncode == 0:
             files = [l for l in staged.stdout.strip().split("\n") if l]
-            return f"📌 auto-checkpoint {ts}: {len(files)} file(s) committed locally"
+            # v4.7.2: inject diff-review prompt so agent self-reviews recent changes
+            review_prompt = (
+                f"\n📌 auto-checkpoint {ts}: {len(files)} file(s) committed locally"
+                f"\n\n[SELF-REVIEW — triggered by checkpoint, not optional]\n"
+                f"Files changed:\n{diff_stat_text}\n\n"
+                f"Quick-check before continuing:\n"
+                f"1. Do these changes match the current task? (drift check)\n"
+                f"2. Any obvious bugs or regressions in what you just wrote?\n"
+                f"3. Are you still on track with the plan/todo list?\n"
+                f"If anything looks wrong, fix it NOW before more edits pile up."
+            )
+            return review_prompt
         return None
     except Exception:
         return None
@@ -6512,6 +6534,8 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - Before reporting a task complete, VERIFY it works: run the test, check the output. If you can't verify (no test exists), say so explicitly rather than claiming success.
 - Report outcomes FAITHFULLY: if tests fail, say so with output. Never claim "all tests pass" when output shows failures. Never suppress or simplify failing checks to manufacture a green result. Never characterize incomplete work as done. Equally, don't hedge confirmed results with unnecessary disclaimers.
 - After 3+ file edits: spawn a verify sub-agent before reporting completion. You own the quality gate.
+- AUTO SELF-REVIEW GATE: Before declaring ANY task complete or reporting "done" to the user, you MUST run `/done quick`. This chains simplify (reuse/quality/efficiency review) then verify (adversarial BREAK testing). If the verdict is not SHIP, fix the issues and re-run `/done quick`. Do NOT skip this step. Do NOT say "I've completed the task" without running /done first. This is a quality gate, not optional.
+- DESIGN BEFORE CODE: For non-trivial tasks where multiple approaches exist, run `/design` first to produce 2-3 options with tradeoffs. Wait for user to pick. Then plan and implement. Do NOT jump straight to coding when the approach is unclear.
 
 # Executing Actions with Care
 - Consider reversibility and blast radius before executing. Freely take local, reversible actions.
