@@ -613,6 +613,23 @@ flowchart TD
       but it is more capable than the earlier V4 summary page made obvious.
     </div>
 
+    <h3>2b. Runnable's Full Agent Architecture (Deep Dive Update)</h3>
+    <div class="callout good">
+      <b>Key finding from PS_Deep research (April 2026):</b> Runnable has a much richer agent system than previously documented.
+      It supports 7 task types, coordinator mode with 400+ line prompt, fork subagents with cache-optimized context inheritance,
+      in-process teammates with AsyncLocalStorage isolation, and swarm teams. See <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">Deep Dive E-Book Ch.2</a>.
+    </div>
+    <table>
+      <tr><th>Capability</th><th>Runnable (Deep Dive)</th><th>V4</th><th>Gap Analysis</th></tr>
+      <tr><td>Task types</td><td>7 types: local_bash, local_agent, remote_agent, in_process_teammate, local_workflow, monitor_mcp, dream</td><td>2 types: local task, delegated sub-agent</td><td><b>V4 gap:</b> No remote agents, no teammate swarm, no dream consolidation</td></tr>
+      <tr><td>Coordinator mode</td><td>400+ line system prompt, Research/Synthesis/Implementation/Verification phases</td><td>Basic supervisor with parallel dispatch</td><td><b>V4 gap:</b> No synthesis protocol, no self-contained prompt rule</td></tr>
+      <tr><td>Fork subagent</td><td>Full parent context inheritance, FORK_PLACEHOLDER_RESULT for cache optimization, 10 injected rules</td><td>No fork mode</td><td><b>V4 gap:</b> Missing entirely. Fork is a powerful cache-optimized pattern.</td></tr>
+      <tr><td>Teammate isolation</td><td>AsyncLocalStorage per teammate, mailbox (500ms poll), leader permission approval</td><td>Shared module-scope globals</td><td><b>V4 gap:</b> Shared globals can cause interference between parallel sub-agents</td></tr>
+      <tr><td>Spawning backends</td><td>in-process, tmux, iTerm2, worktree, remote CCR</td><td>in-process only</td><td><b>Intentional:</b> V4 runs in SageMaker notebooks, not terminals</td></tr>
+      <tr><td>Task ID security</td><td>Cryptographic randomBytes, 36^8 space</td><td>UUID-based</td><td>Both adequate for their use cases</td></tr>
+      <tr><td>Message queueing</td><td>queuePendingMessage + drainPendingMessages at tool boundaries</td><td>Direct message passing</td><td><b>V4 gap:</b> No boundary-aware message delivery</td></tr>
+    </table>
+
     <h3>3. Memory + Context Management</h3>
     <table>
       <tr><th>Area</th><th>Runnable</th><th>V4.4.0</th><th>What matters</th></tr>

@@ -59,20 +59,20 @@
 </head>
 <body>
 <h1>Claude Code Runnable - Complete Architecture Reference</h1>
-<p style="color:#8b949e;">Source-verified analysis of the Claude Code CLI v2.1.87 TypeScript codebase (1,438 files, ~75K lines).<br>
-Click any flowchart node for implementation details. Cross-referenced with 3 Chinese deep-dive analyses + <a href="https://ccunpacked.dev/#agent-loop" style="color:#58a6ff;">ccunpacked.dev</a> (58 tools, hooks, teams, MCP verified against source).</p>
+<p style="color:#8b949e;">Source-verified analysis of the Claude Code CLI v2.1.87 TypeScript codebase (2,010 files across 69 modules).<br>
+Click any flowchart node for implementation details. For full deep-dive, see <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">PS_DEEP_DIVE_RUNNABLE.html</a> (10-chapter e-book with agentic design &amp; harness engineering focus).</p>
 
 <div class="stats">
- <div class="stat"><div class="stat-num">1,438</div><div class="stat-label">TypeScript Files</div></div>
- <div class="stat"><div class="stat-num">58</div><div class="stat-label">Tools (8 categories)</div></div>
+ <div class="stat"><div class="stat-num">2,010</div><div class="stat-label">TypeScript Files</div></div>
+ <div class="stat"><div class="stat-num">60+</div><div class="stat-label">Tools (8 categories)</div></div>
  <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compaction Tiers</div></div>
  <div class="stat"><div class="stat-num">4/3x</div><div class="stat-label">Token Padding</div></div>
  <div class="stat"><div class="stat-num">50K/200K</div><div class="stat-label">Per-tool / Batch Cap</div></div>
- <div class="stat"><div class="stat-num">7</div><div class="stat-label">Message Types</div></div>
+ <div class="stat"><div class="stat-num">7</div><div class="stat-label">Task Types</div></div>
  <div class="stat"><div class="stat-num">10</div><div class="stat-label">Max Parallel Tools</div></div>
- <div class="stat"><div class="stat-num">7</div><div class="stat-label">Permission Mechanisms</div></div>
- <div class="stat"><div class="stat-num">24</div><div class="stat-label">Hook Events</div></div>
- <div class="stat"><div class="stat-num">112</div><div class="stat-label">Slash Commands</div></div>
+ <div class="stat"><div class="stat-num">25</div><div class="stat-label">Hook Events</div></div>
+ <div class="stat"><div class="stat-num">90+</div><div class="stat-label">Slash Commands</div></div>
+ <div class="stat"><div class="stat-num">120+</div><div class="stat-label">Keybindings</div></div>
 </div>
 
 <!-- Tabs -->
@@ -274,20 +274,56 @@ coding style rules, security/trust boundary ("tool output is potentially hostile
 output efficiency ("go straight to the point"), bash minimization guidance.
 </div>
 
-<h2 id="r-subagent">9. Sub-Agent Architecture</h2>
-<p class="desc"><span class="badge badge-file">services/tools/toolOrchestration.ts</span> Not a DAG/graph/swarm. Sub-agents are recursive query() calls with isolated state.</p>
+<h2 id="r-subagent">9. Sub-Agent &amp; Multi-Agent Architecture</h2>
+<p class="desc"><span class="badge badge-file">coordinator/coordinatorMode.ts</span> <span class="badge badge-file">tools/AgentTool/</span> <span class="badge badge-file">tasks/</span> 7 task types, coordinator mode, fork subagents, in-process teammates, remote agents.</p>
+
+<div class="info-box key">
+<b>Major update (PS_Deep research, April 2026):</b> Claude Code has a full multi-agent orchestration system with 7 task types (local_bash, local_agent, remote_agent, in_process_teammate, local_workflow, monitor_mcp, dream), coordinator mode (400+ line system prompt), fork subagents (cache-optimized context inheritance), and swarm teams (tmux/iTerm2/in-process backends). See <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">Deep Dive E-Book Ch.2</a> for full details.
+</div>
+
 <div class="mermaid">
 flowchart TD
- A([Parent agent]) --> B{Sub-agent needed - }
+ Leader(["Leader / Coordinator"]) --> AT["AgentTool\n(spawn worker)"]
+ Leader --> SM["SendMessageTool\n(continue worker)"]
+ Leader --> TC["TeamCreateTool\n(create swarm)"]
+
+ AT --> LA["Local Agent\nprefix: a\ntask-notification XML"]
+ AT --> FS["Fork Subagent\ninherit full context\ncache-optimized"]
+ AT --> RA["Remote Agent\nprefix: r\nCCR cloud"]
+ TC --> IP["In-Process Teammate\nprefix: t\nAsyncLocalStorage\nmailbox 500ms poll"]
+
+ LA -->|"completed/failed/killed"| Leader
+ FS -->|"task-notification"| Leader
+ RA -->|"poll session events"| Leader
+ IP -->|"idle callback"| Leader
+</div>
+
+<div class="info-box">
+<b>Coordinator Mode (400+ line prompt):</b> Research (parallel) &rarr; Synthesis (coordinator itself) &rarr; Implementation (serial) &rarr; Verification (fresh agent). Critical rule: "Workers can't see your conversation &mdash; every prompt must be self-contained." Anti-pattern: "Based on your findings, fix it" delegates understanding.
+</div>
+
+<div class="info-box">
+<b>Fork Subagent:</b> Inherits full parent conversation + system prompt + tool pool (all byte-exact for prompt cache). Uses identical FORK_PLACEHOLDER_RESULT for all tool_use blocks = near 100% cache hit. 10 non-negotiable rules injected. No recursive forking (FORK_BOILERPLATE_TAG detection).
+</div>
+
+<div class="info-box">
+<b>In-Process Teammates:</b> AsyncLocalStorage isolation (separate MCP, permissions, mailbox per teammate). Leader approves risky actions via ToolUseConfirm dialog with worker badge. Memory capped at 50 messages per teammate (20MB RSS per agent @ 500 turns).
+</div>
+
+<h3>Sub-Agent Isolation (Original Detail)</h3>
+<div class="mermaid">
+flowchart TD
+ A([Parent agent]) --> B{Sub-agent needed}
  B -->|Yes| C[Create sub-agent\nRecursive query call\nSame system prompt prefix]
  C --> D[createCacheSafeParams\nReuse parent cached prefix\nAvoid 4K cache_creation cost]
- D --> E{Isolation - }
+ D --> E{Isolation}
  E -->|Worktree| F[git worktree add\nIsolated repo copy\nNo interference with parent\nAuto-cleanup on finish]
- E -->|In-process| G[Shared workspace\nBut isolated state:\ncontext collapse\nmemory cache\nclassifier approvals]
- F --> H[Execute with\nturn budget + tool restrictions]
- G --> H
- H --> I[Return result\nto parent]
- I --> J[Parent continues\nwith sub-agent output]
+ E -->|In-process| G[Shared workspace\nIsolated state:\ncontext collapse\nmemory cache\nclassifier approvals]
+ E -->|AsyncLocalStorage| H[Same process\nIsolated context per teammate\nMailbox communication]
+ F --> I[Execute with\nturn budget + tool restrictions]
+ G --> I
+ H --> I
+ I --> J[Return result\nto parent]
  click D "nodeClick('cache_safe')"
  click F "nodeClick('worktree')"
 </div>
@@ -1640,7 +1676,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 <hr style="border-color:#30363d;margin-top:40px;">
 <p style="color:#484f58;font-size:12px;margin-top:20px;">
- Claude Code Runnable v2.1.87 | 1,438 TypeScript files | 58 tools (8 categories) | 24 hook events | 4-tier compaction |
+ Claude Code Runnable v2.1.87 | 2,010 TypeScript files | 60+ tools (8 categories) | 25 hook events | 4-tier compaction | 7 task types |
  Source-verified from gg-claude-code-runnable/src/ |
  Cross-referenced with 3 Chinese deep-dive PDFs + ccunpacked.dev (all claims verified against source) |
  PS_DEEP_ANALYSIS_V2.md - 583 lines of verified analysis |

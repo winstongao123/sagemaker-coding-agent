@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Deep Dive - Agentic &amp; Harness Engineering E-Book</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9; --muted: #8b949e; --blue: #58a6ff; --purple: #d2a8ff; --green: #3fb950; --yellow: #e3b341; --orange: #f0883e; --red: #f85149; --cyan: #39d353; --sidebar-w: 260px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+/* === LAYOUT: Sidebar + Content === */
+.layout { display: flex; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--card); border-right: 1px solid var(--border); position: fixed; top: 0; left: 0; height: 100vh; overflow-y: auto; z-index: 200; padding: 16px 0; }
+.sidebar-title { color: var(--blue); font-size: 15px; font-weight: 700; padding: 0 16px 12px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.sidebar-title small { display: block; color: var(--muted); font-size: 10px; font-weight: 400; margin-top: 2px; }
+.nav-group { margin-bottom: 4px; }
+.nav-group-title { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 16px 4px; font-weight: 600; }
+.nav-item { display: block; padding: 5px 16px 5px 24px; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; }
+.nav-item:hover { color: var(--text); background: rgba(88,166,255,0.05); }
+.nav-item.active { color: var(--blue); border-left-color: var(--blue); background: rgba(88,166,255,0.08); }
+.nav-item.sub { padding-left: 36px; font-size: 12px; }
+
+/* Content */
+.content { margin-left: var(--sidebar-w); flex: 1; padding: 24px 40px 60px; max-width: 1100px; }
+
+/* Typography */
+h1 { color: var(--blue); font-size: 26px; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 16px; }
+h2 { color: var(--purple); font-size: 22px; margin-top: 48px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+h3 { color: var(--yellow); font-size: 17px; margin-top: 32px; }
+h4 { color: var(--orange); font-size: 15px; margin-top: 20px; }
+p { font-size: 14px; margin: 8px 0; }
+li { font-size: 14px; margin: 3px 0; }
+ul, ol { padding-left: 24px; margin: 8px 0; }
+
+/* WHY-WHAT-HOW boxes */
+.wwh { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 16px 0; }
+.wwh-label { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 2px 8px; border-radius: 3px; margin-bottom: 8px; }
+.wwh-what .wwh-label { background: #1f3a5f; color: var(--blue); }
+.wwh-why .wwh-label { background: #2d1f4e; color: var(--purple); }
+.wwh-how .wwh-label { background: #1a3a1a; color: var(--green); }
+.wwh-learn .wwh-label { background: #3d2e00; color: var(--yellow); }
+.wwh p { margin: 4px 0; font-size: 14px; }
+
+/* Mermaid */
+.mermaid { background: var(--card); border-radius: 8px; padding: 20px; margin: 16px 0; display: flex; justify-content: center; }
+.mermaid svg { max-width: 100%; }
+
+/* Code */
+code { background: #0d1117; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; color: var(--cyan); }
+pre { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 12px 0; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+th { background: var(--card); color: var(--blue); text-align: left; padding: 10px 12px; border: 1px solid var(--border); }
+td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+tr:nth-child(even) { background: var(--card); }
+
+/* Badges */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+.b-blue { background: #1f3a5f; color: var(--blue); }
+.b-purple { background: #2d1f4e; color: var(--purple); }
+.b-green { background: #1a3a1a; color: var(--green); }
+.b-yellow { background: #3d2e00; color: var(--yellow); }
+.b-orange { background: #3d2200; color: var(--orange); }
+.b-red { background: #3d1111; color: var(--red); }
+
+/* Info boxes */
+.info { background: var(--card); border-left: 3px solid var(--blue); padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; font-size: 13px; }
+.info.warn { border-left-color: var(--orange); }
+.info.good { border-left-color: var(--green); }
+.info.key { border-left-color: var(--purple); }
+.info.critical { border-left-color: var(--red); background: #1a0a0a; }
+
+/* Stats */
+.stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+.stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.stat-num { font-size: 20px; font-weight: bold; color: var(--blue); }
+.stat-label { font-size: 10px; color: var(--muted); }
+
+/* Grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 16px 0; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.card h4 { margin-top: 0; }
+
+/* Sections (chapters) */
+.section { display: none; }
+.section.active { display: block; }
+
+/* Mobile */
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .content { margin-left: 0; padding: 16px; }
+  .grid { grid-template-columns: 1fr; }
+  table { display: block; overflow-x: auto; }
+}
+@media print { .sidebar { display: none; } .content { margin-left: 0; } .section { display: block !important; page-break-before: always; } }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ========== LEFT SIDEBAR ========== -->
+<nav class="sidebar" id="sidebar">
+<div class="sidebar-title">Claude Code Deep Dive<small>Agentic &amp; Harness Engineering E-Book</small></div>
+
+<div class="nav-group">
+<div class="nav-group-title">Foundation</div>
+<a class="nav-item active" onclick="go('overview')">Overview &amp; Architecture</a>
+<a class="nav-item sub" onclick="go('overview','startup')">Startup Sequence</a>
+<a class="nav-item sub" onclick="go('overview','modules')">Module Map</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Agentic Design</div>
+<a class="nav-item" onclick="go('agentic')">Agent Architecture</a>
+<a class="nav-item sub" onclick="go('agentic','coordinator')">Coordinator Mode</a>
+<a class="nav-item sub" onclick="go('agentic','tasks')">7 Task Types</a>
+<a class="nav-item sub" onclick="go('agentic','fork')">Fork Subagent</a>
+<a class="nav-item sub" onclick="go('agentic','teammates')">In-Process Teammates</a>
+<a class="nav-item sub" onclick="go('agentic','lifecycle')">Task Lifecycle</a>
+<a class="nav-item sub" onclick="go('agentic','dream')">Dream (Auto-Memory)</a>
+<a class="nav-item sub" onclick="go('agentic','concurrency')">Concurrency Patterns</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Harness Engineering</div>
+<a class="nav-item" onclick="go('harness')">The Four Harness Layers</a>
+<a class="nav-item sub" onclick="go('harness','sysprompt')">System Prompt Assembly</a>
+<a class="nav-item sub" onclick="go('harness','state')">State Architecture</a>
+<a class="nav-item sub" onclick="go('harness','query')">Query Engine (18K lines)</a>
+<a class="nav-item sub" onclick="go('harness','toolpipe')">Tool Execution Pipeline</a>
+<a class="nav-item sub" onclick="go('harness','permissions')">Permission Flow</a>
+<a class="nav-item sub" onclick="go('harness','compaction')">4-Tier Compaction</a>
+<a class="nav-item sub" onclick="go('harness','recovery')">Error Recovery</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Tool System</div>
+<a class="nav-item" onclick="go('tools')">Tool Architecture</a>
+<a class="nav-item sub" onclick="go('tools','inventory')">60+ Tool Inventory</a>
+<a class="nav-item sub" onclick="go('tools','yolo')">YOLO Classifier</a>
+<a class="nav-item sub" onclick="go('tools','deferred')">Deferred Loading</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Prompt Engineering</div>
+<a class="nav-item" onclick="go('prompts')">The Hidden Moat</a>
+<a class="nav-item sub" onclick="go('prompts','techniques')">10 Techniques</a>
+<a class="nav-item sub" onclick="go('prompts','compaction')">Compaction Prompt</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Context &amp; Memory</div>
+<a class="nav-item" onclick="go('context')">Memory System</a>
+<a class="nav-item sub" onclick="go('context','types')">4 Memory Types</a>
+<a class="nav-item sub" onclick="go('context','security')">Path Security</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Extensions</div>
+<a class="nav-item" onclick="go('hooks')">Hooks &amp; Plugins</a>
+<a class="nav-item sub" onclick="go('hooks','events')">25 Hook Events</a>
+<a class="nav-item sub" onclick="go('hooks','plugins')">Plugin Architecture</a>
+</div>
+
+<div class="nav-group">
+<div class="nav-group-title">Reference</div>
+<a class="nav-item" onclick="go('cli')">CLI, Commands &amp; UI</a>
+<a class="nav-item" onclick="go('advanced')">Advanced Systems</a>
+<a class="nav-item" onclick="go('patterns')">Design Patterns &amp; Lessons</a>
+</div>
+</nav>
+
+<!-- ========== RIGHT CONTENT ========== -->
+<main class="content">
+
+<!-- ==================== OVERVIEW ==================== -->
+<div id="s-overview" class="section active">
+
+<h1>Claude Code Deep Dive</h1>
+<p>The Complete Runnable Architecture E-Book &mdash; 2,010 TypeScript files, 69 modules, every subsystem mapped.<br>
+<b>Focus:</b> How to build agentic systems and harness engineering &mdash; applicable to any AI agent project, not just coding.</p>
+
+<div class="stats">
+ <div class="stat"><div class="stat-num">2,010</div><div class="stat-label">TypeScript Files</div></div>
+ <div class="stat"><div class="stat-num">69</div><div class="stat-label">Source Modules</div></div>
+ <div class="stat"><div class="stat-num">7</div><div class="stat-label">Task Types</div></div>
+ <div class="stat"><div class="stat-num">60+</div><div class="stat-label">Tools</div></div>
+ <div class="stat"><div class="stat-num">25</div><div class="stat-label">Hook Events</div></div>
+ <div class="stat"><div class="stat-num">90+</div><div class="stat-label">Slash Commands</div></div>
+ <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compaction Tiers</div></div>
+ <div class="stat"><div class="stat-num">120+</div><div class="stat-label">Keybindings</div></div>
+</div>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is Claude Code?</div>
+<p>A terminal-based AI coding assistant. No frameworks &mdash; pure TypeScript, a <code>while(true)</code> loop, and 60+ tools. The "runnable" is the source code that powers the CLI, VS Code extension, web app, and mobile app.</p>
+</div>
+
+<div class="wwh wwh-why">
+<div class="wwh-label">Why study it?</div>
+<p>Claude Code is the most sophisticated open-architecture AI agent in production. It solves problems every agent builder faces: context management, tool orchestration, multi-agent coordination, permission safety, and graceful degradation. The patterns here apply to <b>any</b> agentic system &mdash; sales bots, data pipelines, DevOps agents, customer service.</p>
+</div>
+
+<div class="wwh wwh-how">
+<div class="wwh-label">How to read this book</div>
+<p><b>Chapters 2-3 (Agentic Design + Harness Engineering)</b> are the core &mdash; read these first. They teach you how to build multi-agent systems and the infrastructure around LLM calls. Other chapters are reference material you can dip into as needed.</p>
+</div>
+
+<h3 id="startup">The Big Picture</h3>
+<div class="mermaid">
+flowchart TD
+    A(["User Input<br/>(CLI / IDE / Web / Mobile)"]) --> B["entry.ts<br/>Bun Bundle Polyfill"]
+    B --> C["main.tsx<br/>4696-line Bootstrap"]
+    C --> D{"Interactive?"}
+    D -->|Yes| E["launchRepl()<br/>React/Ink Terminal UI"]
+    D -->|No| F["runHeadless()<br/>Single Query"]
+    D -->|Coordinator| G["Coordinator Mode<br/>Multi-Agent"]
+    E --> H["QueryEngine<br/>18,623-line State Machine"]
+    F --> H
+    G --> H
+    H --> I["Claude API<br/>(Streaming)"]
+    I --> J{"Response Type"}
+    J -->|text| K["Display to User"]
+    J -->|tool_use| L["Tool Pipeline<br/>6 Steps"]
+    L --> N["Execute Tool"]
+    N --> O["Add Result"]
+    O --> P{"Continue?"}
+    P -->|Yes| H
+    P -->|No| K
+    P -->|Context Full| Q["Compaction"]
+    Q --> H
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning</div>
+<p><b>Every AI agent is fundamentally this loop:</b> send message &rarr; get response &rarr; if tool_use, execute and loop &rarr; if text, return. Claude Code wraps this in 18,623 lines of state management, error recovery, and context optimization. The complexity is in the <b>harness</b>, not the loop itself.</p>
+</div>
+
+<h3>Startup Sequence</h3>
+<div class="mermaid">
+flowchart LR
+    A["Profile<br/>Checkpoint"] --> B["Parallel<br/>Prefetch<br/>(MDM+Keychain)"]
+    B --> C["Feature Gates<br/>Dead-Code<br/>Elimination"]
+    C --> D["Settings"]
+    D --> E["Trust<br/>Dialog"]
+    E --> F["Telemetry"]
+    F --> G["Plugins"]
+    G --> H["Permissions"]
+    H --> I["REPL"]
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning</div>
+<p><b>Startup optimization pattern:</b> Fire expensive I/O (MDM, keychain) in parallel with module loading. Use feature flags for compile-time dead-code elimination. Lazy-load heavy modules (OpenTelemetry ~400KB). This gives Claude Code fast startup despite 2,010 files.</p>
+</div>
+
+<h3 id="modules">Module Map</h3>
+<table>
+<tr><th>Module</th><th>Purpose</th><th>Chapter</th></tr>
+<tr><td><code>coordinator/</code></td><td>Multi-agent orchestration</td><td>Agentic Design</td></tr>
+<tr><td><code>tasks/</code></td><td>7 task types, lifecycle, persistence</td><td>Agentic Design</td></tr>
+<tr><td><code>tools/</code></td><td>60+ tool implementations</td><td>Tool System</td></tr>
+<tr><td><code>services/compact/</code></td><td>4-tier compaction</td><td>Harness</td></tr>
+<tr><td><code>memdir/</code></td><td>Persistent file-based memory</td><td>Context &amp; Memory</td></tr>
+<tr><td><code>hooks/</code></td><td>25 hook events, 4 hook types</td><td>Hooks &amp; Plugins</td></tr>
+<tr><td><code>plugins/</code></td><td>Plugin architecture, marketplace</td><td>Hooks &amp; Plugins</td></tr>
+<tr><td><code>query/</code></td><td>18,623-line state machine</td><td>Harness</td></tr>
+<tr><td><code>bridge/</code></td><td>IDE integration, remote sessions</td><td>Advanced</td></tr>
+<tr><td><code>sdk/</code></td><td>Agent SDK public API</td><td>Advanced</td></tr>
+<tr><td><code>commands/</code></td><td>90+ slash commands</td><td>CLI &amp; UI</td></tr>
+<tr><td><code>skills/</code></td><td>User-defined prompt skills</td><td>CLI &amp; UI</td></tr>
+<tr><td><code>ink/</code></td><td>Terminal UI (React-based)</td><td>CLI &amp; UI</td></tr>
+<tr><td><code>buddy/</code></td><td>Companion (Perch) system</td><td>Advanced</td></tr>
+</table>
+
+</div>
+
+<!-- ==================== AGENTIC DESIGN ==================== -->
+<div id="s-agentic" class="section">
+
+<h2>Chapter 2: Agentic Design</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is agentic design?</div>
+<p>The art of building systems where AI agents can spawn other agents, coordinate work, communicate results, and handle failures &mdash; all without human intervention. This is the hardest problem in AI engineering: making agents that work <b>together</b>.</p>
+</div>
+
+<div class="wwh wwh-why">
+<div class="wwh-label">Why it matters</div>
+<p>A single agent can do simple tasks. But real-world work requires: parallel research across codebases, implementation with verification, long-running background jobs. Multi-agent design lets you break complex work into parallel streams and compose results. This applies to <b>any</b> domain: sales (research + outreach + follow-up), data (extraction + transformation + validation), DevOps (deploy + monitor + rollback).</p>
+</div>
+
+<h3 id="coordinator">Agent Architecture Overview</h3>
+<div class="mermaid">
+flowchart TD
+    Leader(["Leader / Coordinator"]) --> AT["AgentTool<br/>(spawn worker)"]
+    Leader --> SM["SendMessageTool<br/>(continue worker)"]
+    Leader --> TC["TeamCreateTool<br/>(create swarm)"]
+    Leader --> TS["TaskStopTool<br/>(kill worker)"]
+
+    AT --> LA["Local Agent<br/>(background, prefix: a)"]
+    AT --> FS["Fork Subagent<br/>(inherits full context)"]
+    AT --> RA["Remote Agent<br/>(cloud CCR, prefix: r)"]
+
+    TC --> IP["In-Process Teammate<br/>(AsyncLocalStorage, prefix: t)"]
+    TC --> TM["Tmux/iTerm2 Pane"]
+
+    SM --> LA
+    SM --> IP
+
+    LA -->|"task-notification XML"| Leader
+    FS -->|"task-notification XML"| Leader
+    RA -->|"poll session events"| Leader
+    IP -->|"mailbox + idle callback"| Leader
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Build Your Own</div>
+<p><b>To build a multi-agent system, you need 4 primitives:</b><br>
+1. <b>Spawn</b> &mdash; Create a new agent with a prompt and tool set<br>
+2. <b>Message</b> &mdash; Send follow-up instructions to a running agent<br>
+3. <b>Notify</b> &mdash; Receive results when an agent completes<br>
+4. <b>Kill</b> &mdash; Stop an agent that's stuck or no longer needed<br>
+Claude Code implements these as AgentTool, SendMessageTool, task-notification XML, and TaskStopTool.</p>
+</div>
+
+<h3 id="tasks">Seven Task Types</h3>
+<table>
+<tr><th>Type</th><th>Prefix</th><th>Where</th><th>Communication</th><th>Isolation</th><th>Use Case</th></tr>
+<tr><td><span class="b-blue">local_bash</span></td><td>b</td><td>Local process</td><td>Direct output</td><td>None</td><td>Shell commands</td></tr>
+<tr><td><span class="b-purple">local_agent</span></td><td>a</td><td>Local process</td><td>task-notification</td><td>Separate query loop</td><td>Worker agents</td></tr>
+<tr><td><span class="b-green">remote_agent</span></td><td>r</td><td>CCR cloud</td><td>Polled events</td><td>Full VM</td><td>Background / ultrareview</td></tr>
+<tr><td><span class="b-yellow">in_process_teammate</span></td><td>t</td><td>Same process</td><td>Mailbox (500ms)</td><td>AsyncLocalStorage</td><td>Team swarm</td></tr>
+<tr><td><span class="b-orange">local_workflow</span></td><td>w</td><td>Local process</td><td>Workflow events</td><td>Workflow ctx</td><td>Automation</td></tr>
+<tr><td><span class="b-blue">monitor_mcp</span></td><td>m</td><td>Local process</td><td>MCP protocol</td><td>Server process</td><td>MCP monitoring</td></tr>
+<tr><td><span class="b-purple">dream</span></td><td>d</td><td>Local process</td><td>UI-only</td><td>Forked agent</td><td>Memory consolidation</td></tr>
+</table>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Task Type Design</div>
+<p><b>When designing task types for your system, consider 3 axes:</b><br>
+1. <b>Where</b> &mdash; Same process, separate process, remote cloud?<br>
+2. <b>Communication</b> &mdash; Direct return, polling, mailbox, event stream?<br>
+3. <b>Isolation</b> &mdash; Shared state, AsyncLocalStorage, git worktree, full VM?<br>
+More isolation = safer parallel execution but higher overhead. Choose based on your failure tolerance.</p>
+</div>
+
+<h3>Coordinator Mode &mdash; Multi-Agent Orchestration</h3>
+<div class="mermaid">
+flowchart TD
+    C(["Coordinator"]) -->|"Phase 1: Research (parallel)"| R1["Worker A"]
+    C -->|"Phase 1: Research (parallel)"| R2["Worker B"]
+    C -->|"Phase 1: Research (parallel)"| R3["Worker C"]
+
+    R1 -->|"task-notification"| S["SYNTHESIZE<br/>(coordinator does this itself)"]
+    R2 -->|"task-notification"| S
+    R3 -->|"task-notification"| S
+
+    S -->|"Phase 2: Implement (serial)"| I1["Worker D<br/>(specific instructions)"]
+    I1 -->|"task-notification"| V["VERIFY"]
+    V -->|"Phase 3: Verify (fresh agent)"| VW["Worker E"]
+    VW -->|"task-notification"| Done(["Done"])
+</div>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is synthesis?</div>
+<p>After research agents return results, the coordinator reads ALL findings, understands them, and creates specific implementation instructions with file paths, line numbers, and exact changes. It NEVER says "based on your findings, fix it" &mdash; that delegates understanding.</p>
+</div>
+
+<div class="wwh wwh-why">
+<div class="wwh-label">Why synthesis matters</div>
+<p>Workers can't see the coordinator's conversation. If you write "fix what worker A found", worker D has NO idea what worker A found. The coordinator must extract the key insight and include it in the prompt. This is the #1 mistake in multi-agent system design.</p>
+</div>
+
+<div class="wwh wwh-how">
+<div class="wwh-label">How to implement</div>
+<p><b>4-phase workflow:</b> Research (parallel) &rarr; Synthesis (YOU) &rarr; Implementation (serial) &rarr; Verification (fresh agent).<br>
+<b>Prompt rule:</b> "Brief the agent like a colleague who just walked in &mdash; include context, what's been tried, and what to do."<br>
+<b>Anti-pattern:</b> "Based on your findings, implement the fix" &rarr; This pushes synthesis onto the worker.</p>
+</div>
+
+<h3 id="fork">Fork Subagent &mdash; Context Inheritance</h3>
+<div class="mermaid">
+flowchart LR
+    P["Parent Agent<br/>(full conversation)"] -->|"buildForkedMessages()"| F["Fork Child<br/>(inherits everything)"]
+    F -->|"10 rules injected"| E["Execute"]
+    E -->|"task-notification"| P
+</div>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is forking?</div>
+<p>Instead of creating a fresh agent with a new prompt, fork creates a child that inherits the ENTIRE parent conversation. The child sees everything the parent saw &mdash; all messages, tool results, context. It's like cloning yourself to handle a subtask.</p>
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Cache Optimization</div>
+<p><b>Fork uses identical placeholder results for all tool_use blocks.</b> This makes the API prefix byte-exact with the parent, so the child's API call hits nearly 100% prompt cache. The fork is almost free in terms of API cost. This is a brilliant optimization: inherit context AND save money.</p>
+</div>
+
+<h3 id="teammates">In-Process Teammates &mdash; Swarm Execution</h3>
+<div class="mermaid">
+flowchart TD
+    L(["Leader"]) -->|"TeamCreate"| T["Team"]
+    T --> S1["Researcher<br/>(AsyncLocalStorage)"]
+    T --> S2["Implementer<br/>(AsyncLocalStorage)"]
+    T --> S3["Reviewer<br/>(AsyncLocalStorage)"]
+    S1 -->|"mailbox 500ms"| L
+    S2 -->|"mailbox 500ms"| L
+    S3 -->|"idle callback"| L
+    L -->|"SendMessage"| S1
+    L -->|"Broadcast *"| S1
+    L -->|"Broadcast *"| S2
+    L -->|"Broadcast *"| S3
+</div>
+
+<div class="wwh wwh-how">
+<div class="wwh-label">How AsyncLocalStorage isolation works</div>
+<p><code>runWithTeammateContext(identity, fn)</code> wraps all execution. Any tool call inside <code>fn</code> sees the teammate's identity via <code>getTeammateContext()</code>. This means: separate MCP access, separate permission decisions, separate mailbox routing &mdash; all in the same process without shared mutable state. Think of it like thread-local storage for async functions.</p>
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Permission Escalation</div>
+<p><b>Teammates can't approve their own risky actions.</b> When a teammate hits an 'ask' permission, it surfaces to the leader's terminal as a dialog with a worker badge. The leader approves/denies. This is how you build safe multi-agent systems: agents do work, humans (or leader agents) make safety decisions.</p>
+</div>
+
+<h3 id="lifecycle">Task Lifecycle</h3>
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> pending: registerTask()
+    pending --> running: Agent starts
+    running --> completed: completeAsyncAgent()
+    running --> failed: failAsyncAgent()
+    running --> killed: killAsyncAgent()
+    completed --> [*]: evictTerminalTask()
+    failed --> [*]: evictTerminalTask()
+    killed --> [*]: evictTerminalTask()
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Task ID Security</div>
+<p><b>Task IDs use cryptographic randomBytes</b> (36^8 = 2.8 trillion combinations). Why? Because task output is written to disk at predictable paths. Guessable IDs would enable symlink attacks: attacker creates symlink at predicted path before agent writes. Cryptographic IDs make this infeasible.</p>
+</div>
+
+<h3 id="dream">Dream Task &mdash; Auto-Memory Consolidation</h3>
+<div class="wwh wwh-what">
+<div class="wwh-label">What is Dream?</div>
+<p>A background agent that reviews recent sessions and consolidates learnings into persistent memory files. Runs automatically when: &gt;24h since last consolidation AND &ge;5 sessions accumulated. Disk lock prevents concurrent consolidation.</p>
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Background Intelligence</div>
+<p><b>Not all agents serve the user directly.</b> Dream is an "infrastructure agent" that maintains system health (memory quality). Design pattern: use background agents for maintenance tasks (pruning, consolidation, indexing) that improve the system over time without user intervention.</p>
+</div>
+
+<h3 id="concurrency">Concurrency Patterns</h3>
+<div class="grid">
+<div class="card">
+<h4>Parallel Spawning</h4>
+<p>Coordinator spawns multiple workers in a single turn (multiple Agent() tool calls). Each returns immediately with async_launched. Tasks run concurrently.</p>
+</div>
+<div class="card">
+<h4>Message Queueing</h4>
+<p>Mid-turn follow-ups queued via <code>queuePendingMessage()</code>. Drained at tool-round boundary. Never interrupts an agent mid-execution.</p>
+</div>
+<div class="card">
+<h4>Abort Mechanisms</h4>
+<p>Kill entire agent: <code>abortController.abort()</code>. Kill current turn only (teammates): <code>currentWorkAbortController.abort()</code>. Teammate loop catches abort, waits for new work.</p>
+</div>
+<div class="card">
+<h4>Idle Notification</h4>
+<p>Leader registers <code>onIdleCallbacks</code>. When teammate becomes idle, callback fires. Avoids polling &mdash; leader waits efficiently.</p>
+</div>
+</div>
+
+</div>
+
+<!-- ==================== HARNESS ENGINEERING ==================== -->
+<div id="s-harness" class="section">
+
+<h2>Chapter 3: Harness Engineering</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the harness?</div>
+<p>Everything surrounding the LLM call that makes it reliable: state management, prompt assembly, tool dispatch, permission enforcement, context compaction, error recovery. The LLM call itself is simple &mdash; the harness is what turns it into a production system.</p>
+</div>
+
+<div class="wwh wwh-why">
+<div class="wwh-label">Why the harness is the real engineering</div>
+<p>Anyone can call an API. The hard part is: What happens when context fills up? When the user denies a tool? When the API returns an error? When 10 tools run in parallel? When a subagent gets stuck? The harness handles ALL of this. This is 90% of the code in Claude Code.</p>
+</div>
+
+<h3 id="sysprompt">The Four Harness Layers</h3>
+<div class="mermaid">
+flowchart TD
+    subgraph SP["1. System Prompt Harness"]
+        direction LR
+        SP1["Static cached<br/>sections"]
+        SP2["Cache boundary<br/>marker"]
+        SP3["Dynamic sections<br/>(memory, MCP)"]
+    end
+    subgraph ST["2. State Harness"]
+        direction LR
+        ST1["Bootstrap state<br/>(session, model)"]
+        ST2["AppState<br/>(UI, tasks, plugins)"]
+        ST3["Token + cost<br/>tracking"]
+    end
+    subgraph AP["3. Approval Harness"]
+        direction LR
+        AP1["Hard-block<br/>catastrophic"]
+        AP2["YOLO classifier<br/>(fast + thinking)"]
+        AP3["User prompt<br/>(last resort)"]
+    end
+    subgraph EX["4. Execution Harness"]
+        direction LR
+        EX1["Parse + batch<br/>read-only tools"]
+        EX2["Serialize<br/>risky writes"]
+        EX3["Compact retry<br/>+ circuit break"]
+    end
+    SP --> ST --> AP --> EX
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Build Your Harness</div>
+<p><b>Every production AI agent needs these 4 layers.</b> Even a simple chatbot needs: prompt management (what instructions to give), state tracking (what has happened), safety checks (what's allowed), and execution handling (what happens on error). Start with the simplest version of each and add complexity as needed.</p>
+</div>
+
+<h3>System Prompt Assembly</h3>
+<div class="mermaid">
+flowchart LR
+    A["Sections<br/>(memoized)"] --> B["Parallel<br/>resolve"]
+    B --> C["Priority<br/>selection"]
+    C --> D["Cache<br/>boundary"]
+    D --> E["API blocks<br/>with cache_control"]
+</div>
+
+<div class="wwh wwh-how">
+<div class="wwh-label">How cache boundary works</div>
+<p>A special marker <code>__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__</code> splits the prompt. Everything BEFORE is static (tool descriptions, safety rules) and cached across ALL users. Everything AFTER is dynamic (memory, MCP servers, project context) and cached per-org. This means the first user pays for cache creation, and every subsequent user gets a 90% cost reduction on the static portion.</p>
+</div>
+
+<h3 id="state">State Architecture</h3>
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Controlled Mutation</div>
+<p><b>Claude Code's bootstrap state uses getter/setter pattern:</b> <code>getSessionId()</code>, <code>setSessionId()</code>. Why? So you can grep for all mutation sites. The comment says "DO NOT ADD MORE STATE HERE." When building your agent, keep global state minimal and mutation sites traceable.</p>
+</div>
+
+<h3 id="query">Query Engine (18,623 lines)</h3>
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the Query Engine?</div>
+<p>An async generator state machine. Each iteration: build config &rarr; prefetch memories &rarr; normalize messages &rarr; call API (streaming) &rarr; process response &rarr; check token budget &rarr; decide: continue, compact, or finish.</p>
+</div>
+
+<h3 id="toolpipe">Tool Execution Pipeline (6 Steps)</h3>
+<div class="mermaid">
+flowchart LR
+    A["1. Validate<br/>(Zod schema)"] --> B["2. Permission<br/>(tool-specific)"]
+    B --> C["3. Pre-Hooks<br/>(user hooks)"]
+    C --> D["4. Classifier<br/>(YOLO)"]
+    D --> E["5. Execute<br/>(tool.call)"]
+    E --> F["6. Post-Hooks<br/>(validate output)"]
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Layered Validation</div>
+<p><b>Every tool call passes through 6 gates before execution.</b> This is the "Swiss cheese model" of safety: each layer catches different failures. Schema validation catches type errors. Permission checks catch unsafe operations. Hooks let users inject custom policies. The classifier catches subtle safety issues. Even if one layer misses something, others catch it.</p>
+</div>
+
+<h3 id="permissions">Permission Decision Flow</h3>
+<div class="mermaid">
+flowchart TD
+    T["Tool Call"] --> E["1. Blanket deny rules"]
+    E -->|blocked| DENY["DENY"]
+    E -->|pass| R["2. Pattern matching<br/>(allow/deny/ask)"]
+    R -->|allow| ALLOW["ALLOW"]
+    R -->|deny| DENY
+    R -->|ask| H["3. PreToolUse hooks"]
+    H -->|decided| DONE["Hook Decision"]
+    H -->|pass| C["4. YOLO Classifier"]
+    C -->|"Fast 50ms"| C2{"Block?"}
+    C2 -->|No| ALLOW
+    C2 -->|Yes| C3["Thinking 256+ tokens"]
+    C3 -->|allow| ALLOW
+    C3 -->|block| D["5. Denial tracking"]
+    D -->|"5+ same tool"| ASK["Force ASK"]
+    D -->|"< 5"| DENY
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Fail-Closed + Escape Hatch</div>
+<p><b>Default to deny, but track denials.</b> After 5 denials of the same tool, force an 'ask' (show to user). This prevents silent loops where the agent keeps trying and failing. The user sees it and can decide. Pattern: fail-closed for safety, but with visibility for debugging.</p>
+</div>
+
+<h3 id="compaction">4-Tier Compaction</h3>
+<div class="mermaid">
+flowchart TD
+    A["Context Growing"] --> B{"Tier 1: Cached MC<br/>(server-side cache_edits)"}
+    B -->|"Delete old tool results<br/>NO message mutation"| C{"Enough?"}
+    C -->|Yes| D(["Continue"])
+    C -->|No| E{"Tier 2: Time-Based MC<br/>(clear cold-cache results)"}
+    E --> F{"Enough?"}
+    F -->|Yes| D
+    F -->|No| G{"Tier 3: Snip<br/>(drop old turns)"}
+    G --> H{"Enough?"}
+    H -->|Yes| D
+    H -->|No| I["Tier 4: Full Compact<br/>(LLM summarize)"]
+    I --> D
+</div>
+
+<div class="wwh wwh-why">
+<div class="wwh-label">Why 4 tiers?</div>
+<p><b>Each tier has different cost/quality tradeoffs:</b><br>
+Tier 1: Free (server-side), preserves cache &mdash; best quality<br>
+Tier 2: Free (local mutation), loses some cache &mdash; good quality<br>
+Tier 3: Free (drop turns), loses old context &mdash; medium quality<br>
+Tier 4: Expensive (LLM call), summarizes everything &mdash; most aggressive<br>
+By trying cheap options first, you save API costs and preserve context quality.</p>
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Build Tiered Compaction</div>
+<p><b>For any agent with long conversations, implement at least 2 tiers:</b><br>
+1. Prune old tool results (cheap, keeps conversation structure)<br>
+2. Summarize with LLM (expensive, but recovers from any state)<br>
+Add a circuit breaker (max 3 failures) to prevent infinite retry loops.</p>
+</div>
+
+<h3 id="recovery">Error Recovery</h3>
+<table>
+<tr><th>Error</th><th>Recovery Strategy</th><th>Max Retries</th><th>Pattern</th></tr>
+<tr><td>max_output_tokens</td><td>Retry with continuation</td><td>3</td><td>Withhold error, retry silently</td></tr>
+<tr><td>prompt_too_long</td><td>Reactive compact</td><td>3</td><td>Truncate oldest rounds</td></tr>
+<tr><td>529 (capacity)</td><td>Exponential backoff</td><td>3 (529), 10 (general)</td><td>Only foreground, background bails</td></tr>
+<tr><td>Auto-compact failure</td><td>Circuit breaker</td><td>3</td><td>Fall back to manual</td></tr>
+</table>
+
+</div>
+
+<!-- ==================== TOOLS ==================== -->
+<div id="s-tools" class="section">
+
+<h2>Chapter 4: Tool System</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the tool system?</div>
+<p>60+ functions the AI can call: read files, run commands, search code, spawn agents, manage tasks. Each tool has a Zod-validated input schema, permission model, and execution pipeline.</p>
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Fail-Closed Tool Defaults</div>
+<p><b>Every new tool defaults to: not concurrent-safe, not read-only, not destructive.</b> Tools must explicitly opt INTO parallel execution. This prevents accidental unsafe concurrency. When building tools for your agent, always default to the safest behavior.</p>
+</div>
+
+<h3 id="inventory">Tool Inventory (60+)</h3>
+<table>
+<tr><th>Category</th><th>Tools</th></tr>
+<tr><td><span class="b-blue">File Ops (6)</span></td><td>FileRead, FileEdit, FileWrite, Glob, Grep, NotebookEdit</td></tr>
+<tr><td><span class="b-purple">Execution (3)</span></td><td>Bash, PowerShell, REPL</td></tr>
+<tr><td><span class="b-green">Web (3)</span></td><td>WebFetch, WebSearch, WebBrowser</td></tr>
+<tr><td><span class="b-yellow">Agents (10)</span></td><td>Agent, SendMessage, TaskStop, TaskOutput, TeamCreate, TeamDelete, TaskCreate/Get/Update/List</td></tr>
+<tr><td><span class="b-orange">Planning (4)</span></td><td>EnterPlanMode, ExitPlanMode, TodoWrite, VerifyPlanExecution</td></tr>
+<tr><td><span class="b-blue">MCP (4+)</span></td><td>ListMcpResources, ReadMcpResource, MCPTool (dynamic), LSP</td></tr>
+<tr><td><span class="b-purple">System (8)</span></td><td>AskUserQuestion, ToolSearch, Skill, Brief, Config, Sleep, Snip, TerminalCapture</td></tr>
+</table>
+
+<h3 id="yolo">YOLO Two-Stage Classifier</h3>
+<div class="mermaid">
+flowchart LR
+    T["Tool Call"] --> S{"Safe<br/>Allowlist?"}
+    S -->|Yes| A(["AUTO-APPROVE"])
+    S -->|No| F["Stage 1: Fast<br/>50ms, XML"]
+    F -->|"no block"| A
+    F -->|"block"| T2["Stage 2: Thinking<br/>256+ tokens CoT"]
+    T2 -->|allow| A
+    T2 -->|block| B(["REQUIRE APPROVAL"])
+</div>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Two-Stage Classification</div>
+<p><b>Fast path + escalation = best of both worlds.</b> Stage 1 (50ms) handles 90% of cases cheaply. Stage 2 (chain-of-thought) only runs on borderline cases, reducing false positives. This pattern works for any safety classifier: fast check first, expensive check only when needed.</p>
+</div>
+
+<h3 id="deferred">Deferred Tool Loading</h3>
+<div class="wwh wwh-how">
+<div class="wwh-label">How deferred loading works</div>
+<p>60+ tools would consume too many tokens if all loaded on first turn. Solution: mark tools with <code>shouldDefer: true</code>. LLM sees only ToolSearchTool + core tools. When it needs a specific capability, it searches: <code>ToolSearchTool({ query: "database" })</code> and discovers the relevant tool. This is like lazy loading for AI tools.</p>
+</div>
+
+</div>
+
+<!-- ==================== PROMPTS ==================== -->
+<div id="s-prompts" class="section">
+
+<h2>Chapter 5: Prompt Engineering</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the prompt engineering moat?</div>
+<p>Not a single clever prompt &mdash; it's a <b>systematic architecture</b>: modular cached sections, synthesization protocols, 40+ tool descriptions with safety rules, behavioral guardrails, and adaptive routing based on mode/context.</p>
+</div>
+
+<h3 id="techniques">10 Prompt Engineering Techniques</h3>
+<div class="grid">
+<div class="card">
+<h4>1. Modular Sections</h4>
+<p>System prompt assembled from cached sections, resolved in parallel, cleared on /compact. Each section is memoized independently.</p>
+</div>
+<div class="card">
+<h4>2. Cache Boundary</h4>
+<p>Static content (cross-user) cached globally. Dynamic content (memory, MCP) cached per-org. First-turn cost amortized.</p>
+</div>
+<div class="card">
+<h4>3. Synthesization Protocol</h4>
+<p>Parent proves understanding before delegating. Include specific file paths, line numbers, exact changes in worker prompts.</p>
+</div>
+<div class="card">
+<h4>4. Prompt Isolation</h4>
+<p>Every subagent prompt self-contained. No "as discussed" or "based on what we talked about". Enables parallel execution.</p>
+</div>
+<div class="card">
+<h4>5. NO_TOOLS_PREAMBLE</h4>
+<p>Compact prompts say "TEXT ONLY. Tool calls REJECTED." Prevents wasted turns from denied tool calls.</p>
+</div>
+<div class="card">
+<h4>6. Don't Peek</h4>
+<p>"Don't peek at fork output" &mdash; trust task-notification. Prevents agents from trying to read other agents' transcripts.</p>
+</div>
+<div class="card">
+<h4>7. Tool Precision</h4>
+<p>40+ tool descriptions (50-200+ lines each) prevent wrong-tool misuse. Cross-references: "Use Grep, not Bash grep."</p>
+</div>
+<div class="card">
+<h4>8. Adaptive Routing</h4>
+<p>Coordinator, proactive, output styles all swap prompts conditionally. Feature flags enable dead-code elimination.</p>
+</div>
+<div class="card">
+<h4>9. Context Continuity</h4>
+<p>Automatic compaction + session memory keeps work flowing. Summary preserves: user messages, file changes, pending tasks.</p>
+</div>
+<div class="card">
+<h4>10. Behavioral Guardrails</h4>
+<p>"Never fabricate results." "Prove you understood." Each directive prevents a specific failure mode observed in production.</p>
+</div>
+</div>
+
+<h3 id="compaction">Compaction Prompt Design</h3>
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: What to preserve in summaries</div>
+<p><b>The compact prompt produces 9 sections:</b> Primary Request, Key Concepts, Files &amp; Code (with snippets), Errors &amp; Fixes, Problem Solving, All User Messages (critical), Pending Tasks, Current Work (very detailed), Optional Next Step. The most important: <b>All User Messages</b> and <b>Current Work</b>. Without these, the agent loses track of what the user wants and where it was.</p>
+</div>
+
+</div>
+
+<!-- ==================== CONTEXT & MEMORY ==================== -->
+<div id="s-context" class="section">
+
+<h2>Chapter 6: Context &amp; Memory</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the memory system?</div>
+<p>File-based persistent memory: MEMORY.md index + individual topic.md files with YAML frontmatter. Survives across sessions. Sonnet classifier selects top 5 relevant memories per query.</p>
+</div>
+
+<h3 id="types">Four Memory Types</h3>
+<table>
+<tr><th>Type</th><th>Scope</th><th>When to Save</th><th>Example</th></tr>
+<tr><td><span class="b-blue">user</span></td><td>Private</td><td>Role, preferences, expertise</td><td>"Deep Go expertise, new to React"</td></tr>
+<tr><td><span class="b-purple">feedback</span></td><td>Private</td><td>Corrections + confirmations</td><td>"Don't mock DB &mdash; prior prod incident"</td></tr>
+<tr><td><span class="b-green">project</span></td><td>Team</td><td>Deadlines, decisions, state</td><td>"Merge freeze 2026-03-05"</td></tr>
+<tr><td><span class="b-yellow">reference</span></td><td>Team</td><td>External system pointers</td><td>"Bugs in Linear project INGEST"</td></tr>
+</table>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: What NOT to memorize</div>
+<p><b>Don't save:</b> code patterns (read the code), git history (use git log), debugging solutions (fix is in the code), architecture (read the files). Only save what's NOT derivable from the current project state. This prevents stale memories from overriding reality.</p>
+</div>
+
+<h3 id="security">Path Security (Team Memory)</h3>
+<div class="wwh wwh-how">
+<div class="wwh-label">How path validation works</div>
+<p>Team memory validates paths against 6 attack vectors: URL-encoded traversal, Unicode normalization, Windows backslash bypass, symlink escape, dangling symlinks, ELOOP cycles. Two-pass: string-level check first, then symlink-aware realpath() verification. If any check fails, the write is rejected.</p>
+</div>
+
+</div>
+
+<!-- ==================== HOOKS & PLUGINS ==================== -->
+<div id="s-hooks" class="section">
+
+<h2>Chapter 7: Hooks &amp; Plugins</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What are hooks?</div>
+<p>User-defined actions that execute at 25 lifecycle points: before/after tool calls, session start/end, file changes, compaction, agent events. Four types: shell commands, LLM prompts, agentic verifiers, HTTP webhooks.</p>
+</div>
+
+<h3 id="events">25 Hook Events</h3>
+<table>
+<tr><th>Category</th><th>Events</th></tr>
+<tr><td>Tool/Permission</td><td>PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, PermissionDenied</td></tr>
+<tr><td>Session</td><td>SessionStart, SessionEnd, Setup</td></tr>
+<tr><td>User Input</td><td>UserPromptSubmit</td></tr>
+<tr><td>Agents</td><td>SubagentStart, SubagentStop, Stop, StopFailure, TaskCreated, TaskCompleted, TeammateIdle</td></tr>
+<tr><td>Files/Config</td><td>FileChanged, CwdChanged, ConfigChange, InstructionsLoaded</td></tr>
+<tr><td>Compaction</td><td>PreCompact, PostCompact</td></tr>
+<tr><td>Other</td><td>Notification, Elicitation, WorktreeCreate, WorktreeRemove</td></tr>
+</table>
+
+<h3 id="plugins">Plugin Architecture</h3>
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: Plugin as Bundle</div>
+<p><b>A plugin is a collection of:</b> skills, hooks, MCP servers, LSP servers, commands, agents, output styles. Each has a manifest.json, scoped installation (user/project/enterprise), and 24 specific error types for diagnostics. The key insight: plugins extend EVERY part of the system, not just tools.</p>
+</div>
+
+</div>
+
+<!-- ==================== CLI & UI ==================== -->
+<div id="s-cli" class="section">
+
+<h2>Chapter 8: CLI, Commands &amp; UI</h2>
+
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the CLI system?</div>
+<p>90+ slash commands (3 types: local, local-jsx, prompt), a skills system for user-created commands, 120+ keybindings across 15+ contexts, React-based terminal UI (Ink), and optional vim/voice modes.</p>
+</div>
+
+<h3>Key Commands</h3>
+<table>
+<tr><th>Category</th><th>Commands</th></tr>
+<tr><td>Session</td><td>/clear, /compact, /resume, /cost, /stats</td></tr>
+<tr><td>Config</td><td>/config, /model, /effort, /fast, /permissions</td></tr>
+<tr><td>Dev</td><td>/diff, /review, /ultrareview, /plan</td></tr>
+<tr><td>Agents</td><td>/agents, /tasks, /buddy</td></tr>
+<tr><td>Extensions</td><td>/mcp, /plugin, /skills</td></tr>
+</table>
+
+<h3>Skills System</h3>
+<div class="wwh wwh-how">
+<div class="wwh-label">How to create a skill</div>
+<p>Create a .md file in <code>~/.claude/skills/</code> with YAML frontmatter (name, description, whenToUse, allowedTools, model). The markdown body becomes the prompt. The skill appears as a slash command and can be invoked by the model. This is the simplest way to extend Claude Code.</p>
+</div>
+
+</div>
+
+<!-- ==================== ADVANCED ==================== -->
+<div id="s-advanced" class="section">
+
+<h2>Chapter 9: Advanced Systems</h2>
+
+<h3>Bridge (IDE Integration)</h3>
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the bridge?</div>
+<p>WebSocket/HTTP protocol connecting Claude Code CLI to IDE extensions (VS Code, JetBrains). Register environment &rarr; poll for work &rarr; process &rarr; send results. Enables the same agent to run in terminal, IDE, web, and mobile.</p>
+</div>
+
+<h3>SDK</h3>
+<div class="wwh wwh-what">
+<div class="wwh-label">What is the SDK?</div>
+<p>Programmatic API: <code>unstable_v2_createSession()</code>, <code>query()</code>, <code>tool()</code>. Build custom applications on Claude Code's infrastructure. Generated types from Zod schemas ensure type safety.</p>
+</div>
+
+<h3>Remote Execution (CCR)</h3>
+<div class="wwh wwh-what">
+<div class="wwh-label">What is CCR?</div>
+<p>Cloud Container Runner. Full VM isolation for background tasks. Supports: remote-agent, ultraplan, ultrareview, autofix-pr, background-pr. Long-running with polled event subscription.</p>
+</div>
+
+<h3>Buddy (Perch)</h3>
+<div class="wwh wwh-what">
+<div class="wwh-label">What is Perch?</div>
+<p>A small companion creature beside the input box. 18 species (dragon, axolotl, capybara...), 5 rarities (common 60% to legendary 1%). Deterministic from hash(userId). "Bones" (appearance) from hash, "soul" (name, personality) persisted in config.</p>
+</div>
+
+</div>
+
+<!-- ==================== DESIGN PATTERNS ==================== -->
+<div id="s-patterns" class="section">
+
+<h2>Chapter 10: Design Patterns &amp; Lessons</h2>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Key Learning: The 6 Principles of Agent Engineering</div>
+<p>These patterns apply to <b>any</b> agentic system you build, in any domain.</p>
+</div>
+
+<div class="grid">
+<div class="card">
+<h4>1. Fail-Closed Defaults</h4>
+<p><b>What:</b> Default to the safest behavior.<br><b>Why:</b> Prevents accidental unsafe states.<br><b>How:</b> Tools default to not-concurrent, not-read-only. Classifier blocks on unparseable responses. Every security decision defaults to deny.</p>
+</div>
+<div class="card">
+<h4>2. Cache-First Design</h4>
+<p><b>What:</b> Structure everything for caching.<br><b>Why:</b> 90% cost reduction on cached tokens.<br><b>How:</b> Cache boundary in prompts. Sorted tool pools. Memoized context. Fork subagents maximize prefix hits. Skills survive compaction.</p>
+</div>
+<div class="card">
+<h4>3. Isolation Over Shared State</h4>
+<p><b>What:</b> Keep agents independent.<br><b>Why:</b> Shared mutable state causes race conditions.<br><b>How:</b> AsyncLocalStorage for teammates. Git worktrees for files. Branded types prevent ID mixing. Getter/setter for bootstrap state.</p>
+</div>
+<div class="card">
+<h4>4. Synthesize Before Delegating</h4>
+<p><b>What:</b> Understand results before passing them on.<br><b>Why:</b> Workers can't see parent context.<br><b>How:</b> Coordinator reads all findings, extracts key insights, includes specific details in worker prompts. Never "based on your findings, fix it."</p>
+</div>
+<div class="card">
+<h4>5. Graceful Degradation</h4>
+<p><b>What:</b> Handle every failure mode.<br><b>Why:</b> Agents run unattended for long periods.<br><b>How:</b> Circuit breaker (3 failures). Denial tracking (force ask after 5). Token budget diminishing returns. Reactive compact on error.</p>
+</div>
+<div class="card">
+<h4>6. Parallel Prefetch</h4>
+<p><b>What:</b> Start expensive operations early.<br><b>Why:</b> I/O time is free when overlapped.<br><b>How:</b> Memory prefetch parallel with query. MDM/keychain overlap module loading. Git status parallelizes 5 commands. System prompt sections resolve in parallel.</p>
+</div>
+</div>
+
+<h3>Key Numbers</h3>
+<table>
+<tr><th>Metric</th><th>Value</th><th>Lesson</th></tr>
+<tr><td>Source files</td><td>2,010</td><td>Real agents need real engineering</td></tr>
+<tr><td>main.tsx</td><td>4,696 lines</td><td>Bootstrap is complex</td></tr>
+<tr><td>query.ts</td><td>18,623 lines</td><td>The harness IS the product</td></tr>
+<tr><td>BashTool</td><td>161KB</td><td>Safety is expensive but necessary</td></tr>
+<tr><td>Teammate cap</td><td>50 messages</td><td>Memory management is non-optional</td></tr>
+<tr><td>Task ID space</td><td>36^8 = 2.8T</td><td>Security at every layer</td></tr>
+<tr><td>Parallel tools</td><td>Up to 10</td><td>Concurrency requires explicit opt-in</td></tr>
+<tr><td>Cache savings</td><td>90%</td><td>Cache-first design pays for itself</td></tr>
+</table>
+
+<div class="wwh wwh-learn">
+<div class="wwh-label">Final Takeaway</div>
+<p><b>Claude Code's moat isn't the LLM call.</b> It's the 18,623-line query engine, the 4-tier compaction system, the 6-step tool pipeline, the multi-agent coordinator with synthesis protocol, the 25-event hook system, and the cache-first prompt architecture. The LLM is the brain. The harness is the body. You need both to build a production agent.</p>
+</div>
+
+</div>
+
+</main>
+</div><!-- end layout -->
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#1f3a5f', primaryTextColor: '#c9d1d9', primaryBorderColor: '#30363d',
+    lineColor: '#58a6ff', secondaryColor: '#161b22', tertiaryColor: '#0d1117',
+    fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif', fontSize: '13px'
+  },
+  flowchart: { curve: 'basis', padding: 15 }
+});
+
+function go(section, anchor) {
+  // Switch section
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('s-' + section).classList.add('active');
+
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navItems = document.querySelectorAll('.nav-item');
+  for (const item of navItems) {
+    const onclick = item.getAttribute('onclick');
+    if (anchor && onclick === `go('${section}','${anchor}')`) {
+      item.classList.add('active');
+    } else if (!anchor && onclick === `go('${section}')`) {
+      item.classList.add('active');
+    }
+  }
+
+  // Scroll to anchor or top
+  if (anchor) {
+    const el = document.getElementById(anchor);
+    if (el) { setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); }
+  } else {
+    document.querySelector('.content').scrollTop = 0;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Re-render mermaid in newly visible section
+  setTimeout(() => {
+    const section_el = document.getElementById('s-' + section);
+    const unrendered = section_el.querySelectorAll('.mermaid:not([data-processed])');
+    if (unrendered.length > 0) { mermaid.run({ nodes: unrendered }); }
+  }, 50);
+}
+
+// Print all sections
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'p') {
+    document.querySelectorAll('.section').forEach(s => s.style.display = 'block');
+  }
+});
+</script>
+</body>
+</html>
