@@ -4,26 +4,33 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.6.1
+# SageAgent V4.7.1
 
-AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, 10 skills, Runnable-grade review/verification, workspace path resolution fix. **v4.6.1**.
+AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, 10 skills, Runnable-grade review/verification, local-git regression protection. **v4.7.1**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
-**Core files:** `sagemaker_agent.py` (9,505 lines) + this notebook + `memory.md` (auto-populated) + `skills/` (10 skills).
+**Core files:** `sagemaker_agent.py` (9,866 lines) + this notebook + `memory.md` (auto-populated) + `skills/` (10 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
 
-### What is new in v4.6.1 — Workspace Path Resolution Fix
+### What's new in v4.7.0 + v4.7.1
 
-Real-session bug: agent launched in a subfolder could not find files that lived in the parent git repo. `glob "**/name.py"` returned "No files found" even though the file was readable via `read_file`. Four architectural blind spots closed:
+**v4.7.1 — Three targeted fixes (anti-bloat release):**
+1. **Compact preserves TODO list** — bug fix. Agent was losing its task plan across auto-compaction. Now re-injects todos into post-compact messages.
+2. **Auto-commit checkpoint** — `Config.auto_commit_every = N` (default off). Runs `git commit -am "agent-checkpoint (auto)"` locally every N edits. Never pushes. Keeps `git diff HEAD` showing only the latest change set.
+3. **`/regression`** — thin wrapper: `git diff HEAD --stat` + session edit summary + suggested test command.
 
-1. **Workspace info injected into cached system prompt** — agent always knows its Root + Also-accessible paths.
-2. **`tool_glob` falls through to `allowed_paths`** when workspace search is empty and no explicit `path` arg is given.
-3. **Informative error messages** — `validate_path`, `read_file`, and `glob` all now include workspace root + allowed roots + a `glob "**/filename"` recovery template.
-4. **Startup announcement** — top-level agent prints `[Workspace: /path] [Also accessible: /other]` on the first turn.
+**v4.7.0 — Coding UX enhancements:**
+- `/done [full|quick]` — pre-ship gate (simplify → verify → READY-TO-SHIP verdict)
+- `/diffs [summary|last|<file>]` — session edit history from `_RECENT_DIFFS` buffer
+- `/phase <text>` — work phase indicator in status bar + token display
+- `/revert <file>` — now shows diff preview before revert; requires `--yes` to execute
+- `/checkpoint restore <name>` — restore todos from named checkpoint
+- Budget progress bar in token display when `Config.session_cost_limit > 0`
 
-Verified with `test_v461_path_fix.py` — **11/11 PASS** (fresh-git-repo reproduction of the exact failure scenario).
+**v4.6.1 — Workspace path resolution fix:**
+Agent in a subfolder can now find files in parent git repo. `glob` falls through to `allowed_paths`. Informative error messages with recovery templates.
 
 **Troubleshooting:** If you see "file not found" or empty glob results, check the `[Workspace: ...]` line at session start. Your target file must live under that Root or under one of the `Also accessible` roots (auto-detected: git repo root, SageMaker home). Otherwise add it explicitly via `agent_config.json` → `allowed_paths`.
 
@@ -71,9 +78,15 @@ Applies widget config and calls `create_chat_ui()`.
 | Activate skill | `/skill use review` |
 | Deactivate skills | `/skill clear` |
 | List skills | `/skills` |
-| Verify project | `/verify` |
-| Revert file | `/revert filename.py` or `/revert all` |
-| Compact context | Click Compact button (or auto at 80%) |
+| **Pre-ship gate** | `/done full` (simplify → verify → READY-TO-SHIP verdict) |
+| **Regression check** | `/regression` (git diff stat + session edits + test suggestion) |
+| Verify project | `/verify` (adversarial testing skill) |
+| Session diffs | `/diffs` (summary), `/diffs last`, `/diffs <file>` |
+| Set work phase | `/phase refactoring auth` (shown in status bar) |
+| Revert file | `/revert filename.py` (shows diff preview → `/revert filename.py --yes` to confirm) |
+| Revert all | `/revert all --yes` (destructive, requires `--yes`) |
+| Checkpoint | `/checkpoint create milestone-1`, `/checkpoint list`, `/checkpoint restore milestone-1` |
+| Compact context | Click Compact button (or auto at 80%) — **TODOs now preserved** |
 | Save/Load | Save button / Session dropdown + Load |
 
 ### 22 Tools
