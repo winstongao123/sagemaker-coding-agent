@@ -8163,6 +8163,7 @@ def create_chat_ui(mock_mode: bool = None):
     def on_budget_change(change):
         CONFIG.session_cost_limit = change['new']
         update_mode_display()
+        update_tokens_display()
     budget_input.observe(on_budget_change, names='value')
     # Initialize config
     if CONFIG.session_cost_limit <= 0:

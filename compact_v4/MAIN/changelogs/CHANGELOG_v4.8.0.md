@@ -1,5 +1,16 @@
 # CHANGELOG — V4.8.0 (2026-04-13)
 
+## Patch — 2026-04-13 (later)
+
+### chat.ipynb markdown trim
+- **Problem**: Cell 4 markdown was 3,792 chars, duplicating content already in `USER_GUIDE.md`
+- **Fix**: Trimmed cell 4 to 1,006 chars (-73%). Now contains only: button summary (Clear vs Clean clarified), skill table (command + "use when"), common slash commands, memory types, pointer to USER_GUIDE.md
+- **Rationale**: notebook cells = quick reminders only. Full docs live in USER_GUIDE.md (1,104 lines)
+
+### Zip rebuild
+- `compact_v4.zip`: 53 files, 407.2 KB
+- `wins_docs.zip`: 30 files, 247.9 KB (synced chat.ipynb + USER_GUIDE.md + sagemaker_agent.py)
+
 ## Summary
 Major UX and reliability release based on PS_Deep Runnable architecture research. 
 8 fixes addressing user-reported issues + 5 gap closures from Runnable comparison.

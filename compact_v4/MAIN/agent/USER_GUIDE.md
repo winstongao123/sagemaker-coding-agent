@@ -1,4 +1,4 @@
-# SageAgent V4 — User Guide (v4.3.2)
+# SageAgent V4 — User Guide (v4.8.0)
 
 A single-file AI coding assistant that runs inside a Jupyter notebook on AWS SageMaker, powered by Bedrock Claude.
 
@@ -392,22 +392,19 @@ Skills are **instruction files** that tell the AI how to behave for a specific t
 
 **Example:** The included `code-review` skill tells the AI to check for security issues, code quality, performance, and testing when reviewing code.
 
-### Proactive Skill Matching
+### Activating Skills (V4.8.0+)
 
-The agent **automatically detects** when your request matches an available skill and loads it without manual activation. For example:
-- Ask "Review my code" → agent auto-loads the `review` skill
-- Ask "Create a Power BI dashboard" → agent auto-loads the `powerbi-dashboard` skill
-- Ask "Check code quality" → agent auto-loads the `coding-standards` skill
+Skills require explicit activation via `/command`. They do NOT auto-trigger on keywords — this prevents unwanted skill activation when you're just having a conversation.
 
-This follows the Claude Code (Anthropic) pattern where the agent proactively matches user requests to available skill descriptions.
-
-### Manual Activation (still supported)
-
-You can also manually activate skills:
-
-1. Type `/skills` in the chat — lists all discovered skills
-2. Type `/skill use <name>` — activate a specific skill
-3. Type `/skill clear` — deactivate all skills
+```
+/skills                  ← list all available skills
+/skill use <name>        ← activate a skill (stays on for ALL messages until cleared)
+/skill clear             ← deactivate ALL active skills
+/verify                  ← shortcut: auto-activates verify + runs it
+/done [full|quick]       ← pre-ship gate: simplify → verify → SHIP verdict
+/simplify                ← shortcut: auto-activates simplify + runs it
+/security-review         ← shortcut: auto-activates security-review + runs it
+```
 
 ### How to Create Your Own Skill
 
@@ -634,6 +631,7 @@ Sub-agents are **child AI sessions** that the main agent can spawn to handle spe
 | **verify** | Adversarial testing — tries to BREAK the code | read_file, glob, grep, bash, python_exec, list_dir, semantic_search | 15 | `/verify` or "Test this thoroughly" |
 | **review** | Security, quality, performance review | read_file, glob, grep, list_dir, semantic_search, view_image | 10 | "Review this code for issues" |
 | **general** | Research + some execution | read_file, glob, grep, list_dir, bash, python_exec, semantic_search, view_image | 15 | "Research how this module works and write a summary" |
+| **fork** | Inherits parent context (cache-optimized) | Parent's tools | Parent's limit | Internal — spawned for cache-efficient continuation |
 
 ### Examples That Trigger Sub-Agents
 
@@ -959,16 +957,58 @@ You: /revert main.py     ← main.py is restored to the version before the rewri
 
 ## UI Features
 
-| Feature | Description |
+### Layout
+
+```
+Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
+Row 2: [Temp] [Thinking] [Budget] [Dark] | [Plan Mode] [☑Auto-Compact] [Chat Height]
+Chat:  HTML widget with internal scroll
+Row 3: [Send] [Stop] [Clear] [Compact] [🧹Clean] | [Status]
+Row 4: Token usage with progress bar + budget bar + cost
+```
+
+### Toggles & Sliders
+
+| Control | What it does |
 |---------|-------------|
-| **Plan Mode** toggle | Restricts agent to read-only tools — safe for exploration |
-| **Require Approval** toggle | Controls whether high-risk tools need your approval |
-| **Auto-Compact** | Automatically compresses conversation when context reaches 90% |
-| **Stop button** | Cancel AI processing mid-stream |
-| **Dark mode** toggle | Switch between light and dark themes |
-| **Session management** | Save, load, or start new sessions |
-| **Token usage bar** | Progress bar showing how much of the context window is used |
-| **Status bar** | Shows model, connection status, MCP count, cost, active skill |
+| **Plan Mode** | Restricts agent to read-only tools — safe for exploration |
+| **Require Approval** | Controls whether high-risk tools need your approval before execution |
+| **Auto-Compact** | Automatically compresses conversation when context reaches 80% |
+| **Dark Mode** | Switch between light and dark themes (updates all existing messages) |
+| **Temp** slider | Temperature (0.0 = deterministic, 1.0 = creative) — changes take effect on next message |
+| **Thinking** checkbox | Enable extended thinking mode (slower, uses more tokens, better for complex tasks) |
+| **Chat Height** slider | Resize the chat window (200–1200px). Drag or use the slider |
+| **Budget $** | Session cost display. Changes reflect immediately in the budget bar. Display-only — warns at 80% but does NOT stop the agent |
+
+### Buttons
+
+| Button | What it does |
+|--------|-------------|
+| **Send** | Send your message to the agent (Enter also works) |
+| **Stop** | Cancel the agent mid-stream. Current tool call finishes, then stops |
+| **Clear** (yellow, trash icon) | **Reset the conversation.** Saves memories from current session first, then wipes: messages, todos, file cache, read tracking, skills, tokens, checkpoints. Result: blank chat, "Ready" status — like starting fresh without restarting the kernel |
+| **Compact** | Manually compress the conversation. Two-stage: prunes old tool results, then LLM-summarizes if needed. Use when context is getting full or agent starts forgetting earlier work |
+| **🧹 Clean** (eraser icon) | **Delete disk artifacts** the agent created over time. Removes: `audit_logs/`, `.snapshots/`, `.code_index/`, `truncated_outputs/`, `.exec_budget.json`. **Keeps sessions** (conversation history preserved). Always safe — none of these are your code or data. Only caveat: `/revert` won't work for previous edits after cleaning since snapshots are gone |
+| **💾 Save** | Save current session (messages, todos, skills, token stats, checkpoints) |
+| **📁 Load** | Load a previously saved session from the dropdown |
+| **+New** | Start a new session (calls Clear internally) |
+
+### Session Management
+
+Sessions persist your conversation across kernel restarts:
+- **Save** stores: messages, model used, active skills, todos, checkpoints, token stats
+- **Load** restores everything — you can pick up exactly where you left off
+- Sessions are stored locally in the workspace directory
+- The session dropdown shows all saved sessions by name and timestamp
+
+### Token & Cost Display (Row 4)
+
+The metrics bar shows:
+- **📊 Tokens**: Input/output counts and API call count
+- **Context bar**: Green/orange/red progress bar showing context window usage (compact triggers at 80%)
+- **💰 Cost**: Session cost, last call cost, model rate, cache savings
+- **Budget bar**: If budget > 0, shows spend vs limit with color coding (green < 80% < orange < 100% < red)
+- **🎯 Phase**: Current work phase if set via `/phase` command
 
 ---
 
