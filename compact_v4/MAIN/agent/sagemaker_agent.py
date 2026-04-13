@@ -2252,8 +2252,10 @@ class SkillManager:
                                 desc = line.lstrip("#").strip()
                                 break
                     # V4.6: Parse triggers from frontmatter (comma-separated or YAML list)
+                    # V4.8.0: auto_trigger: false disables keyword auto-discovery (skill only via /command)
+                    _auto_trigger = str(meta.get("auto_trigger", "true")).strip().lower() != "false"
                     _triggers_raw = meta.get("triggers", "")
-                    _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if _triggers_raw else None
+                    _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if (_triggers_raw and _auto_trigger) else None
                     self._cache[name] = SkillInfo(
                         name=name, description=desc,
                         location=str(fp), base_dir=str(fp.parent),

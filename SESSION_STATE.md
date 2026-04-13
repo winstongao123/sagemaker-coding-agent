@@ -3,6 +3,8 @@
 ## Last Session: 2026-04-13 — V4.8.0 Release + PS_Deep E-Book
 
 ### V4.8.0 Changes (sagemaker_agent.py)
+- Clara skill: auto_trigger disabled (was firing on generic "claims" keywords). Now only via /clara-review
+- SkillManager: new auto_trigger: false frontmatter support to disable keyword auto-discovery
 - [CRITICAL] Chat window resizable (500px default, drag + slider 200-1200px)
 - [CRITICAL] Prefer chat answers over file generation (system prompt + per-turn reminder)
 - [CRITICAL] CSV/Excel data validation accuracy (system prompt section)
