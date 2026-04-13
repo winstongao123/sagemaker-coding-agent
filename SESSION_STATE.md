@@ -39,8 +39,11 @@
 - .git/hooks/pre-commit — rejects files with invalid Unicode (unpaired surrogates)
 - Prevents API Error 400 "invalid high surrogate in string"
 
+### compact_v4.zip rebuilt (clean)
+- Was 129 files / 3.6MB (included __pycache__, audit_logs, .pytest_cache, truncated_outputs, .benchmarks, .code_index, .snapshots, sessions)
+- Now 53 files / 0.4MB — source code, skills, tests, changelogs only
+
 ### To Resume
 - V4.8.0 needs AWS Bedrock testing before final ship
 - Remaining gaps: auto-nudge on 3+ tasks, multi-agent FP filtering, fork cache sharing (blocked on Bedrock)
-- Rebuild compact_v4.zip and PDF/wins_docs.zip after all changes
 - Consider adding chat_height_slider to the layout row in chat.ipynb as well
