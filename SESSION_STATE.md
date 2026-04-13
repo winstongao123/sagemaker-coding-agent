@@ -27,7 +27,20 @@
 - PS_FLOWCHART_RUNNABLE.html — stats corrected, sub-agent section expanded
 - PS_FLOWCHART_V4.html — agent comparison table added
 
+### Hermes vs Coding Agent HTML (new)
+- PS_ClaudeCode_Insights/HERMES_VS_CODING_AGENT.html — 7-tab comparison (self-improving vs coding loop)
+- Screenshots added to PS_ClaudeCode_Insights/screenshots/
+
+### chat.ipynb cleanup
+- Removed coding-standards SKILL.md (merged into main skills)
+- Updated chat.ipynb markdown
+
+### Pre-commit hook added
+- .git/hooks/pre-commit — rejects files with invalid Unicode (unpaired surrogates)
+- Prevents API Error 400 "invalid high surrogate in string"
+
 ### To Resume
 - V4.8.0 needs AWS Bedrock testing before final ship
 - Remaining gaps: auto-nudge on 3+ tasks, multi-agent FP filtering, fork cache sharing (blocked on Bedrock)
+- Rebuild compact_v4.zip and PDF/wins_docs.zip after all changes
 - Consider adding chat_height_slider to the layout row in chat.ipynb as well
