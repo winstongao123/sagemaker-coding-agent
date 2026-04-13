@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.3.1"
+__version__ = "4.8.0"
 
 # ============================================================
 # IMPORTS
@@ -451,6 +451,10 @@ Format as a comprehensive summary that preserves all context needed to continue 
             recent_messages = [{"role": "user", "content": "[Conversation compacted. Continue from summary.]"}]
 
         compacted = [summary_msg] + recent_messages
+
+        # V4.8.0: Clear FILE_CACHE context markers since old file results are discarded.
+        # Without this, agent thinks files are still in context when they've been compacted away.
+        FILE_CACHE.clear_context()
 
         # V4: append file restoration, guarding Bedrock role alternation (SR-5)
         restoration_text = build_file_restoration_message(recently_read)
@@ -1194,11 +1198,11 @@ class SecurityManager:
         (r"\baws\s+cloudformation\s+", "AWS CloudFormation - restricted"),
         (r"\baws\s+sagemaker\s+(?!help)", "AWS SageMaker CLI - use SDK in code instead"),
 
-        # === NETWORK - EXTERNAL REQUESTS (except pip) ===
-        (r"\bcurl\s+https?://(?!pypi\.|files\.pythonhosted\.)", "External HTTP request - blocked for security"),
-        (r"\bwget\s+https?://(?!pypi\.|files\.pythonhosted\.|localhost|127\.0\.0\.1)", "External download - blocked for security"),
-        (r"\bcurl\s+.*\|\s*(ba)?sh", "Pipe to shell"),
-        (r"\bwget\s+.*\|\s*(ba)?sh", "Pipe to shell"),
+        # === NETWORK - EXTERNAL REQUESTS ===
+        # V4.8.0: Relaxed wget/curl restrictions. Only block pipe-to-shell (RCE risk).
+        # wget/curl for downloading files is legitimate (e.g., installing tools, fetching data).
+        (r"\bcurl\s+.*\|\s*(ba)?sh", "Pipe to shell — RCE risk"),
+        (r"\bwget\s+.*\|\s*(ba)?sh", "Pipe to shell — RCE risk"),
         (r"\bbase64\s+-d.*\|\s*(ba)?sh", "Encoded payload execution"),
 
         # === COMMAND SUBSTITUTION / VARIABLE EXPANSION ===
@@ -1349,7 +1353,8 @@ AWS access tiers (SageMaker execution role):
 - ADMIN: iam, sts, kms, ssm, secretsmanager → BLOCKED (regex denylist, no override)
 """
 
-    NETWORK_COMMANDS = ["curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "ftp", "telnet"]
+    # V4.8.0: curl/wget removed from network block (now in BASE_ALLOWED_COMMANDS)
+    NETWORK_COMMANDS = ["nc", "netcat", "ssh", "scp", "rsync", "ftp", "telnet"]
 
     # Baseline allowlist: only these base commands can be executed via bash tool.
     # Anything not on this list is blocked regardless of denylist patterns.
@@ -1376,6 +1381,8 @@ AWS access tiers (SageMaker execution role):
         "pytest", "jest", "mocha", "cargo",
         # Misc safe utilities
         "jq", "yq", "less", "more", "true", "false", "test",
+        # V4.8.0: Allow bash scripts and wget downloads (pipe-to-shell still blocked)
+        "bash", "sh", "wget", "curl",
     }
 
     INTERPRETER_COMMANDS = {"python", "python3", "node", "ruby", "go", "cargo", "rustc", "javac", "java"}
@@ -6537,6 +6544,18 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - AUTO SELF-REVIEW GATE: Before declaring ANY task complete or reporting "done" to the user, you MUST run `/done quick`. This chains simplify (reuse/quality/efficiency review) then verify (adversarial BREAK testing). If the verdict is not SHIP, fix the issues and re-run `/done quick`. Do NOT skip this step. Do NOT say "I've completed the task" without running /done first. This is a quality gate, not optional.
 - DESIGN BEFORE CODE: For non-trivial tasks where multiple approaches exist, run `/design` first to produce 2-3 options with tradeoffs. Wait for user to pick. Then plan and implement. Do NOT jump straight to coding when the approach is unclear.
 
+# [CRITICAL] Answer Preference — Chat vs Files
+- PREFER ANSWERING IN CHAT over creating files. When the user asks a question, explain something, or wants a summary, respond DIRECTLY in the conversation text. Do NOT create .md files, summary documents, or reports unless the user EXPLICITLY asks for a file (e.g., "create a report", "save this to a file", "write a document").
+- If a task REQUIRES creating files (code, configs, data outputs), create them in the user's specified location.
+- If the user did NOT specify a location and the file is a temporary artifact (summary, analysis, intermediate result), create it under a `_temp/` subfolder in the workspace. This lets users clean up temporary files easily.
+- NEVER create files like "summary.md", "analysis.md", "results.md" unless explicitly requested. Just display the content in chat.
+
+# Data Validation — CSV/Excel Accuracy
+- When reading or validating CSV/Excel data, ALWAYS check: row counts match expectations, column types are correct, null/NaN handling is explicit, no duplicate rows unless expected.
+- When merging or joining data, VERIFY: the join key is unique (or explain why duplicates are expected), the output row count makes sense (inner join <= min, outer join >= max), no unintended Cartesian products.
+- If data looks inflated (more rows than expected), flag it as a potential issue. Do NOT say inflated row counts are "OK" without explicit justification.
+- Cross-validate results: compare source row counts to output, check totals, verify samples.
+
 # Executing Actions with Care
 - Consider reversibility and blast radius before executing. Freely take local, reversible actions.
 - For hard-to-reverse or shared-state actions, check with user first:
@@ -7066,14 +7085,11 @@ class Agent:
                 output_fn("[Stopped by user]")
                 return response.text if response else ""
 
-            # Check cost budget — soft stop: warn and ask, don't hard-kill
-            if TOKENS.is_over_budget() and not getattr(self, '_budget_override', False):
-                msg = f"[Session cost ${TOKENS.session_cost:.4f} reached limit ${CONFIG.session_cost_limit:.2f}. Increase Budget $ slider in UI to continue, or click Stop.]"
-                output_fn(msg)
-                # Check if user raised the limit while we were running
-                if not TOKENS.is_over_budget():
-                    continue  # User raised limit — keep going
-                return msg
+            # V4.8.0: Budget is display-only metric — never stops execution
+            # Show warning but continue. User controls stop via Stop button.
+            if TOKENS.is_over_budget() and not getattr(self, '_budget_warned_this_run', False):
+                self._budget_warned_this_run = True
+                output_fn(f"[Cost ${TOKENS.session_cost:.4f} passed budget ${CONFIG.session_cost_limit:.2f} — continuing. Adjust Budget $ or click Stop.]")
 
             # Check context usage
             warning = CONTEXT.check_and_warn(self.messages)
@@ -7206,6 +7222,23 @@ class Agent:
                     output_fn(f"[i] Cold cache detected ({_gap_min:.0f}min gap) — "
                               f"proactive microcompact freed ~{_mc_saved:,} tokens")
 
+            # V4.8.0: Inject critical reminder each turn to prevent drift in long conversations.
+            # This is appended as a system-reminder in the last user message, NOT modifying system prompt
+            # (which would break prompt cache). Mirrors Runnable's per-turn behavioral guardrails.
+            _TURN_REMINDER = (
+                "\n<system-reminder>\n"
+                "CRITICAL PER-TURN REMINDERS:\n"
+                "- Answer in chat. Do NOT create files unless user explicitly requested a file.\n"
+                "- For data (CSV/Excel): validate row counts, check for duplicates, verify join logic.\n"
+                "- If task involves 3+ edits, verify before reporting done.\n"
+                "</system-reminder>"
+            )
+            # Append to last user message if not already present
+            if self.messages and self.messages[-1].get("role") == "user":
+                _last_content = self.messages[-1].get("content", "")
+                if isinstance(_last_content, str) and "<system-reminder>" not in _last_content:
+                    self.messages[-1]["content"] = _last_content + _TURN_REMINDER
+
             def make_request():
                 return self.client.chat(
                     self.messages,
@@ -7271,7 +7304,8 @@ class Agent:
                         if _cr > 0:
                             self._cache_broken_by_compact = False  # Cache restored
                         elif _cache_attempted:
-                            output_fn("[Cache: restarted after compact — next turn should rebuild cache]")
+                            # V4.8.0: Enhanced cache breakage warning with cost impact
+                            output_fn("[⚠ Cache miss after compact — cost spike expected. Next turn rebuilds cache.]")
                             self._cache_broken_by_compact = False  # Only warn once
                 # V4.3.3: Diminishing returns detection (mirrors runnable tokenBudget.ts)
                 # If 3+ consecutive TEXT-ONLY turns produce <200 output tokens, agent may be stuck.
@@ -7795,6 +7829,7 @@ def create_chat_ui(mock_mode: bool = None):
         "model_connection_msg": "Not validated yet",
         "active_skills": [],
         "session_phase": "",  # Current work phase, shown in status bar. Set via /phase <text>.
+        "chat_height": 500,  # V4.8.0: default chat height in px (adjustable via slider)
     }
     ui_state["model_change_lock"] = False
 
@@ -7994,7 +8029,9 @@ def create_chat_ui(mock_mode: bool = None):
         # CSS-only auto-scroll: use flex-direction: column-reverse
         # Messages are wrapped in inner div, outer div is reversed flex container
         # This makes new content appear at bottom and stay visible
-        chat_display.value = f'''<div style="height:400px;max-height:400px;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;">
+        # V4.8.0: resizable chat window (resize:vertical) — user can drag bottom edge to enlarge
+        _chat_h = ui_state.get("chat_height", 500)  # Default 500px, adjustable via height slider
+        chat_display.value = f'''<div style="height:{_chat_h}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {border};background:{bg};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;">
             <div style="padding:10px;font-family:system-ui,-apple-system,sans-serif;">
                 {content}
             </div>
@@ -8110,18 +8147,24 @@ def create_chat_ui(mock_mode: bool = None):
     new_btn = widgets.Button(description='New', button_style='success', icon='plus')
 
     # Session budget slider (live control)
-    budget_slider = widgets.FloatSlider(
-        value=CONFIG.session_cost_limit,
-        min=0.5, max=20.0, step=0.5,
+    # V4.8.0: Budget as editable text box (display-only metric, never stops execution)
+    budget_input = widgets.BoundedFloatText(
+        value=CONFIG.session_cost_limit if CONFIG.session_cost_limit > 0 else 10.0,
+        min=0.0, max=999.0, step=0.5,
         description='Budget $:',
         style={'description_width': '70px'},
-        layout=widgets.Layout(width='220px'),
-        readout_format='.1f'
+        layout=widgets.Layout(width='160px'),
+        tooltip='Display-only cost tracking. Does NOT stop agent. Set 0 to disable warning.'
     )
+    # Alias for backward compat (other code references budget_slider)
+    budget_slider = budget_input
     def on_budget_change(change):
         CONFIG.session_cost_limit = change['new']
         update_mode_display()
-    budget_slider.observe(on_budget_change, names='value')
+    budget_input.observe(on_budget_change, names='value')
+    # Initialize config
+    if CONFIG.session_cost_limit <= 0:
+        CONFIG.session_cost_limit = 10.0
 
     # Live parameter controls
     temp_slider = widgets.FloatSlider(
@@ -8146,6 +8189,18 @@ def create_chat_ui(mock_mode: bool = None):
         layout=widgets.Layout(width='250px'),
         disabled=not CONFIG.thinking_enabled
     )
+    # V4.8.0: Chat height slider — user can adjust chat window size
+    chat_height_slider = widgets.IntSlider(
+        value=500, min=200, max=1200, step=50,
+        description='Chat Height:',
+        style={'description_width': '100px'},
+        layout=widgets.Layout(width='250px')
+    )
+    def on_chat_height_change(change):
+        ui_state["chat_height"] = change['new']
+        render_chat()
+    chat_height_slider.observe(on_chat_height_change, names='value')
+
     dark_mode_checkbox = widgets.Checkbox(
         value=True,  # Default on like GCP
         description='Dark Mode',
@@ -9814,7 +9869,7 @@ def create_chat_ui(mock_mode: bool = None):
     model_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
     # Group 2: Thinking + budget + secondary toggles
-    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, budget_slider, auto_compact_checkbox, dark_mode_checkbox])
+    thinking_row = widgets.HBox([thinking_checkbox, thinking_budget_slider, temp_slider, budget_slider, auto_compact_checkbox, dark_mode_checkbox, chat_height_slider])
     thinking_row.layout = widgets.Layout(flex_flow='row wrap', align_items='center', gap='4px 8px')
 
     # Group 3: Session
