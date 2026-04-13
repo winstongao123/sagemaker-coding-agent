@@ -3,7 +3,10 @@
 ## Last Session: 2026-04-13 — V4.8.0 Release + PS_Deep E-Book
 
 ### V4.8.0 Changes (sagemaker_agent.py)
-- Clara skill: auto_trigger disabled (was firing on generic "claims" keywords). Now only via /clara-review
+- All 8 skills: auto_trigger disabled. Skills only activate via /command or explicit request.
+  - verify, simplify, review, security-review, batch, coding-standards, clara: auto_trigger: false
+  - report: keeps keyword triggers ("create a report") since that's explicit intent
+- /done and /verify are no longer auto-forced. Agent suggests them after 3+ file edits, user decides.
 - SkillManager: new auto_trigger: false frontmatter support to disable keyword auto-discovery
 - [CRITICAL] Chat window resizable (500px default, drag + slider 200-1200px)
 - [CRITICAL] Prefer chat answers over file generation (system prompt + per-turn reminder)

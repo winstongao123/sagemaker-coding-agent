@@ -1,7 +1,8 @@
 ---
 name: batch
 description: Coordinator-worker orchestration for large multi-file tasks. Decomposes work into 3-30 independent units, spawns parallel workers in isolated worktrees.
-triggers: batch, large refactor, migrate all, update all, refactor across, bulk change, many files, parallel workers, refactor all, change all, across all files
+triggers: /batch, run batch, batch refactor
+auto_trigger: false
 ---
 
 # Batch: Coordinator-Worker Orchestration

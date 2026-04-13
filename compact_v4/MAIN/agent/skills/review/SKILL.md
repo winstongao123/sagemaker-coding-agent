@@ -1,7 +1,8 @@
 ---
 name: code-review
 description: Comprehensive code review — parallel agents for reuse, quality, efficiency + security checklist + iterative feedback
-triggers: code review, review pr, review change, review diff, pull request, code quality, review my code, review this code
+triggers: /review, /code-review, review my code, review this pr
+auto_trigger: false
 ---
 
 # Code Review

@@ -1,7 +1,8 @@
 ---
 name: coding-standards
 description: Language-agnostic coding quality standards for naming, error handling, design patterns, and testing
-triggers: coding standards, naming convention, best practices, code style, design pattern, kiss, dry, yagni
+triggers: /coding-standards, apply coding standards
+auto_trigger: false
 ---
 
 # Coding Standards
