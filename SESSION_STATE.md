@@ -1,5 +1,10 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-18 — Security hardening: .gitignore
+
+Added `.env.*`, `*.pem`, `*.key`, `credentials*.json`,
+`service-account*.json` patterns. No code changes. Pushed to `sageagent`.
+
 ## Last Session: 2026-04-13 — V4.8.0 Release + PS_Deep E-Book
 
 ### V4.8.0 Changes (sagemaker_agent.py)
