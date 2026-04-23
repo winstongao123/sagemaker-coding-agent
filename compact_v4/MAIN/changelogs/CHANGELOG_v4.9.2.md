@@ -31,8 +31,8 @@ This is essential because previously the agent could be asked "how do I deactiva
 
 **Kept (runtime essentials):**
 - `MAIN/agent/sagemaker_agent.py` (the agent)
-- `MAIN/agent/chat.ipynb`, `chat.md` (entry notebook + chat docs)
-- `MAIN/agent/USER_GUIDE.md`
+- `MAIN/agent/chat.ipynb` (entry notebook)
+- `MAIN/agent/USER_GUIDE.md` (full user docs — chat.md md-companion of the notebook is excluded since it duplicates this file)
 - `MAIN/agent/memory.md` (auto-loaded, even if empty)
 - `MAIN/agent/skills/<all skill files>` including `clara/prompts/*` and `clara/FULL_REVIEW.md`
 - `MAIN/changelogs/CHANGELOG_v4.X.X.md` (release context)

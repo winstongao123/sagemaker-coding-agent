@@ -64,6 +64,7 @@ EXCLUDE_FILE_PATTERNS = [
     "TEST_LOG.md",               # dev artefact
     "v3_architecture.html",      # historical doc, superseded by changelogs
     "V4_NOTES.md",               # per-version dev notes (lives inside skills/clara/)
+    "chat.md",                   # md companion to chat.ipynb — redundant with USER_GUIDE.md, kept in repo only
     # FULL_REVIEW.md (clara skill orchestration) is KEPT — part of the runtime skill workflow
 ]
 
