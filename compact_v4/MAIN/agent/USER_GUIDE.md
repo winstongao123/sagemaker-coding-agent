@@ -351,8 +351,9 @@ Slash commands are typed directly in the chat input box (not as natural language
 | Command | What it does | Example |
 |---------|-------------|---------|
 | `/skills` | List all discovered skills | `/skills` |
-| `/skill use <name>` | Activate a skill for the session | `/skill use code-review` |
-| `/skill clear` | Deactivate all skills | `/skill clear` |
+| `/skill use <name>` | Activate a skill for the session (lifts any prior `/unskill` block on this skill) | `/skill use code-review` |
+| `/skill clear` | Deactivate all currently-active skills (sticky — they won't auto-re-match this session) | `/skill clear` |
+| `/unskill <name>` | Deactivate ONE specific skill — stays off for the session even if user message would auto-match it. Lifted only by `/skill use <name>` or new session. | `/unskill clara-review` |
 | `/commands` | List custom slash commands from `agent_config.json` | `/commands` |
 | `/cost` | Show token usage and cost breakdown | `/cost` |
 | `/revert <file>` | **Preview diff** first (current → snapshot). Use `--yes` to confirm. | `/revert app.py` then `/revert app.py --yes` |
@@ -399,7 +400,8 @@ Skills require explicit activation via `/command`. They do NOT auto-trigger on k
 ```
 /skills                  ← list all available skills
 /skill use <name>        ← activate a skill (stays on for ALL messages until cleared)
-/skill clear             ← deactivate ALL active skills
+/skill clear             ← deactivate ALL active skills (sticky — won't auto-re-match)
+/unskill <name>          ← deactivate ONE skill (sticky — won't auto-re-match this session)
 /verify                  ← shortcut: auto-activates verify + runs it
 /done [full|quick]       ← pre-ship gate: simplify → verify → SHIP verdict
 /simplify                ← shortcut: auto-activates simplify + runs it

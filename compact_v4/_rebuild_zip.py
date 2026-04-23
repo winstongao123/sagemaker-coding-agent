@@ -1,7 +1,27 @@
-"""Rebuild compact_v4.zip.
+"""Rebuild compact_v4.zip — MINIMUM-SHIP profile.
 
-V4.9.0 — excludes powerbi-dashboard and powerbi-dashboard-v2 skills per user request
-(keeps the shipping bundle focused on the coding/review/skills core).
+v4.9.2: tightened to ship only what's needed to RUN the agent in a SageMaker
+notebook environment. Drops dev artefacts, test files, audit docs, historical
+HTMLs, and powerbi skills (per user request, kept out since v4.9.0).
+
+Kept (runtime essentials):
+- sagemaker_agent.py (the agent)
+- chat.ipynb / chat.md (entry notebook + user-facing chat docs)
+- USER_GUIDE.md (user docs)
+- memory.md (auto-loaded persistent memory file, even if empty)
+- skills/<all skill SKILL.md and dependent files>
+- changelogs/CHANGELOG_v4.X.X.md (release notes)
+- top-level CHANGELOG.md (release index)
+
+Dropped (dev only):
+- test_*.py (all test suites — dev verification, not runtime)
+- TEST_LOG.md (dev artefact)
+- v3_architecture.html (historical, superseded by changelogs)
+- skills/clara/V4_NOTES.md (per-version dev notes)
+- docs/ (audit docs, internal)
+- .gitignore, .git/, __pycache__/, .pytest_cache/, .snapshots/, .code_index/
+- _rebuild_zip.py (this file — meta tool)
+- powerbi-dashboard, powerbi-dashboard-v2 (per user)
 """
 
 from __future__ import annotations
@@ -14,7 +34,7 @@ OUT_ZIP = "compact_v4.zip"
 
 # Extra paths to include at the zip root (outside MAIN/).
 EXTRA_FILES = ["CHANGELOG.md"]
-EXTRA_DIRS = ["docs"]  # audit docs shipped alongside the agent
+EXTRA_DIRS = []  # docs/ deliberately excluded — audit docs are internal, not shipped to users
 
 EXCLUDE_DIR_NAMES = {
     "__pycache__",
@@ -30,13 +50,21 @@ EXCLUDE_DIR_NAMES = {
     "powerbi-dashboard-v2",
 }
 EXCLUDE_REL_PATHS = {
-    "MAIN/tests/competition",
+    "MAIN/tests",                # whole tests/ dir — dev-only, not shipped
+    "MAIN/tests/competition",    # legacy, kept for clarity
 }
 EXCLUDE_FILE_PATTERNS = [
     "*.pyc",
     ".DS_Store",
     "*.swp",
-    ".exec_budget.json",  # per-session exec budget, not for shipping
+    ".exec_budget.json",         # per-session exec budget, not for shipping
+    ".gitignore",                # dev/git artefact
+    "test_*.py",                 # all test files — dev only
+    "*_test.py",
+    "TEST_LOG.md",               # dev artefact
+    "v3_architecture.html",      # historical doc, superseded by changelogs
+    "V4_NOTES.md",               # per-version dev notes (lives inside skills/clara/)
+    # FULL_REVIEW.md (clara skill orchestration) is KEPT — part of the runtime skill workflow
 ]
 
 

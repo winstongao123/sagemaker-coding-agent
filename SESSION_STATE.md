@@ -1,5 +1,27 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-23 — V4.9.2 Patch: doc alignment + minimum-ship zip
+
+### Context
+v4.9.1 production-readiness scan flagged 3 doc gaps (D1, D2, D3): `/unskill` was implemented but not documented in user-facing docs (USER_GUIDE.md, chat.md) or the agent's own SYSTEM_PROMPT command list. Also surfaced: shipping zip carried test files, dev artefacts, internal audit docs, and runtime caches not needed in production. Both addressed in this patch.
+
+### V4.9.2 Changes
+- **USER_GUIDE.md**: command table gained `/unskill` row; workflow block updated; sticky-deactivation behaviour documented on `/skill clear` and `/unskill`
+- **chat.md**: slash-commands table gained `/unskill` row
+- **SYSTEM_PROMPT** ([sagemaker_agent.py:6629](compact_v4/MAIN/agent/sagemaker_agent.py)): `# Commands` line gained `/skills`, `/skill use`, `/skill clear`, `/unskill` so agent self-knowledge is complete
+- **`_rebuild_zip.py`**: tightened to minimum-ship profile — drops `test_*.py`, `TEST_LOG.md`, `v3_architecture.html`, `V4_NOTES.md`, `docs/*` audit, `.gitignore`, `.git/`, `__pycache__/`, `.pytest_cache/`, `.snapshots/`, `.code_index/`
+- **Version**: 4.9.1 → 4.9.2
+
+### Zip shape
+- v4.9.1: 40 files, 321 KB
+- v4.9.2: **25 files, 239 KB** (25% smaller, dev clutter removed)
+
+### Verification
+- `py_compile` / `ast.parse` / warnings-as-errors import — clean, version reports `4.9.2`
+- 30/30 tests still green (11 v4.9 + 10 v4.9.1 + 9 v4.7.1)
+- Zip extracted, `__version__ = "4.9.2"` confirmed inside zip
+- Manual zip listing reviewed — no powerbi, no test files, no dev artefacts
+
 ## 2026-04-23 — V4.9.1 Patch: /unskill + sticky deactivation + prompt tightening
 
 ### Context

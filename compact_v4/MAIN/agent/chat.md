@@ -83,7 +83,8 @@ Applies widget config and calls `create_chat_ui()`.
 | Stop agent | Click Stop button |
 | Check cost | `/cost` (shows token usage, cache savings, session cost) |
 | Activate skill | `/skill use review` |
-| Deactivate skills | `/skill clear` |
+| Deactivate one skill (sticky) | `/unskill clara-review` |
+| Deactivate all skills (sticky) | `/skill clear` |
 | List skills | `/skills` |
 | **Pre-ship gate** | `/done full` (simplify → verify → READY-TO-SHIP verdict) |
 | **Regression check** | `/regression` (git diff stat + session edits + test suggestion) |

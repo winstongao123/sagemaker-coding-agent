@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.9.1"
+__version__ = "4.9.2"
 
 # ============================================================
 # IMPORTS
@@ -6626,7 +6626,7 @@ WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create
 MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Prefer MCP tools when available.
 
 # Commands
-`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/commands` (custom).
+`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/skills` (list available), `/skill use <name>` (activate; lifts any prior /unskill block), `/skill clear` (deactivate all — sticky for session), `/unskill <name>` (V4.9.1 — deactivate one skill, sticky for session), `/commands` (custom).
 
 # === DYNAMIC ===
 """

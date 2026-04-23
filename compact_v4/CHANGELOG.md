@@ -1,5 +1,13 @@
 # Compact V4 Changelog
 
+## v4.9.2 — Doc alignment + minimum-ship zip (2026-04-23)
+
+Documentation-only patch. Closes the three doc gaps surfaced by the v4.9.1 production-readiness scan: `/unskill` is now documented in `USER_GUIDE.md`, `chat.md`, and the agent's own `SYSTEM_PROMPT # Commands` line. Tightens the shipping bundle to runtime essentials only — `compact_v4.zip` shrinks from 40 → **25 files / 239 KB** by dropping test files, dev artefacts, audit docs, historical HTMLs, and `.git`/`__pycache__/.snapshots/.pytest_cache/.code_index/` runtime caches.
+
+Detailed: [`compact_v4/MAIN/changelogs/CHANGELOG_v4.9.2.md`](compact_v4/MAIN/changelogs/CHANGELOG_v4.9.2.md).
+
+No behavioural change. 30/30 tests still green. Migration: none.
+
 ## v4.9.1 — /unskill + sticky deactivation + critique-prompt tightening (2026-04-23)
 
 Patch release completing audit §8 coverage. Adds `/unskill <name>` command and sticky deactivation so `/skill clear` and `/unskill` can't be silently undone by the next user message. Tightens the "Handling Critique" SYSTEM_PROMPT section (concrete `read_file` tool call, workspace-absent fallback, concise-ACCEPT exception). Fixes one logic bug found in diff review (`/unskill <nonexistent>` no longer silently succeeds).
