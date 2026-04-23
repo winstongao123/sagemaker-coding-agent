@@ -1,5 +1,21 @@
 # Compact V4 Changelog
 
+## v4.9.3 — Cross-repo enhancements (Bedrock-only fit) (2026-04-23)
+
+Five enhancements pulled from a deep-scan comparison against `gg-claude-code-runnable`, `hermes-agent`, and `Learning_Factory`, filtered for the actual deployment target (SageMaker + Bedrock-only + no external network, insurance-company environment):
+
+1. **Prompt-injection scanner** on `memory.md` / `CLAUDE.md` / `SKILL.md` loads — flags instruction-override, role-hijack, fake reminder tags, exposed credentials, invisible chars (advisory, doesn't block)
+2. **CSO description validator** on skill discovery — warns when a skill's frontmatter description text doesn't start with "Use when"
+3. **New `/reflexion` skill** — 3-pass critique-refine-judge for high-stakes outputs
+4. **SYSTEM_PROMPT** Handling-Critique section gains spec-first ordering rule
+5. Doom-loop detection (already existed at line 7368) confirmed — no change needed
+
+Rejected for fit: MCP integration, OpenRouter routing, multi-platform messaging, self-patching skills, mixture-of-agents voting (cost), error classifier (defer to v4.10), permission rule engine (defer to v4.10).
+
+Detailed: [`compact_v4/MAIN/changelogs/CHANGELOG_v4.9.3.md`](compact_v4/MAIN/changelogs/CHANGELOG_v4.9.3.md). Full cross-repo comparison: see audit doc §11.
+
+Verification: **41/41 tests green** (11 new + 30 regression). py_compile + ast clean. No Codex (per `feedback_codex_skip_bedrock_patches.md`).
+
 ## v4.9.2 — Doc alignment + minimum-ship zip (2026-04-23)
 
 Documentation-only patch. Closes the three doc gaps surfaced by the v4.9.1 production-readiness scan: `/unskill` is now documented in `USER_GUIDE.md`, `chat.md`, and the agent's own `SYSTEM_PROMPT # Commands` line. Tightens the shipping bundle to runtime essentials only — `compact_v4.zip` shrinks from 40 → **25 files / 239 KB** by dropping test files, dev artefacts, audit docs, historical HTMLs, and `.git`/`__pycache__/.snapshots/.pytest_cache/.code_index/` runtime caches.

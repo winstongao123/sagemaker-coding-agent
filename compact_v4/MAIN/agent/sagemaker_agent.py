@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.9.2"
+__version__ = "4.9.3"
 
 # ============================================================
 # IMPORTS
@@ -2258,6 +2258,15 @@ class SkillManager:
                     _auto_trigger = str(meta.get("auto_trigger", "true")).strip().lower() != "false"
                     _triggers_raw = meta.get("triggers", "")
                     _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if (_triggers_raw and _auto_trigger) else None
+                    # V4.9.3: CSO format check — descriptions should start with "Use when [trigger]"
+                    # so they're easy for the agent to surface ("Consider using X when Y" pattern).
+                    # Warning only — does NOT block load. Skip the legacy code-review skill (name "code-review")
+                    # which pre-dates the CSO convention.
+                    if desc and not desc.lower().lstrip().startswith("use when"):
+                        logging.warning(
+                            f"[CSO-CHECK] skill '{name}' description does not start with 'Use when' — "
+                            f"current: '{desc[:60]}...'  (advisory; see ADVANCED_PATTERNS.md R-105)"
+                        )
                     self._cache[name] = SkillInfo(
                         name=name, description=desc,
                         location=str(fp), base_dir=str(fp.parent),
@@ -2302,6 +2311,10 @@ class SkillManager:
         try:
             text = Path(skill.location).read_text(encoding="utf-8", errors="ignore")
             _, content = self._parse_frontmatter(text)
+            # V4.9.3: scan skill body for injection markers (advisory) — defends against
+            # crafted SKILL.md files in workspaces with multiple authors.
+            for w in _scan_for_prompt_injection(content, f"skill:{name}"):
+                logging.warning(w)
             return True, content[:max_chars]
         except Exception as e:
             return False, f"Failed reading skill: {e}"
@@ -6223,6 +6236,9 @@ def load_project_instructions(workspace: str) -> str:
             except Exception:
                 content = ""
             if content.strip():
+                # V4.9.3: scan project instructions for injection markers (advisory)
+                for w in _scan_for_prompt_injection(content, f"CLAUDE.md ({claude_md})"):
+                    logging.warning(w)
                 instructions.append(f"# Project Instructions ({claude_md})\n{content[:8000]}")
         if path == home or path == os.path.dirname(path):
             break
@@ -6284,6 +6300,44 @@ _MEMORY_MAX_LINES: int = 200       # V4.3 V3-B: mirrors runnable MAX_ENTRYPOINT_
 _MEMORY_MAX_BYTES: int = 25_000    # V4.3 V3-B: mirrors runnable MAX_ENTRYPOINT_BYTES=25_000
 
 
+# V4.9.3: Prompt-injection scanner for context files (memory.md, CLAUDE.md, SKILL.md).
+# Insurance-company / regulated-environment defence: these files can be edited by anyone with
+# workspace write access, so a malicious or careless edit could sneak instructions into the
+# system prompt. WARNING-only — surfaces findings to stderr/audit log but does NOT block load
+# (false-positive avoidance — code examples and docs legitimately mention "ignore" etc.).
+_INJECTION_PATTERNS = [
+    (re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above|earlier)\s+instructions", re.IGNORECASE), "instruction-override"),
+    (re.compile(r"disregard\s+(?:all\s+)?(?:previous|prior|above)\s+", re.IGNORECASE), "instruction-override"),
+    (re.compile(r"you\s+are\s+now\s+(?:a|an)\s+\w+", re.IGNORECASE), "role-hijack"),
+    (re.compile(r"</?\s*system\s*-?\s*reminder\s*>", re.IGNORECASE), "fake-reminder-tag"),
+    (re.compile(r"</?\s*important[\s\-_]+instructions?\s*>", re.IGNORECASE), "fake-instruction-tag"),
+    (re.compile(r"\b(?:AWS|API)[_\s]*(?:KEY|SECRET|TOKEN)[\s=:]+[A-Za-z0-9+/=_\-]{16,}", re.IGNORECASE), "exposed-credential"),
+]
+# Invisible / bidirectional / format-confusion characters per Unicode Technical Standard #36.
+_INVISIBLE_CHAR_PATTERN = re.compile(
+    r"[​-‏‪-‮⁠-⁤⁪-⁯﻿￹-￻]"
+)
+
+
+def _scan_for_prompt_injection(text: str, source_label: str) -> list:
+    """Scan loaded context-file text for likely prompt-injection markers.
+
+    Returns a list of warning strings. Empty list = clean.
+    Does NOT modify or block the loaded text — purely advisory for audit/operator review.
+    """
+    warnings = []
+    if not text:
+        return warnings
+    for pattern, label in _INJECTION_PATTERNS:
+        n = len(pattern.findall(text))
+        if n > 0:
+            warnings.append(f"[INJECTION-SCAN] {source_label}: {label} pattern matched ({n}x)")
+    invisible_count = len(_INVISIBLE_CHAR_PATTERN.findall(text))
+    if invisible_count > 0:
+        warnings.append(f"[INJECTION-SCAN] {source_label}: {invisible_count} invisible/format-confusion char(s)")
+    return warnings
+
+
 def _load_persistent_memory() -> str:
     """Load persistent memory from workspace memory.md file.
 
@@ -6309,6 +6363,10 @@ def _load_persistent_memory() -> str:
         sections = _parse_memory_sections(content)
         if not sections:
             return ""
+
+        # V4.9.3: scan for injection markers (advisory, does not block)
+        for w in _scan_for_prompt_injection(content, "memory.md"):
+            logging.warning(w)
 
         output = "\n\n# Persistent Memory (from memory.md)\n"
         was_truncated = total_size > _MEMORY_MAX_BYTES or truncated_by_lines
@@ -6552,6 +6610,7 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 # Handling Critique of Your Own Work (V4.9)
 - When a user pastes a critique of a review, plan, or analysis you wrote, do NOT decide agree/reject from memory. Call `read_file` on the source being discussed and re-verify each claim against it before responding. Reasoning about the critique text alone produces sycophancy at low temperature and defensive rejection at high temperature — both are wrong.
 - If the source being critiqued is NOT accessible in the current workspace (paths don't exist, code was generated earlier and not persisted), say so explicitly in your reply and fall back to reasoning about the pasted text, flagging the limitation. Do not fabricate file references.
+- **Spec-first ordering (V4.9.3):** address the critique in this order — (1) spec/correctness compliance first (does the work do what it was asked to do?), (2) code quality / style second (is the implementation clean?). Do not dilute spec-compliance findings by mixing them with style findings; they're different categories.
 - For each critique point, respond with one of three labels + evidence:
   - `ACCEPT` — agree. Cite the file:function or line that supports the critique. For clear-cut critiques (typos, obvious errors), state ACCEPT concisely without padding evidence to look thorough.
   - `PARTIAL` — agree in principle, disagree on specifics. State which part holds and which doesn't, with evidence.

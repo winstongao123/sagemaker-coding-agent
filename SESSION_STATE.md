@@ -1,5 +1,34 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-23 — V4.9.3 Patch: cross-repo enhancements (Bedrock-only fit)
+
+### Context
+After v4.9.2 doc alignment / minimum-ship zip, user requested deep-scan comparison vs `gg-claude-code-runnable`, `hermes-agent`, and `Learning_Factory` to identify enhancements. User clarified hard constraints: **SageMaker + Bedrock-only + no external network from insurance company**. That filter rejected MCP, OpenRouter, multi-platform messaging, self-patching skills upfront. Pre-implementation scan revealed doom-loop detection already exists (line 7368), so that candidate was dropped too. Final scope: 5 small enhancements, all local-only.
+
+### V4.9.3 Changes (sagemaker_agent.py + skills)
+1. **Prompt-injection scanner** (`_scan_for_prompt_injection`) — wired into `_load_persistent_memory()`, `load_project_instructions()`, `SkillManager.read_skill()`. Patterns: instruction-override, role-hijack, fake `<system-reminder>` / `<important-instructions>` tags, exposed AWS/API credentials, invisible/format-confusion chars (Unicode TS#36). Advisory-only `[INJECTION-SCAN]` warnings via `logging.warning()`.
+2. **CSO description validator** in `SkillManager.discover()` — `[CSO-CHECK]` warning when a skill's frontmatter description text doesn't start with "Use when". Insurance-side cleanup target — 9 of 10 currently-shipped skills will warn.
+3. **New `skills/reflexion/SKILL.md`** — 3-pass critique-refine-judge loop. Slash-only (`auto_trigger: false`). CSO-compliant.
+4. **SYSTEM_PROMPT "Handling Critique" section** gains spec-first ordering bullet — address spec/correctness BEFORE code-quality findings.
+5. **Version**: 4.9.2 → 4.9.3
+
+### Verification
+- `py_compile` / `ast.parse` / warnings-as-errors import — clean, version `4.9.3`
+- `test_v493_enhancements.py` (NEW) — **11/11 PASS** (8 scanner + 2 CSO + 1 reflexion-discovery)
+- All regression: **41/41 total tests green** (1 path_fix + 9 v4.7.1 + 11 v4.9 + 10 v4.9.1 + 11 v4.9.3)
+- No Codex review (per project rule for Bedrock-only patches that don't touch general algorithms)
+- Self-review: forward-reference of `_scan_for_prompt_injection` from `read_skill` (line 2294) to module-level helper (line ~6286) verified to resolve at runtime via Python's name resolution
+
+### Rejected (so future-you doesn't re-litigate)
+- MCP integration — external network not allowed
+- OpenRouter / provider fallback chain — external network not allowed
+- Multi-platform messaging gateway — wrong UX target (SageMaker notebook only)
+- Self-patching skills — insurance compliance frowns on agent-modified runtime artefacts
+- Multi-stage compaction — current single-stage is adequate
+- Mixture-of-models voting — cost concern, defer until justified
+- Error classifier — defer to v4.10 (significant work)
+- Permission rule engine — defer to v4.10 (bigger feature)
+
 ## 2026-04-23 — V4.9.2 Patch: doc alignment + minimum-ship zip
 
 ### Context
