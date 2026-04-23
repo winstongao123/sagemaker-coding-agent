@@ -1,5 +1,13 @@
 # Compact V4 Changelog
 
+## v4.9.1 — /unskill + sticky deactivation + critique-prompt tightening (2026-04-23)
+
+Patch release completing audit §8 coverage. Adds `/unskill <name>` command and sticky deactivation so `/skill clear` and `/unskill` can't be silently undone by the next user message. Tightens the "Handling Critique" SYSTEM_PROMPT section (concrete `read_file` tool call, workspace-absent fallback, concise-ACCEPT exception). Fixes one logic bug found in diff review (`/unskill <nonexistent>` no longer silently succeeds).
+
+Detailed: [`compact_v4/MAIN/changelogs/CHANGELOG_v4.9.1.md`](compact_v4/MAIN/changelogs/CHANGELOG_v4.9.1.md).
+
+Verification: 11/11 v4.9 tests + **10/10 new v4.9.1 tests** + 9/9 v4.7.1 regression tests (30/30 total green), py_compile + ast clean. No Codex this round (patch scope is Bedrock agent UI handlers + prompt text — Codex's generic lens adds nothing here over self-review).
+
 ## v4.9.0 — Skill auto_trigger fix + critique-handling rule (2026-04-23)
 
 Fixes the silent `auto_trigger: false` bug shipped in v4.8.0 (opt-out flag parsed but never honoured by the keyword auto-match loop) + hardens keyword match against substring false-positives + adds a SYSTEM_PROMPT rule for handling critiques of the agent's own work + makes skill auto-injection visible to the user with an approximate char-count.

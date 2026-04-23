@@ -1,5 +1,39 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-23 — V4.9.1 Patch: /unskill + sticky deactivation + prompt tightening
+
+### Context
+v4.9.0 shipped the main audit §6 fix (auto_trigger honoured) earlier today, but audit §8 items #4 (/unskill) and a latent bug in the "Handling Critique" prompt (implicit re-read, missing workspace-absent fallback, no concise-ACCEPT exception) remained. Also during diff review of v4.9.1, one logic bug was caught: `/unskill <nonexistent>` silently accepted junk names. All resolved here.
+
+### V4.9.1 Changes (sagemaker_agent.py)
+- **New `/unskill <name>` command** — per-skill deactivation, validates against `SKILLS._cache`, rejects nonexistent names with the available list
+- **Sticky deactivation** — new `ui_state["deactivated_skills"]` set. `/unskill` and `/skill clear` populate it. Auto-match loop skips any member. `/skill use <name>` lifts the block for that skill. New Session button resets the set.
+- **SYSTEM_PROMPT "Handling Critique" tightened**:
+  - "Re-open the source file" → "Call `read_file` on the source being discussed" (concrete tool call)
+  - New fallback line for critiques of code not in the workspace
+  - ACCEPT label now says: state concisely for clear-cut critiques, don't pad evidence
+- **Logic bug fixed during diff review**: `/unskill <nonexistent>` no longer silently adds junk to deactivated set
+- **Version**: 4.9.0 → 4.9.1
+
+### New files
+- `compact_v4/MAIN/agent/test_v491_unskill.py` — 10 tests covering /unskill, sticky deactivation, /skill use re-enable, auto-match skip, new-session reset
+- `compact_v4/MAIN/changelogs/CHANGELOG_v4.9.1.md`
+
+### Verification
+- `py_compile` / `ast.parse` / warnings-as-errors import — clean, version reports 4.9.1
+- **30/30 tests green**: 11/11 v4.9 + 10/10 v4.9.1 + 9/9 v4.7.1 regression
+- Diff re-read: 1 logic bug caught and fixed before shipping (validation missing)
+- **No Codex review** this round — per user direction: Codex is a generic code-review tool, adds little for patches touching Bedrock agent UI handlers + prompt text. Self-review covers it.
+
+### Audit §8 status after v4.9.1
+| # | Item | Status |
+|---|---|---|
+| 1 | Thinking-mode temp=1 | Out of scope — Bedrock API constraint, cannot override |
+| 2 | Re-read source rule | **DONE** (v4.9.0), tightened v4.9.1 |
+| 3 | Partial-agreement scaffold | **DONE** (v4.9.0), tightened v4.9.1 |
+| 4 | `/unskill` command | **DONE** v4.9.1 |
+| 5 | Skill injection char count | **DONE** (v4.9.0) |
+
 ## 2026-04-23 — V4.9.0 Release: skill auto_trigger fix + critique-handling rule
 
 ### Context

@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.9.0"
+__version__ = "4.9.1"
 
 # ============================================================
 # IMPORTS
@@ -6550,9 +6550,10 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - DESIGN BEFORE CODE: For non-trivial tasks where multiple approaches exist, run `/design` first to produce 2-3 options with tradeoffs. Wait for user to pick. Then plan and implement. Do NOT jump straight to coding when the approach is unclear.
 
 # Handling Critique of Your Own Work (V4.9)
-- When a user pastes a critique of a review, plan, or analysis you wrote, do NOT decide agree/reject from memory. Re-open the source file being discussed and re-verify each claim against it before responding. Reasoning about the critique text alone produces sycophancy at low temperature and defensive rejection at high temperature — both are wrong.
+- When a user pastes a critique of a review, plan, or analysis you wrote, do NOT decide agree/reject from memory. Call `read_file` on the source being discussed and re-verify each claim against it before responding. Reasoning about the critique text alone produces sycophancy at low temperature and defensive rejection at high temperature — both are wrong.
+- If the source being critiqued is NOT accessible in the current workspace (paths don't exist, code was generated earlier and not persisted), say so explicitly in your reply and fall back to reasoning about the pasted text, flagging the limitation. Do not fabricate file references.
 - For each critique point, respond with one of three labels + evidence:
-  - `ACCEPT` — agree. Cite the file:function or line that supports the critique.
+  - `ACCEPT` — agree. Cite the file:function or line that supports the critique. For clear-cut critiques (typos, obvious errors), state ACCEPT concisely without padding evidence to look thorough.
   - `PARTIAL` — agree in principle, disagree on specifics. State which part holds and which doesn't, with evidence.
   - `REJECT` — disagree. Cite the file:function that contradicts the critique.
 - Never issue a single global verdict ("it's 70% right", "all true", "all wrong") without going point-by-point. A global grade without per-point evidence is not analysis.
@@ -7842,6 +7843,7 @@ def create_chat_ui(mock_mode: bool = None):
         "model_connection_ok": None,  # True/False/None(unknown)
         "model_connection_msg": "Not validated yet",
         "active_skills": [],
+        "deactivated_skills": set(),  # V4.9.1: skills explicitly turned off via /unskill or /skill clear — auto-match skips them for the session
         "session_phase": "",  # Current work phase, shown in status bar. Set via /phase <text>.
         "chat_height": 500,  # V4.8.0: default chat height in px (adjustable via slider)
     }
@@ -8901,6 +8903,11 @@ def create_chat_ui(mock_mode: bool = None):
                 if name not in active:
                     active.append(name)
                     ui_state["active_skills"] = active
+                # V4.9.1: explicit /skill use lifts any prior /unskill or /skill clear deactivation.
+                _deact = ui_state.get("deactivated_skills", set())
+                if name in _deact:
+                    _deact.discard(name)
+                    ui_state["deactivated_skills"] = _deact
                 with SKILLS._pending_lock:
                     SKILLS.active_skill = name
                 add_message('system', f'Enabled skill: {name}')
@@ -8909,15 +8916,42 @@ def create_chat_ui(mock_mode: bool = None):
             _release_lock()
             return
         if msg == "/skill clear":
+            # V4.9.1: remember which skills were cleared so auto-match can't silently re-match them.
+            prev_active = list(ui_state.get("active_skills", []))
             ui_state["active_skills"] = []
+            ui_state["deactivated_skills"] = ui_state.get("deactivated_skills", set()) | set(prev_active)
             with SKILLS._pending_lock:
                 SKILLS.active_skill = None
                 SKILLS._pending_activations.clear()
-            add_message('system', 'Cleared active skills')
+            sticky_note = f' (sticky: {", ".join(sorted(ui_state["deactivated_skills"]))})' if ui_state["deactivated_skills"] else ""
+            add_message('system', f'Cleared active skills{sticky_note}')
             update_mode_display()
             input_box.value = ""
             _release_lock()
             return
+        # V4.9.1: /unskill <name> — deactivate one specific skill (stays off for the session)
+        if msg.startswith("/unskill "):
+            name = msg[len("/unskill "):].strip()
+            if not name:
+                add_message('system', 'Usage: /unskill <skill-name>  — see /skills for the list')
+            elif name not in SKILLS._cache:
+                _available = ", ".join(sorted(SKILLS._cache.keys())) if SKILLS._cache else "none"
+                add_message('system', f'Skill not found: {name}. Available: {_available}')
+            else:
+                active = ui_state.get("active_skills", [])
+                was_active = name in active
+                ui_state["active_skills"] = [s for s in active if s != name]
+                ui_state["deactivated_skills"] = ui_state.get("deactivated_skills", set()) | {name}
+                with SKILLS._pending_lock:
+                    if SKILLS.active_skill == name:
+                        SKILLS.active_skill = None
+                verb = "Deactivated" if was_active else "Blocked auto-match for"
+                add_message('system', f'{verb} skill: {name}  (stays off until /skill use {name} or new session)')
+                update_mode_display()
+            input_box.value = ""
+            _release_lock()
+            return
+        # V4.9.1: /skill use <name> lifts any prior deactivation so the user can explicitly re-enable.
         if msg == "/revert" or msg.startswith("/revert "):
             raw = msg[len("/revert"):].strip()
             # Support "--yes" flag for confirmed revert (skip preview)
@@ -9341,11 +9375,16 @@ def create_chat_ui(mock_mode: bool = None):
                 msg_lower = msg.lower()
                 # Extract word tokens once per message (alphanumerics separated by non-word chars).
                 msg_words = set(re.findall(r"[a-z0-9]+", msg_lower))
+                # V4.9.1: auto-match must also respect user-initiated deactivations (/unskill, /skill clear).
+                _deactivated = ui_state.get("deactivated_skills", set())
                 for skill_info in SKILLS.list_skills():
                     s_name = skill_info["name"]
                     # V4.9.0: skip skills that opted out of auto-matching.
                     _skill_obj = SKILLS._cache.get(s_name)
                     if _skill_obj is not None and not _skill_obj.auto_trigger:
+                        continue
+                    # V4.9.1: skip skills the user explicitly deactivated this session.
+                    if s_name in _deactivated:
                         continue
                     # Match if every word in the skill name appears as a whole word in the user message.
                     # ("clara-review" -> needs both "clara" AND "review" in the message as complete words.)
@@ -9516,6 +9555,7 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["messages"] = []
         ui_state["todos"] = []  # Clear todos
         ui_state["active_skills"] = []
+        ui_state["deactivated_skills"] = set()  # V4.9.1: sticky deactivations don't carry across sessions
         ui_state["checkpoints"] = []
         with SKILLS._pending_lock:
             SKILLS.active_skill = None
@@ -9702,6 +9742,7 @@ def create_chat_ui(mock_mode: bool = None):
         ui_state["todos"] = []  # Clear todos
         ui_state["checkpoints"] = []
         ui_state["active_skills"] = []
+        ui_state["deactivated_skills"] = set()  # V4.9.1: sticky deactivations don't carry across sessions
         with SKILLS._pending_lock:
             SKILLS.active_skill = None
             SKILLS._pending_activations.clear()

@@ -273,3 +273,31 @@ Each would be a separate small patch. Owning them here so they don't get lost.
 - **Fix is two small additions** (see §6). No refactor.
 - **Case study shows real behavioural harm** beyond just cost — sycophancy/paranoia swing in a review session that should have been clean.
 - **Out-of-scope weaknesses in §8** are separately tracked, not fixed by this patch.
+
+---
+
+## 10. §8 closure log (v4.9.0 + v4.9.1)
+
+Tracking which §8 items got done as the patches shipped.
+
+| # | Item | Status | Shipped in | Notes |
+|---|---|---|---|---|
+| 1 | Thinking-mode `temperature=1` calibration | **Out of scope** | — | Bedrock API requires `temperature: 1` when Extended Thinking is enabled. Passing any other value → `ValidationException`. No local fix possible. Behavioural mitigation via prompt (#2) only. |
+| 2 | Re-read-source-before-defending rule | **DONE** | v4.9.0, tightened v4.9.1 | v4.9.0 added the SYSTEM_PROMPT section. v4.9.1 replaced "re-open the source file" with concrete `read_file` tool call and added a fallback for critiques of non-workspace code. |
+| 3 | Partial-agreement scaffold (ACCEPT/PARTIAL/REJECT) | **DONE** | v4.9.0, tightened v4.9.1 | v4.9.0 added the 3-label scaffold. v4.9.1 added a concise-ACCEPT exception for clear-cut critiques (typos etc.) to prevent over-verification. |
+| 4 | `/unskill <name>` command | **DONE** | v4.9.1 | New handler mirroring `/skill use` pattern, validated against `SKILLS._cache`, session-scoped sticky deactivation. |
+| 5 | Skill-injection char count | **DONE** | v4.9.0 | Auto-match banner now reads `Auto-matched skill: clara-review (~8123 chars injected)`. |
+
+### New findings during v4.9.1 implementation (not in original §8)
+
+- **Sticky deactivation after `/skill clear`.** Without this, calling `/skill clear` only clears `active_skills` for the current turn; the next user message could silently re-match the same skill via auto-match. Added `ui_state["deactivated_skills"]` set populated by both `/skill clear` and `/unskill`; auto-match skips any member; `/skill use` lifts the block for explicit re-enable.
+- **`/unskill` input validation.** Without validating `name` against `SKILLS._cache`, `/unskill nonexistent-skill` would silently add junk to the deactivated set and print a misleading success. Caught in diff review and fixed before shipping v4.9.1.
+
+### Residual uncertainties (honest, not fixed)
+
+Two behaviour changes can't be deterministically tested without a live Bedrock session:
+
+1. **The "Handling Critique" SYSTEM_PROMPT** change takes effect only when the agent is mid-conversation with a real LLM. The prompt wording is verified (reviewed, checked for internal consistency with existing `TRUST BOUNDARY` and `Lead with the answer` rules) but behavioural effect requires a live session.
+2. **The skill-injection char-count banner** only renders in the Jupyter UI path. Tests cover the code path; the visible rendering first appears on next notebook run.
+
+Both are framework-level limits (can't fake a live LLM or ipywidgets in unit tests), not gaps in the audit.
