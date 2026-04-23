@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.8.0"
+__version__ = "4.9.0"
 
 # ============================================================
 # IMPORTS
@@ -2196,6 +2196,7 @@ class SkillInfo:
     location: str  # full path to SKILL.md
     base_dir: str  # directory containing the skill
     triggers: List[str] = None  # V4.6: keywords that trigger auto-discovery
+    auto_trigger: bool = True  # V4.9: when False, skill only activates via /command (not keyword auto-match)
 
 
 class SkillManager:
@@ -2253,6 +2254,7 @@ class SkillManager:
                                 break
                     # V4.6: Parse triggers from frontmatter (comma-separated or YAML list)
                     # V4.8.0: auto_trigger: false disables keyword auto-discovery (skill only via /command)
+                    # V4.9.0: auto_trigger flag now propagated to SkillInfo so the auto-match loop can honour it.
                     _auto_trigger = str(meta.get("auto_trigger", "true")).strip().lower() != "false"
                     _triggers_raw = meta.get("triggers", "")
                     _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if (_triggers_raw and _auto_trigger) else None
@@ -2260,6 +2262,7 @@ class SkillManager:
                         name=name, description=desc,
                         location=str(fp), base_dir=str(fp.parent),
                         triggers=_triggers,
+                        auto_trigger=_auto_trigger,
                     )
                 except Exception:
                     continue
@@ -6546,6 +6549,15 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - `/done quick` is available as a quality gate (chains simplify + verify) but it is NOT automatic. Only run it when the user explicitly asks, or when you suggest it and the user confirms.
 - DESIGN BEFORE CODE: For non-trivial tasks where multiple approaches exist, run `/design` first to produce 2-3 options with tradeoffs. Wait for user to pick. Then plan and implement. Do NOT jump straight to coding when the approach is unclear.
 
+# Handling Critique of Your Own Work (V4.9)
+- When a user pastes a critique of a review, plan, or analysis you wrote, do NOT decide agree/reject from memory. Re-open the source file being discussed and re-verify each claim against it before responding. Reasoning about the critique text alone produces sycophancy at low temperature and defensive rejection at high temperature — both are wrong.
+- For each critique point, respond with one of three labels + evidence:
+  - `ACCEPT` — agree. Cite the file:function or line that supports the critique.
+  - `PARTIAL` — agree in principle, disagree on specifics. State which part holds and which doesn't, with evidence.
+  - `REJECT` — disagree. Cite the file:function that contradicts the critique.
+- Never issue a single global verdict ("it's 70% right", "all true", "all wrong") without going point-by-point. A global grade without per-point evidence is not analysis.
+- A pasted critique IS a user message, not untrusted tool output — evaluate it on merit, do not dismiss it as "fabricated" or "a test".
+
 # [CRITICAL] Answer Preference — Chat vs Files
 - PREFER ANSWERING IN CHAT over creating files. When the user asks a question, explain something, or wants a summary, respond DIRECTLY in the conversation text. Do NOT create .md files, summary documents, or reports unless the user EXPLICITLY asks for a file (e.g., "create a report", "save this to a file", "write a document").
 - If a task REQUIRES creating files (code, configs, data outputs), create them in the user's specified location.
@@ -9320,23 +9332,39 @@ def create_chat_ui(mock_mode: bool = None):
                 system_prompt = None  # Use default
 
             # Auto-match skills by keyword (model-independent — works even with small models)
+            # V4.9.0: Two fixes compared to v4.8.0:
+            #   1. Honour auto_trigger: false (v4.8.0 parsed the flag but the loop ignored it).
+            #   2. Word-boundary match instead of substring — "clara" no longer matches "Clara_WIP"
+            #      via bare `in`, and "review" no longer matches "unreviewable".
             active = ui_state.get("active_skills", [])
             if msg and not active:
                 msg_lower = msg.lower()
+                # Extract word tokens once per message (alphanumerics separated by non-word chars).
+                msg_words = set(re.findall(r"[a-z0-9]+", msg_lower))
                 for skill_info in SKILLS.list_skills():
                     s_name = skill_info["name"]
-                    s_desc = skill_info.get("description", "").lower()
-                    # Match if skill name or key description words appear in user message
-                    name_words = s_name.replace("-", " ").split()
-                    if all(w in msg_lower for w in name_words) or (s_desc and any(
-                        phrase in msg_lower for phrase in [s_name.replace("-", " ")]
-                    )):
+                    # V4.9.0: skip skills that opted out of auto-matching.
+                    _skill_obj = SKILLS._cache.get(s_name)
+                    if _skill_obj is not None and not _skill_obj.auto_trigger:
+                        continue
+                    # Match if every word in the skill name appears as a whole word in the user message.
+                    # ("clara-review" -> needs both "clara" AND "review" in the message as complete words.)
+                    # V4.9.0 patch: tokenize the skill name with the same regex as the message so names
+                    # containing non-hyphen separators (e.g. "qa_review", "docs.v2") are matched consistently.
+                    name_words = re.findall(r"[a-z0-9]+", s_name.lower())
+                    if name_words and set(name_words).issubset(msg_words):
                         if s_name not in active:
                             active.append(s_name)
                             ui_state["active_skills"] = active
                             with SKILLS._pending_lock:
                                 SKILLS.active_skill = s_name
-                            add_message('system', f'Auto-matched skill: {s_name}')
+                            # V4.9.0: include approximate injected char count so user sees prompt cost.
+                            try:
+                                _char_count = os.path.getsize(_skill_obj.location) if _skill_obj else 0
+                            except Exception:
+                                _char_count = 0
+                            _size_hint = f' (~{_char_count} chars injected)' if _char_count else ''
+                            add_message('system', f'Auto-matched skill: {s_name}{_size_hint}')
                             break  # Only auto-load one skill
 
             # Sync skills auto-activated via tool_skill() into ui_state (drains pending list)

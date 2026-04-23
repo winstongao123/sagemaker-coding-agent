@@ -1,5 +1,13 @@
 # Compact V4 Changelog
 
+## v4.9.0 — Skill auto_trigger fix + critique-handling rule (2026-04-23)
+
+Fixes the silent `auto_trigger: false` bug shipped in v4.8.0 (opt-out flag parsed but never honoured by the keyword auto-match loop) + hardens keyword match against substring false-positives + adds a SYSTEM_PROMPT rule for handling critiques of the agent's own work + makes skill auto-injection visible to the user with an approximate char-count.
+
+Detailed audit: [`compact_v4/docs/V4_8_SKILL_AUTOTRIGGER_AUDIT.md`](compact_v4/docs/V4_8_SKILL_AUTOTRIGGER_AUDIT.md). Per-change spec: [`compact_v4/MAIN/changelogs/CHANGELOG_v4.9.0.md`](compact_v4/MAIN/changelogs/CHANGELOG_v4.9.0.md).
+
+Verification: self-review (11/11 new tests + 9/9 regression tests green, py_compile/ast clean) + Codex review with `gpt-5.3-codex` (NEEDS-FIX → fix applied → PASS on re-review).
+
 ## v4.7.1 — Local-git baseline + compact-survives-TODOs + /regression (2026-04-12)
 
 Base: compact_v4 v4.7.0
