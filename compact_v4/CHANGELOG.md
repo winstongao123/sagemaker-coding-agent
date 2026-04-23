@@ -1,5 +1,20 @@
 # Compact V4 Changelog
 
+## v4.9.4 — Hermes patterns: cost ceiling + structured errors + smarter compaction (2026-04-23)
+
+Six hermes-validated production-reliability enhancements, all Bedrock-only / no-external-network. Net change: **+336 / -33 lines** in `sagemaker_agent.py`. **73/73 tests green** (32 new + 41 regression).
+
+1. **`IterationBudget`** — shared LLM-turn counter across parent + sub-agents. Default 90. Stops runaway sub-agent costs. Tunable via `CONFIG.max_iteration_budget`.
+2. **`ErrorClassifier`** — ~10 Bedrock SDK exception categories with explicit recovery actions (retry-jitter / shrink-input / abort / etc.). Replaces scattered try/except.
+3. **`RetryPolicy`** — jittered exponential backoff (base=1s, cap=30s, max=4) on throttle / transient / service-unavailable. Wired into `BedrockClient.chat()`.
+4. **Pre-compact tool-result pruning** — cheap pass that trims oversized `tool_result` bodies (head 800 + tail 400 chars) before the summary LLM sees them.
+5. **Auxiliary-model compaction** — opt-in `CONFIG.compaction_model` (e.g. Haiku) for ~10x cheaper summaries while main agent runs Sonnet/Opus.
+6. **Structured "Resolved/Pending Questions" sections** in summary template — explicit Q/A blocks on top of the existing 9-section format. Pending Questions = first thing to look at on resume.
+
+Detailed: [`compact_v4/MAIN/changelogs/CHANGELOG_v4.9.4.md`](compact_v4/MAIN/changelogs/CHANGELOG_v4.9.4.md). Cross-repo comparison + adopted/rejected matrix: see audit doc §12.
+
+No Codex this round (per `feedback_codex_skip_bedrock_patches.md`). Migration: none — fully additive, defaults preserve existing behaviour.
+
 ## v4.9.3 — Cross-repo enhancements (Bedrock-only fit) (2026-04-23)
 
 Five enhancements pulled from a deep-scan comparison against `gg-claude-code-runnable`, `hermes-agent`, and `Learning_Factory`, filtered for the actual deployment target (SageMaker + Bedrock-only + no external network, insurance-company environment):

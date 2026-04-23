@@ -1,5 +1,36 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-23 — V4.9.4 Release: hermes patterns (cost ceiling + structured errors + smarter compaction)
+
+### Context
+After v4.9.3 user pushed back: had we really learned agent coordination + self-healing + memory/context management from hermes? Honest audit said no — IterationBudget, ErrorClassifier, jittered backoff, pre-compact pruning, auxiliary-model compaction, and structured summary were all real-value patterns I had wrongly deferred to "v4.10". User said "i want comeple udapgate of v4". v4.9.4 closes those 6 gaps.
+
+### V4.9.4 Changes (sagemaker_agent.py)
+1. **IterationBudget** class + Agent.iteration_budget kwarg + Agent.run() consume per turn + sub-agent inheritance. Default 90 via CONFIG.max_iteration_budget. Stops runaway sub-agent cost.
+2. **BedrockErrorCategory enum + ErrorClassifier**. ~10 Bedrock SDK categories with explicit recovery: throttle / validation-cache / validation-other / context-overflow / model-not-ready / model-timeout / access-denied / service-unavailable / transient-network / unknown.
+3. **RetryPolicy** jittered exponential backoff (base=1s, cap=30s, max=4). Wired into BedrockClient.chat() via classify → retry-or-raise loop. Cache-validation fallback preserved as one-shot inside the same loop.
+4. **Compactor._prune_tool_results_for_summary** — pre-LLM cheap pass trims oversized tool_result (head 800 + tail 400, threshold 2000). Idempotent. Doesn't mutate input. Handles both string and list forms.
+5. **Compactor._summary_client + CONFIG.compaction_model** — opt-in auxiliary model for compaction. Default empty = use main. Aux clients cached per model_id. Token tracking charges aux model when used.
+6. **Compactor.create_summary_prompt** gains "Resolved Questions" + "Pending Questions" sections (10, 11). Existing 9 sections preserved.
+7. **Version**: 4.9.3 → 4.9.4
+
+### New tests
+- `test_v494_hermes_patterns.py` — 32 tests across 6 sections + cross-cutting Agent constructor checks
+
+### Verification
+- `py_compile` / `ast.parse` / warnings-as-errors import — clean, version `4.9.4`
+- **73/73 deterministic tests green** (1 + 9 + 11 + 10 + 11 + 32) across all suites
+- Smoke-tested all 6 items: IterationBudget exhaust, all 10 ErrorClassifier categories, RetryPolicy decisions, pruning preserves small/trims large, aux client returns main when unconfigured, summary template has Resolved + Pending
+- No Codex this round (Bedrock-only patch — per `feedback_codex_skip_bedrock_patches.md`)
+
+### Net code change
++336 / -33 lines in sagemaker_agent.py. 1 new test file (~370 lines, 32 tests).
+
+### Still deferred (genuinely out of scope)
+- Session-search via FTS5 + LLM (high cost, unclear demand)
+- Permission rule engine (UX redesign)
+- Mixture-of-models voting (cost concern, defer until justified)
+
 ## 2026-04-23 — V4.9.3 Patch: cross-repo enhancements (Bedrock-only fit)
 
 ### Context

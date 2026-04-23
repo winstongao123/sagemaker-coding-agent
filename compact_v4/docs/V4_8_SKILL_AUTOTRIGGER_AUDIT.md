@@ -338,3 +338,52 @@ After v4.9.2 shipped, a deep-scan comparison was run against three reference cod
 - Code surface grew by ~57 lines in `sagemaker_agent.py` + 1 new SKILL.md file.
 - No external network introduced. No new dependencies. Single-file deploy story preserved.
 - Insurance-compliance posture improved (injection scanning + CSO validator both fit audit narratives).
+
+---
+
+## 12. v4.9.4 — hermes self-healing + cost-ceiling + smarter-compaction patterns
+
+After v4.9.3 shipped, user pressed: had we really learned the BIG patterns from hermes (agent coordination / self-healing / memory+context management), or had we just done the easy ones? Honest re-audit said no — six measurable production-reliability/cost wins from hermes had been wrongly deferred to "v4.10" instead of being pulled into the v4.9 series. v4.9.4 closes those six gaps.
+
+### Adopted in v4.9.4 (6 items)
+
+| # | Pattern | Source | What landed | Tests |
+|---|---|---|---|---|
+| 1 | `IterationBudget` shared parent + sub-agents | hermes `run_agent.py:170` | New class with thread-safe `consume()/used()/remaining()`. `Agent.__init__` accepts `iteration_budget=` kwarg; `_run_task_tool` passes parent's budget to sub-agents. `Agent.run()` consumes one per turn, surfaces "Budget exhausted" message on rejection. `CONFIG.max_iteration_budget=90` default. | 5 |
+| 2 | `ErrorClassifier` + `BedrockErrorCategory` | hermes `error_classifier.py:24-58` | ~10 Bedrock SDK categories (throttle / validation-cache / validation-other / context-overflow / model-not-ready / model-timeout / access-denied / service-unavailable / transient-network / unknown), each with explicit recovery action. Bedrock-only — no provider-fallback category. | 10 |
+| 3 | `RetryPolicy` jittered exponential backoff | hermes `retry_utils.py` | Standard full-jitter (`min(cap, base * 2^attempt) * uniform(0,1)`). Defaults: base=1s, cap=30s, max=4. Wired into `BedrockClient.chat()` invoke_model loop via classify → retry-or-raise. | 5 |
+| 4 | Pre-compact tool-result pruning | hermes `ContextCompressor` | `Compactor._prune_tool_results_for_summary()`: cheap pass trimming oversized `tool_result` bodies (head 800 + tail 400 chars, threshold 2000). Handles both string and list-of-blocks content. Idempotent. Doesn't mutate input. | 4 |
+| 5 | Auxiliary-model compaction | hermes `ContextCompressor` aux-model | `Compactor._summary_client()` + `CONFIG.compaction_model: str = ""`. Empty = use main. When set (e.g. Haiku model ID), Compactor builds + caches a separate `BedrockClient` for summary generation. Token tracking charges the model that actually ran. | 3 |
+| 6 | Structured "Resolved/Pending Questions" sections | hermes summary structure | `Compactor.create_summary_prompt()` gains sections 10 + 11 (Resolved Questions Q→A, Pending Questions Q→Status). Existing 9 sections preserved. Pending Questions = first thing to look at on resume. | 3 + 2 cross-cutting |
+
+### Why these six were the right ones to pull
+
+| Item | Production failure mode it prevents |
+|---|---|
+| 1 | Parent + N sub-agents collectively blowing the cost ceiling on a large task |
+| 2 | "Bedrock returned an error" → opaque retry-or-give-up. Now: classified category in audit log, explicit recovery action chosen |
+| 3 | Naive retry storm during Bedrock per-second-token throttle peaks (insurance prod env will hit these) |
+| 4 | Wasting summary tokens to re-read 50KB stale bash dumps |
+| 5 | Paying Sonnet rates for compaction summaries that could run on Haiku at ~10% the cost |
+| 6 | "What was I doing again?" loop on session resume |
+
+None are speculative. Every line solves a measurable problem.
+
+### Still deferred (genuinely out of scope, not just "small enough to skip")
+
+| Item | Why still deferred |
+|---|---|
+| Session search via FTS5 + LLM summary | High implementation cost; demand unclear (no user has asked for "what did we decide last week?") |
+| Permission rule engine (per-tool granular allowlist) | UX redesign — current binary approval works; defer until users hit friction |
+| Mixture-of-models voting (Sonnet + Haiku judge for high-stakes reviews) | Doubles cost per review. Defer until a specific high-stakes use case justifies the spend |
+| Self-patching skills | Insurance-compliance frowns on agent-modified runtime artefacts |
+| MCP / OpenRouter / multi-platform messaging | Hard-rejected by Bedrock-only / no-external-network constraint |
+
+### Net effect
+
+- v4.9.4 ships with **6 concrete enhancements** verified by 32 new tests + 41 regression tests = **73/73 PASS**.
+- Code surface grew by **+336 / -33 lines** in `sagemaker_agent.py`. One new test file (~370 lines).
+- No external network introduced. No new dependencies. Single-file deploy story preserved.
+- Bedrock cost-control posture meaningfully improved (iteration budget + jittered backoff + opt-in cheaper compaction model + pre-compact pruning).
+- Audit-trail quality improved (structured error categories + per-category recovery actions logged).
+- Resume quality improved (structured Resolved/Pending Questions surface what's next first).

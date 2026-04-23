@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.9.3"
+__version__ = "4.9.4"
 
 # ============================================================
 # IMPORTS
@@ -269,7 +269,9 @@ class Compactor:
 
     @classmethod
     def create_summary_prompt(cls, messages: List[Dict]) -> str:
-        """Create a prompt to summarize the conversation using Claude Code's 9-section format."""
+        """Create a prompt to summarize the conversation using Claude Code's 9-section format
+        plus V4.9.4 'Resolved/Pending Questions' sections (hermes pattern) for crisper resume.
+        """
         return """<analysis>
 First, analyze the conversation to identify: main goal, technical concepts, files touched, errors encountered, and current progress.
 </analysis>
@@ -306,6 +308,14 @@ Create a detailed summary following these EXACT sections:
    - Relevant code context
 
 9. **Next Step**: Only if directly in line with user's explicit request. Include direct quotes from user if applicable.
+
+10. **Resolved Questions** (V4.9.4): list each question/decision the conversation has SETTLED, one per line:
+    - "Q: <question>" -> "A: <one-sentence resolution>"
+    - Only include items that no longer need attention.
+
+11. **Pending Questions** (V4.9.4): list each open question/decision still needing resolution:
+    - "Q: <question>" -> "Status: <waiting on user / blocked on X / next-up>"
+    - This is the FIRST thing to look at when resuming after compaction.
 
 Format as a comprehensive summary that preserves all context needed to continue seamlessly."""
 
@@ -351,11 +361,127 @@ Format as a comprehensive summary that preserves all context needed to continue 
 
         return truncated
 
+    # V4.9.4: per-tool-result cap during summary generation (cheap pre-LLM pass).
+    # Tool outputs above this size get a head/tail preview replacing the bulk —
+    # prevents wasting summary tokens on stale 50KB bash dumps.
+    SUMMARY_TOOL_RESULT_HEAD = 800   # chars from head kept verbatim
+    SUMMARY_TOOL_RESULT_TAIL = 400   # chars from tail kept verbatim
+    SUMMARY_TOOL_RESULT_THRESHOLD = 2000  # only prune outputs larger than this
+
+    @classmethod
+    def _prune_tool_results_for_summary(cls, messages: List[Dict]) -> List[Dict]:
+        """V4.9.4: Cheap pre-LLM pass — replace large tool_result bodies with head/tail
+        previews so the LLM summary call doesn't pay tokens to re-read stale dumps.
+        Pure-local, no LLM call. Idempotent. Returns a new list, doesn't mutate input.
+        """
+        out = []
+        pruned_count = 0
+        pruned_chars = 0
+        for msg in messages:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                out.append(msg)
+                continue
+            new_blocks = []
+            mutated = False
+            for block in content:
+                if not isinstance(block, dict):
+                    new_blocks.append(block)
+                    continue
+                if block.get("type") != "tool_result":
+                    new_blocks.append(block)
+                    continue
+                inner = block.get("content")
+                # tool_result.content is usually a string OR a list of blocks
+                if isinstance(inner, str) and len(inner) > cls.SUMMARY_TOOL_RESULT_THRESHOLD:
+                    head = inner[:cls.SUMMARY_TOOL_RESULT_HEAD]
+                    tail = inner[-cls.SUMMARY_TOOL_RESULT_TAIL:]
+                    pruned_chars += len(inner) - len(head) - len(tail)
+                    pruned_count += 1
+                    new_block = dict(block)
+                    new_block["content"] = (
+                        f"{head}\n... [pruned {len(inner) - len(head) - len(tail):,} chars for summary] ...\n{tail}"
+                    )
+                    new_blocks.append(new_block)
+                    mutated = True
+                elif isinstance(inner, list):
+                    new_inner = []
+                    inner_mutated = False
+                    for sub in inner:
+                        if isinstance(sub, dict) and sub.get("type") == "text":
+                            txt = sub.get("text", "")
+                            if len(txt) > cls.SUMMARY_TOOL_RESULT_THRESHOLD:
+                                head = txt[:cls.SUMMARY_TOOL_RESULT_HEAD]
+                                tail = txt[-cls.SUMMARY_TOOL_RESULT_TAIL:]
+                                pruned_chars += len(txt) - len(head) - len(tail)
+                                pruned_count += 1
+                                new_sub = dict(sub)
+                                new_sub["text"] = (
+                                    f"{head}\n... [pruned {len(txt) - len(head) - len(tail):,} chars for summary] ...\n{tail}"
+                                )
+                                new_inner.append(new_sub)
+                                inner_mutated = True
+                                continue
+                        new_inner.append(sub)
+                    if inner_mutated:
+                        new_block = dict(block)
+                        new_block["content"] = new_inner
+                        new_blocks.append(new_block)
+                        mutated = True
+                    else:
+                        new_blocks.append(block)
+                else:
+                    new_blocks.append(block)
+            if mutated:
+                new_msg = dict(msg)
+                new_msg["content"] = new_blocks
+                out.append(new_msg)
+            else:
+                out.append(msg)
+        if pruned_count > 0:
+            logging.info(
+                f"[COMPACT-PREP] pruned {pruned_count} oversized tool_result block(s), "
+                f"saved ~{pruned_chars:,} chars before LLM summary"
+            )
+        return out
+
+    @classmethod
+    def _summary_client(cls, main_client):
+        """V4.9.4: If CONFIG.compaction_model is set, build (or reuse) a Bedrock client
+        for that cheaper auxiliary model so summaries don't pay main-model rates.
+        Bedrock-only — no provider switch, just a different modelId in the same region.
+        Returns the main client unchanged when no auxiliary is configured.
+        """
+        aux_model = (getattr(CONFIG, "compaction_model", "") or "").strip()
+        if not aux_model or aux_model == main_client.model_id:
+            return main_client
+        # Cache aux clients on the class so we don't construct one per compaction
+        if not hasattr(cls, "_aux_client_cache"):
+            cls._aux_client_cache = {}
+        cached = cls._aux_client_cache.get(aux_model)
+        if cached is not None:
+            return cached
+        try:
+            aux = BedrockClient(aux_model, main_client.region, main_client.mock_mode)
+            cls._aux_client_cache[aux_model] = aux
+            logging.info(f"[COMPACT] Using auxiliary compaction model: {aux_model}")
+            return aux
+        except Exception as e:
+            logging.warning(f"[COMPACT] Auxiliary model '{aux_model}' init failed, using main: {e}")
+            return main_client
+
     @classmethod
     def create_llm_summary(cls, client, messages: List[Dict]) -> Optional[str]:
         """Create LLM-generated summary via Bedrock. Returns None on failure.
         Used by both manual and auto compact for high-quality summaries.
-        Truncates long conversations to ~20 messages to avoid sending 160K+ tokens."""
+        Truncates long conversations to ~20 messages to avoid sending 160K+ tokens.
+
+        V4.9.4: pre-LLM tool-result pruning + optional auxiliary model for cost win.
+        """
+        # V4.9.4: cheap pre-LLM pass to drop large tool_result bodies
+        messages = cls._prune_tool_results_for_summary(messages)
+        # V4.9.4: optionally route summary through cheaper auxiliary model
+        summary_client = cls._summary_client(client)
         summary_input = cls._build_summary_input(messages)
         attempts = 0
         while True:
@@ -367,19 +493,22 @@ Format as a comprehensive summary that preserves all context needed to continue 
                     summary_messages.append({"role": "assistant", "content": "[Preparing summary...]"})
                 summary_messages.append({"role": "user", "content": summary_prompt})
 
-                response = client.chat(
+                response = summary_client.chat(
                     messages=summary_messages,
                     system=("You are summarizing a coding conversation. You have ZERO tools available — "
                             "do NOT attempt any tool calls. Be concise but preserve:\n"
                             "1. Current task and goal\n2. Key files modified or read\n"
                             "3. Important decisions made\n4. Where we left off\n"
-                            "5. What needs to happen next"),
+                            "5. What needs to happen next\n"
+                            "6. (V4.9.4) Resolved questions\n"
+                            "7. (V4.9.4) Pending questions"),
                     tools=None,
                     max_tokens=2000,
                     temperature=0.0
                 )
                 if response and response.usage:
-                    TOKENS.add(response.usage, model_id=client.model_id)
+                    # V4.9.4: track tokens against the model that actually ran (could be aux)
+                    TOKENS.add(response.usage, model_id=summary_client.model_id)
                 if response and response.text:
                     return response.text
                 return None
@@ -942,6 +1071,13 @@ class Config:
     mcp_timeout_seconds: int = 30
     subagent_max_depth: int = 2
     enable_worktree: bool = True  # V4.4: Git worktree isolation for build sub-agents
+
+    # V4.9.4: shared iteration budget across parent + sub-agents (hermes pattern)
+    max_iteration_budget: int = 90
+
+    # V4.9.4: optional auxiliary model for compaction summaries (cost win — use Haiku for summary
+    # while main agent runs Sonnet/Opus). Empty string = use main model. Bedrock-only.
+    compaction_model: str = ""
 
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)  # {"review": {"template": "...", "agent": "plan"}}
@@ -1916,6 +2052,99 @@ class Response:
     thinking: str = ""  # Extended thinking content (if enabled)
 
 
+# ============================================================
+# V4.9.4: ErrorClassifier + RetryPolicy (hermes pattern, Bedrock-only fit)
+# ============================================================
+# Classifies Bedrock SDK exceptions into ~10 categories, each with a recovery
+# hint. Replaces scattered try/except. Insurance/audit team gets structured
+# failure logs (WHY a call failed, not just THAT it did).
+#
+# Source pattern: hermes-agent/agent/error_classifier.py:24-58.
+# Bedrock-only filter: no provider-fallback category — degrade gracefully on
+# Bedrock errors, never propose switching to a different provider.
+
+class BedrockErrorCategory:
+    """Enum-like categories for Bedrock SDK exceptions.
+
+    Each category implies a recovery action (see ErrorClassifier.recovery()).
+    """
+    THROTTLE = "throttle"                  # ThrottlingException, TooManyRequestsException
+    VALIDATION_CACHE = "validation_cache"  # cache_control rejected — strip and retry once
+    VALIDATION_OTHER = "validation_other"  # other ValidationException — abort
+    CONTEXT_OVERFLOW = "context_overflow"  # prompt too long / too many tokens
+    MODEL_NOT_READY = "model_not_ready"    # ModelNotReadyException, ModelStreamErrorException
+    MODEL_TIMEOUT = "model_timeout"        # ModelTimeoutException
+    ACCESS_DENIED = "access_denied"        # AccessDeniedException — config issue, abort
+    SERVICE_UNAVAILABLE = "service_unavailable"  # ServiceUnavailableException — retry with backoff
+    TRANSIENT_NETWORK = "transient_network"      # connection reset, EOF, 5xx without category
+    UNKNOWN = "unknown"
+
+    # Recovery actions
+    RECOVERY_RETRY_JITTER = "retry_with_jitter"        # use RetryPolicy.backoff()
+    RECOVERY_RETRY_ONCE = "retry_once_after_strip"     # strip offending param, retry once
+    RECOVERY_SHRINK_INPUT = "shrink_input_then_retry"  # caller should reduce input
+    RECOVERY_ABORT = "abort"                           # surface to user, no retry
+    RECOVERY_NONE = "none"                             # no error or unrecognised
+
+
+class ErrorClassifier:
+    """Maps Bedrock exceptions to (category, recovery_action) pairs."""
+
+    @staticmethod
+    def classify(exc: BaseException) -> tuple:
+        """Return (category, recovery_action, debug_msg)."""
+        msg = str(exc)
+        msg_lower = msg.lower()
+        # Order matters — check more specific patterns first.
+        if "throttling" in msg_lower or "toomanyrequests" in msg_lower or "rate exceeded" in msg_lower:
+            return (BedrockErrorCategory.THROTTLE, BedrockErrorCategory.RECOVERY_RETRY_JITTER, msg[:200])
+        if "validationexception" in msg_lower and ("cache_control" in msg_lower or "prompt-caching" in msg_lower or "cache" in msg_lower):
+            return (BedrockErrorCategory.VALIDATION_CACHE, BedrockErrorCategory.RECOVERY_RETRY_ONCE, msg[:200])
+        if "prompt is too long" in msg_lower or "too many tokens" in msg_lower or "input is too long" in msg_lower:
+            return (BedrockErrorCategory.CONTEXT_OVERFLOW, BedrockErrorCategory.RECOVERY_SHRINK_INPUT, msg[:200])
+        if "validationexception" in msg_lower:
+            return (BedrockErrorCategory.VALIDATION_OTHER, BedrockErrorCategory.RECOVERY_ABORT, msg[:200])
+        if "modelnotready" in msg_lower or "modelstreamerror" in msg_lower:
+            return (BedrockErrorCategory.MODEL_NOT_READY, BedrockErrorCategory.RECOVERY_RETRY_JITTER, msg[:200])
+        if "modeltimeout" in msg_lower or "model timed out" in msg_lower:
+            return (BedrockErrorCategory.MODEL_TIMEOUT, BedrockErrorCategory.RECOVERY_RETRY_JITTER, msg[:200])
+        if "accessdenied" in msg_lower or "not authorized" in msg_lower:
+            return (BedrockErrorCategory.ACCESS_DENIED, BedrockErrorCategory.RECOVERY_ABORT, msg[:200])
+        if "serviceunavailable" in msg_lower or "service is unavailable" in msg_lower:
+            return (BedrockErrorCategory.SERVICE_UNAVAILABLE, BedrockErrorCategory.RECOVERY_RETRY_JITTER, msg[:200])
+        if "connection" in msg_lower and ("reset" in msg_lower or "aborted" in msg_lower or "refused" in msg_lower or "timeout" in msg_lower):
+            return (BedrockErrorCategory.TRANSIENT_NETWORK, BedrockErrorCategory.RECOVERY_RETRY_JITTER, msg[:200])
+        if "endpointconnectionerror" in msg_lower or "readtimeouterror" in msg_lower:
+            return (BedrockErrorCategory.TRANSIENT_NETWORK, BedrockErrorCategory.RECOVERY_RETRY_JITTER, msg[:200])
+        return (BedrockErrorCategory.UNKNOWN, BedrockErrorCategory.RECOVERY_ABORT, msg[:200])
+
+
+class RetryPolicy:
+    """Exponential backoff with full-jitter for Bedrock retries.
+
+    Standard pattern: sleep = min(cap, base * 2^attempt) * uniform(0, 1).
+    Capped retries to bound worst-case latency.
+    """
+    BASE_SECONDS = 1.0
+    CAP_SECONDS = 30.0
+    MAX_RETRIES = 4
+
+    @classmethod
+    def backoff_seconds(cls, attempt: int) -> float:
+        """Return sleep time for retry attempt N (0-indexed). Uses full jitter."""
+        if attempt < 0:
+            attempt = 0
+        upper = min(cls.CAP_SECONDS, cls.BASE_SECONDS * (2 ** attempt))
+        return random.uniform(0, upper)
+
+    @classmethod
+    def should_retry(cls, attempt: int, recovery: str) -> bool:
+        """True if this category warrants another retry attempt at this attempt count."""
+        if attempt >= cls.MAX_RETRIES:
+            return False
+        return recovery == BedrockErrorCategory.RECOVERY_RETRY_JITTER
+
+
 class BedrockClient:
     """AWS Bedrock Claude client with mock mode for testing."""
 
@@ -2031,38 +2260,51 @@ class BedrockClient:
         if tools:
             body["tools"] = tools
 
-        try:
-            response = self.client.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(body, separators=(',', ':')),
-                contentType="application/json",
-            )
-        except Exception as e:
-            # V4.1 #14: If cache_control blocks cause a Bedrock validation error,
-            # fall back to plain string system prompt and disable caching for this session.
-            err_str = str(e)
-            is_cache_error = use_cache and (
-                "cache_control" in err_str
-                or "prompt-caching" in err_str
-                or ("ValidationException" in err_str and "cache" in err_str.lower())
-            )
-            if is_cache_error:
-                logging.warning(f"Prompt cache not supported by this model/region, falling back: {e}")
-                self.prompt_cache_supported = False  # Suppress cache blocks for remainder of session
-                # Flatten system back to plain string
-                if isinstance(system, str):
-                    body["system"] = system
-                else:
-                    body["system"] = "\n\n".join(
-                        b.get("text", "") for b in system if isinstance(b, dict)
-                    )
-                # No anthropic_beta to remove — Bedrock caching is content-block based
+        # V4.9.4: Jittered exponential backoff on transient/throttle errors.
+        # Replaces the previous single try/except with classify -> recover -> backoff loop.
+        # Cache-validation errors keep their existing one-shot fallback (still inside the loop).
+        attempt = 0
+        last_exc = None
+        while True:
+            try:
                 response = self.client.invoke_model(
                     modelId=self.model_id,
                     body=json.dumps(body, separators=(',', ':')),
                     contentType="application/json",
                 )
-            else:
+                break  # success
+            except Exception as e:
+                last_exc = e
+                category, recovery, debug_msg = ErrorClassifier.classify(e)
+
+                # Cache-validation: strip cache blocks, retry once (existing v4.1 #14 behaviour preserved)
+                if category == BedrockErrorCategory.VALIDATION_CACHE and use_cache and self.prompt_cache_supported:
+                    logging.warning(
+                        f"[BEDROCK] Prompt cache not supported by this model/region, falling back: {debug_msg}"
+                    )
+                    self.prompt_cache_supported = False
+                    if isinstance(system, str):
+                        body["system"] = system
+                    else:
+                        body["system"] = "\n\n".join(
+                            b.get("text", "") for b in system if isinstance(b, dict)
+                        )
+                    use_cache = False  # don't re-enter this branch on subsequent retries
+                    continue
+
+                # Throttle / transient / model-not-ready / service-unavailable / network: retry with jitter
+                if RetryPolicy.should_retry(attempt, recovery):
+                    sleep_s = RetryPolicy.backoff_seconds(attempt)
+                    logging.warning(
+                        f"[BEDROCK] {category} (recovery={recovery}, attempt={attempt + 1}/"
+                        f"{RetryPolicy.MAX_RETRIES + 1}, sleep={sleep_s:.1f}s): {debug_msg}"
+                    )
+                    time.sleep(sleep_s)
+                    attempt += 1
+                    continue
+
+                # Anything else (context-overflow, validation-other, access-denied, unknown): surface it
+                logging.error(f"[BEDROCK] {category} (recovery={recovery}, no-retry): {debug_msg}")
                 raise
         result = json.loads(response["body"].read())
         return self._parse(result)
@@ -6694,6 +6936,48 @@ MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Pref
 # AGENT LOOP
 # ============================================================
 
+# V4.9.4: IterationBudget — shared LLM-turn counter across a parent agent
+# and all its spawned sub-agents. Pattern from hermes-agent run_agent.py:170.
+# Prevents runaway sub-agent costs: a parent agent could otherwise spawn N
+# sub-agents that each loop max_turns times, blowing the cost ceiling.
+# Insurance/audit values predictable cost ceilings per user request.
+
+class IterationBudget:
+    """Thread-safe counter shared across a parent agent and its spawned sub-agents.
+
+    A parent agent creates one budget at the start of `run()`; sub-agents inherit
+    the same instance. Each LLM turn (success or failure) increments the counter.
+    When `consume()` returns False, the agent surfaces a "budget exhausted" message
+    and stops cleanly, preserving partial work.
+    """
+
+    DEFAULT_MAX = 90  # default ceiling (matches hermes default; tunable via Config)
+
+    def __init__(self, max_iterations: int = DEFAULT_MAX):
+        self._max = max(1, int(max_iterations))
+        self._used = 0
+        self._lock = threading.Lock()
+
+    def consume(self) -> bool:
+        """Atomically reserve one iteration. Returns False if budget is exhausted."""
+        with self._lock:
+            if self._used >= self._max:
+                return False
+            self._used += 1
+            return True
+
+    def remaining(self) -> int:
+        with self._lock:
+            return max(0, self._max - self._used)
+
+    def used(self) -> int:
+        with self._lock:
+            return self._used
+
+    def total(self) -> int:
+        return self._max
+
+
 # Global exec budget — shared across all agents and sub-agents, persisted across kernel restarts
 _GLOBAL_EXEC_CALLS = 0
 _GLOBAL_EXEC_SECONDS = 0.0
@@ -6762,6 +7046,7 @@ class Agent:
         tool_allowlist: Optional[Set[str]] = None,
         subagent_depth: int = 0,
         initial_messages: Optional[List[Dict]] = None,
+        iteration_budget: Optional["IterationBudget"] = None,
     ):
         self.client = client
         self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -6790,6 +7075,12 @@ class Agent:
         self._cache_broken_by_compact: bool = False  # Set True after compact, reset on next API call (cache HIT or miss-with-warning)
         # V4.6.1: Workspace announcement — print root once per session so user can spot CWD mismatches immediately
         self._workspace_announced: bool = False
+        # V4.9.4: Shared iteration budget across parent + sub-agents. If None and this is a top-level
+        # agent (subagent_depth=0), create a fresh one. Sub-agents must be passed the parent's budget
+        # so a parent + N sub-agents can't collectively blow past the ceiling.
+        if iteration_budget is None:
+            iteration_budget = IterationBudget(max_iterations=getattr(CONFIG, "max_iteration_budget", IterationBudget.DEFAULT_MAX))
+        self.iteration_budget = iteration_budget
 
     def _run_ask_user_tool(self, args: Dict, output_fn: Callable) -> str:
         """Ask the user a question and wait for response via text input widget."""
@@ -6961,6 +7252,7 @@ class Agent:
                 tool_allowlist=allow,
                 subagent_depth=self.subagent_depth + 1,
                 initial_messages=_fork_messages,
+                iteration_budget=self.iteration_budget,  # V4.9.4: share budget so parent + N subs can't blow ceiling
             )
             sub_output = []
             is_plan_mode = agent_type == "plan"
@@ -7157,6 +7449,17 @@ class Agent:
             # Check if stop was requested
             if self.on_stop_check and self.on_stop_check():
                 output_fn("[Stopped by user]")
+                return response.text if response else ""
+
+            # V4.9.4: Shared iteration budget — stops parent + sub-agents from collectively
+            # blowing the cost ceiling. Surfaces a clear "budget exhausted" message so the
+            # user sees WHY work stopped (vs silent truncation).
+            if not self.iteration_budget.consume():
+                _used, _total = self.iteration_budget.used(), self.iteration_budget.total()
+                output_fn(
+                    f"[Budget exhausted: {_used}/{_total} iterations used across this agent + "
+                    f"sub-agents. Adjust CONFIG.max_iteration_budget or start a new session.]"
+                )
                 return response.text if response else ""
 
             # V4.8.0: Budget is display-only metric — never stops execution
