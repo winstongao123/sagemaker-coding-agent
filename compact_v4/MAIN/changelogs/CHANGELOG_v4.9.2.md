@@ -29,14 +29,17 @@ This is essential because previously the agent could be asked "how do I deactiva
 - `.gitignore`, `__pycache__/`, `.pytest_cache/`, `.snapshots/`, `.code_index/`, `.git/`
 - `_rebuild_zip.py` (the meta tool itself)
 
-**Kept (runtime essentials):**
+**Kept (runtime essentials only — 20 files / 203 KB):**
 - `MAIN/agent/sagemaker_agent.py` (the agent)
 - `MAIN/agent/chat.ipynb` (entry notebook)
-- `MAIN/agent/USER_GUIDE.md` (full user docs — chat.md md-companion of the notebook is excluded since it duplicates this file)
-- `MAIN/agent/memory.md` (auto-loaded, even if empty)
+- `MAIN/agent/USER_GUIDE.md` (full user docs)
+- `MAIN/agent/memory.md` (auto-loaded persistent memory, even if empty)
 - `MAIN/agent/skills/<all skill files>` including `clara/prompts/*` and `clara/FULL_REVIEW.md`
-- `MAIN/changelogs/CHANGELOG_v4.X.X.md` (release context)
-- `CHANGELOG.md` (top-level index)
+
+**Also dropped from zip (per user direction, post-v4.9.2 rebuild):**
+- `chat.md` — md companion of `chat.ipynb`, redundant with `USER_GUIDE.md`
+- `MAIN/changelogs/CHANGELOG_v4.X.X.md` — release notes are repo-only, not part of the runtime ship
+- `CHANGELOG.md` (top-level index) — same reason
 
 ### 3. Version bump
 

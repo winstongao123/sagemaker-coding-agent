@@ -4,16 +4,17 @@ v4.9.2: tightened to ship only what's needed to RUN the agent in a SageMaker
 notebook environment. Drops dev artefacts, test files, audit docs, historical
 HTMLs, and powerbi skills (per user request, kept out since v4.9.0).
 
-Kept (runtime essentials):
+Kept (runtime essentials only):
 - sagemaker_agent.py (the agent)
-- chat.ipynb / chat.md (entry notebook + user-facing chat docs)
-- USER_GUIDE.md (user docs)
+- chat.ipynb (entry notebook — md companion excluded)
+- USER_GUIDE.md (full user docs)
 - memory.md (auto-loaded persistent memory file, even if empty)
 - skills/<all skill SKILL.md and dependent files>
-- changelogs/CHANGELOG_v4.X.X.md (release notes)
-- top-level CHANGELOG.md (release index)
 
-Dropped (dev only):
+Dropped:
+- chat.md (md companion of chat.ipynb — redundant with USER_GUIDE.md)
+- changelogs/CHANGELOG_v4.X.X.md (per-version release notes — repo-only)
+- top-level CHANGELOG.md (release index — repo-only)
 - test_*.py (all test suites — dev verification, not runtime)
 - TEST_LOG.md (dev artefact)
 - v3_architecture.html (historical, superseded by changelogs)
@@ -33,8 +34,8 @@ SRC_DIR = "MAIN"
 OUT_ZIP = "compact_v4.zip"
 
 # Extra paths to include at the zip root (outside MAIN/).
-EXTRA_FILES = ["CHANGELOG.md"]
-EXTRA_DIRS = []  # docs/ deliberately excluded — audit docs are internal, not shipped to users
+EXTRA_FILES = []   # release-context files (CHANGELOG.md, etc.) are NOT shipped — runtime-only zip
+EXTRA_DIRS = []    # docs/ deliberately excluded — audit docs are internal, not shipped to users
 
 EXCLUDE_DIR_NAMES = {
     "__pycache__",
@@ -52,6 +53,7 @@ EXCLUDE_DIR_NAMES = {
 EXCLUDE_REL_PATHS = {
     "MAIN/tests",                # whole tests/ dir — dev-only, not shipped
     "MAIN/tests/competition",    # legacy, kept for clarity
+    "MAIN/changelogs",           # per-version release notes — repo-only, not part of runtime ship
 }
 EXCLUDE_FILE_PATTERNS = [
     "*.pyc",
