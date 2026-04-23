@@ -387,3 +387,49 @@ None are speculative. Every line solves a measurable problem.
 - Bedrock cost-control posture meaningfully improved (iteration budget + jittered backoff + opt-in cheaper compaction model + pre-compact pruning).
 - Audit-trail quality improved (structured error categories + per-category recovery actions logged).
 - Resume quality improved (structured Resolved/Pending Questions surface what's next first).
+
+---
+
+## 13. v4.9.5 — self-patching skills with safety rails (handy use re-classification)
+
+After v4.9.4 shipped, user re-classified the deployment scope: NOT insurance-only — this is for **personal / handy** use. The previously-rejected hermes self-patching pattern (§10 in this audit, originally rejected on insurance-compliance grounds) became a candidate again. Designed with 8 safety rails to keep the user in control of every skill mutation.
+
+### What changed in the constraint set
+
+| Before (insurance-only) | After (handy / personal use) |
+|---|---|
+| Audit team reviews every behaviour change | User reviews changes inline via chat |
+| Reproducibility = "no model drift over time" | Reproducibility = "user knows when skill changed" |
+| Self-patching banned outright | Self-patching OK if user has approval workflow |
+| Single point of failure if patch is wrong | User catches bad patch via diff preview before apply |
+
+### Adopted in v4.9.5 (1 item, 8 safety rails)
+
+| Component | Source | Implementation |
+|---|---|---|
+| Self-patching skills (closed learning loop) | hermes `skill_manage.py` | New: `CONFIG.enable_skill_patching` flag (default OFF), `SkillManager.propose_patch / list_proposals / apply_proposal / reject_proposal`, `_log_skill_patch_event` audit helper, `tool_skill_propose_patch` tool, 3 slash commands (`/skill suggestions`, `/skill apply <name> [--yes\|--edit]`, `/skill reject <name>`), SYSTEM_PROMPT addition. Patches go to `skills/<name>/.proposed/<ts>.md` — live SKILL.md never auto-modified. |
+
+### The 8 safety rails — what each one prevents
+
+| # | Rail | Failure mode it prevents |
+|---|---|---|
+| 1 | Default OFF (`CONFIG.enable_skill_patching = False`) | Accidental enablement on a deployment that shouldn't have it (e.g. shared workspace) |
+| 2 | Propose-not-apply | Bad patch never goes live without explicit user OK |
+| 3 | Diff preview before apply | User sees exact change, not just "agent wants to update report skill" |
+| 4 | Snapshot before apply | Existing `/revert <path>` undoes a bad apply |
+| 5 | Audit log per event (`audit_logs/skill_patches.jsonl`) | "When did this skill change and why?" — answerable from log |
+| 6 | `--edit` flag | User can tweak proposed file before applying (handle 90%-right proposals) |
+| 7 | Empty-name validation | `/skill apply nonexistent` gives a clear error, doesn't crash |
+| 8 | Tool no-ops when flag is OFF | Even if agent tries to call `skill_propose_patch` while feature is off, nothing happens — explicit refusal message instead |
+
+### How this differs from hermes' default behaviour
+
+Hermes auto-applies skill mutations — the closed learning loop runs without human gates. v4.9.5 takes the same closed-loop intent but inverts the trust model: agent **proposes**, user **decides**. Same long-term benefit (agent gets smarter at recurring tasks), without the "wait, when did the report skill change?" surprise.
+
+### Net effect
+
+- v4.9.5 ships with **1 concrete enhancement (self-patching) + 8 safety rails** verified by 19 new tests + 73 regression tests = **92/92 PASS**.
+- Code surface grew by ~370 lines across SkillManager methods + tool + slash commands + audit helper + SYSTEM_PROMPT addition.
+- USER_GUIDE.md gains a full "Self-patching skills" section with example session.
+- chat.ipynb v4.9.X highlights banner updated; quick-reminder cell adds the new commands.
+- Backwards compatible: feature OFF by default, existing flows unaffected.

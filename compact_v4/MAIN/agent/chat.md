@@ -86,6 +86,9 @@ Applies widget config and calls `create_chat_ui()`.
 | Deactivate one skill (sticky) | `/unskill clara-review` |
 | Deactivate all skills (sticky) | `/skill clear` |
 | List skills | `/skills` |
+| Review pending skill patches (V4.9.5) | `/skill suggestions` |
+| Apply a proposed skill patch (diff preview first) | `/skill apply report` then `/skill apply report --yes` |
+| Reject pending patches | `/skill reject report` |
 | **Pre-ship gate** | `/done full` (simplify → verify → READY-TO-SHIP verdict) |
 | **Regression check** | `/regression` (git diff stat + session edits + test suggestion) |
 | Verify project | `/verify` (adversarial testing skill) |

@@ -354,6 +354,9 @@ Slash commands are typed directly in the chat input box (not as natural language
 | `/skill use <name>` | Activate a skill for the session (lifts any prior `/unskill` block on this skill) | `/skill use code-review` |
 | `/skill clear` | Deactivate all currently-active skills (sticky — they won't auto-re-match this session) | `/skill clear` |
 | `/unskill <name>` | Deactivate ONE specific skill — stays off for the session even if user message would auto-match it. Lifted only by `/skill use <name>` or new session. | `/unskill clara-review` |
+| `/skill suggestions` | **(V4.9.5)** List pending agent-proposed patches across all skills. See § Self-patching skills below. | `/skill suggestions` |
+| `/skill apply <name>` | **(V4.9.5)** Preview a proposed patch as a unified diff. Add `--yes` to apply, `--edit` to tweak first. | `/skill apply report` then `/skill apply report --yes` |
+| `/skill reject <name>` | **(V4.9.5)** Discard ALL pending proposals for a skill. Audit-logged. | `/skill reject report` |
 | `/commands` | List custom slash commands from `agent_config.json` | `/commands` |
 | `/cost` | Show token usage and cost breakdown | `/cost` |
 | `/revert <file>` | **Preview diff** first (current → snapshot). Use `--yes` to confirm. | `/revert app.py` then `/revert app.py --yes` |
@@ -484,6 +487,97 @@ The agent searches these directories for `**/SKILL.md` files:
 - `.agent/skills/`
 - `.agent/skillss/`
 - `.claude/skills/`
+
+---
+
+## Self-patching skills (V4.9.5, opt-in)
+
+The agent can **propose improvements to its own skills** based on what it learns during use — but it never modifies a `SKILL.md` directly. Every change goes through your review.
+
+### When you want this
+
+- You're using the agent for personal / dev / handy work (not regulated environment)
+- You're tired of correcting the agent the same way over and over
+- You want the agent to remember workflow improvements across sessions
+
+### Enable it
+
+```python
+# In the chat UI, or in agent_config.json:
+CONFIG.enable_skill_patching = True
+```
+
+Default is `False`. When OFF, the `skill_propose_patch` tool no-ops — agent suggests improvements in chat instead of writing files.
+
+### How the loop works
+
+1. **You correct the agent on the same skill 3+ times.** Example: "set dpi=150" repeated three times when running `/report`.
+2. **Agent proposes a patch** by calling its `skill_propose_patch` tool with `name`, `reason`, and the full new SKILL.md body.
+3. **The patch lands in `skills/<name>/.proposed/<timestamp>.md`** — never in the live `SKILL.md`.
+4. **Banner appears in chat:** `Patch proposed for skill 'report'. Review with: /skill suggestions`
+5. **You review:** `/skill suggestions` lists all pending patches. `/skill apply <name>` shows a unified diff.
+6. **You decide:** `--yes` to apply, `--edit` to tweak the proposed file before applying, or `/skill reject <name>` to discard.
+7. **Apply also snapshots** the live `SKILL.md` — easy rollback via existing `/revert <skill-path>`.
+8. **Audit log:** every propose / apply / reject lands in `audit_logs/skill_patches.jsonl`.
+
+### Example session
+
+```
+You: /report on Q4 sales
+Agent: [creates blurry chart on Windows]
+You: set dpi=150
+
+You: /report on Q3
+Agent: [forgets, blurry again]
+You: dpi=150 AGAIN
+
+You: /report on Q2
+Agent: I've noticed this is the third correction on dpi.
+       Proposed a patch to skills/report/SKILL.md.
+       Review with: /skill suggestions
+
+You: /skill suggestions
+
+[System]: Pending skill patches (1):
+            - report   proposed 2026-04-23 15:30:45
+              reason: Windows chart-render dpi default
+
+          Review with: /skill apply report
+
+You: /skill apply report
+
+[System]: Diff for skill 'report':
+          ```diff
+          -1. Create chart PNG with create_chart
+          +1. Create chart PNG with create_chart, dpi=150
+           2. Embed PNG in Word doc with create_word
+          ```
+          Apply? Type:
+            /skill apply report --yes        (apply now)
+            /skill apply report --edit       (open the proposed file and tweak first)
+            /skill reject report             (discard, never apply)
+
+You: /skill apply report --yes
+[System]: ✓ Snapshot saved (use /revert if needed)
+          ✓ Patch applied to skills/report/SKILL.md
+          ✓ Audit logged
+```
+
+### Safety rails
+
+| Rail | What it guarantees |
+|---|---|
+| Default OFF | Feature requires explicit `CONFIG.enable_skill_patching = True` |
+| Propose, don't auto-apply | Patches sit in `.proposed/` until you `apply` or `reject` |
+| Diff shown before apply | You see exact changes before they go live |
+| Snapshot before apply | Existing `/revert <path>` undoes the change |
+| Audit log per event | `audit_logs/skill_patches.jsonl` records every propose / apply / reject |
+| Empty-name validation | Agent can't propose patches for non-existent skills |
+
+### When NOT to enable
+
+- Insurance / regulated environment where every behaviour change needs human sign-off (the proposal log helps but adds review burden)
+- Multi-user shared workspace where two agents could fight over the same SKILL.md (still safe, but coordination is on you)
 
 ---
 

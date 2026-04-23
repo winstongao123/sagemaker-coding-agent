@@ -1,5 +1,40 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-23 — V4.9.5 Release: self-patching skills with safety rails (opt-in, handy use)
+
+### Context
+After v4.9.4, user re-classified the deployment scope: NOT insurance-only — this is for handy/personal use. The previously-rejected hermes self-patching pattern came back on the table. Designed with 4 (now 8) safety rails so user stays in control of every change. Opt-in via `CONFIG.enable_skill_patching = True` (default OFF).
+
+### V4.9.5 Changes (sagemaker_agent.py + skills + docs)
+1. **CONFIG.enable_skill_patching: bool = False** — opt-in flag for the whole feature
+2. **SkillManager.propose_patch / list_proposals / get_latest_proposal / apply_proposal / reject_proposal** — full lifecycle methods using `skills/<name>/.proposed/<timestamp>.md` convention
+3. **`_log_skill_patch_event()` helper** — JSONL audit log at `audit_logs/skill_patches.jsonl`
+4. **New `tool_skill_propose_patch`** registered in TOOLS (no-ops when flag is OFF)
+5. **Three new slash commands**: `/skill suggestions`, `/skill apply <name> [--yes|--edit]` (with unified diff preview), `/skill reject <name>`
+6. **SYSTEM_PROMPT** gains "Skill self-patching (V4.9.5, opt-in)" section: only propose when flag on AND user corrected 3+ times
+7. **USER_GUIDE.md** gains "Self-patching skills" section with full example session + safety-rails table
+8. **chat.md + chat.ipynb** cell 0 + cell 4 — version banner bumped to v4.9.5, v4.9.X highlights, new commands documented
+9. **Version**: 4.9.4 → 4.9.5
+
+### Safety rails (8 total)
+1. Default OFF (`CONFIG.enable_skill_patching = False`)
+2. Propose-not-apply (`.proposed/<ts>.md`, never live)
+3. Diff preview before apply (unified diff format)
+4. Snapshot before apply (existing SNAPSHOTS → `/revert <path>` undoes)
+5. Audit log per event (JSONL)
+6. `--edit` flag for tweaking proposed file
+7. Empty-name validation
+8. Tool no-ops when flag is OFF
+
+### Verification
+- `py_compile` / `ast.parse` / warnings-as-errors import — clean, version `4.9.5`
+- `test_v495_self_patching.py` (NEW) — **19/19 PASS**
+- All regression: **92/92 total tests green** (1 + 9 + 11 + 10 + 11 + 32 + 19)
+- No Codex this round (per project rule)
+
+### Net code change
+~370 lines added across SkillManager, tool, slash handlers, audit log helper, SYSTEM_PROMPT addition, plus ~250 lines test, plus markdown updates to USER_GUIDE.md / chat.md / chat.ipynb.
+
 ## 2026-04-23 — V4.9.4 Release: hermes patterns (cost ceiling + structured errors + smarter compaction)
 
 ### Context

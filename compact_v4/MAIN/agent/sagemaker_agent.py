@@ -67,7 +67,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.9.4"
+__version__ = "4.9.5"
 
 # ============================================================
 # IMPORTS
@@ -1078,6 +1078,13 @@ class Config:
     # V4.9.4: optional auxiliary model for compaction summaries (cost win — use Haiku for summary
     # while main agent runs Sonnet/Opus). Empty string = use main model. Bedrock-only.
     compaction_model: str = ""
+
+    # V4.9.5: opt-in self-patching skills (hermes "closed learning loop" pattern, with safety rails).
+    # When True, the agent CAN propose patches to SKILL.md files via the skill_propose_patch tool.
+    # Patches are written to skills/<name>/.proposed/<ts>.md — NEVER auto-applied to live SKILL.md.
+    # User reviews via `/skill suggestions` and applies via `/skill apply <name>`.
+    # Default OFF — propose mode only when explicitly enabled per session.
+    enable_skill_patching: bool = False
 
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)  # {"review": {"template": "...", "agent": "plan"}}
@@ -2597,6 +2604,182 @@ class SkillManager:
             return ""
         # Compact format: "name1, name2, name3" (descriptions in SKILL.md, not here)
         return "Available: " + ", ".join(self._cache.keys())
+
+    # ========================================================================
+    # V4.9.5: Self-patching skills with safety rails
+    # ========================================================================
+    # Hermes-style closed learning loop, but with human-in-loop approval.
+    # Agent proposes patches via skill_propose_patch tool; patches sit in
+    # skills/<name>/.proposed/<ts>.md until user reviews via /skill apply.
+    # Opt-in: requires CONFIG.enable_skill_patching=True. Default OFF.
+
+    PROPOSED_DIR_NAME = ".proposed"
+
+    def _proposed_dir(self, skill_name: str):
+        """Return the .proposed/ Path for a given skill, or None if skill unknown."""
+        skill = self._cache.get(skill_name)
+        if not skill:
+            return None
+        return Path(skill.base_dir) / self.PROPOSED_DIR_NAME
+
+    def propose_patch(self, name: str, reason: str, new_content: str) -> Tuple[bool, str]:
+        """V4.9.5: Agent-callable. Write a proposed patch for skill `name` to
+        skills/<name>/.proposed/<timestamp>.md. NEVER touches the live SKILL.md.
+        Returns (success, message_or_path).
+        """
+        if not self._cache:
+            self.discover()
+        skill = self._cache.get(name)
+        if not skill:
+            available = ", ".join(sorted(self._cache.keys())) if self._cache else "none"
+            return False, f"Skill not found: {name}. Available: {available}"
+        if not (reason or "").strip():
+            return False, "Reason is required (one sentence explaining why this patch helps)."
+        if not (new_content or "").strip():
+            return False, "new_content is required (the full replacement SKILL.md body, not a diff)."
+        proposed_dir = self._proposed_dir(name)
+        try:
+            proposed_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            proposed_path = proposed_dir / f"{ts}.md"
+            # Wrap with metadata header so reviewers see the reason next to the diff
+            wrapped = (
+                f"<!-- proposed_at: {ts}\n"
+                f"     skill: {name}\n"
+                f"     reason: {reason.strip()}\n"
+                f"-->\n"
+                f"{new_content}"
+            )
+            proposed_path.write_text(wrapped, encoding="utf-8")
+            return True, str(proposed_path)
+        except Exception as e:
+            return False, f"Failed to write proposal: {e}"
+
+    def list_proposals(self) -> List[Dict]:
+        """V4.9.5: Scan all skills for pending proposals.
+        Returns list of {skill, ts, path, reason}."""
+        if not self._cache:
+            self.discover()
+        out = []
+        for name, skill in self._cache.items():
+            pdir = Path(skill.base_dir) / self.PROPOSED_DIR_NAME
+            if not pdir.is_dir():
+                continue
+            for fp in sorted(pdir.glob("*.md")):
+                reason = ""
+                try:
+                    head = fp.read_text(encoding="utf-8", errors="ignore").splitlines()[:5]
+                    for line in head:
+                        if "reason:" in line.lower():
+                            reason = line.split("reason:", 1)[1].strip()
+                            if reason.endswith("-->"):
+                                reason = reason[:-3].strip()
+                            break
+                except Exception:
+                    pass
+                out.append({
+                    "skill": name,
+                    "ts": fp.stem,
+                    "path": str(fp),
+                    "reason": reason,
+                })
+        return out
+
+    def get_latest_proposal(self, name: str) -> Optional[Dict]:
+        """V4.9.5: Return the most recent pending proposal for a skill, or None."""
+        proposals = [p for p in self.list_proposals() if p["skill"] == name]
+        if not proposals:
+            return None
+        proposals.sort(key=lambda p: p["ts"])
+        return proposals[-1]
+
+    def apply_proposal(self, name: str) -> Tuple[bool, str]:
+        """V4.9.5: Apply the LATEST pending proposal for skill `name`.
+        - Snapshots current SKILL.md (for /revert)
+        - Writes proposed body to live SKILL.md
+        - Audit-logs the apply
+        - Deletes the proposal file
+        Returns (success, message).
+        """
+        if not self._cache:
+            self.discover()
+        skill = self._cache.get(name)
+        if not skill:
+            return False, f"Skill not found: {name}"
+        proposal = self.get_latest_proposal(name)
+        if not proposal:
+            return False, f"No pending proposals for skill '{name}'."
+        live_path = Path(skill.location)
+        proposed_path = Path(proposal["path"])
+        try:
+            proposed_text = proposed_path.read_text(encoding="utf-8", errors="ignore")
+            # Strip the metadata HTML comment header before writing live (keep skill clean)
+            stripped = proposed_text
+            if stripped.lstrip().startswith("<!--"):
+                end = stripped.find("-->")
+                if end != -1:
+                    stripped = stripped[end + 3:].lstrip()
+            # Snapshot via existing SNAPSHOTS system if available, else best-effort
+            try:
+                if "SNAPSHOTS" in globals():
+                    SNAPSHOTS.snapshot(str(live_path))
+            except Exception:
+                pass
+            live_path.write_text(stripped, encoding="utf-8")
+            # Re-discover to pick up the change
+            self._cache.clear()
+            self.discover()
+            # Delete the applied proposal
+            try:
+                proposed_path.unlink()
+            except Exception:
+                pass
+            _log_skill_patch_event("apply", name, ts=proposal["ts"], reason=proposal.get("reason", ""))
+            return True, f"Applied patch to {live_path} (ts {proposal['ts']}). Use /revert {live_path} to undo."
+        except Exception as e:
+            return False, f"Apply failed: {e}"
+
+    def reject_proposal(self, name: str) -> Tuple[bool, str]:
+        """V4.9.5: Discard ALL pending proposals for skill `name`. Audit-log the reject."""
+        if not self._cache:
+            self.discover()
+        skill = self._cache.get(name)
+        if not skill:
+            return False, f"Skill not found: {name}"
+        pdir = Path(skill.base_dir) / self.PROPOSED_DIR_NAME
+        if not pdir.is_dir():
+            return False, f"No pending proposals for '{name}'."
+        deleted = 0
+        for fp in list(pdir.glob("*.md")):
+            try:
+                fp.unlink()
+                deleted += 1
+            except Exception:
+                pass
+        if deleted == 0:
+            return False, f"No proposals to reject for '{name}'."
+        _log_skill_patch_event("reject", name, count=deleted)
+        return True, f"Rejected {deleted} pending proposal(s) for '{name}'."
+
+
+def _log_skill_patch_event(action: str, skill_name: str, **extra) -> None:
+    """V4.9.5: Append a JSONL line to audit_logs/skill_patches.jsonl recording every
+    propose/apply/reject event. Best-effort — failures don't break agent flow.
+    """
+    try:
+        log_dir = Path(CONFIG.workspace) / "audit_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "skill_patches.jsonl"
+        entry = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "action": action,
+            "skill": skill_name,
+        }
+        entry.update(extra)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
 
 
 # Initialize skills manager
@@ -5817,6 +6000,41 @@ def tool_skill(args: Dict) -> str:
             f"described in this skill.**\n\n{content}")
 
 
+def tool_skill_propose_patch(args: Dict) -> str:
+    """V4.9.5: Agent proposes an improvement to a SKILL.md file.
+
+    The patch is written to skills/<name>/.proposed/<timestamp>.md and surfaced
+    to the user via /skill suggestions. The live SKILL.md is NEVER auto-modified.
+
+    Requires CONFIG.enable_skill_patching=True (opt-in for handy/personal use).
+    """
+    if not getattr(CONFIG, "enable_skill_patching", False):
+        return (
+            "Skill patching is disabled. The user has not opted in this session.\n"
+            "If the user wants to enable: set CONFIG.enable_skill_patching = True, "
+            "then re-run this tool. Until then, suggest the improvement in chat instead."
+        )
+    name = (args.get("name") or "").strip()
+    reason = (args.get("reason") or "").strip()
+    new_content = args.get("new_content") or ""
+    if not name:
+        return "Error: 'name' is required (which skill to patch)."
+    if not reason:
+        return "Error: 'reason' is required (one sentence explaining why this patch helps)."
+    if not new_content.strip():
+        return "Error: 'new_content' is required (the FULL replacement SKILL.md body, not a diff)."
+    ok, msg = SKILLS.propose_patch(name, reason, new_content)
+    if not ok:
+        return f"Error: {msg}"
+    _log_skill_patch_event("propose", name, reason=reason, path=msg)
+    return (
+        f"Patch proposed for skill '{name}'. Saved to: {msg}\n"
+        f"Reason: {reason}\n\n"
+        f"The user can review with: /skill suggestions\n"
+        f"Then apply with: /skill apply {name}  (or /skill reject {name})"
+    )
+
+
 def tool_task(args: Dict) -> str:
     """Spawn a sub-agent for delegated tasks. Handled by Agent runtime."""
     return "Error: task must be executed by Agent runtime"
@@ -6386,6 +6604,29 @@ TOOLS = {
             "name": {"type": "string", "description": "Skill name to load. Omit to list all available skills."}
         }, "required": []}),
 
+    "skill_propose_patch": (tool_skill_propose_patch, True,
+        "V4.9.5: Use when you have noticed a recurring improvement to a skill that the user "
+        "has corrected you on 3+ times in this session. Proposes a patch (NOT auto-applied) "
+        "saved to skills/<name>/.proposed/<timestamp>.md. The user reviews via /skill suggestions "
+        "and applies via /skill apply <name>.\n\n"
+        "REQUIRES: CONFIG.enable_skill_patching = True. Otherwise this tool returns a no-op message.\n\n"
+        "WHEN to use:\n"
+        "- The user has corrected you the same way 3+ times on the same skill (e.g. dpi=150 reminders)\n"
+        "- You discovered a missing step in a skill that, if added, would prevent the same mistake\n"
+        "- The improvement is general (helps any future run), NOT specific to this one task\n\n"
+        "WHEN NOT to use:\n"
+        "- One-off corrections (just remember within the session)\n"
+        "- Stylistic preferences specific to this conversation\n"
+        "- Anything you're not sure the user wants permanent\n\n"
+        "ALWAYS: write a clear `reason` explaining why this patch helps. The user reviews based on it.\n"
+        "ALWAYS: provide the FULL replacement SKILL.md body in `new_content`, not a diff. The system "
+        "will diff it against the live file when the user runs /skill apply.",
+        {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Skill to patch (must exist in skills/ directory)"},
+            "reason": {"type": "string", "description": "One sentence explaining why this patch helps."},
+            "new_content": {"type": "string", "description": "Full replacement SKILL.md body (frontmatter + markdown). NOT a diff."}
+        }, "required": ["name", "reason", "new_content"]}),
+
     "task": (tool_task, True,
         "Launch a sub-agent to handle complex, multi-step tasks autonomously.\n\n"
         "Sub-agents run independently with their own conversation context and tool access. "
@@ -6927,7 +7168,13 @@ WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create
 MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Prefer MCP tools when available.
 
 # Commands
-`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/skills` (list available), `/skill use <name>` (activate; lifts any prior /unskill block), `/skill clear` (deactivate all — sticky for session), `/unskill <name>` (V4.9.1 — deactivate one skill, sticky for session), `/commands` (custom).
+`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/skills` (list available), `/skill use <name>` (activate; lifts any prior /unskill block), `/skill clear` (deactivate all — sticky for session), `/unskill <name>` (V4.9.1 — deactivate one skill, sticky for session), `/skill suggestions` (V4.9.5 — list pending agent-proposed patches), `/skill apply <name> [--yes|--edit]` (V4.9.5 — preview diff then apply), `/skill reject <name>` (V4.9.5 — discard pending patches), `/commands` (custom).
+
+# Skill self-patching (V4.9.5, opt-in)
+- ONLY when `CONFIG.enable_skill_patching = True`. If the flag is False, do NOT call `skill_propose_patch` — it will no-op. Suggest the improvement in chat instead.
+- WHEN to propose: the user has corrected you on the SAME skill the SAME way 3+ times in this session. The correction is general (helps any future run), not a one-off task preference.
+- HOW: call `skill_propose_patch` with `name`, `reason` (one sentence), and `new_content` (the FULL replacement SKILL.md body, frontmatter included — NOT a diff). The system writes it to `.proposed/<ts>.md` for the user to review via `/skill suggestions`. The live SKILL.md is NEVER auto-modified.
+- After proposing, mention it in chat ONCE: "I noticed [thing]. I proposed a patch — review with /skill suggestions". Do NOT keep nagging.
 
 # === DYNAMIC ===
 """
@@ -9314,6 +9561,98 @@ def create_chat_ui(mock_mode: bool = None):
             _release_lock()
             return
         # V4.9.1: /skill use <name> lifts any prior deactivation so the user can explicitly re-enable.
+        # V4.9.5: skill self-patching commands — review/apply/reject pending proposals
+        if msg == "/skill suggestions" or msg == "/skill suggestion":
+            proposals = SKILLS.list_proposals()
+            if not proposals:
+                add_message('system', 'No pending skill patches.\n\n'
+                                      f'Skill patching is currently {"ON" if CONFIG.enable_skill_patching else "OFF"} '
+                                      f'(toggle via CONFIG.enable_skill_patching).')
+            else:
+                lines = [f'Pending skill patches ({len(proposals)}):']
+                for p in proposals:
+                    lines.append(f'  - {p["skill"]:<20} proposed {p["ts"]}')
+                    if p.get("reason"):
+                        lines.append(f'    reason: {p["reason"]}')
+                lines.append('')
+                lines.append('Review with: /skill apply <name>   (or /skill reject <name>)')
+                add_message('system', '\n'.join(lines))
+            input_box.value = ""
+            _release_lock()
+            return
+        if msg.startswith("/skill apply "):
+            raw = msg[len("/skill apply "):].strip()
+            # Parse optional --yes / --edit flag
+            force = False
+            edit_first = False
+            parts = raw.split()
+            name = parts[0] if parts else ""
+            for p in parts[1:]:
+                if p == "--yes":
+                    force = True
+                elif p == "--edit":
+                    edit_first = True
+            if not name:
+                add_message('system', 'Usage: /skill apply <name> [--yes|--edit]\n  See /skill suggestions for pending patches.')
+            else:
+                proposal = SKILLS.get_latest_proposal(name)
+                if not proposal:
+                    add_message('system', f'No pending proposals for skill "{name}". Use /skill suggestions to list all.')
+                elif edit_first:
+                    add_message('system', f'Edit the proposal at: {proposal["path"]}\nThen run: /skill apply {name} --yes')
+                elif not force:
+                    # Show diff preview
+                    skill = SKILLS._cache.get(name)
+                    live_text = ""
+                    proposed_text = ""
+                    try:
+                        live_text = open(skill.location, encoding="utf-8").read()
+                        proposed_text = open(proposal["path"], encoding="utf-8").read()
+                        # Strip metadata header from proposed for accurate diff
+                        if proposed_text.lstrip().startswith("<!--"):
+                            end = proposed_text.find("-->")
+                            if end != -1:
+                                proposed_text = proposed_text[end + 3:].lstrip()
+                    except Exception as e:
+                        add_message('system', f'Failed to read files for diff: {e}')
+                        input_box.value = ""
+                        _release_lock()
+                        return
+                    import difflib as _difflib
+                    diff = list(_difflib.unified_diff(
+                        live_text.splitlines(keepends=True),
+                        proposed_text.splitlines(keepends=True),
+                        fromfile=f'live/{name}/SKILL.md',
+                        tofile=f'proposed/{name}/SKILL.md',
+                        n=3,
+                    ))
+                    diff_text = "".join(diff) if diff else "(no differences detected)"
+                    add_message('system',
+                        f"Diff for skill '{name}' (proposed {proposal['ts']}):\n\n"
+                        f"```diff\n{diff_text}\n```\n\n"
+                        f"Reason given: \"{proposal.get('reason', '(none)')}\"\n\n"
+                        f"Apply? Type:\n"
+                        f"  /skill apply {name} --yes        (apply now)\n"
+                        f"  /skill apply {name} --edit       (open the .proposed file and tweak first)\n"
+                        f"  /skill reject {name}             (discard, never apply)"
+                    )
+                else:
+                    ok, message = SKILLS.apply_proposal(name)
+                    add_message('system', f'{"OK" if ok else "FAIL"}: {message}')
+                    update_mode_display()
+            input_box.value = ""
+            _release_lock()
+            return
+        if msg.startswith("/skill reject "):
+            name = msg[len("/skill reject "):].strip()
+            if not name:
+                add_message('system', 'Usage: /skill reject <name>')
+            else:
+                ok, message = SKILLS.reject_proposal(name)
+                add_message('system', f'{"OK" if ok else "FAIL"}: {message}')
+            input_box.value = ""
+            _release_lock()
+            return
         if msg == "/revert" or msg.startswith("/revert "):
             raw = msg[len("/revert"):].strip()
             # Support "--yes" flag for confirmed revert (skip preview)

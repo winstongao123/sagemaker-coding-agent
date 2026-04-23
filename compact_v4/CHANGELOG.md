@@ -1,5 +1,17 @@
 # Compact V4 Changelog
 
+## v4.9.5 — Self-patching skills with safety rails (opt-in, handy use) (2026-04-23)
+
+Hermes "closed learning loop" pattern — agent proposes improvements to its own SKILL.md files based on user corrections — but with **human-in-loop approval**. Opt-in via `CONFIG.enable_skill_patching = True` (default OFF). Previously rejected on insurance grounds; back on the table after user re-classified deployment as personal/handy use.
+
+Flow: agent corrects same skill 3+ times → calls `skill_propose_patch` → patch lands in `skills/<name>/.proposed/<ts>.md` (NEVER live) → `/skill suggestions` lists pending → `/skill apply <name>` shows unified diff → `--yes` to apply (snapshots first) → existing `/revert <path>` undoes → audit logged at `audit_logs/skill_patches.jsonl`.
+
+8 safety rails: opt-in flag, propose-not-apply, diff preview, snapshot before apply, audit log per event, `--edit` flag for tweaking, empty-name validation, tool no-ops when disabled.
+
+Detailed: [`compact_v4/MAIN/changelogs/CHANGELOG_v4.9.5.md`](compact_v4/MAIN/changelogs/CHANGELOG_v4.9.5.md). Cross-repo decision: see audit doc §13.
+
+Verification: **92/92 tests green** (19 new + 73 regression). py_compile + ast clean. No Codex (per `feedback_codex_skip_bedrock_patches.md`). Migration: none — fully additive, default OFF.
+
 ## v4.9.4 — Hermes patterns: cost ceiling + structured errors + smarter compaction (2026-04-23)
 
 Six hermes-validated production-reliability enhancements, all Bedrock-only / no-external-network. Net change: **+336 / -33 lines** in `sagemaker_agent.py`. **73/73 tests green** (32 new + 41 regression).
