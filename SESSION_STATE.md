@@ -224,6 +224,7 @@ Added `.env.*`, `*.pem`, `*.key`, `credentials*.json`,
 ### Hermes vs Coding Agent HTML (new)
 - PS_ClaudeCode_Insights/HERMES_VS_CODING_AGENT.html — 7-tab comparison (self-improving vs coding loop)
 - Screenshots added to PS_ClaudeCode_Insights/screenshots/
+- 2026-04-25: relocated copy added at compact_v4/docs/HERMES_VS_CODING_AGENT.html so it ships with the v4 docs bundle (original was previously committed to winstonpgao/hermes-agent fork; that fork is being flattened back to upstream).
 
 ### chat.ipynb cleanup
 - Removed coding-standards SKILL.md (merged into main skills)
