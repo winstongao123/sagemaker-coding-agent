@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.2 (April 2026)
+Version: 4.10.3 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.2"
+__version__ = "4.10.3"
 
 # ============================================================
 # IMPORTS
@@ -1699,16 +1699,33 @@ AWS access tiers (SageMaker execution role):
         # === LAYER 1: Command allowlist ===
         bases = self._extract_base_command(command)
         if not bases:
-            return False, "Empty command"
+            return False, "Empty command — pass a non-empty shell command to bash."
         for base in bases:
             if base not in self.ALLOWED_COMMANDS:
-                return False, f"Command not allowed: '{base}'. Allowed: {', '.join(sorted(self.ALLOWED_COMMANDS))}"
+                # V4.10.3 #14: clearer denial — explain WHY and WHAT to do.
+                # Suggest the closest allowed alternative if any prefix matches.
+                allowed = sorted(self.ALLOWED_COMMANDS)
+                suggestions = [a for a in allowed if a.startswith(base[:3]) and a != base][:5]
+                hint = f" Closest allowed: {', '.join(suggestions)}." if suggestions else ""
+                return False, (
+                    f"Command not allowed: '{base}'.{hint} "
+                    f"This SageMaker agent restricts bash to a fixed allowlist for safety. "
+                    f"Full allowlist: {', '.join(allowed)}. "
+                    f"If you need '{base}', try the Python equivalent (e.g. 'python_exec' tool, "
+                    f"or read/write/edit_file for file ops)."
+                )
 
         # === LAYER 2: Denylist patterns (catch dangerous arguments/patterns) ===
         for pattern, reason in self.DANGEROUS_PATTERNS:
             try:
                 if re.search(pattern, command, re.IGNORECASE):
-                    return False, f"Blocked: {reason}"
+                    # V4.10.3 #14: include the actual matching reason + a recovery hint.
+                    return False, (
+                        f"Blocked: {reason}. "
+                        f"Pattern matched: /{pattern}/. "
+                        f"Rephrase the command to avoid the dangerous pattern, or use a "
+                        f"dedicated tool (read_file / edit_file / python_exec) instead of bash."
+                    )
             except re.error:
                 continue
 

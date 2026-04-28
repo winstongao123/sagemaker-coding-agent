@@ -1,5 +1,27 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.3 Release: Codex production-readiness review apply
+
+### Context
+User pasted a Codex production-readiness review filtered for the SageMaker self-use target. Audit showed 14 of 18 "must learn / apply" items were already done in v4.10.2; 4 small additions worth applying. All additive — zero functional code changes to existing paths.
+
+### V4.10.3 Changes
+1. **Ship-gate verifier** — new `compact_v4/verify_ship_zip.py` script. Asserts: 5 required runtime files at root, 9 required skill subfolders with SKILL.md, no forbidden artefacts (test tempdirs, caches, .proposed/, MAIN/agent wrapper, .pyc/.swp/.DS_Store), version sanity (4.10.x), required v4.10.x features present (notebook_edit, context_collapse, enforce_verify_contract, BEDROCK_MODEL_CONTEXT_WINDOWS, skill auto-trigger default OFF), Sonnet 4.5 default, no deep wrapper directories outside skills/. Exit 0 = ship-ready, exit 1 = blocker.
+2. **Cache-boundary regression test** — new `MAIN/agent/test_v410_cache_boundary.py`. 6 tests guarding the static prompt prefix: marker presence, ≥1024-token threshold, byte-stability across calls, sub-agent prefix matches parent, dynamic content lives ONLY after boundary, BedrockClient boundary constant matches test constant.
+3. **Many-skill stress test** — extended `test_v410_skill_listing_budget.py` with `test_many_skill_workspace_stress`. Verifies cap behavior at 100 and 1000 skills.
+4. **Clearer permission denials** — `SecurityManager.validate_command` denial messages now include WHY (allowlist), closest-prefix suggestion, and recommended Python tool alternative. Pattern denials include the matching pattern and recovery hint.
+
+### Test/live split confirmed
+Already correctly gated. Deterministic tests in `MAIN/agent/test_v410_*.py` (no Bedrock, fast, run on every change). Live Bedrock tests in `MAIN/tests/test_production.py` (manually invoked, not part of the v4.10.x regression run).
+
+### Verification
+- Full v4.10.x + regression suite: **74/74 across 8 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 cache-boundary + 12 v4.9 auto-trigger = 74)
+- `verify_ship_zip.py` PASSES on the freshly-rebuilt zip
+- Codex review pre-commit: PASS
+
+### Version: 4.10.2 → 4.10.3
+
+
 ## 2026-04-28 — V4.10.2 Release (Codex-surfaced contradiction fix): verify-contract softened
 
 ### Context

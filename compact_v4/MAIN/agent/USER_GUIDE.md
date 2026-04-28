@@ -1,5 +1,14 @@
-# SageAgent V4 — User Guide (v4.10.2)
+# SageAgent V4 — User Guide (v4.10.3)
 
+
+## What's new in v4.10.3 (2026-04-28, production-readiness review apply)
+
+User asked Codex for a production-readiness review of v4.10.2. Most items were already done; 4 small additions worth applying:
+
+- **Ship-gate verifier (`compact_v4/verify_ship_zip.py`)** — run `python verify_ship_zip.py` before any release. Checks required runtime files, no forbidden artefacts (test tempdirs, caches, `.proposed/` patches), version sanity, flat-root layout. Catches the kind of test-tempdir leak that almost shipped in v4.10.2.
+- **Cache-boundary regression test** — `test_v410_cache_boundary.py` (6 tests) asserts the static portion of the system prompt is byte-identical across calls and meets the Sonnet 4.5 cache threshold (1024 tokens). Future edits that accidentally inject dynamic content into the cached prefix will fail this test immediately.
+- **Many-skill stress test** — verifies skill listing stays under cap with 100 skills (no truncation needed) and 1000 skills (truncation kicks in, cap honored).
+- **Clearer permission denials** — when `bash` is denied, the message now explains WHY (allowlist), suggests the closest allowed alternative (if any prefix matches), and points to the right Python tool (`python_exec`, `edit_file`). Same for pattern denials.
 
 ## What's new in v4.10.2 (2026-04-28, contradiction fix)
 

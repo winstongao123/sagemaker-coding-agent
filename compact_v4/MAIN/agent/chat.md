@@ -4,15 +4,23 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.2
+# SageAgent V4.10.3
 
-AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, and surgical Jupyter cell editing. **v4.10.2**.
+AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.3**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.3
+
+**v4.10.3 — production-readiness review apply (4 small additions, all additive):**
+1. **Ship-gate verifier** — `compact_v4/verify_ship_zip.py`. Run before any release.
+2. **Cache-boundary regression test** — 6 tests guarding the static prompt prefix.
+3. **Many-skill stress test** — verifies cap holds with 100 / 1000 skills.
+4. **Clearer permission denials** — bash/security messages now explain WHY + WHAT to do.
 
 ### What's new in v4.10.2
 

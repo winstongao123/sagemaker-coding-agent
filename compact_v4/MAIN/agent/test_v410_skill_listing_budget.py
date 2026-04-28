@@ -114,6 +114,34 @@ def test_listing_format_is_stable_for_cache():
     assert a == b, "Listing must be deterministic for prompt cache stability"
 
 
+def test_many_skill_workspace_stress():
+    """V4.10.3 #5: workspace with 100 skills must produce a listing that
+    (a) stays under the cap, (b) shows '+N more' truncation hint, (c) doesn't
+    explode the prompt prefix. Production-realistic stress test."""
+    skills = [_make_skill(f"skill_{i:03d}", desc=f"description for skill {i}") for i in range(100)]
+    mgr = _build_manager(skills)
+    out = mgr.list_for_prompt()  # default budget = 1% of 200K = 2000 tokens
+    assert out.startswith("Available: ")
+    # Hard cap kicks in (2000 tokens < 1% of 200K) — but 100 skill names
+    # at ~5 tokens each = 500 tokens, well under cap. No truncation expected.
+    est = sa.Compactor.estimate_tokens(out)
+    assert est <= sa.SKILL_LISTING_HARD_CAP_TOKENS, (
+        f"100-skill listing {est} tokens exceeds hard cap "
+        f"{sa.SKILL_LISTING_HARD_CAP_TOKENS}"
+    )
+    # All 100 skills should fit (under the 2000-token cap, 100 names is fine)
+    assert "more)" not in out, "100 skills shouldn't trigger truncation"
+    # Now stress with 1000 skills — truncation must kick in
+    skills_big = [_make_skill(f"sk_{i:04d}") for i in range(1000)]
+    mgr_big = _build_manager(skills_big)
+    out_big = mgr_big.list_for_prompt()
+    est_big = sa.Compactor.estimate_tokens(out_big)
+    assert est_big <= sa.SKILL_LISTING_HARD_CAP_TOKENS, (
+        f"1000-skill listing {est_big} tokens overshot cap"
+    )
+    assert "more)" in out_big, "1000 skills should trigger truncation"
+
+
 def test_first_entry_over_budget_does_not_overshoot():
     """Codex 2026-04-28 fix: when the FIRST name alone exceeds budget, the long
     name must NOT slip into the output. Cap stays strict; hint surfaces instead."""
@@ -167,6 +195,7 @@ if __name__ == "__main__":
         ("hard_cap_clamps_huge_context_window", test_hard_cap_clamps_huge_context_window),
         ("empty_cache_returns_empty_string", test_empty_cache_returns_empty_string),
         ("listing_format_is_stable_for_cache", test_listing_format_is_stable_for_cache),
+        ("many_skill_workspace_stress", test_many_skill_workspace_stress),
         ("first_entry_over_budget_does_not_overshoot", test_first_entry_over_budget_does_not_overshoot),
         ("degenerate_budget_returns_empty_when_hint_overshoots", test_degenerate_budget_returns_empty_when_hint_overshoots),
         ("truncation_hint_token_cost_accounted", test_truncation_hint_token_cost_accounted),

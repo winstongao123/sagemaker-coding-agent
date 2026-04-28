@@ -1,5 +1,26 @@
 # Compact V4 Changelog
 
+## v4.10.3 — Production-readiness review apply (2026-04-28)
+
+User pasted a Codex production-readiness review. Audit showed 14 of 18 items already done in v4.10.2; 4 small additions worth applying. All additive, no functional code changes to existing paths.
+
+Added:
+- **Ship-gate verifier** — `compact_v4/verify_ship_zip.py`. Run before any release: asserts required runtime files at root, required skill subfolders, no forbidden artefacts (test tempdirs, caches, .proposed/, MAIN/agent wrapper, .pyc), version sanity checks, layout depth check. Exit 0 = ship-ready, exit 1 = blocker. Catches the v410_nb_* leak we just fixed before it can recur.
+- **Cache-boundary regression test** — `MAIN/agent/test_v410_cache_boundary.py`. Asserts: SYSTEM_PROMPT contains the `# === DYNAMIC ===` marker; static prefix is ≥1024 tokens (Sonnet 4.5 cache checkpoint threshold); static prefix byte-identical across calls; sub-agent prompt static prefix matches parent's (so sub-agent calls hit the same cache); dynamic content (env-details, memory header, project status, skill discovery) lives ONLY after the boundary; the boundary constant in BedrockClient.chat() matches what the test uses. 6 tests, all PASS.
+- **Many-skill workspace stress test** — `test_v410_skill_listing_budget.py::test_many_skill_workspace_stress`. Builds a 100-skill workspace and a 1000-skill workspace; verifies cap holds, 1000 triggers truncation hint, neither exceeds `SKILL_LISTING_HARD_CAP_TOKENS`.
+- **Permission denial clarity** — `SecurityManager.validate_command` denial messages now explain WHY (allowlist) and WHAT to do (closest-prefix suggestion if any, recommended Python equivalent like `python_exec` / `edit_file`). Pattern-deny messages include the matching pattern + recovery hint.
+
+Test/live split confirmed:
+- Deterministic offline tests: `compact_v4/MAIN/agent/test_v410_*.py` (no Bedrock)
+- Live Bedrock tests: `compact_v4/MAIN/tests/test_production.py` — manually invoked, NOT part of the v4.10.x regression suite
+
+Verification
+- Full v4.10.x + regression suite: **74/74 across 8 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 cache-boundary + 12 v4.9 auto-trigger = 74)
+- `verify_ship_zip.py` PASSES on the freshly-rebuilt zip
+- 13 Codex-caught issues across v4.10.0/.1/.2 still all fixed; this release is purely additive (test + script + better error messages)
+
+Version: `4.10.2` → `4.10.3`.
+
 ## v4.10.2 — Verify-contract softened, opt-in strict mode (2026-04-28)
 
 Same-day follow-up to v4.10.1. Codex review surfaced a real prompt contradiction: the system prompt simultaneously said `verify` was MANDATORY (Sub-agent Coordination + Verification Contract sections) AND that the model should SUGGEST it without auto-running (Doing Tasks section). Model behavior was unpredictable depending on which sentence won attention. Resolved by aligning all three sections to suggest-and-confirm by default, with strict mode opt-in.
