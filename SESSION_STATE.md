@@ -1,5 +1,33 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.4 Release: Sub-agent work-context handoff (closes largest review gap)
+
+### Context
+After v4.10.3 + final cleanup, user's Codex follow-up review pointed out the most important remaining weak spot: **sub-agents only got env-details (cwd / git HEAD / depth) but NOT the work context (current goal, active todos, changed files)**. AGENT_STATUS.md was loaded only at top-level (`subagent_depth==0`) by `_load_project_status()`. If the parent forgot to brief them in the `task` tool's `prompt` argument, sub-agents flew blind on the larger goal.
+
+### V4.10.4 Changes
+1. **`_build_subagent_handoff_block()`** — new helper returning a bounded handoff block with three optional sections (each fail-quiet, never-raise):
+   - AGENT_STATUS.md slice (capped at `_SUBAGENT_STATUS_MAX_CHARS = 4000`)
+   - Active todos via `build_todo_restoration_message()` (capped at `_SUBAGENT_TODOS_MAX_CHARS = 2000`)
+   - Last 10 changed file paths from `_RECENT_DIFFS` (paths only, no diff bodies)
+2. Wired into `_run_task_tool` AFTER `_build_subagent_env_details` and BEFORE `prompt_suffix` — appended to `sub_prompt` after the cached SYSTEM_PROMPT boundary so the static prompt-cache prefix is preserved unchanged.
+3. **`CONFIG.enable_subagent_handoff: bool = True`** — opt-out flag for users preferring v4.10.3 env-details-only behavior.
+4. **`_sanitize_handoff()`** — replaces literal `# === DYNAMIC ===` in user-supplied AGENT_STATUS or todo content with `# === DYNAMIC === (sanitized)` so a future cache-splitter implementation can't be fooled by user content.
+
+### Codex review (1 fix round)
+- ISSUES (round 1): constants named `_MAX_BYTES` but enforced via Python `str` `len()` (CHARS not BYTES); user-supplied content not sanitized for cache-boundary marker.
+- PASS (round 2): both fixed (renamed to `_MAX_CHARS` for truthful naming, added `_sanitize_handoff` on AGENT_STATUS + todos paths, 2 new sanitizer tests).
+
+### Verification
+- `test_v410_subagent_handoff.py` — **11/11 PASS**
+- Full v4.10.x + regression suite: **85/85 across 9 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 + 11 + 12 v4.9 = 85)
+
+### Why this matters
+With v4.10.3 alone, a parent that spawned a `verify` sub-agent and forgot "the goal is X, see AGENT_STATUS.md Plan section" got a verify agent that probed whatever files looked interesting — easy to miss the actual point. With v4.10.4 the sub-agent always gets cwd + git + AGENT_STATUS goal + todos + changed files, regardless of what the parent's prompt says. Closes the largest remaining gap from the production-readiness review.
+
+### Version: 4.10.3 → 4.10.4
+
+
 ## 2026-04-28 — V4.10.3 Release: Codex production-readiness review apply
 
 ### Context

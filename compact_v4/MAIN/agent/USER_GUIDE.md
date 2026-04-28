@@ -1,5 +1,19 @@
-# SageAgent V4 — User Guide (v4.10.3)
+# SageAgent V4 — User Guide (v4.10.4)
 
+
+## What's new in v4.10.4 (2026-04-28, sub-agent work-context handoff)
+
+User's Codex follow-up review pointed out that v4.10.3 sub-agents only saw env-details (cwd / git HEAD / depth) but NOT the work context (current goal, active todos, changed files). If the parent forgot to brief them in the prompt, sub-agents flew blind. Fixed:
+
+- **Sub-agents now receive a bounded handoff block** — appended after the cached SYSTEM_PROMPT boundary (so the prompt cache prefix is preserved unchanged), containing three optional sections:
+  - `AGENT_STATUS.md` slice (truncated to 4,000 chars / ~1000 tokens)
+  - Active todos via the existing `build_todo_restoration_message()`
+  - Last 10 changed-file paths (NO diff bodies — would blow the budget)
+- **Opt-out** via `CONFIG.enable_subagent_handoff = False` in `agent_config.json` if you prefer the v4.10.3 env-details-only behavior.
+- **Boundary-marker sanitization** — if user-supplied AGENT_STATUS or todo content contains the literal `# === DYNAMIC ===` cache boundary marker, the handoff sanitizer replaces it before injection. Defends against future cache-split implementation changes.
+- **Fail-quiet** — every section is wrapped in `try/except`. A sub-agent spawn cannot fail because handoff probing misbehaved.
+
+11 new tests in `test_v410_subagent_handoff.py`. Codex flagged 2 edges in round 1 (chars vs bytes naming, missing sanitizer); both fixed; round 2 PASS.
 
 ## What's new in v4.10.3 (2026-04-28, production-readiness review apply)
 

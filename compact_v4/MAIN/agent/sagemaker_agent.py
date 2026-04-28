@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.3 (April 2026)
+Version: 4.10.4 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.3"
+__version__ = "4.10.4"
 
 # ============================================================
 # IMPORTS
@@ -1109,6 +1109,14 @@ class Config:
     # avoids over-spawning verify subagents in self-use sessions). Flip to True for
     # production-discipline workflows where verify must run before a completion claim.
     enforce_verify_contract: bool = False
+
+    # V4.10.4: control whether sub-agents receive a bounded handoff block
+    # (active todos + AGENT_STATUS slice + recently changed files) on top of
+    # the env-details block. Default True — without this, sub-agents only know
+    # what the parent's prompt argument tells them, which is fragile when the
+    # parent forgets to brief them on the larger goal. Set to False to fall
+    # back to env-details-only (v4.10.3 behaviour).
+    enable_subagent_handoff: bool = True
 
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)  # {"review": {"template": "...", "agent": "plan"}}
@@ -7563,6 +7571,109 @@ def _build_subagent_env_details(agent_type: str, depth: int, workspace: str = ""
     return "\n".join(lines)
 
 
+# V4.10.4: Bounded sub-agent handoff block — work-context that env-details
+# alone doesn't carry. Without this, sub-agents only know what the parent's
+# `prompt` argument tells them; if the parent forgets to brief them on the
+# larger goal/todos/changed files, the sub-agent flies blind. This block
+# fills that gap with an honest cap so it can't blow up the prompt.
+# Codex review 2026-04-28: caps are CHAR-based (Python str / .read(n)), not
+# byte-based. UTF-8 multi-byte chars can make actual byte size larger.
+# That's acceptable here — the budget is for prompt-token control, and
+# tokenizers see code points, not bytes. Names use _MAX_CHARS to be truthful.
+_SUBAGENT_STATUS_MAX_CHARS: int = 4_000   # ~1000 tokens of AGENT_STATUS slice
+_SUBAGENT_TODOS_MAX_CHARS: int = 2_000    # cap for todos block
+_SUBAGENT_DIFF_MAX_FILES: int = 10        # last N changed files
+
+# Codex review 2026-04-28: handoff content (user-supplied AGENT_STATUS,
+# user-supplied todo strings) could literally contain the cache boundary
+# marker. BedrockClient.chat splits on the FIRST marker only so a second
+# occurrence inside the dynamic tail is harmless to the cache, but we
+# sanitize anyway so the cache-boundary regression test's "no marker
+# beyond the real one" contract holds.
+_HANDOFF_BOUNDARY_SANITIZED: str = "# === DYNAMIC === (sanitized)"
+
+
+def _sanitize_handoff(text: str) -> str:
+    """Replace any in-content occurrence of the cache-boundary marker so it
+    cannot confuse a future split implementation that uses split(marker)."""
+    if not text:
+        return text
+    return text.replace("# === DYNAMIC ===", _HANDOFF_BOUNDARY_SANITIZED)
+
+
+def _build_subagent_handoff_block() -> str:
+    """V4.10.4: Build a bounded handoff block for fresh sub-agents.
+
+    Includes (each section is independently optional and bounded):
+    - AGENT_STATUS.md slice (truncated to _SUBAGENT_STATUS_MAX_BYTES)
+    - Active todos (truncated to _SUBAGENT_TODOS_MAX_BYTES)
+    - Last N changed files this session (no diff bodies — file paths only)
+
+    Each step is fail-quiet: a missing or unreadable AGENT_STATUS, an empty
+    todo list, or no recent diffs simply omits that section. The full helper
+    never raises — a sub-agent spawn must not fail because handoff probing
+    misbehaved.
+
+    Output goes AFTER the cached SYSTEM_PROMPT boundary, so the static
+    prefix's prompt cache is preserved unchanged.
+    """
+    if not getattr(CONFIG, "enable_subagent_handoff", True):
+        return ""
+
+    parts: List[str] = []
+
+    # AGENT_STATUS slice (bounded read — won't load 25KB into every sub-agent)
+    try:
+        status_path = _status_doc_path()
+        if status_path and os.path.exists(status_path):
+            with open(status_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read(_SUBAGENT_STATUS_MAX_CHARS + 1)
+            if content.strip():
+                truncated = len(content) > _SUBAGENT_STATUS_MAX_CHARS
+                if truncated:
+                    content = content[:_SUBAGENT_STATUS_MAX_CHARS]
+                content = _sanitize_handoff(content)
+                marker = " (truncated)" if truncated else ""
+                parts.append(f"## AGENT_STATUS.md slice{marker}\n{content}")
+    except Exception:
+        pass
+
+    # Active todos
+    try:
+        todos_text = build_todo_restoration_message()
+        if todos_text:
+            if len(todos_text) > _SUBAGENT_TODOS_MAX_CHARS:
+                todos_text = todos_text[:_SUBAGENT_TODOS_MAX_CHARS] + "\n... (todos truncated)"
+            todos_text = _sanitize_handoff(todos_text)
+            parts.append(f"## Active TODOs (parent session)\n{todos_text}")
+    except Exception:
+        pass
+
+    # Recent changed files
+    try:
+        with _RECENT_DIFFS_LOCK:
+            recent = list(_RECENT_DIFFS)[-_SUBAGENT_DIFF_MAX_FILES:]
+        if recent:
+            seen = []
+            file_lines = []
+            for entry in recent:
+                p = entry.get("file") or ""
+                if p and p not in seen:
+                    seen.append(p)
+                    file_lines.append(f"- {p}")
+            if file_lines:
+                parts.append(
+                    f"## Files edited in parent session (last {len(file_lines)}, no diff bodies)\n"
+                    + "\n".join(file_lines)
+                )
+    except Exception:
+        pass
+
+    if not parts:
+        return ""
+    return "# Sub-agent Handoff (parent context, bounded)\n" + "\n\n".join(parts)
+
+
 # ============================================================
 # V4.1 #8: MEMORY AUTO-EXTRACTION
 # ============================================================
@@ -8090,6 +8201,13 @@ class Agent:
         _env_details = _build_subagent_env_details(agent_type, self.subagent_depth + 1)
         if _env_details:
             sub_prompt = sub_prompt + "\n\n" + _env_details
+        # V4.10.4: bounded work-context handoff (AGENT_STATUS slice + active todos
+        # + recently changed files). Fills the gap where env-details alone leaves
+        # the sub-agent flying blind on the larger goal. Also appended after the
+        # cached boundary so the prompt-cache prefix is preserved.
+        _handoff = _build_subagent_handoff_block()
+        if _handoff:
+            sub_prompt = sub_prompt + "\n\n" + _handoff
         if prompt_suffix:
             sub_prompt = sub_prompt + "\n\n" + prompt_suffix
         # V4.6: Critical reminder injection (mirrors Runnable's criticalSystemReminder_EXPERIMENTAL).

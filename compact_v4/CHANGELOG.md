@@ -1,5 +1,31 @@
 # Compact V4 Changelog
 
+## v4.10.4 — Sub-agent work-context handoff (Codex follow-up review) (2026-04-28)
+
+User's Codex follow-up review pointed out that v4.10.3 sub-agents only got env-details (cwd / git HEAD / depth) but NOT the work context (current goal, active todos, changed files). If the parent forgot to brief them in the prompt argument, sub-agents flew blind. This was the largest remaining gap from earlier reviews. Closed in v4.10.4.
+
+Added:
+- **Bounded sub-agent handoff block** — new `_build_subagent_handoff_block()` helper that builds three optional, independently-bounded sections appended to the sub-agent prompt AFTER the cached SYSTEM_PROMPT boundary:
+  1. `AGENT_STATUS.md` slice (truncated to `_SUBAGENT_STATUS_MAX_CHARS = 4000`, marked "(truncated)" if cut).
+  2. Active todos via existing `build_todo_restoration_message()` (capped at `_SUBAGENT_TODOS_MAX_CHARS = 2000`).
+  3. Last `_SUBAGENT_DIFF_MAX_FILES = 10` changed-file paths from `_RECENT_DIFFS` — file paths only, NEVER diff bodies (would blow the budget).
+  Each section is wrapped in `try/except Exception: pass` — a sub-agent spawn must never fail because handoff probing misbehaved. If any section fails or is empty it's omitted.
+- **`CONFIG.enable_subagent_handoff: bool = True`** — opt-out flag for users who want v4.10.3 env-details-only behaviour.
+- **Boundary-marker sanitizer (`_sanitize_handoff`)** — replaces literal `# === DYNAMIC ===` in user-supplied AGENT_STATUS or todo content with `# === DYNAMIC === (sanitized)` so a malicious or accidental marker can't confuse a future cache splitter. BedrockClient's current splitter uses `split(marker, 1)` and is already safe, but this defends against future implementation changes.
+
+Codex review (1 fix round)
+- ISSUES (round 1): constants named `_MAX_BYTES` but enforcement used `len()` on Python `str` (CHARS not BYTES); user-supplied content not sanitized for boundary marker.
+- PASS (round 2): both fixed, 2 new sanitizer tests added.
+
+Tests
+- New: `test_v410_subagent_handoff.py` — 11 tests covering: empty state, AGENT_STATUS-only inclusion, oversized truncation, todos inclusion, recent-diffs paths-only, all-three-sections, disabled-via-flag, no-cache-boundary-leakage, sanitizer for AGENT_STATUS, sanitizer for todos, never-raises.
+- Full v4.10.x + regression suite: **85/85 across 9 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 + 11 + 12 v4.9 = 85).
+
+Why this matters
+With v4.10.3 alone, a parent that spawned a `verify` sub-agent and forgot to mention "the goal is X, see AGENT_STATUS.md Plan section" would get a verify agent that just probed whatever files looked interesting — easy to miss the actual point. With v4.10.4 the sub-agent always gets a 4-line summary of cwd + git, plus the goal + todos + changed files. Closes the largest remaining gap from the production-readiness review.
+
+Version: `4.10.3` → `4.10.4`.
+
 ## v4.10.3 — Production-readiness review apply (2026-04-28)
 
 User pasted a Codex production-readiness review. Audit showed 14 of 18 items already done in v4.10.2; 4 small additions worth applying. All additive, no functional code changes to existing paths.

@@ -4,15 +4,21 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.3
+# SageAgent V4.10.4
 
-AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.3**.
+AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.4**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.4
+
+**v4.10.4 — sub-agent work-context handoff (closes largest remaining review gap):**
+1. Sub-agents now receive a bounded handoff block (AGENT_STATUS slice + active todos + last 10 changed files, paths only). Filled the gap where env-details alone left them flying blind on the larger goal.
+2. Opt-out via `CONFIG.enable_subagent_handoff = False`. Boundary-marker sanitization protects against malicious or accidental literal markers in user content. 11 new tests, Codex PASS after 1 fix round.
 
 ### What's new in v4.10.3
 
