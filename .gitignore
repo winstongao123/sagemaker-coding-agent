@@ -39,7 +39,27 @@ _temp_context.md
 truncated_outputs/
 .pytest_cache/
 test_*.py
+# v4.10.0 #41a..#47: explicitly track our regression tests so Codex per-phase reviews can be reproduced
+!compact_v4/MAIN/agent/test_v49_auto_trigger.py
+!compact_v4/MAIN/agent/test_v410_*.py
+# v4.10.0: clean up tempdir artefacts created by tests inside the agent workspace (they're tempfile.mkdtemp under CONFIG.workspace so cleanup is best-effort)
+v410_nb_*/
+v410_skills_*/
+v410_subagent_env_*/
+v410_ctxwin_*/
 nul
 _archive/compare_code/gg-claude-code-runnable
 test-results/
 quality-reports/
+
+# Codex review / temp artefacts
+.codex_review/
+.codex_tmp/
+
+# Build zips (regenerate on demand)
+*_compact_v4.zip
+*compact_v4.zip
+
+# npm lockfiles (not a Node project)
+package-lock.json
+package.json

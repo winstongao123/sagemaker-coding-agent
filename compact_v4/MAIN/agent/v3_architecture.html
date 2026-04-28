@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageAgent V3 — AI Coding Agent Architecture</title>
+<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.0)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== Design System (matches Demo Tech docs) ===== */
@@ -187,12 +187,13 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 
 <!-- Navigation -->
 <nav class="topnav">
-    <div class="topnav-brand">SageAgent V3 — Architecture Guide</div>
+    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.0)</div>
     <div class="topnav-links">
-        <a href="#what" class="active"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
+        <a href="#v410" class="active"><span class="nav-dot" style="background:#10b981"></span> What's New</a>
+        <a href="#what"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
         <a href="#flowchart"><span class="nav-dot" style="background:var(--sky)"></span> How It Works</a>
         <a href="#architecture"><span class="nav-dot" style="background:var(--amber)"></span> Layers</a>
-        <a href="#tools"><span class="nav-dot" style="background:var(--green)"></span> 22 Tools</a>
+        <a href="#tools"><span class="nav-dot" style="background:var(--green)"></span> 23 Tools</a>
         <a href="#security"><span class="nav-dot" style="background:var(--red)"></span> Security</a>
         <a href="#comparison"><span class="nav-dot" style="background:var(--purple)"></span> Comparison</a>
         <a href="#results"><span class="nav-dot" style="background:var(--teal)"></span> Results</a>
@@ -205,22 +206,67 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 <!-- Hero -->
 <div class="hero">
     <div class="badges">
-        <span class="badge"><span class="dot" style="background:var(--green)"></span> v3.2.3</span>
-        <span class="badge"><span class="dot" style="background:var(--blue)"></span> 9.0/10 Score</span>
-        <span class="badge"><span class="dot" style="background:var(--amber)"></span> 81/81 Tests</span>
-        <span class="badge"><span class="dot" style="background:var(--purple)"></span> 15/15 Competition</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.0</span>
+        <span class="badge"><span class="dot" style="background:var(--blue)"></span> Bedrock-only</span>
+        <span class="badge"><span class="dot" style="background:var(--amber)"></span> 55/55 V4.10 Tests</span>
+        <span class="badge"><span class="dot" style="background:var(--purple)"></span> 5/5 Codex Review PASS</span>
     </div>
-    <h1>SageAgent V3</h1>
-    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, creates documents, generates charts, and helps you build software &mdash; all through a chat interface.</p>
+    <h1>SageAgent V4 &mdash; v4.10.0</h1>
+    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 ships five Runnable-parity upgrades: surgical notebook_edit, skill listing budget cap, per-subagent env-details, model-aware context window, and reactive compact on Bedrock prompt-too-long.</p>
 </div>
 
 <!-- Stats -->
 <div class="stats-row">
-    <div class="stat-card"><div class="stat-value blue">22</div><div class="stat-label">Built-in Tools</div></div>
-    <div class="stat-card"><div class="stat-value green">7,450</div><div class="stat-label">Lines of Code</div></div>
+    <div class="stat-card"><div class="stat-value blue">23</div><div class="stat-label">Built-in Tools</div></div>
+    <div class="stat-card"><div class="stat-value green">11,553</div><div class="stat-label">Lines of Code</div></div>
     <div class="stat-card"><div class="stat-value amber">16</div><div class="stat-label">Security Layers</div></div>
-    <div class="stat-card"><div class="stat-value purple">9.0</div><div class="stat-label">Review Score /10</div></div>
-    <div class="stat-card"><div class="stat-value teal">$0.12</div><div class="stat-label">Avg Cost/Task</div></div>
+    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.0)</div></div>
+    <div class="stat-card"><div class="stat-value teal">200K</div><div class="stat-label">Default Context (auto-derived)</div></div>
+</div>
+
+<!-- ========== V4.10.0 What's New ========== -->
+<div class="section" id="v410">
+    <div class="section-header" style="background:linear-gradient(135deg, #ecfdf5 0%, #f0f9ff 100%);">
+        <h2><span style="color:#10b981">★</span> v4.10.0 &mdash; Runnable Parity Upgrade (2026-04-28)</h2>
+        <p>Five additions from a deep rescan against <code>gg-claude-code-runnable</code>. Each phase had its own Codex review (gpt-5.3-codex, read-only). Codex caught 9 real correctness issues across the five phases; all fixed and re-verified before merging.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-3">
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-icon">📓</div>
+                <div class="card-title">notebook_edit (#10)</div>
+                <div class="card-desc">Surgical insert/replace/delete of a single .ipynb cell. Atomic write (tmp + rename), preserves cell <code>id</code> on replace, resets <code>execution_count</code> and <code>outputs</code> on code cells. Use this — not <code>create_notebook</code> — when modifying an existing notebook so you don't blow away cells you didn't touch. Mirrors Runnable's NotebookEditTool. <strong>13/13 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">📏</div>
+                <div class="card-title">Skill listing budget (#24)</div>
+                <div class="card-desc"><code>SkillManager.list_for_prompt</code> caps the listing at 1% of context window, hard-clamped at 2000 tokens. When over budget, trailing entries collapse to <code>...(+N more)</code>. Hint cost reserved up-front so the cap is strict. Auto-trigger surfacing also caps each description at 250 chars. Mirrors Runnable's SKILL_BUDGET_CONTEXT_PERCENT. <strong>9/9 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-icon">🛰️</div>
+                <div class="card-title">Sub-agent env-details (#47)</div>
+                <div class="card-desc">Every sub-agent gets a 4–6 line "Sub-agent Environment" block injected after the cached SYSTEM_PROMPT boundary: agent type, depth/max, workspace cwd, git HEAD, working-tree status. 5s timeout per git probe; never raises. Means a fresh <code>verify</code> agent picks up parent's worktree swap automatically. Mirrors Runnable's enhanceSystemPromptWithEnvDetails. <strong>6/6 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--purple)">
+                <div class="card-icon">📐</div>
+                <div class="card-title">Model-aware context window (#44)</div>
+                <div class="card-desc"><code>BEDROCK_MODEL_CONTEXT_WINDOWS</code> maps each model to its window. <code>CONFIG.context_max_tokens</code> auto-derives from <code>model_id</code> at startup unless overridden in <code>agent_config.json</code>. Override is validated (positive int, not bool-as-int). When AWS exposes a 1M-context Bedrock variant, the only change is one entry in the map. <strong>10/10 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">🔄</div>
+                <div class="card-title">Reactive Compact (#41a)</div>
+                <div class="card-desc">When Bedrock rejects with "prompt is too long" / "too many tokens", the agent runs microcompact (or placeholder-summary fallback if microcompact didn't free enough), clears file-read state, sets <code>_cache_broken_by_compact</code>, and retries the request once. NO additional LLM call (calling the same model with the same overflowing context to summarise would just fail again). Cap: 1 reactive recovery per <code>run()</code> call. Mirrors the spirit of Runnable's reactiveCompact feature gate. <strong>5/5 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--teal)">
+                <div class="card-icon">✅</div>
+                <div class="card-title">Skill auto-load STILL OFF</div>
+                <div class="card-desc">The v4.9.6 fix is intact: <code>CONFIG.enable_skill_auto_trigger=False</code> by default AND per-skill <code>auto_trigger=false</code> by default. Both gates must be explicitly turned on. <code>test_v49_auto_trigger.py</code> regression: <strong>12/12 still green</strong>. The "skill caused coding issue" bug from earlier sessions cannot recur.</div>
+            </div>
+        </div>
+        <div style="margin-top:24px; padding:16px; background:var(--bg-card); border-left:4px solid var(--green); border-radius:4px;">
+            <strong>Codex review per phase</strong> — 5 reviews, 9 real bugs caught and fixed before any phase advanced. Issues found: first-entry-over-budget overshoot, unbudgeted truncation hint, degenerate-budget overshoot, freeze-on-invalid-JSON, bool-as-int JSON trap, narrow OSError catch on notebook write, file-read state cleared only on one reactive branch, <code>_cache_broken_by_compact</code> set only on one reactive branch, retry stop-check missing token-billing parity. <strong>All resolved.</strong>
+        </div>
+    </div>
 </div>
 
 <!-- ========== SECTION 1: What Is a Coding Agent? ========== -->

@@ -185,6 +185,16 @@ tr:nth-child(even) { background: var(--card); }
 <p>The Complete Runnable Architecture E-Book &mdash; 2,010 TypeScript files, 69 modules, every subsystem mapped.<br>
 <b>Focus:</b> How to build agentic systems and harness engineering &mdash; applicable to any AI agent project, not just coding.</p>
 
+<div style="background:#0d2818; border:1px solid #10b981; border-radius:8px; padding:14px 18px; margin:14px 0 20px 0; font-size:14px;">
+  <strong style="color:#34d399;">★ SageAgent V4.10.0 Runnable-parity update (2026-04-28):</strong>
+  <span style="color:#c9d1d9;">After this deep dive, we ran a fresh rescan of compact_v4 vs runnable. SageAgent V4.10.0 now matches Runnable on 5 dimensions where it lagged:
+  <b>NotebookEdit</b> (surgical .ipynb cell edits), <b>SKILL_BUDGET_CONTEXT_PERCENT</b> (1% cap on skill listing in tool description),
+  <b>enhanceSystemPromptWithEnvDetails</b> (per-sub-agent cwd + git HEAD), <b>context_window auto-derive from model_id</b>
+  (Bedrock equivalent of CONTEXT_1M_BETA_HEADER — switch to a 1M ARN, everything rebases automatically),
+  and <b>reactiveCompact</b> (microcompact + retry once on Bedrock <code>CONTEXT_OVERFLOW</code>).
+  Each phase Codex-reviewed (gpt-5.3-codex). 55 new tests, all green. Full plan: <code>compact_v4/docs/V4_10_0_PLAN.md</code>.</span>
+</div>
+
 <div class="stats">
  <div class="stat"><div class="stat-num">2,010</div><div class="stat-label">TypeScript Files</div></div>
  <div class="stat"><div class="stat-num">69</div><div class="stat-label">Source Modules</div></div>

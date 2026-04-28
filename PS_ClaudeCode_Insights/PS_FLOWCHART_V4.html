@@ -212,24 +212,27 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.7.1</h1>
+    <h1>SageMaker Coding Agent V4.10.0</h1>
     <p class="subtitle">
-      Architecture map of V4.7.1 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (9,866 lines),
-      plus comparison against Claude Code runnable source. <b>V4.7.1 is the anti-bloat release</b> — after v4.7.0 shipped six
-      UX features, v4.7.1 ships exactly three targeted fixes and explicitly rejects five features as overcomplication.
-      Changes: <b>compact now preserves TODO list</b> (real bug fix — agent was losing its task plan across auto-compaction),
-      <b>auto-commit checkpoint</b> for local-git baseline maintenance, and <b>/regression</b> thin-wrapper command. All three
-      verified by 9/9 passing real tests (temp git repos, live function calls — not static checks).
-      v4.7.0 added six coding-UX enhancements; v4.6.1 added workspace path resolution fix on top of v4.6.0's full
-      review/verification parity with Runnable.
+      Architecture map of V4.10.0 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (11,553 lines),
+      plus comparison against Claude Code runnable source. <b>V4.10.0 is the Runnable-parity release</b> — five surgical
+      additions after a deep rescan: <b>notebook_edit</b> (surgical .ipynb cell editor),
+      <b>skill listing token budget</b> (1% of context, hard-capped at 2000 tokens),
+      <b>per-sub-agent env-details</b> (cwd + git HEAD injected after the cached SYSTEM_PROMPT boundary),
+      <b>model-aware context window auto-derive</b> (BEDROCK_MODEL_CONTEXT_WINDOWS map, ready for AWS 1M variants),
+      and <b>reactive compact on CONTEXT_OVERFLOW</b> (microcompact + retry, capped at 1 reactive recovery per run).
+      Codex-reviewed per phase (gpt-5.3-codex, read-only). 55 new tests across 5 phases, all green; existing skill auto-trigger
+      regression test (12/12) still green — skill auto-load remains default OFF.
     </p>
     <div class="stats">
-      <div class="stat"><strong>25+</strong><span>Tools</span></div>
+      <div class="stat"><strong>23</strong><span>Tools</span></div>
       <div class="stat"><strong>16</strong><span>Security Layers</span></div>
       <div class="stat"><strong>7</strong><span>Sub-Agent Types</span></div>
-      <div class="stat"><strong>10</strong><span>Skills</span></div>
-      <div class="stat"><strong>9,866</strong><span>Lines of Code</span></div>
-      <div class="stat"><strong>V4.7.1</strong><span>Current Version</span></div>
+      <div class="stat"><strong>11</strong><span>Skills</span></div>
+      <div class="stat"><strong>11,553</strong><span>Lines of Code</span></div>
+      <div class="stat"><strong>V4.10.0</strong><span>Current Version</span></div>
+      <div class="stat"><strong>55/55</strong><span>V4.10 Tests Pass</span></div>
+      <div class="stat"><strong>5/5</strong><span>Codex PASS</span></div>
     </div>
   </section>
 

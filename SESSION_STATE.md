@@ -1,5 +1,53 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.0 Release: Runnable parity (notebook_edit, skill budget, env-details, context window, reactive compact)
+
+### Context
+Deep rescan of `compact_v4` vs `gg-claude-code-runnable` produced a 55-row check table. User asked to fix items #10, #24, #41a, #44, #47 and ship as v4.10.0. #41b (Context Collapse, segment-level summary) deferred to v4.11.0 — non-trivial (~200 LOC), low ROI for self-use.
+
+### V4.10.0 Changes (sagemaker_agent.py + tests + docs + HTMLs + zip)
+
+Five additions, each with its own per-phase Codex review (gpt-5.3-codex, read-only). Codex caught 9 real correctness issues across the five phases; all fixed and re-verified before any phase advanced.
+
+1. **#24 Skill listing token budget cap** — `SkillManager.list_for_prompt` caps the listing at 1% of context window, hard-clamped at 2000 tokens. Hint reserve computed upfront so the cap is strict on every path including degenerate "no name fits". Auto-trigger surfacing also caps each description at 250 chars. Mirrors Runnable `SKILL_BUDGET_CONTEXT_PERCENT`. **9/9 tests.**
+
+2. **#47 Per-sub-agent env-details** — `_build_subagent_env_details` injects 4–6 line block (agent type, depth/max, workspace cwd, git HEAD, working-tree status) into every sub-agent prompt AFTER the cached SYSTEM_PROMPT boundary. 5s timeout per git probe, fail-quiet, never raises. Mirrors Runnable `enhanceSystemPromptWithEnvDetails`. **6/6 tests.**
+
+3. **#44 context_window auto-derive from model_id** — new `BEDROCK_MODEL_CONTEXT_WINDOWS` map covers every Bedrock model in `BEDROCK_MODELS`. `CONFIG.context_max_tokens` auto-derives from model_id at startup; `agent_config.json` override wins (validated as positive int, NOT bool-as-int). When AWS exposes 1M variants the only change is one entry in the map. **10/10 tests.**
+
+4. **#10 notebook_edit surgical .ipynb cell tool** — insert / replace / delete one cell. Atomic write (tmp + rename), preserves cell `id` on replace, resets `execution_count`/`outputs` on code cells. Always returns `Error:` string never raises (broad `Exception`, not just `OSError`). One-line system prompt addition tells the model to prefer `notebook_edit` over `create_notebook` for existing notebooks. Mirrors Runnable `NotebookEditTool`. **13/13 tests.**
+
+5. **#41a Reactive Compact on CONTEXT_OVERFLOW** — when Bedrock rejects with "prompt is too long" / "too many tokens" / "input is too long", agent runs microcompact (or placeholder-summary fallback if microcompact freed less than `MICROCOMPACT_MIN_SAVINGS` — deliberately NO additional LLM call), clears file-read state, sets `_cache_broken_by_compact` (both branches), and retries the same request once. Cap: 1 reactive recovery per `run()` call. Other error categories surface unchanged. Retry stop-check mirrors original token-billing parity. Mirrors spirit of Runnable `reactiveCompact`. **5/5 tests.**
+
+### Skill auto-load STILL DEFAULT OFF
+The v4.9.6 fix is intact (both `CONFIG.enable_skill_auto_trigger` and per-skill frontmatter `auto_trigger` default False). `test_v49_auto_trigger.py` regression: **12/12 still green**.
+
+### Codex issues caught & fixed (per phase)
+1. Phase 1: first-entry-over-budget overshoot (loop guard)
+2. Phase 1: truncation hint cost not budget-accounted (upfront reserve)
+3. Phase 1: degenerate-budget overshoot (hint-only path bounds check)
+4. Phase 3: invalid JSON value froze default (validate type before honour)
+5. Phase 3: `bool`-as-`int` JSON trap (explicit `isinstance bool` exclusion)
+6. Phase 3: weak e2e test (rewrote with injected fake-model + window=1.5M)
+7. Phase 4: narrow `OSError` catch on notebook write (broadened to `Exception`)
+8. Phase 5: file-read state cleared only on placeholder branch (now both)
+9. Phase 5: retry stop-check missing `TOKENS.add` (parity with original)
+
+### Verification
+- 55/55 new V4.10.0 tests across 5 files all green (9 + 6 + 10 + 13 + 5 + 12 v4.9 regression = 55 + 12 = **67/67**)
+- Cache integrity preserved: every dynamic addition lives AFTER the `# === DYNAMIC ===` boundary; cached SYSTEM_PROMPT prefix is byte-identical across turns
+- System prompt grew by 2 lines total (one in `# Documents` for `notebook_edit`, one updating tools comment) — small-model friendly
+- compact_v4.zip rebuilt: 57 files / 245.7 KB / runtime-only (no test files in ship)
+- HTML reports updated: `v3_architecture.html` (full v4.10.0 section), `PS_FLOWCHART_V4.html` (banner + stats), `PS_DEEP_DIVE_RUNNABLE.html` (Runnable-parity callout), `HERMES_VS_CODING_AGENT.html` (banner)
+- Live status doc: `compact_v4/docs/V4_10_0_PLAN.md`
+- CHANGELOG updated with full v4.10.0 entry
+
+### Net code change
++2164 / -62 across 15 files. New constants: `SKILL_LISTING_BUDGET_PERCENT`, `SKILL_LISTING_DESC_CAP`, `SKILL_LISTING_HARD_CAP_TOKENS`, `_SUBAGENT_ENV_GIT_TIMEOUT_S`, `BEDROCK_MODEL_CONTEXT_WINDOWS`, `DEFAULT_CONTEXT_WINDOW`. New helpers: `_build_subagent_env_details`, `_normalise_ipynb_source`, `_auto_derive_context_window`, `resolve_context_window`, `tool_notebook_edit`. New tool registered: `notebook_edit`.
+
+### Version: 4.9.7 → 4.10.0
+
+
 ## 2026-04-23 — V4.9.5 Release: self-patching skills with safety rails (opt-in, handy use)
 
 ### Context

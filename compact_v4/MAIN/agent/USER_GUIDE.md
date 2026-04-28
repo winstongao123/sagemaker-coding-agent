@@ -1,4 +1,19 @@
-# SageAgent V4 — User Guide (v4.8.0)
+# SageAgent V4 — User Guide (v4.10.0)
+
+
+## What's new in v4.10.0 (2026-04-28)
+
+Five Runnable-parity upgrades. Each one has its own regression test file and was reviewed by Codex (gpt-5.3-codex) per phase.
+
+- **`notebook_edit` tool** — surgically insert / replace / delete a single cell in an existing `.ipynb` without overwriting the whole file. Use this when you ask the agent to "add a cell that does X" — `create_notebook` is now reserved for brand-new notebooks. Atomic write, preserves cell IDs, returns `Error:` strings rather than raising.
+- **Skill listing budget cap** — the skill list embedded in the `skill` tool description is now hard-capped at 1% of the active context window (or 2,000 tokens, whichever is smaller). When a workspace has many skills, the trailing entries collapse to `...(+N more)`. Stops the prompt cache from being blown out by skill churn.
+- **Per-sub-agent env-details** — every sub-agent the parent spawns now sees a 4–6-line block: agent type, depth/max, workspace cwd, git HEAD, working-tree status. Means a fresh `verify` agent picks up a parent's worktree swap automatically. Git probes are 5s timeout, fail-quiet — they never break sub-agent spawn.
+- **`context_max_tokens` auto-derives from `model_id`** — `BEDROCK_MODEL_CONTEXT_WINDOWS` maps each model to its window. When AWS exposes a 1M Bedrock variant, you change one entry in the map and `agent_config.json` `model_id`; everything else (compaction triggers, microcompact, prune) rebases automatically. You can still explicitly override `context_max_tokens` via `agent_config.json`.
+- **Reactive Compact** — when Bedrock rejects a request with "prompt is too long" (which can happen even if the local token estimator says you're fine), the agent now runs microcompact (or a placeholder-summary fallback if microcompact didn't free enough), clears file-read state, and retries the same request once. Capped at 1 reactive recovery per `run()` call. From your perspective the request just succeeds.
+
+Skill auto-load remains default OFF (the v4.9.6 fix is still in force; `test_v49_auto_trigger.py` 12/12 green). No skill loads itself unless BOTH `CONFIG.enable_skill_auto_trigger=True` AND the per-skill frontmatter has `auto_trigger: true`.
+
+
 
 A single-file AI coding assistant that runs inside a Jupyter notebook on AWS SageMaker, powered by Bedrock Claude.
 
@@ -58,11 +73,13 @@ Before you start, you need:
 
 ### Step 1: Upload files to SageMaker
 
-Upload the entire `MAIN/` folder to your SageMaker notebook's file browser. You should have:
+If using `compact_v4.zip`, extract it directly into your SageMaker workspace. The zip uses a flat runtime root layout, so it should not create a nested `MAIN/agent/` wrapper. You should have:
 ```
 your-workspace/
 ├── sagemaker_agent.py
 ├── chat.ipynb
+├── AGENT_STATUS.md        (long-running handoff state)
+├── memory.md             (cross-session memory, optional/auto-managed)
 ├── agent_config.json        (optional config)
 └── skills/
     └── review/
@@ -288,7 +305,8 @@ Each tool is something the agent can do. You don't call tools directly — you d
 | `create_word` | Create a `.docx` Word document | "Create a Word doc summarizing the meeting notes" |
 | `create_excel` | Create a `.xlsx` Excel spreadsheet | "Create an Excel file with employee salaries" |
 | `create_markdown` | Create a `.md` Markdown file | "Write a README.md for this project" |
-| `create_notebook` | Create a `.ipynb` Jupyter Notebook with code/markdown cells | "Create a notebook that loads and plots data" |
+| `create_notebook` | Create a NEW `.ipynb` Jupyter Notebook with code/markdown cells | "Create a notebook that loads and plots data" |
+| `notebook_edit` | **V4.10.0:** Surgically edit ONE cell of an EXISTING `.ipynb` (insert/replace/delete). Atomic write, preserves cell IDs. Use this — NOT `create_notebook` — when modifying an existing notebook so you don't blow away cells you didn't touch. | "Add a new code cell after cell 3 that loads data" |
 | `create_pdf` | Create a `.pdf` document | "Create a PDF report with a title page and table" |
 
 ### Charts (1 tool)
@@ -359,6 +377,7 @@ Slash commands are typed directly in the chat input box (not as natural language
 | `/skill reject <name>` | **(V4.9.5)** Discard ALL pending proposals for a skill. Audit-logged. | `/skill reject report` |
 | `/commands` | List custom slash commands from `agent_config.json` | `/commands` |
 | `/cost` | Show token usage and cost breakdown | `/cost` |
+| `/context` | Show context/token diagnostics: top tool-output sources, duplicate file reads, and suggested action | `/context` |
 | `/revert <file>` | **Preview diff** first (current → snapshot). Use `--yes` to confirm. | `/revert app.py` then `/revert app.py --yes` |
 | `/revert all --yes` | Restore all files the agent modified (destructive, requires `--yes`) | `/revert all --yes` |
 | `/diffs` | Summary of session edits per file | `/diffs` |
@@ -368,6 +387,9 @@ Slash commands are typed directly in the chat input box (not as natural language
 | `/done [full\|quick]` | **Pre-ship gate:** runs simplify → verify, produces READY-TO-SHIP / NEEDS-WORK / BLOCKED verdict | `/done full` |
 | `/phase <text>` | Set current work phase shown in status bar and token display | `/phase refactoring auth` |
 | `/phase clear` | Clear the phase indicator | `/phase clear` |
+| `/status` | Show the durable long-running task handoff file (`AGENT_STATUS.md`) | `/status` |
+| `/status init` | Create the default `AGENT_STATUS.md` template if missing | `/status init` |
+| `/status path` | Show the exact status doc path | `/status path` |
 | `/checkpoint create <name>` | Save todos + file list + token stats as a named checkpoint | `/checkpoint create phase-1-complete` |
 | `/checkpoint list` | List all saved checkpoints in session | `/checkpoint list` |
 | `/checkpoint restore <name>` | Restore todos from checkpoint (files NOT auto-reverted — review list then `/revert` per file) | `/checkpoint restore phase-1-complete` |
@@ -382,7 +404,13 @@ Slash commands are typed directly in the chat input box (not as natural language
 
 **Note on auto-commit checkpoint (v4.7.1):** Set `CONFIG.auto_commit_every = N` (e.g. 5) in agent_config.json to have v4 run `git commit -am "agent-checkpoint HH:MM:SS (auto)"` locally every N successful edits. **Never pushes** — local only. Keeps `git diff HEAD` always showing just the latest change set so you (and the agent) get a clean "what just changed" read-out. Default is 0 (disabled).
 
+**Note on SageMaker git scope (v4.9.6):** Treat git as a local tree only. The agent can use `git status`, `git diff`, `git log`, local commits/checkpoints, and git worktrees. It should not use GitHub, `gh`, PR creation, or remote operations such as `git push`, `git pull`, `git fetch`, or `git clone` from SageMaker.
+
 **Note on compact + todos (v4.7.1):** When v4 auto-compacts at 80% context, the TODO list is now re-injected into the post-compact message so the agent remembers its task plan. In-progress tasks shown first, completed tasks truncated to last 3. Previously the agent would lose this across compaction and need re-briefing.
+
+**Note on long-running status (v4.9.6):** `AGENT_STATUS.md` is loaded on every top-level run when `CONFIG.enable_status_doc = True` (default). Use it for durable handoff state: current goal, standing user instructions, plan, progress, blockers, changed files, verification, and next step. This complements `todo_write` (live task list), checkpoints (snapshots of task state), and compaction summaries (conversation continuity).
+
+**Note on `/context` (v4.9.7):** Use this during long-running tasks when the context bar climbs or the agent starts repeating reads. It shows what is consuming context, highlights duplicate full-file reads, and tells you whether to compact, switch to targeted `grep`/offset reads, or keep going.
 
 **Note on `/regression`:** Thin wrapper — prints git diff stat, session edit counts, and a suggested test command. Does NOT run tests itself (you run them via bash) and does NOT track baselines. For automated adversarial testing use `/verify`. For a full ship gate use `/done`.
 
@@ -443,6 +471,12 @@ When the user asks you to [do something], follow these steps:
 ```
 
 The `---` section at the top (YAML frontmatter) is optional but recommended. The `name` must match what you use in `/skill use <name>`.
+
+**Auto-trigger policy (v4.9.6):** skills do **not** auto-load by default. Use `/skill use <name>` or a slash command. Keyword auto-trigger only works when both are true:
+- `CONFIG.enable_skill_auto_trigger = True`
+- the skill frontmatter explicitly says `auto_trigger: true`
+
+This prevents accidental long-context skill injection from ordinary words in a prompt or file path.
 
 **Step 3:** Verify and use:
 ```
@@ -870,6 +904,9 @@ Optional file. Place in your workspace root alongside `sagemaker_agent.py`. Supp
   // ── Skills ──
   "skills_dir": "./skills",
   "enable_skills": true,
+  "enable_skill_auto_trigger": false,
+  "enable_status_doc": true,
+  "status_doc": "AGENT_STATUS.md",
 
   // ── Custom slash commands ──
   "commands": {

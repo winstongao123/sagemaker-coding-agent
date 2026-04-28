@@ -1,5 +1,60 @@
 # Compact V4 Changelog
 
+## v4.10.0 — Runnable parity: notebook editing, reactive compact, skill budget, env-details, context map (2026-04-28)
+
+Five-phase upgrade after a deep rescan against `gg-claude-code-runnable`. Each phase shipped behind its own Codex review (gpt-5.3-codex, read-only sandbox), with regression catches re-fixed before moving on. **55 new tests across 5 files, all green; `test_v49_auto_trigger.py` skill-auto-load regression also still 12/12.**
+
+Added:
+- **`notebook_edit` tool (#10):** surgical insert / replace / delete of a single `.ipynb` cell, atomic write (tmp + rename), preserves cell `id` on replace, resets `execution_count` and `outputs` on code cells, returns an `Error:` string instead of raising. Use this — not `create_notebook` — when modifying an existing notebook so you don't blow away cells the model didn't touch. Mirrors Runnable's `NotebookEditTool`. 13 tests.
+- **Skill listing token budget (#24):** `SkillManager.list_for_prompt` now caps the listing at 1% of the active context window (`SKILL_LISTING_BUDGET_PERCENT`), with a hard ceiling of 2,000 tokens (`SKILL_LISTING_HARD_CAP_TOKENS`). When the cap is hit, the trailing entries are replaced with `...(+N more)`. Hint cost is reserved up-front so the cap is strict on every path, including the degenerate "even one name doesn't fit" path. Auto-trigger surfacing also caps each skill description at 250 chars (`SKILL_LISTING_DESC_CAP`). Mirrors Runnable's `SKILL_BUDGET_CONTEXT_PERCENT` / `MAX_LISTING_DESC_CHARS`. 9 tests.
+- **Per-subagent env-details (#47):** every sub-agent now gets a 4–6-line "Sub-agent Environment" block (agent type, depth/max, workspace cwd, git HEAD, git working-tree summary) appended after the cached `SYSTEM_PROMPT` boundary. Git probes are 5s timeout, fail-quiet, and the helper never raises. Mirrors Runnable's `enhanceSystemPromptWithEnvDetails`. 6 tests.
+- **`BEDROCK_MODEL_CONTEXT_WINDOWS` map + `resolve_context_window()` + `_auto_derive_context_window()` (#44):** every model in `BEDROCK_MODELS` now has an explicit per-model context window (200K across the board today), and `CONFIG.context_max_tokens` auto-derives from `model_id` at startup unless the user explicitly overrides it via `agent_config.json`. The override path validates the JSON value (positive int, not a `bool` masquerading as int) so an invalid override no longer silently freezes the dataclass default. When AWS exposes a 1M-context Bedrock variant, the only change is one entry in the map. 10 tests.
+- **Reactive Compact on `CONTEXT_OVERFLOW` (#41a):** when Bedrock rejects a request with "prompt is too long" / "too many tokens" / "input is too long", the agent now runs microcompact (or, if microcompact freed less than `MICROCOMPACT_MIN_SAVINGS`, a placeholder-summary compaction with NO additional LLM call), clears file-read state, sets `_cache_broken_by_compact`, and retries the same request exactly once. Capped at 1 reactive recovery per `run()` call so we cannot infinite-loop. Other error categories surface unchanged. Mirrors the spirit of Runnable's `reactiveCompact` feature gate without the Anthropic-API-only beta header. 5 tests.
+
+Operational:
+- Version bumped from `4.9.7` to `4.10.0` (`__version__` and module docstring header).
+- New module-level constants: `SKILL_LISTING_BUDGET_PERCENT`, `SKILL_LISTING_DESC_CAP`, `SKILL_LISTING_HARD_CAP_TOKENS`, `_SUBAGENT_ENV_GIT_TIMEOUT_S`, `BEDROCK_MODEL_CONTEXT_WINDOWS`, `DEFAULT_CONTEXT_WINDOW`.
+- `_apply_config_file` now accepts `context_max_tokens` as a scalar override field.
+- New tests: `test_v410_skill_listing_budget.py` (9), `test_v410_subagent_env.py` (6), `test_v410_context_window.py` (10), `test_v410_notebook_edit.py` (13), `test_v410_reactive_compact.py` (5). Existing `test_v49_auto_trigger.py` regression test (12/12) still green — skill auto-load remains default OFF.
+- System prompt grew by 2 lines total (one in `# Documents` calling out `notebook_edit`, one updating the tools comment) — within the small-model-friendly limit.
+- Cache integrity preserved: every new piece of dynamic content (env-details, reactive-compact markers, skill listing) sits AFTER the `# === DYNAMIC ===` boundary; the cached `SYSTEM_PROMPT` prefix is byte-identical across turns.
+
+Process discipline:
+- Codex review per phase (5 reviews total, gpt-5.3-codex, read-only sandbox). Codex caught 9 real correctness issues across the five phases — first-entry-over-budget overshoot, unbudgeted truncation hint, degenerate-budget overshoot, freeze-on-invalid-JSON, `bool`-as-`int` JSON trap, narrow `OSError` catch on notebook write, file-read state cleared only on one reactive branch, `_cache_broken_by_compact` set only on one reactive branch, retry stop-check missing token-billing parity. All fixed and re-verified by Codex with PASS verdicts before moving on.
+- Live status doc at `docs/V4_10_0_PLAN.md`.
+
+Detailed: [`docs/V4_10_0_PLAN.md`](docs/V4_10_0_PLAN.md).
+
+## v4.9.7 — Context diagnostic parity for long-running tasks (2026-04-28)
+
+Follow-up from the deep comparison against `gg_claude_code/gg-claude-code-runnable`, focused on the part that matters for SageMaker self-use: understanding why long sessions get large.
+
+Added:
+- **`/context` slash command:** shows context percentage, message-body estimate, fixed overhead estimate, top tool request/result token sources, duplicate full-file reads, and a suggested next action.
+- **Regression coverage:** `test_context_report_surfaces_tool_bloat_and_duplicate_reads` locks the duplicate-read and tool-bloat report behavior.
+- **Docs/notebook updates:** `USER_GUIDE.md`, `chat.md`, `chat.ipynb`, and production status now document `/context`.
+
+Detailed: [`MAIN/changelogs/CHANGELOG_v4.9.7.md`](MAIN/changelogs/CHANGELOG_v4.9.7.md). Status: [`docs/PRODUCTION_READINESS_STATUS.md`](docs/PRODUCTION_READINESS_STATUS.md).
+
+Verification: **106/106 targeted deterministic tests green** + `py_compile` clean + notebook JSON valid. `compact_v4.zip` rebuilt from runtime files: **22 files / 225.4 KB**, flat runtime root layout.
+
+## v4.9.6 — Production hardening: skill auto-load off, compact safety, worktree fixes (2026-04-28)
+
+Deep-review patch after comparing `compact_v4` against `gg_claude_code/gg-claude-code-runnable`.
+
+Fixes:
+- **No skill auto-load by default:** new `CONFIG.enable_skill_auto_trigger = False`; missing `auto_trigger` now defaults false. Explicit `/skill use <name>` and slash commands are unchanged.
+- **Bedrock-safe compaction:** compacted histories now start with a user summary plus assistant acknowledgement instead of an assistant-first message.
+- **Build worktree isolation fixed:** the previously unreachable worktree branch now runs for sequential build sub-agents.
+- **Dirty-state overlay:** dirty tracked files and untracked files are copied into the build worktree so the sub-agent sees the parent workspace state.
+- **Parallel build safety:** multiple build sub-agents serialize when worktree isolation is enabled because `CONFIG.workspace` is process-global in Jupyter.
+- **Durable long-run status:** `AGENT_STATUS.md` is loaded each top-level run, and `/status` can show or initialize the handoff file.
+- **Local git only in SageMaker:** local git tree operations are supported; GitHub/`gh`/PR and remote git operations are not assumed.
+
+Detailed: [`MAIN/changelogs/CHANGELOG_v4.9.6.md`](MAIN/changelogs/CHANGELOG_v4.9.6.md). Status: [`docs/PRODUCTION_READINESS_STATUS.md`](docs/PRODUCTION_READINESS_STATUS.md).
+
+Verification: **105/105 targeted deterministic tests green** + `py_compile` clean. `compact_v4.zip` rebuilt from runtime files: **22 files / 223.4 KB**, flat runtime root layout. Remaining: clean legacy/live Bedrock test harnesses, run SageMaker smoke test, and do a final security pass before calling this production-grade.
+
 ## v4.9.5 — Self-patching skills with safety rails (opt-in, handy use) (2026-04-23)
 
 Hermes "closed learning loop" pattern — agent proposes improvements to its own SKILL.md files based on user corrections — but with **human-in-loop approval**. Opt-in via `CONFIG.enable_skill_patching = True` (default OFF). Previously rejected on insurance grounds; back on the table after user re-classified deployment as personal/handy use.

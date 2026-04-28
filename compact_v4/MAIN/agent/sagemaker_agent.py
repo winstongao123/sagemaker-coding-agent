@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.2.1 (April 2026)
+Version: 4.10.0 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -21,6 +21,8 @@ Features Implemented:
 - Context: Auto-Compact (ON by default, triggers at 90%, keeps last 3 messages)
 - Context: Pre-send compact (auto-compacts at 80% BEFORE sending to prevent overflow)
 - Context: Auto-continue after compact (resumes automatically)
+- Context: Bedrock-safe compaction history (user-starting summary + assistant ack)
+- Context: /context diagnostic for token bloat, tool outputs, and duplicate file reads
 - Context: Plan Mode (enforced read-only - blocks write tools)
 - Context: Token display shows actual context window % (not cumulative API totals)
 - UI: Stop button (cancel LLM processing mid-stream)
@@ -33,10 +35,11 @@ Features Implemented:
 - Session: Auto-save after each message (no manual save needed)
 - Session: Save/Load with absolute paths (./sessions/)
 - Session: Todo list persisted with session
+- Session: AGENT_STATUS.md loaded each run for long-task handoff
 - Tools: 22 tools including:
   - File: read_file, write_file, edit_file, glob, grep, list_dir
   - Exec: bash, python_exec
-  - Docs: create_word (with images), create_excel (with charts), create_markdown, create_notebook
+  - Docs: create_word (with images), create_excel (with charts), create_markdown, create_notebook, notebook_edit (V4.10.0 surgical .ipynb cell edit)
   - Charts/PDF: create_chart (bar/line/pie/scatter/inline), create_pdf (text/tables/images)
   - Search: semantic_search, web_fetch
   - Agents: skill, task (sub-agents), ask_user
@@ -55,19 +58,20 @@ Dependencies:
     pip install matplotlib reportlab  # For charts and PDFs
 
 Implemented (sub-agent architecture):
-- Sub-agents (5 types: build, plan, explore, general, review)
+- Sub-agents (7 types: build, plan, explore, verify, general, review, fork)
+- Build agents use isolated git worktrees when enabled; parallel build tasks serialize for safety
 - MCP server integration (stdio + HTTP transports)
-- Skills system with proactive auto-invocation
+- Skills system with explicit activation; keyword auto-trigger is global opt-in and default-off
 
 Not Yet Implemented:
-- Sliding window context
+- Full pytest-safe live Bedrock production suite (legacy live scripts still need cleanup)
 
 Usage:
     from sagemaker_agent import create_chat_ui
     create_chat_ui()
 """
 
-__version__ = "4.9.5"
+__version__ = "4.10.0"
 
 # ============================================================
 # IMPORTS
@@ -565,21 +569,25 @@ Format as a comprehensive summary that preserves all context needed to continue 
         recently_read = get_recently_read_files(messages)
 
         summary_msg = {
-            "role": "assistant",
+            "role": "user",
             "content": f"[CONVERSATION SUMMARY]\n{summary}\n[END SUMMARY - Continuing from here]"
+        }
+        summary_ack = {
+            "role": "assistant",
+            "content": "Summary received. Continuing from compacted context."
         }
 
         # Keep last N messages for continuity
         n = cls.KEEP_LAST_MESSAGES
         recent_messages = copy.deepcopy(messages[-n:] if len(messages) > n else messages)
 
-        # Ensure summary assistant message is followed by user role for Bedrock alternation.
+        # Ensure the synthetic summary+ack is followed by a user message for Bedrock alternation.
         while recent_messages and recent_messages[0].get("role") != "user":
             recent_messages.pop(0)
         if not recent_messages:
             recent_messages = [{"role": "user", "content": "[Conversation compacted. Continue from summary.]"}]
 
-        compacted = [summary_msg] + recent_messages
+        compacted = [summary_msg, summary_ack] + recent_messages
 
         # V4.8.0: Clear FILE_CACHE context markers since old file results are discarded.
         # Without this, agent thinks files are still in context when they've been compacted away.
@@ -1064,7 +1072,10 @@ class Config:
     load_claude_md: bool = True   # Auto-load CLAUDE.md from workspace + parent dirs into system prompt
     enable_prompt_cache: bool = True  # Cache static system prompt prefix on Bedrock (saves ~90% tokens/turn)
     enable_memory_extraction: bool = False  # V4.1 #8: Auto-extract learnings to memory.md at session end (opt-in)
+    enable_status_doc: bool = True  # V4.9.6: load AGENT_STATUS.md every turn for long-running task continuity
+    status_doc: str = "AGENT_STATUS.md"
     enable_skills: bool = True
+    enable_skill_auto_trigger: bool = False  # V4.9.6: global opt-in; no skill auto-loads by default
     skills_dir: str = "./skills"
     enable_mcp: bool = False
     mcp_servers: Dict = field(default_factory=dict)  # {"name": {"type": "local"|"remote", ...}}
@@ -1168,10 +1179,13 @@ def _apply_config_file(config: 'Config') -> None:
         "load_claude_md": bool,
         "enable_prompt_cache": bool,
         "enable_memory_extraction": bool,
-        "enable_skills": bool, "skills_dir": str,
+        "enable_status_doc": bool, "status_doc": str,
+        "enable_skills": bool, "enable_skill_auto_trigger": bool, "skills_dir": str,
         "enable_mcp": bool, "mcp_timeout_seconds": int, "subagent_max_depth": int, "enable_worktree": bool,
         "max_user_messages_per_minute": int, "max_user_messages_per_session": int,
         "audit_retention_days": int,
+        # V4.10.0 #44: explicit context-window override; if absent, _auto_derive_context_window picks per-model default.
+        "context_max_tokens": int,
     }
     for key, expected_type in _SCALAR_FIELDS.items():
         if key not in ext:
@@ -1340,6 +1354,12 @@ class SecurityManager:
         (r"\baws\s+logs\s+", "AWS CloudWatch Logs - restricted"),
         (r"\baws\s+cloudformation\s+", "AWS CloudFormation - restricted"),
         (r"\baws\s+sagemaker\s+(?!help)", "AWS SageMaker CLI - use SDK in code instead"),
+
+        # === GIT REMOTES / GITHUB ===
+        # SageMaker runtime has a local git tree, not GitHub publishing integration.
+        # Keep local git inspection/worktree/commit flows, but block remote network ops.
+        (r"\bgit\s+(push|pull|fetch|clone)\b", "Git remote operation unavailable in SageMaker; use local git tree only"),
+        (r"\bgit\s+remote\s+(add|remove|rm|rename|set-url|set-head|prune)\b", "Git remote modification unavailable in SageMaker; use local git tree only"),
 
         # === NETWORK - EXTERNAL REQUESTS ===
         # V4.8.0: Relaxed wget/curl restrictions. Only block pipe-to-shell (RCE risk).
@@ -2437,6 +2457,16 @@ SESSIONS = SessionManager(CONFIG.sessions_dir)
 # SKILLS (V4)
 # ============================================================
 
+# V4.10.0 #24: Token budget for skill listing in tool description.
+# Mirrors Runnable's SKILL_BUDGET_CONTEXT_PERCENT (1% of context window).
+# Prevents prompt bloat once a workspace accumulates many skills.
+# Listing is computed at module-load time (frozen into TOOLS dict),
+# so the cap protects the prompt cache from a one-time prefix explosion;
+# it is not re-evaluated per turn.
+SKILL_LISTING_BUDGET_PERCENT: float = 0.01   # 1% of context window
+SKILL_LISTING_DESC_CAP: int = 250            # Per-skill description cap (chars), used by auto-trigger surfacing
+SKILL_LISTING_HARD_CAP_TOKENS: int = 2000    # Safety upper bound regardless of context_max_tokens
+
 @dataclass
 class SkillInfo:
     """Parsed skill metadata."""
@@ -2445,7 +2475,7 @@ class SkillInfo:
     location: str  # full path to SKILL.md
     base_dir: str  # directory containing the skill
     triggers: List[str] = None  # V4.6: keywords that trigger auto-discovery
-    auto_trigger: bool = True  # V4.9: when False, skill only activates via /command (not keyword auto-match)
+    auto_trigger: bool = False  # V4.9.6: explicit opt-in; skill only auto-matches when true AND global flag is enabled
 
 
 class SkillManager:
@@ -2504,7 +2534,9 @@ class SkillManager:
                     # V4.6: Parse triggers from frontmatter (comma-separated or YAML list)
                     # V4.8.0: auto_trigger: false disables keyword auto-discovery (skill only via /command)
                     # V4.9.0: auto_trigger flag now propagated to SkillInfo so the auto-match loop can honour it.
-                    _auto_trigger = str(meta.get("auto_trigger", "true")).strip().lower() != "false"
+                    # V4.9.6: default changed to false. A skill must explicitly opt in AND
+                    # CONFIG.enable_skill_auto_trigger must be true before any keyword auto-load.
+                    _auto_trigger = str(meta.get("auto_trigger", "false")).strip().lower() == "true"
                     _triggers_raw = meta.get("triggers", "")
                     _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if (_triggers_raw and _auto_trigger) else None
                     # V4.9.3: CSO format check — descriptions should start with "Use when [trigger]"
@@ -2585,6 +2617,8 @@ class SkillManager:
         Mirrors Runnable's skill discovery auto-surfacing pattern."""
         if not self._cache:
             self.discover()
+        if not getattr(CONFIG, "enable_skill_auto_trigger", False):
+            return []
         msg_lower = user_message.lower()
         relevant = []
         for name, skill in self._cache.items():
@@ -2596,14 +2630,59 @@ class SkillManager:
                 relevant.append(name)
         return relevant
 
-    def list_for_prompt(self) -> str:
-        """Compact skill list for LLM tool description (token-efficient)."""
+    def list_for_prompt(self, budget_tokens: int = 0) -> str:
+        """Compact skill list for LLM tool description (token-efficient, budget-capped).
+
+        V4.10.0 #24: Apply token budget so the listing can never blow up the
+        prompt prefix (cached portion) regardless of how many skills exist.
+        Listing format unchanged ("Available: name1, name2, ..."), so behavior
+        and prompt-cache shape are preserved when count is small. When the cap
+        is hit, the trailing entries are replaced with "...(+N more)" so the
+        model still knows extra skills exist (it can list them via /skills).
+
+        Args:
+            budget_tokens: max tokens to spend on the listing. <= 0 means
+                derive from CONFIG.context_max_tokens * SKILL_LISTING_BUDGET_PERCENT,
+                clamped to SKILL_LISTING_HARD_CAP_TOKENS.
+        """
         if not self._cache:
             self.discover()
         if not self._cache:
             return ""
-        # Compact format: "name1, name2, name3" (descriptions in SKILL.md, not here)
-        return "Available: " + ", ".join(self._cache.keys())
+        if budget_tokens <= 0:
+            ctx_max = getattr(CONFIG, "context_max_tokens", 200000) or 200000
+            budget_tokens = max(1, int(ctx_max * SKILL_LISTING_BUDGET_PERCENT))
+        budget_tokens = min(budget_tokens, SKILL_LISTING_HARD_CAP_TOKENS)
+
+        names = list(self._cache.keys())
+        n_total = len(names)
+        # Codex review 2026-04-28: reserve worst-case hint cost upfront so the
+        # final output never exceeds budget — including the truncation hint
+        # itself — and the cap also holds when the FIRST name is too large.
+        hint_reserve = Compactor.estimate_tokens(f"...(+{n_total} more), ")
+
+        out_names: List[str] = []
+        used = Compactor.estimate_tokens("Available: ")
+        truncated = False
+        for name in names:
+            cost = Compactor.estimate_tokens(name + ", ")
+            if used + cost + hint_reserve > budget_tokens:
+                truncated = True
+                break
+            out_names.append(name)
+            used += cost
+
+        if truncated:
+            omitted = n_total - len(out_names)
+            if not out_names:
+                # Degenerate: budget too small to fit even one name. Surface
+                # only the hint when it itself fits the cap; otherwise return ""
+                # so the cap is never silently exceeded (Codex review 2026-04-28).
+                hint_only = f"Available: ...(+{omitted} more)"
+                return hint_only if Compactor.estimate_tokens(hint_only) <= budget_tokens else ""
+            out_names.append(f"...(+{omitted} more)")
+
+        return "Available: " + ", ".join(out_names)
 
     # ========================================================================
     # V4.9.5: Self-patching skills with safety rails
@@ -3609,6 +3688,173 @@ def microcompact(messages: List[Dict], keep_n_override: int = None) -> Tuple[Lis
 
     tokens_saved = tokens_before - CONTEXT.estimate_tokens(result_msgs)
     return result_msgs, tokens_saved
+
+
+def _context_block_tokens(block: Any) -> int:
+    """Estimate tokens for one content block using JSON when possible."""
+    try:
+        text = json.dumps(block, ensure_ascii=False, default=str)
+    except Exception:
+        text = str(block)
+    return Compactor.estimate_tokens(text)
+
+
+def _context_add(counter: Dict[str, int], key: str, tokens: int) -> None:
+    key = key or "unknown"
+    counter[key] = counter.get(key, 0) + max(0, int(tokens))
+
+
+def analyze_context_messages(messages: List[Dict]) -> Dict[str, Any]:
+    """Summarize what is consuming chat context.
+
+    This is intentionally local-only and approximate. It mirrors the useful part
+    of runnable's context analysis without adding provider-specific machinery.
+    """
+    stats: Dict[str, Any] = {
+        "messages": len(messages),
+        "message_tokens": CONTEXT.estimate_tokens(messages),
+        "user_text_tokens": 0,
+        "assistant_text_tokens": 0,
+        "other_tokens": 0,
+        "tool_request_tokens": {},
+        "tool_result_tokens": {},
+        "duplicate_reads": {},
+    }
+    tool_names: Dict[str, str] = {}
+    read_paths: Dict[str, str] = {}
+    read_counts: Dict[str, Dict[str, int]] = {}
+
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            tokens = Compactor.estimate_tokens(content)
+            if role == "user":
+                stats["user_text_tokens"] += tokens
+            elif role == "assistant":
+                stats["assistant_text_tokens"] += tokens
+            else:
+                stats["other_tokens"] += tokens
+            continue
+
+        if not isinstance(content, list):
+            stats["other_tokens"] += Compactor.estimate_tokens(str(content))
+            continue
+
+        for block in content:
+            if not isinstance(block, dict):
+                stats["other_tokens"] += Compactor.estimate_tokens(str(block))
+                continue
+
+            block_type = block.get("type")
+            if block_type == "text":
+                tokens = Compactor.estimate_tokens(str(block.get("text", "")))
+                if role == "user":
+                    stats["user_text_tokens"] += tokens
+                elif role == "assistant":
+                    stats["assistant_text_tokens"] += tokens
+                else:
+                    stats["other_tokens"] += tokens
+            elif block_type == "tool_use":
+                tool_id = str(block.get("id", ""))
+                tool_name = str(block.get("name", "unknown"))
+                tool_names[tool_id] = tool_name
+                if tool_name == "read_file":
+                    inp = block.get("input", {})
+                    if isinstance(inp, dict):
+                        read_paths[tool_id] = str(inp.get("file_path", "unknown"))
+                _context_add(stats["tool_request_tokens"], tool_name, _context_block_tokens(block))
+            elif block_type == "tool_result":
+                tool_id = str(block.get("tool_use_id", ""))
+                tool_name = tool_names.get(tool_id, "unknown")
+                inner = block.get("content", "")
+                tokens = Compactor.estimate_tokens(str(inner))
+                _context_add(stats["tool_result_tokens"], tool_name, tokens)
+                if tool_name == "read_file":
+                    path = read_paths.get(tool_id, "unknown")
+                    entry = read_counts.setdefault(path, {"count": 0, "tokens": 0})
+                    entry["count"] += 1
+                    entry["tokens"] += tokens
+            else:
+                stats["other_tokens"] += _context_block_tokens(block)
+
+    duplicates: Dict[str, Dict[str, int]] = {}
+    for path, data in read_counts.items():
+        count = data.get("count", 0)
+        if count > 1:
+            avg = data.get("tokens", 0) // count
+            duplicates[path] = {
+                "count": count,
+                "duplicate_tokens": avg * (count - 1),
+            }
+    stats["duplicate_reads"] = duplicates
+    return stats
+
+
+def _context_top(counter: Dict[str, int], limit: int = 6) -> List[Tuple[str, int]]:
+    return sorted(counter.items(), key=lambda item: item[1], reverse=True)[:limit]
+
+
+def format_context_report(messages: List[Dict]) -> str:
+    """Build a concise /context report for the notebook UI."""
+    stats = analyze_context_messages(messages)
+    usage = CONTEXT.get_usage(messages)
+    try:
+        overhead = TOKENS.get_fixed_overhead()
+    except Exception:
+        overhead = 3350
+
+    lines = [
+        "## Context Diagnostic",
+        "",
+        f"- Messages: {stats['messages']}",
+        f"- Context: {usage['tokens']:,} / {usage['max_tokens']:,} tokens ({usage['percent'] * 100:.1f}%, {usage['level']})",
+        f"- Message body estimate: {stats['message_tokens']:,} tokens",
+        f"- Fixed overhead estimate: ~{overhead:,} tokens (system prompt + tool schemas + Bedrock wrapper)",
+        "",
+        "### By Category",
+        f"- User text: {stats['user_text_tokens']:,} tokens",
+        f"- Assistant text: {stats['assistant_text_tokens']:,} tokens",
+        f"- Other blocks: {stats['other_tokens']:,} tokens",
+    ]
+
+    request_top = _context_top(stats["tool_request_tokens"])
+    result_top = _context_top(stats["tool_result_tokens"])
+    if request_top:
+        lines.append("")
+        lines.append("### Tool Requests")
+        for name, tokens in request_top:
+            lines.append(f"- {name}: ~{tokens:,} tokens")
+    if result_top:
+        lines.append("")
+        lines.append("### Tool Results")
+        for name, tokens in result_top:
+            lines.append(f"- {name}: ~{tokens:,} tokens")
+
+    duplicate_top = sorted(
+        stats["duplicate_reads"].items(),
+        key=lambda item: item[1].get("duplicate_tokens", 0),
+        reverse=True,
+    )[:6]
+    if duplicate_top:
+        lines.append("")
+        lines.append("### Duplicate File Reads")
+        for path, data in duplicate_top:
+            lines.append(
+                f"- {path}: {data.get('count', 0)} reads, ~{data.get('duplicate_tokens', 0):,} duplicate tokens"
+            )
+
+    lines.append("")
+    lines.append("### Suggested Action")
+    if usage["percent"] >= 0.80:
+        lines.append("- Run `/compact` or use the Compact button before continuing.")
+    elif duplicate_top:
+        lines.append("- Avoid re-reading full files already in context; use `grep` or `read_file` offsets.")
+    elif result_top and result_top[0][1] > 10000:
+        lines.append("- Consider focused commands that return smaller outputs, then compact if the run is long.")
+    else:
+        lines.append("- Context looks healthy. Keep `AGENT_STATUS.md` current for long tasks.")
+    return "\n".join(lines)
 
 
 def _check_file_staleness(path: str) -> Optional[str]:
@@ -5334,6 +5580,142 @@ def tool_create_notebook(args: Dict) -> str:
         return f"Error: {e}"
 
 
+# V4.10.0 #10: surgical .ipynb cell editor (Runnable NotebookEdit parity).
+# Mirrors the create_notebook security/path semantics, then performs an
+# in-place insert/replace/delete on a single cell. Atomic: writes to a
+# temporary file in the same directory and renames over the original.
+_NOTEBOOK_EDIT_ACTIONS = ("insert", "replace", "delete")
+_NOTEBOOK_CELL_TYPES = ("code", "markdown")
+
+
+def _normalise_ipynb_source(source) -> List[str]:
+    """Convert source string to ipynb's list-of-lines format (with newlines)."""
+    if isinstance(source, list):
+        return source
+    s = source if isinstance(source, str) else str(source or "")
+    if not s:
+        return [""]
+    lines = s.split("\n")
+    # ipynb format: every line ends with "\n" except the last
+    return [ln + "\n" for ln in lines[:-1]] + [lines[-1]]
+
+
+def tool_notebook_edit(args: Dict) -> str:
+    """V4.10.0 #10: Edit a single cell in an existing .ipynb file.
+
+    Args:
+        path:        absolute or workspace-relative .ipynb file
+        action:      "insert" | "replace" | "delete"
+        cell_index:  0-based; -1 = append (insert only)
+        cell_type:   "code" | "markdown" (required for insert/replace)
+        source:      cell content (required for insert/replace)
+
+    Returns:
+        Status string with new cell count, or "Error: ..." on failure.
+        Atomic: writes via tmp file + rename so a partial failure cannot
+        corrupt the live notebook.
+    """
+    filepath = args.get("path") or args.get("filepath")
+    action = (args.get("action") or "").lower()
+    cell_index = args.get("cell_index", None)
+    cell_type = (args.get("cell_type") or "").lower() or None
+    source = args.get("source", None)
+
+    if not filepath:
+        return "Error: 'path' is required"
+    if action not in _NOTEBOOK_EDIT_ACTIONS:
+        return f"Error: 'action' must be one of {_NOTEBOOK_EDIT_ACTIONS}, got: {action!r}"
+    if cell_index is None or not isinstance(cell_index, int):
+        return "Error: 'cell_index' must be an integer (use -1 to append on insert)"
+    if action in ("insert", "replace"):
+        if cell_type not in _NOTEBOOK_CELL_TYPES:
+            return f"Error: 'cell_type' must be one of {_NOTEBOOK_CELL_TYPES} for insert/replace"
+        if source is None:
+            return "Error: 'source' is required for insert/replace"
+
+    if not os.path.isabs(filepath):
+        filepath = os.path.join(CONFIG.workspace, filepath)
+    if not filepath.endswith(".ipynb"):
+        return f"Error: target must be a .ipynb file, got: {filepath}"
+
+    ok, msg = SECURITY.validate_path(filepath)
+    if not ok:
+        return f"Error: {msg}"
+    if not os.path.exists(filepath):
+        return f"Error: notebook does not exist: {filepath}"
+
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            nb = json.load(f)
+    except json.JSONDecodeError as e:
+        return f"Error: notebook is not valid JSON ({e})"
+    except OSError as e:
+        return f"Error: cannot read notebook ({e})"
+
+    cells = nb.get("cells")
+    if not isinstance(cells, list):
+        return "Error: notebook structure invalid (cells not a list)"
+    n = len(cells)
+
+    if action == "insert":
+        # cell_index == -1 (or >= n) = append
+        if cell_index < 0 or cell_index > n:
+            cell_index = n  # append
+        new_cell: Dict = {
+            "cell_type": cell_type,
+            "metadata": {},
+            "source": _normalise_ipynb_source(source),
+        }
+        if cell_type == "code":
+            new_cell["execution_count"] = None
+            new_cell["outputs"] = []
+        cells.insert(cell_index, new_cell)
+    elif action == "replace":
+        if cell_index < 0 or cell_index >= n:
+            return f"Error: cell_index {cell_index} out of bounds (0..{n - 1})"
+        old = cells[cell_index]
+        new_cell = {
+            "cell_type": cell_type,
+            "metadata": old.get("metadata", {}) or {},
+            "source": _normalise_ipynb_source(source),
+        }
+        # Preserve cell id if present (nbformat 4.5+)
+        if isinstance(old.get("id"), str):
+            new_cell["id"] = old["id"]
+        if cell_type == "code":
+            new_cell["execution_count"] = None
+            new_cell["outputs"] = []
+        cells[cell_index] = new_cell
+    else:  # delete
+        if cell_index < 0 or cell_index >= n:
+            return f"Error: cell_index {cell_index} out of bounds (0..{n - 1})"
+        cells.pop(cell_index)
+
+    nb["cells"] = cells
+
+    # Atomic write: tmp file in same dir, then rename over original.
+    # Codex review 2026-04-28: catch any Exception (json.dump can raise
+    # TypeError on non-serialisable cell data, which is non-OSError) so the
+    # function always returns "Error: ..." rather than propagating an
+    # exception out of a tool call.
+    tmp_path = filepath + ".v410.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(nb, f, indent=1, ensure_ascii=False)
+        os.replace(tmp_path, filepath)
+    except Exception as e:
+        # Best-effort cleanup of the tmp file. Original notebook is untouched
+        # because os.replace happens AFTER successful json.dump.
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        return f"Error: failed to write notebook ({type(e).__name__}: {e})"
+
+    return f"Edited {filepath}: {action} at cell {cell_index} (now {len(cells)} cells)"
+
+
 # ============== CHARTS & PDF ==============
 
 def tool_create_chart(args: Dict) -> str:
@@ -6519,13 +6901,14 @@ TOOLS = {
         "- Finding files: use glob (NOT find/ls)\n"
         "- Searching content: use grep (NOT grep/rg/ag)\n\n"
         "WHEN to use bash:\n"
-        "- Git operations: git status, git diff, git commit, git log, git push\n"
+        "- Local git operations: git status, git diff, git log, git worktree, git commit\n"
         "- Package management: pip install, npm install, conda install\n"
         "- Running scripts and tests: python script.py, pytest, npm test\n"
         "- Building/compiling projects: make, npm run build\n"
         "- System commands with no dedicated tool equivalent\n\n"
         "Git safety rules:\n"
-        "- NEVER force-push to main/master\n"
+        "- SageMaker has local git tree support, not GitHub/PR/publish support\n"
+        "- Do NOT use GitHub CLI (`gh`), GitHub APIs, git push/pull/fetch/clone, or PR creation from SageMaker\n"
         "- ALWAYS create NEW commits (don't amend unless explicitly asked)\n"
         "- Stage specific files by name (not git add -A or git add .)\n"
         "- NEVER skip hooks (--no-verify, --no-gpg-sign)\n"
@@ -6565,6 +6948,21 @@ TOOLS = {
                 "source": {"type": "string"}
             }, "required": ["type", "source"]}}
         }, "required": ["filepath", "cells"]}),
+
+    # V4.10.0 #10: surgical .ipynb cell edits (Runnable NotebookEdit parity).
+    # Use INSTEAD of create_notebook when modifying an existing notebook so you
+    # don't blow away cells (and any execution outputs) you didn't mean to touch.
+    "notebook_edit": (tool_notebook_edit, True,
+        "Edit one cell in an existing .ipynb. action=insert|replace|delete, cell_index=0-based "
+        "(-1 = append on insert). For insert/replace also pass cell_type=code|markdown and source. "
+        "Atomic write — safer than overwriting the whole notebook with create_notebook.",
+        {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Absolute or workspace-relative .ipynb path"},
+            "action": {"type": "string", "enum": ["insert", "replace", "delete"]},
+            "cell_index": {"type": "integer", "description": "0-based cell index. -1 (or out of range) on insert = append."},
+            "cell_type": {"type": "string", "enum": ["code", "markdown"], "description": "Required for insert/replace"},
+            "source": {"type": "string", "description": "Cell content. Required for insert/replace"}
+        }, "required": ["path", "action", "cell_index"]}),
 
     "create_chart": (tool_create_chart, True, "Create chart PNG image. WHEN: generating visualizations for Word/PDF reports (create chart FIRST, then embed with ![](path.png)). Types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo. Always set title, xlabel, ylabel for professional output. Use dpi=150 for reports.",
         {"type": "object", "properties": {
@@ -6868,6 +7266,158 @@ def _load_persistent_memory() -> str:
         logging.warning(f"Failed to load memory.md: {e}")
     return ""
 
+
+_STATUS_DOC_MAX_LINES: int = 180
+_STATUS_DOC_MAX_BYTES: int = 20_000
+
+
+def _status_doc_path(workspace: Optional[str] = None) -> Optional[str]:
+    """Resolve the long-running task status doc path inside the active workspace."""
+    raw = str(getattr(CONFIG, "status_doc", "AGENT_STATUS.md") or "").strip()
+    if not raw:
+        return None
+    base = os.path.abspath(workspace or CONFIG.workspace)
+    target = raw if os.path.isabs(raw) else os.path.join(base, raw)
+    target_abs = os.path.abspath(target)
+    try:
+        base_real = os.path.normcase(os.path.realpath(base))
+        target_real = os.path.normcase(os.path.realpath(target_abs))
+        if os.path.commonpath([base_real, target_real]) != base_real:
+            logging.warning(f"Status doc outside workspace ignored: {target_abs}")
+            return None
+    except ValueError:
+        logging.warning(f"Status doc outside workspace ignored: {target_abs}")
+        return None
+    return target_abs
+
+
+def _status_doc_template() -> str:
+    """Default durable handoff template for long-running work."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return f"""# Agent Status
+
+Last updated: {today}
+
+Purpose: durable handoff state for long-running SageAgent work. Keep this file concise and current.
+
+## Current Goal
+- Build and maintain a reliable self-use SageMaker coding agent.
+
+## Standing User Instructions
+- Do not silently auto-load skills.
+- Keep a clear plan and update progress during long-running work.
+- Run a code diff review before calling critical changes done.
+- Verify with commands and report exact results.
+- Do not claim production readiness without evidence.
+
+## Plan
+- Pending: record the next concrete steps here.
+
+## Progress
+- Pending: summarize completed work here.
+
+## Blockers And Risks
+- Pending: list open risks, missing tests, or environment blockers here.
+
+## Files Changed
+- Pending: list important edited files here.
+
+## Verification
+- Pending: record compile/test/build commands and results here.
+
+## Next Step
+- Pending: write the next action so a resumed session can continue immediately.
+"""
+
+
+def _load_project_status() -> str:
+    """Load AGENT_STATUS.md so long-running work survives compaction and session drift."""
+    if not getattr(CONFIG, "enable_status_doc", True):
+        return ""
+    status_path = _status_doc_path()
+    if not status_path or not os.path.isfile(status_path):
+        return ""
+    try:
+        total_size = os.path.getsize(status_path)
+        with open(status_path, "r", encoding="utf-8", errors="replace") as f:
+            raw = f.read(_STATUS_DOC_MAX_BYTES)
+        lines = raw.splitlines(keepends=True)
+        truncated_by_lines = len(lines) > _STATUS_DOC_MAX_LINES
+        if truncated_by_lines:
+            lines = lines[:_STATUS_DOC_MAX_LINES]
+        content = "".join(lines).strip()
+        if not content:
+            return ""
+        for w in _scan_for_prompt_injection(content, f"AGENT_STATUS.md ({status_path})"):
+            logging.warning(w)
+        was_truncated = total_size > _STATUS_DOC_MAX_BYTES or truncated_by_lines
+        header = f"\n\n# Project Status (from {status_path})\n"
+        if was_truncated:
+            header += f"[WARNING: AGENT_STATUS.md truncated to {_STATUS_DOC_MAX_LINES} lines / {_STATUS_DOC_MAX_BYTES:,} bytes. Prune old entries.]\n"
+        return header + content + "\n"
+    except Exception as e:
+        logging.warning(f"Failed to load AGENT_STATUS.md: {e}")
+        return ""
+
+# ============================================================
+# V4.10.0 #47: PER-SUBAGENT ENV-DETAILS
+# ============================================================
+# Mirrors Runnable's enhanceSystemPromptWithEnvDetails. Injected into every
+# fresh sub-agent's prompt so it knows its own workspace state — independent
+# of any drift the parent has accumulated. Only appended AFTER the cached
+# SYSTEM_PROMPT (i.e. inside the dynamic section), so the cache prefix is
+# preserved unchanged across sub-agents.
+
+# Cap each git command at 5s so a hanging git client never stalls a sub-agent spawn.
+_SUBAGENT_ENV_GIT_TIMEOUT_S: float = 5.0
+
+
+def _build_subagent_env_details(agent_type: str, depth: int, workspace: str = "") -> str:
+    """V4.10.0 #47: Build a concise env-details block for a fresh sub-agent.
+
+    Includes: agent type, depth (relative to max), workspace cwd, git HEAD,
+    git working-tree status. Git probes are fail-quiet: any error or timeout
+    yields no line for that detail. Output is ≤ 6 short lines so it does not
+    bloat the prompt for smaller models (Haiku 4.5).
+    """
+    ws = workspace or getattr(CONFIG, "workspace", "")
+    lines: List[str] = ["# Sub-agent Environment"]
+    lines.append(f"- Agent type: {agent_type}")
+    max_depth = getattr(CONFIG, "subagent_max_depth", 2)
+    lines.append(f"- Sub-agent depth: {depth} (max {max_depth})")
+    if ws:
+        lines.append(f"- Workspace cwd: {ws}")
+    # git HEAD (short SHA) — fail-quiet
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True,
+            timeout=_SUBAGENT_ENV_GIT_TIMEOUT_S,
+            cwd=ws or None,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            lines.append(f"- Git HEAD: {r.stdout.strip()}")
+    except Exception:
+        pass
+    # git working tree summary — fail-quiet
+    try:
+        r = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True,
+            timeout=_SUBAGENT_ENV_GIT_TIMEOUT_S,
+            cwd=ws or None,
+        )
+        if r.returncode == 0:
+            changed = [ln for ln in r.stdout.splitlines() if ln.strip()]
+            lines.append(
+                f"- Git working tree: {len(changed)} changed file(s)" if changed
+                else "- Git working tree: clean"
+            )
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
 # ============================================================
 # V4.1 #8: MEMORY AUTO-EXTRACTION
 # ============================================================
@@ -7115,10 +7665,12 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 
 # Executing Actions with Care
 - Consider reversibility and blast radius before executing. Freely take local, reversible actions.
+- SageMaker runtime has local git tree access only. Use local `git status`, `git diff`, `git log`, `git worktree`, and local commits/checkpoints.
+- Do NOT use GitHub CLI (`gh`), GitHub APIs, PR creation, issue updates, or remote git operations (`git push`, `git pull`, `git fetch`, `git clone`) from SageMaker.
 - For hard-to-reverse or shared-state actions, check with user first:
   - Destructive: deleting files/branches, overwriting uncommitted changes
-  - Hard to reverse: force push, git reset --hard, amending published commits
-  - Visible to others: pushing code, creating/closing PRs or issues
+  - Hard to reverse: git reset --hard, amending commits, changing remote config
+  - Visible to others: any non-SageMaker publishing step requested for an external system
 - Do not use destructive actions as shortcuts. Investigate root causes first.
 - Never skip git hooks (--no-verify) unless explicitly asked.
 - Create NEW commits not amend. After hook failure, fix issue and create new commit.
@@ -7139,6 +7691,12 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - Explore agent: specify thoroughness — "quick" for simple lookup, "medium" for moderate, "very thorough" for deep analysis.
 - Don't peek at running sub-agent output. Wait for completion notification. Don't fabricate or predict results mid-wait.
 
+# Long-Running Status
+- For critical, multi-phase, or long-running work, maintain `AGENT_STATUS.md` in the workspace as the durable handoff file.
+- Use `todo_write` for the live task list, and update `AGENT_STATUS.md` for cross-session state: Current Goal, Standing User Instructions, Plan, Progress, Blockers And Risks, Files Changed, Verification, Next Step.
+- Update the status doc when the user changes priorities, after major implementation/verification phases, before stopping, and before claiming a critical task is ready.
+- Keep it concise and factual. Do not bury stale history; keep the latest next step obvious.
+
 # Verification Contract
 When non-trivial implementation happens (3+ file edits that change logic, API, or data flow — not just renames or formatting), independent adversarial verification MUST happen before you report completion.
 - Spawn a verify sub-agent (subagent_type: "verify"). Pass: the original task description, list of files changed, and approach taken.
@@ -7157,6 +7715,7 @@ Save decisions/patterns, not ephemeral task state. Do NOT save: code patterns (r
 
 # Documents
 WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create_word or create_pdf with ![caption](chart.png) to embed. NEVER mix raw markdown syntax with plain text in documents — be consistent. For Excel: set chart_type + x_column + y_columns to embed chart directly in sheet. Use /report skill for guided workflow.
+NOTEBOOKS: use notebook_edit (insert/replace/delete a single cell) when modifying an existing .ipynb. Do NOT call create_notebook on an existing file — it overwrites all cells and any execution outputs.
 
 # Security
 - Workspace boundary enforced. Write ops require approval.
@@ -7168,7 +7727,7 @@ WORKFLOW: 1) create_chart for each visualization FIRST (saves as PNG), 2) create
 MCP servers from config are auto-registered as `mcp_<server>_<tool>` tools. Prefer MCP tools when available.
 
 # Commands
-`/cost`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/skills` (list available), `/skill use <name>` (activate; lifts any prior /unskill block), `/skill clear` (deactivate all — sticky for session), `/unskill <name>` (V4.9.1 — deactivate one skill, sticky for session), `/skill suggestions` (V4.9.5 — list pending agent-proposed patches), `/skill apply <name> [--yes|--edit]` (V4.9.5 — preview diff then apply), `/skill reject <name>` (V4.9.5 — discard pending patches), `/commands` (custom).
+`/cost`, `/context` (token/context bloat diagnostic), `/status [init|path]`, `/revert <file>` (shows diff preview; add `--yes` to confirm), `/revert all --yes`, `/diffs [summary|last|<file>]` (session edit history), `/regression` (git diff HEAD stat + session edits + suggested test cmd), `/verify [full|quick|pre-commit]`, `/simplify`, `/done [full|quick]` (simplify+verify gate → READY-TO-SHIP verdict), `/phase <text>` (set current work phase in status bar), `/checkpoint [create <name>|list|restore <name>]`, `/skills` (list available), `/skill use <name>` (activate; lifts any prior /unskill block), `/skill clear` (deactivate all — sticky for session), `/unskill <name>` (V4.9.1 — deactivate one skill, sticky for session), `/skill suggestions` (V4.9.5 — list pending agent-proposed patches), `/skill apply <name> [--yes|--edit]` (V4.9.5 — preview diff then apply), `/skill reject <name>` (V4.9.5 — discard pending patches), `/commands` (custom).
 
 # Skill self-patching (V4.9.5, opt-in)
 - ONLY when `CONFIG.enable_skill_patching = True`. If the flag is False, do NOT call `skill_propose_patch` — it will no-op. Suggest the improvement in chat instead.
@@ -7381,6 +7940,11 @@ class Agent:
         max_turns = agent_cfg.get("max_turns", 15)
         prompt_suffix = agent_cfg.get("prompt_suffix", "")
         sub_prompt = SYSTEM_PROMPT + "\n\n# Sub-agent Notes\n- Always use ABSOLUTE file paths (cwd may reset between bash calls).\n- In your final response, share relevant file paths (absolute, never relative).\n- Include code snippets only when exact text is load-bearing (a bug, a signature). Do not recap code you merely read.\n- Do NOT use emojis."
+        # V4.10.0 #47: per-subagent env-details (Runnable enhanceSystemPromptWithEnvDetails parity).
+        # Appended in the DYNAMIC section so the cached SYSTEM_PROMPT prefix is preserved.
+        _env_details = _build_subagent_env_details(agent_type, self.subagent_depth + 1)
+        if _env_details:
+            sub_prompt = sub_prompt + "\n\n" + _env_details
         if prompt_suffix:
             sub_prompt = sub_prompt + "\n\n" + prompt_suffix
         # V4.6: Critical reminder injection (mirrors Runnable's criticalSystemReminder_EXPERIMENTAL).
@@ -7413,6 +7977,7 @@ class Agent:
         )
         if _use_worktree:
             try:
+                _worktree_ready = False
                 _git_check = subprocess.run(
                     ["git", "rev-parse", "--is-inside-work-tree"],
                     capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
@@ -7432,7 +7997,11 @@ class Agent:
                         _worktree_path = None
                     else:
                         output_fn("[Worktree] Auto-initialized git for workspace protection")
-                if _worktree_path is not None:
+                        _worktree_ready = True
+                else:
+                    _worktree_ready = True
+
+                if _worktree_ready:
                     # Review fix [MEDIUM]: UUID suffix prevents name collision on rapid sequential builds
                     import uuid
                     _wt_name = f"_worktree_build_{int(time.time())}_{uuid.uuid4().hex[:8]}"
@@ -7448,6 +8017,44 @@ class Agent:
                             capture_output=True, text=True, timeout=5, cwd=_worktree_path
                         )
                         _worktree_head_sha = _sha_result.stdout.strip() if _sha_result.returncode == 0 else None
+
+                        # V4.9.6: make the isolated build see the user's current dirty workspace
+                        # without committing those changes. Git worktrees start from HEAD only;
+                        # overlay modified/untracked files and remove locally-deleted files so
+                        # the child agent works from the same state the parent is seeing.
+                        try:
+                            _status = subprocess.run(
+                                ["git", "-c", "core.quotepath=false", "status", "--porcelain", "--untracked-files=all"],
+                                capture_output=True, text=True, timeout=10, cwd=CONFIG.workspace
+                            )
+                            _norm_ws = os.path.normcase(os.path.normpath(os.path.abspath(CONFIG.workspace)))
+                            _norm_wt = os.path.normcase(os.path.normpath(os.path.abspath(_worktree_path)))
+                            for _line in _status.stdout.splitlines():
+                                if len(_line) < 4:
+                                    continue
+                                _code = _line[:2]
+                                _rel = _line[3:]
+                                if " -> " in _rel:
+                                    _rel = _rel.split(" -> ", 1)[1]
+                                _src = os.path.normcase(os.path.normpath(os.path.abspath(os.path.join(CONFIG.workspace, _rel))))
+                                _dst = os.path.normcase(os.path.normpath(os.path.abspath(os.path.join(_worktree_path, _rel))))
+                                try:
+                                    if (os.path.commonpath([_norm_ws, _src]) != _norm_ws or
+                                            os.path.commonpath([_norm_wt, _dst]) != _norm_wt):
+                                        continue
+                                except ValueError:
+                                    continue
+                                if "D" in _code and not os.path.exists(_src):
+                                    if os.path.isdir(_dst):
+                                        shutil.rmtree(_dst, ignore_errors=True)
+                                    elif os.path.exists(_dst):
+                                        os.remove(_dst)
+                                elif os.path.isfile(_src):
+                                    os.makedirs(os.path.dirname(_dst), exist_ok=True)
+                                    shutil.copy2(_src, _dst)
+                        except Exception as e:
+                            logging.warning(f"Worktree dirty-state overlay failed: {e}")
+
                         _original_workspace = CONFIG.workspace
                         CONFIG.workspace = _worktree_path
                         output_fn(f"[Worktree] Build agent isolated in: {_worktree_path}")
@@ -7542,12 +8149,17 @@ class Agent:
 
                         if _changed:
                             _copied = 0
-                            _norm_ws = os.path.normpath(_original_workspace)
+                            _norm_ws = os.path.normcase(os.path.normpath(os.path.abspath(_original_workspace)))
                             for _f in _changed:
                                 _src = os.path.join(_worktree_path, _f)
                                 _dst = os.path.join(_original_workspace, _f)
                                 # Review fix [LOW]: path traversal containment check
-                                if not os.path.normpath(_dst).startswith(_norm_ws):
+                                _dst_norm = os.path.normcase(os.path.normpath(os.path.abspath(_dst)))
+                                try:
+                                    _in_workspace = os.path.commonpath([_norm_ws, _dst_norm]) == _norm_ws
+                                except ValueError:
+                                    _in_workspace = False
+                                if not _in_workspace:
                                     logging.warning(f"[Worktree] Skipping out-of-bounds path: {_f}")
                                     continue
                                 if os.path.isfile(_src):
@@ -7640,14 +8252,23 @@ class Agent:
             _base_prompt += f"\n\n{_ws_info}"
         if self.subagent_depth == 0:
             _base_prompt += _load_persistent_memory()
+            _base_prompt += _load_project_status()
             # V4.6 Gap #7: Skill discovery auto-surfacing.
             # Match user message against skill triggers, suggest relevant skills.
             # Only for top-level agent (sub-agents don't need discovery).
             _relevant = SKILLS.discover_relevant(user_message)
             if _relevant:
                 _skill_names = ", ".join(_relevant)
+                # V4.10.0 #24: cap each description at SKILL_LISTING_DESC_CAP chars
+                # so a single verbose SKILL.md cannot bloat the dynamic prompt section.
+                def _trim_desc(d: str) -> str:
+                    d = (d or "").strip().replace("\n", " ")
+                    if len(d) > SKILL_LISTING_DESC_CAP:
+                        return d[: SKILL_LISTING_DESC_CAP - 3] + "..."
+                    return d
                 _descriptions = "; ".join(
-                    f"{s}: {SKILLS._cache[s].description}" for s in _relevant if s in SKILLS._cache
+                    f"{s}: {_trim_desc(SKILLS._cache[s].description)}"
+                    for s in _relevant if s in SKILLS._cache
                 )
                 _base_prompt += (f"\n\n# Skills Relevant to This Task\n"
                                  f"Consider using: {_skill_names}\n"
@@ -7692,6 +8313,10 @@ class Agent:
 
         _effective_max_turns = max_turns_override if max_turns_override is not None else CONFIG.max_turns
         response = None
+        # V4.10.0 #41a: per-run reactive-compact flag. Once we run reactive compact for
+        # this user message we don't run it again, even across turns — if the second
+        # attempt also fails on context, something else is wrong and the user should see it.
+        _reactive_compact_done_this_call = False
         for turn in range(_effective_max_turns):
             # Check if stop was requested
             if self.on_stop_check and self.on_stop_check():
@@ -7794,7 +8419,7 @@ class Agent:
                 _recent_text = " ".join(str(m.get("content", ""))[:200].lower() for m in self.messages[-4:])
                 _exclude = set()
                 # Doc tools: only when documents/charts mentioned
-                _DOC_TOOLS = {"create_word", "create_excel", "create_chart", "create_pdf", "create_notebook", "create_markdown"}
+                _DOC_TOOLS = {"create_word", "create_excel", "create_chart", "create_pdf", "create_notebook", "notebook_edit", "create_markdown"}
                 # Note: "word" can false-positive on "password" — use " word " with spaces or check tool names
                 _DOC_KEYWORDS = {"chart", "report", "document", "docx", " word ", "excel", "xlsx", "pdf",
                                  "notebook", "ipynb", "plot", "graph", "spreadsheet", "visualization",
@@ -7903,10 +8528,87 @@ class Agent:
                     raise _llm_result[1]
                 response = _llm_result[0]
             except Exception as e:
-                error_msg = f"[AGENT ERROR] Error calling Bedrock: {e}"
-                output_fn(error_msg)
-                AUDIT.log(self.session_id, "error", result_summary=str(e))
-                return error_msg
+                # V4.10.0 #41a: Reactive Compact. When Bedrock rejects with
+                # CONTEXT_OVERFLOW (prompt too long / too many tokens), run
+                # microcompact + (if needed) full compact, then retry the same
+                # request once. Capped at 1 reactive retry per run() so we
+                # cannot infinite-loop. Any other error category surfaces normally.
+                _category = None
+                try:
+                    _category, _, _ = ErrorClassifier.classify(e)
+                except Exception:
+                    pass
+                if (_category == BedrockErrorCategory.CONTEXT_OVERFLOW
+                        and not _reactive_compact_done_this_call):
+                    _reactive_compact_done_this_call = True
+                    output_fn(
+                        "[Reactive compact: Bedrock rejected the prompt as too long — "
+                        "compacting and retrying once]"
+                    )
+                    # Try microcompact first (zero extra LLM calls). If it
+                    # freed enough, retry. Otherwise apply a placeholder-summary
+                    # compaction without burning another LLM call — calling
+                    # the same model with the same overflowing context to
+                    # generate a summary would just fail again. Reactive
+                    # path is for FAST recovery, not for quality summarisation.
+                    _mc_msgs, _mc_saved = microcompact(self.messages)
+                    if _mc_saved >= MICROCOMPACT_MIN_SAVINGS:
+                        self.messages = _mc_msgs
+                        output_fn(f"[Reactive: microcompact freed ~{_mc_saved:,} tokens]")
+                    else:
+                        output_fn("[Reactive: microcompact insufficient — placeholder compaction]")
+                        _summary = (
+                            "Conversation reactively compacted because Bedrock rejected the "
+                            "prompt as too long. Older turns elided; continue from the most "
+                            "recent context."
+                        )
+                        self.messages = COMPACTOR.compact(self.messages, _summary)
+                    # Codex review 2026-04-28: cache-breakage flag and file-read
+                    # state apply to BOTH reactive paths. Microcompact rewrites
+                    # tool-result blocks (still invalidates the messages prefix
+                    # at Bedrock) and may have purged read_file results that the
+                    # agent thought were cached.
+                    self._cache_broken_by_compact = True
+                    with _FILES_READ_LOCK:
+                        _FILES_READ.clear()
+                        _FILE_READ_TIMES.clear()
+                        _FILE_PARTIAL_READS.clear()
+                    # Retry the same call exactly once.
+                    try:
+                        _retry_result = [None, None]
+                        def _retry_llm():
+                            try:
+                                _retry_result[0] = RETRY.execute(make_request, on_retry)
+                            except Exception as _re:
+                                _retry_result[1] = _re
+                        _retry_thread = threading.Thread(target=_retry_llm, daemon=True)
+                        _retry_thread.start()
+                        while _retry_thread.is_alive():
+                            if self.on_stop_check and self.on_stop_check():
+                                # Codex review 2026-04-28: parity with the original
+                                # stop path — if the response arrived before stop,
+                                # Bedrock has already billed us, so account for it.
+                                if _retry_result[0] and _retry_result[0].usage:
+                                    TOKENS.add(_retry_result[0].usage, model_id=self.client.model_id)
+                                output_fn("[Stopped during reactive retry]")
+                                return _retry_result[0].text if _retry_result[0] else ""
+                            _retry_thread.join(timeout=0.1)
+                        if _retry_result[1]:
+                            raise _retry_result[1]
+                        response = _retry_result[0]
+                        output_fn("[Reactive compact: retry succeeded]")
+                    except Exception as _retry_e:
+                        _retry_msg = (
+                            f"[AGENT ERROR] Retry after reactive compact also failed: {_retry_e}"
+                        )
+                        output_fn(_retry_msg)
+                        AUDIT.log(self.session_id, "error", result_summary=str(_retry_e))
+                        return _retry_msg
+                else:
+                    error_msg = f"[AGENT ERROR] Error calling Bedrock: {e}"
+                    output_fn(error_msg)
+                    AUDIT.log(self.session_id, "error", result_summary=str(e))
+                    return error_msg
 
             # Track token usage BEFORE stop check — Bedrock already billed us
             if response and response.usage:
@@ -8058,7 +8760,11 @@ class Agent:
                 else:
                     _approved_tcs = _task_tcs
 
-                if len(_approved_tcs) >= 2:
+                _serialize_build_tasks = (
+                    CONFIG.enable_worktree and
+                    any(str((tc.input or {}).get("subagent_type", "general")).strip() == "build" for tc in _approved_tcs)
+                )
+                if len(_approved_tcs) >= 2 and not _serialize_build_tasks:
                     _output_lock = threading.Lock()
                     def _thread_safe_output(text):
                         with _output_lock:
@@ -8092,6 +8798,11 @@ class Agent:
                         output_fn(f"[Parallel execution failed: {e}. Falling back to sequential.]")
                     finally:
                         FILE_CACHE.restore_context(_parent_ctx)
+                elif len(_approved_tcs) >= 2 and _serialize_build_tasks:
+                    # CONFIG.workspace is process-global, so parallel build agents cannot
+                    # safely point at different worktrees. The dispatch loop below runs
+                    # them sequentially; each build call then gets its own worktree.
+                    output_fn("[Build sub-agents run sequentially to preserve worktree isolation]")
                 elif len(_approved_tcs) == 1:
                     # Only 1 approved — run sequentially (will be handled in main dispatch loop)
                     pass
@@ -8412,12 +9123,91 @@ BEDROCK_MODELS = [
 ]
 # Single source of truth: chat.ipynb should import BEDROCK_MODELS instead of duplicating
 
+# V4.10.0 #44: Per-model context window (tokens). Used to rebase compaction
+# percent triggers when the user switches model. Bedrock 1M variants will
+# slot in here when AWS exposes them (currently 200K everywhere as of 2026-04).
+# Mirrors Runnable's CONTEXT_1M_BETA_HEADER concept but adapted to Bedrock,
+# which exposes context window as a separate model ARN, not a beta header.
+BEDROCK_MODEL_CONTEXT_WINDOWS: Dict[str, int] = {
+    "au.anthropic.claude-haiku-4-5-20251001-v1:0": 200_000,
+    "au.anthropic.claude-sonnet-4-6":              200_000,
+    "au.anthropic.claude-sonnet-4-5-20250929-v1:0": 200_000,
+    "au.anthropic.claude-opus-4-6-v1":             200_000,
+    "global.anthropic.claude-opus-4-5-20251101-v1:0": 200_000,
+    "anthropic.claude-3-5-sonnet-20241022-v2:0":   200_000,
+    "anthropic.claude-3-5-sonnet-20240620-v1:0":   200_000,
+    "anthropic.claude-3-haiku-20240307-v1:0":      200_000,
+    "anthropic.claude-3-sonnet-20240229-v1:0":     200_000,
+    # When AWS exposes Sonnet/Haiku 1M Bedrock variants, add their ARNs here
+    # with 1_000_000 — no other code needs to change because compaction
+    # thresholds rebase against this value.
+}
+DEFAULT_CONTEXT_WINDOW: int = 200_000
+
+
+def resolve_context_window(model_id: str, override: int = 0) -> int:
+    """V4.10.0 #44: Resolve a sane context window for a given Bedrock model.
+
+    Args:
+        model_id: Bedrock model ARN/ID.
+        override: explicit user-set value (>0 wins). Pass 0/None to auto-derive.
+
+    Returns:
+        Context window in tokens. Falls back to DEFAULT_CONTEXT_WINDOW for
+        unknown model IDs.
+    """
+    if override and override > 0:
+        return int(override)
+    return BEDROCK_MODEL_CONTEXT_WINDOWS.get(model_id, DEFAULT_CONTEXT_WINDOW)
+
+
+def _auto_derive_context_window(config: 'Config') -> int:
+    """V4.10.0 #44: Sync CONFIG.context_max_tokens to the per-model default
+    UNLESS the user explicitly set context_max_tokens in agent_config.json.
+
+    User override is detected by re-reading the JSON: if the key is present,
+    we leave it alone (the value already loaded via _apply_config_file wins).
+    Otherwise we derive from model_id and rebase in place.
+
+    Returns the resolved value.
+    """
+    ext = _load_config_file(config.workspace) or {}
+    raw = ext.get("context_max_tokens", None)
+    # Codex review 2026-04-28: only honor a user override if it's a valid
+    # positive int. If JSON has the key with an invalid value (None, string,
+    # negative, bool — which is an int subclass), _apply_config_file already
+    # rejected it — derive the default instead of freezing on whatever the
+    # dataclass default happens to be.
+    if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0:
+        # User explicitly set a valid value — respect it; nothing to derive.
+        return int(config.context_max_tokens)
+    derived = resolve_context_window(config.model_id, override=0)
+    if derived != config.context_max_tokens:
+        old = config.context_max_tokens
+        config.context_max_tokens = derived
+        try:
+            CONTEXT.max_tokens = derived  # keep ContextManager view consistent
+        except Exception:
+            pass
+        logging.info(
+            "[V4.10.0 #44] context_max_tokens=%d (model=%s); previous default was %d",
+            derived, config.model_id, old,
+        )
+    return derived
+
+
+# Resolve once at module load so all downstream compaction triggers compute
+# against the correct window. Safe even on unknown model IDs (falls back to default).
+_auto_derive_context_window(CONFIG)
+
+
 # Tool icons for display (synced from GCP version)
 TOOL_ICONS = {
     'read_file': '📖', 'write_file': '📝', 'edit_file': '✏️',
     'glob': '🔍', 'grep': '🔎', 'list_dir': '📁',
     'bash': '💻', 'python_exec': '🐍',
     'create_word': '📄', 'create_excel': '📊', 'create_markdown': '📋',
+    'create_notebook': '📓', 'notebook_edit': '📓',  # V4.10.0 #10
     'view_image': '🖼️', 'semantic_search': '🧠',
     'todo_write': '✅', 'todo_read': '📋',
     'skill': '🧩', 'task': '🧠',
@@ -9739,6 +10529,49 @@ def create_chat_ui(mock_mode: bool = None):
             input_box.value = ""
             _release_lock()
             return
+        # /context command - inspect context/token bloat sources
+        if msg == "/context":
+            agent = ui_state.get("agent")
+            if not agent:
+                add_message('system', 'No active agent session yet.')
+            else:
+                add_message('system', format_context_report(agent.messages))
+            input_box.value = ""
+            _release_lock()
+            return
+        # /status command - inspect or initialize durable long-running task state
+        if msg == "/status" or msg.startswith("/status "):
+            arg = msg[len("/status"):].strip()
+            status_path = _status_doc_path()
+            if not status_path:
+                add_message('system', 'Status doc is disabled or outside workspace. Check `CONFIG.status_doc`.')
+            elif arg == "path":
+                add_message('system', f'Status doc path: `{status_path}`')
+            elif arg == "init":
+                try:
+                    if os.path.exists(status_path):
+                        add_message('system', f'AGENT_STATUS.md already exists: `{status_path}`')
+                    else:
+                        os.makedirs(os.path.dirname(status_path), exist_ok=True)
+                        with open(status_path, "w", encoding="utf-8") as f:
+                            f.write(_status_doc_template())
+                        add_message('system', f'Initialized AGENT_STATUS.md: `{status_path}`')
+                except Exception as e:
+                    add_message('system', f'Failed to initialize AGENT_STATUS.md: {e}')
+            else:
+                if not os.path.isfile(status_path):
+                    add_message('system', f'No AGENT_STATUS.md found at `{status_path}`. Use `/status init` to create the template.')
+                else:
+                    loaded = _load_project_status().strip()
+                    if loaded:
+                        if len(loaded) > 8000:
+                            loaded = loaded[:8000] + "\n... (truncated for display)"
+                        add_message('system', loaded)
+                    else:
+                        add_message('system', f'AGENT_STATUS.md exists but is empty or disabled: `{status_path}`')
+            input_box.value = ""
+            _release_lock()
+            return
         # /verify command - auto-loads verify skill and runs verification
         if msg == "/verify" or msg.startswith("/verify "):
             scope = msg[len("/verify"):].strip() or "full"
@@ -10067,12 +10900,14 @@ def create_chat_ui(mock_mode: bool = None):
                 system_prompt = None  # Use default
 
             # Auto-match skills by keyword (model-independent — works even with small models)
+            # V4.9.6: Entire feature is global opt-in. Default is OFF so skills never
+            # silently load into context unless the user intentionally enables it.
             # V4.9.0: Two fixes compared to v4.8.0:
             #   1. Honour auto_trigger: false (v4.8.0 parsed the flag but the loop ignored it).
             #   2. Word-boundary match instead of substring — "clara" no longer matches "Clara_WIP"
             #      via bare `in`, and "review" no longer matches "unreviewable".
             active = ui_state.get("active_skills", [])
-            if msg and not active:
+            if CONFIG.enable_skill_auto_trigger and msg and not active:
                 msg_lower = msg.lower()
                 # Extract word tokens once per message (alphanumerics separated by non-word chars).
                 msg_words = set(re.findall(r"[a-z0-9]+", msg_lower))
