@@ -1,5 +1,23 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-29 — V4.10.10 Release: `aws_bedrock_only` UI toggle
+
+### Context
+After v4.10.9 ship + Codex audit, user accepted the strict bedrock-only default but asked: *"where to set it, in UI to control?"*. Previously hardcoded in chat.ipynb cell 3 — now surfaced as a UI checkbox in cell 2.
+
+### v4.10.10 Changes
+- **chat.ipynb cell 2** — added `bedrock_only_toggle` widget (`Checkbox(value=True, description='Bedrock-only (block S3, Lambda, Textract, etc.)')`); included in `config_box` VBox so it renders.
+- **chat.ipynb cell 3** — replaced hardcoded `CONFIG.aws_bedrock_only = True` with `CONFIG.aws_bedrock_only = bedrock_only_toggle.value`. Config-applied banner now includes "AWS scope: Bedrock-only ..." or "All AWS services allowed (with approval)".
+- **No validator logic changed.** Existing per-method blocks (delete_bucket, delete_object, terminate_instances, etc., line 1571-1574) and per-service blocks (IAM, STS, KMS, EC2, RDS, CloudFormation, line 1561-1569) remain in place regardless of toggle state.
+
+### Codex Review
+Run via `codex exec --full-auto -s read-only -m gpt-5.3-codex`. **VERDICT: PASS** — *"change is correct, no impairment."* Codex specifically verified: ipywidgets syntax, cell 3 wiring, no namespace regression, no breakage of other CONFIG assignments, default value matches strict policy.
+
+### Tests
+No new tests needed (UI-surfacing only). Existing 134 destructive-coverage cases + 122 v4 unit tests still green.
+
+### Version: 4.10.9 → 4.10.10
+
 ## 2026-04-29 — V4.10.9 Release: backtick eval+downloader parity
 
 ### Context

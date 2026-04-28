@@ -1,5 +1,17 @@
-# SageAgent V4 — User Guide (v4.10.9)
+# SageAgent V4 — User Guide (v4.10.10)
 
+
+## What's new in v4.10.10 (2026-04-29, `aws_bedrock_only` UI toggle)
+
+The `aws_bedrock_only` flag is now controllable via a checkbox in the config UI (cell 2 of `chat.ipynb`) instead of a hardcoded line in cell 3. Default is **ticked** (strict, Bedrock-only).
+
+**To allow S3 / Textract / Lambda / DynamoDB calls** (with approval, destructive ops still blocked): untick the checkbox **before running cell 3**.
+
+When ticked → only `boto3.client('bedrock-runtime')` is reachable. When unticked → all AWS services available with the approval gate; destructive operations (delete bucket / object / table / function, terminate instances, etc.) remain hard-blocked.
+
+The Configuration Applied banner shown by cell 3 now displays the AWS scope so you can see which mode you're in at a glance.
+
+Codex review on this change: **PASS** ("change is correct, no impairment"). 134 destructive-coverage tests + 122 v4 unit tests still green.
 
 ## What's new in v4.10.9 (2026-04-29, backtick eval+downloader parity)
 

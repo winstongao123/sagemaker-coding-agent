@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.9)</title>
+<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.10)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== Design System (matches Demo Tech docs) ===== */
@@ -187,7 +187,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 
 <!-- Navigation -->
 <nav class="topnav">
-    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.9)</div>
+    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.10)</div>
     <div class="topnav-links">
         <a href="#v410" class="active"><span class="nav-dot" style="background:#10b981"></span> What's New</a>
         <a href="#what"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
@@ -206,13 +206,13 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 <!-- Hero -->
 <div class="hero">
     <div class="badges">
-        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.9</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.10</span>
         <span class="badge"><span class="dot" style="background:var(--blue)"></span> Bedrock-only</span>
         <span class="badge"><span class="dot" style="background:var(--amber)"></span> 91/91 V4.10 Tests</span>
         <span class="badge"><span class="dot" style="background:var(--purple)"></span> 5/5 Codex Review PASS</span>
     </div>
-    <h1>SageAgent V4 &mdash; v4.10.9</h1>
-    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.5 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check. v4.10.6 added the html skill: presentation / design / flowchart / architecture HTML deliverables, with screenshot-iteration loop. v4.10.7 hardened destructive-command coverage: ~50 new bash patterns + ~12 python patterns spanning cloud / IaC / orchestration / storage / DB CLI / persistence / system-overwrite, HIGH_RISK_TOOLS excluded from Always-Approve UI, cross-surface mirrored into Claude Code + Learning_Factory hooks. v4.10.8 closed the residual obfuscation escape route (base64/xxd/eval pipe-to-shell now blocked across more interpreters) and hard-blocked recursive folder removal from the agent (`rm -r/-rf/-fr/-R/--recursive`, `rmdir`, `Remove-Item -Recurse`, `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()`) — single-file cleanup still allowed; the 🧹 Clean button still works in-process. v4.10.9 closed Codex's third local-hook finding by adding a narrow backtick eval+downloader pattern (defense-in-depth only — eval was already excluded from the bash allowlist; zero new false-positive risk). 134/134 destructive-coverage tests + 122 v4 unit tests + 16/16 hook obfuscation self-test all green.</p>
+    <h1>SageAgent V4 &mdash; v4.10.10</h1>
+    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.5 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check. v4.10.6 added the html skill: presentation / design / flowchart / architecture HTML deliverables, with screenshot-iteration loop. v4.10.7 hardened destructive-command coverage: ~50 new bash patterns + ~12 python patterns spanning cloud / IaC / orchestration / storage / DB CLI / persistence / system-overwrite, HIGH_RISK_TOOLS excluded from Always-Approve UI, cross-surface mirrored into Claude Code + Learning_Factory hooks. v4.10.8 closed the residual obfuscation escape route (base64/xxd/eval pipe-to-shell now blocked across more interpreters) and hard-blocked recursive folder removal from the agent (`rm -r/-rf/-fr/-R/--recursive`, `rmdir`, `Remove-Item -Recurse`, `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()`) — single-file cleanup still allowed; the 🧹 Clean button still works in-process. v4.10.9 closed Codex's third local-hook finding by adding a narrow backtick eval+downloader pattern (defense-in-depth only — eval was already excluded from the bash allowlist; zero new false-positive risk). v4.10.10 surfaced the previously-hardcoded `aws_bedrock_only` setting as a UI checkbox in cell 2 of `chat.ipynb` (default ticked = strict). Codex review on v4.10.10: PASS. 134/134 destructive-coverage tests + 122 v4 unit tests + 16/16 hook obfuscation self-test all green.</p>
 </div>
 
 <!-- Stats -->
@@ -220,7 +220,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     <div class="stat-card"><div class="stat-value blue">23</div><div class="stat-label">Built-in Tools</div></div>
     <div class="stat-card"><div class="stat-value green">11,553</div><div class="stat-label">Lines of Code</div></div>
     <div class="stat-card"><div class="stat-value amber">16</div><div class="stat-label">Security Layers</div></div>
-    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.9)</div></div>
+    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.10)</div></div>
     <div class="stat-card"><div class="stat-value teal">200K</div><div class="stat-label">Default Context (auto-derived)</div></div>
 </div>
 
@@ -276,6 +276,11 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
                 <div class="card-icon">🎯</div>
                 <div class="card-title">v4.10.9 — Backtick eval+downloader parity</div>
                 <div class="card-desc">Closes Codex's third local-hook finding from the v4.10.8 round in v4 itself: bare backtick command-substitution (<code>eval `curl ...`</code>, <code>eval `wget ...`</code>, <code>eval `base64 -d ...`</code>) was caught in the local hook but not v4. <strong>Defense-in-depth only</strong> — <code>eval</code> is already excluded from v4's bash allowlist, so all <code>eval</code> forms fail at allowlist before regex runs. The new pattern provides clear attack-specific messaging for the obfuscation case and parity with the local hook. <strong>Narrow-by-design</strong>: requires backtick AND a remote-fetcher (<code>curl</code>/<code>wget</code>/<code>fetch</code>) OR decoder (<code>base64</code>/<code>xxd</code>/<code>hexdump</code>). Legitimate uses like <code>eval `date`</code>, <code>eval `git ...`</code>, <code>eval `pwd`</code> would NOT trip even if <code>eval</code> were allowlisted. <strong>Zero new false-positive risk.</strong> 134-case test coverage (up from v4.10.8's 129) + 122 v4 unit tests still green.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">🎚️</div>
+                <div class="card-title">v4.10.10 — `aws_bedrock_only` UI toggle</div>
+                <div class="card-desc">User asked: <em>"when bedrock only, then just it only — where to set it, in UI to control?"</em>. The previously-hardcoded <code>aws_bedrock_only</code> setting is now surfaced as a checkbox in cell 2 of <code>chat.ipynb</code>. <strong>Default ticked (strict, Bedrock-only).</strong> Untick before running cell 3 to allow S3 read/write, Textract, Lambda invoke, DynamoDB writes — all gated by the approval prompt; destructive AWS operations (delete bucket / object / table / function, terminate instances, etc.) remain hard-blocked at the per-method denylist (lines 1571-1574) and admin services blocked at boto3.client level (lines 1561-1569). Cell 3 banner now displays AWS scope at startup. <strong>Codex review: PASS.</strong> No false-positive risk added; UI surfacing only — validator logic unchanged. Tests unchanged (134 destructive-coverage + 122 unit still green).</div>
             </div>
         </div>
         <div style="margin-top:24px; padding:16px; background:var(--bg-card); border-left:4px solid var(--green); border-radius:4px;">

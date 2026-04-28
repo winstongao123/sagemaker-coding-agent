@@ -4,15 +4,23 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.9
+# SageAgent V4.10.10
 
-AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, bypass-proof destructive-command coverage (cloud / IaC / storage / DB / persistence / system overwrite), obfuscation hardening (base64/xxd/eval pipe-to-shell), folder-removal hard-block, and backtick-eval+downloader parity. **v4.10.9**.
+AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, bypass-proof destructive-command coverage, obfuscation hardening, folder-removal hard-block, backtick-eval+downloader parity, and **AWS scope UI toggle** (Bedrock-only checkbox in cell 2). **v4.10.10**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.10
+
+**v4.10.10 — `aws_bedrock_only` UI toggle (2026-04-29):**
+- Cell 2 gains a `bedrock_only_toggle` checkbox (default ticked = strict).
+- Cell 3 reads `bedrock_only_toggle.value` into `CONFIG.aws_bedrock_only` (was hardcoded `True`). Config banner now shows AWS scope.
+- Untick the checkbox to allow S3 read/write, Textract, Lambda invoke, DynamoDB writes (with approval). Destructive AWS ops remain hard-blocked.
+- Codex review: PASS. No false-positive risk. No test changes (UI-surfacing only).
 
 ### What's new in v4.10.9
 

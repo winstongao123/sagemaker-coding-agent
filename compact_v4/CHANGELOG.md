@@ -1,5 +1,23 @@
 # Compact V4 Changelog
 
+## v4.10.10 — `aws_bedrock_only` UI toggle (2026-04-29)
+
+User asked: *"3 [bedrock-only] is fine. When say bedrock only, then just it only. Where to set it, in UI to control?"* — surfaces the previously-hardcoded setting as a checkbox in the config UI.
+
+**Change:**
+- `chat.ipynb` cell 2 — added `bedrock_only_toggle` widget (default ticked = strict, blocks S3 / Lambda / Textract / DynamoDB / etc.).
+- `chat.ipynb` cell 3 — `CONFIG.aws_bedrock_only = bedrock_only_toggle.value` (was hardcoded `True`). Config-applied banner now shows AWS scope.
+
+**Behavior:**
+- Default (ticked): strict Bedrock-only. Only `boto3.client('bedrock-runtime')` reachable; other AWS service clients blocked at validate_python layer (line 1974-2000) and AWS CLI blocked at validate_command (line 1856).
+- Unticked: agent default `False` applies — S3 read/write, Textract, Lambda invoke, DynamoDB writes all allowed (with approval prompt; destructive ops still hard-blocked at lines 1571-1574 and per-service blocks at 1561-1569).
+
+**Codex review:** PASS. *"change is correct, no impairment."*
+
+**Tests:** unchanged (134 destructive coverage cases + 122 v4 unit tests still green; no logic added to validators, only UI surfacing).
+
+### Version: 4.10.9 → 4.10.10
+
 ## v4.10.9 — Backtick eval+downloader parity (2026-04-29)
 
 User asked: "we made so many fix on safety after 22:27 zip rebuild — all in zip?". Audit found that during the v4.10.8 cross-surface push, Codex's third finding (backtick command-substitution bypass for eval+downloader/decoder) was applied to the local hook + Learning_Factory hook but **not** to v4 itself. v4.10.9 closes that parity gap.
