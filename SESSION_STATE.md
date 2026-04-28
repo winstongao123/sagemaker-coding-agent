@@ -20,12 +20,16 @@ After v4.10.1 shipped, user asked detailed production-readiness questions about 
 
 ### Version: 4.10.1 → 4.10.2
 
-### Final consistency sweep (Codex round 2)
+### Final consistency sweep (Codex round 2 + manual round 3)
 After the initial v4.10.2 fix, a second Codex pass found three remaining inconsistencies:
 - L6686 todo_write nudge still said "you should spawn verify" (verbiage from old MANDATORY rule). Softened to "SUGGEST /verify and wait for confirmation; only auto-spawn if CONFIG.enforce_verify_contract=True".
 - chat.ipynb cell 0 title still said V4.10.1; bumped to V4.10.2 + new highlight bullet for the verify-contract softening.
 - v3_architecture.html and PS_FLOWCHART_V4.html still had v4.10.1 markers; bumped to v4.10.2.
 All fixed in the same v4.10.2 commit.
+
+A third manual sweep (during user's 6-question audit) caught two more:
+- v3_architecture.html L215 narrative had over-replaced "v4.10.1" with "v4.10.2" — reframed correctly: v4.10.0 = 5 phases, v4.10.1 = Context Collapse + Sonnet, v4.10.2 = verify-contract softening.
+- HERMES_VS_CODING_AGENT.html and PS_DEEP_DIVE_RUNNABLE.html banners still said "v4.10.0 update" only; now describe all 3 v4.10.x same-day releases.
 
 
 ## 2026-04-28 — V4.10.1 Release (same-day follow-up): Context Collapse + default Sonnet 4.5

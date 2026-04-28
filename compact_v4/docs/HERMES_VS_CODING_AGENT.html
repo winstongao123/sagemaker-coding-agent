@@ -86,8 +86,12 @@ window.addEventListener('load', async () => {
 
 <h1>Self-Improving Loop vs Coding Agent Loop</h1>
 <div style="background:#0d2818; border:1px solid #10b981; border-radius:8px; padding:14px 18px; margin:12px 0 20px 0;">
-  <strong style="color:#34d399;">★ v4.10.0 update (2026-04-28):</strong>
-  <span style="color:#c9d1d9;">SageAgent V4 now ships 5 Runnable-parity additions — surgical <code>notebook_edit</code>, skill listing token budget, per-sub-agent env-details, model-aware context window auto-derive, and reactive compact on Bedrock <code>CONTEXT_OVERFLOW</code>. 55 new tests across 5 phases, all green; Codex-reviewed per phase (gpt-5.3-codex). See <code>compact_v4/CHANGELOG.md</code> and <code>compact_v4/docs/V4_10_0_PLAN.md</code> for the full status table and the 9 correctness issues Codex caught and we fixed.</span>
+  <strong style="color:#34d399;">★ v4.10.x update (2026-04-28):</strong>
+  <span style="color:#c9d1d9;">SageAgent V4 now ships 6 Runnable-parity additions across 3 same-day releases:
+  <b>v4.10.0</b> — surgical <code>notebook_edit</code>, skill listing token budget, per-sub-agent env-details, model-aware context window, reactive compact on Bedrock <code>CONTEXT_OVERFLOW</code>;
+  <b>v4.10.1</b> — segment-level Context Collapse + default model switched to Sonnet 4.5 (cache activates from 1024 tokens vs Haiku 4096);
+  <b>v4.10.2</b> — verify-contract softened (Codex caught prompt contradiction): now suggest-and-confirm by default, opt-in strict mode via <code>CONFIG.enforce_verify_contract</code>.
+  67/67 tests across 7 files green; Codex-reviewed per phase (gpt-5.3-codex). See <code>compact_v4/CHANGELOG.md</code> and <code>compact_v4/docs/V4_10_0_PLAN.md</code>.</span>
 </div>
 <p class="desc">
   Why is <strong>Hermes</strong> (self-improving agent) different from <strong>Runnable / SageMaker V4</strong> (coding agent)?<br>
