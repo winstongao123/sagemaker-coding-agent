@@ -1,5 +1,20 @@
-# SageAgent V4 — User Guide (v4.10.6)
+# SageAgent V4 — User Guide (v4.10.7)
 
+
+## What's new in v4.10.7 (2026-04-28, destructive-command hardening)
+
+User asked: "Will v4 ever run a destructive cloud / git / storage / DB command without my explicit OK, even if I've turned auto-approve on?" Answer: no. v4.10.7 closes every theoretical bypass.
+
+What's blocked end-to-end:
+- **Cloud CLIs are not on the allowlist** — `gcloud`, `aws`, `az`, `kubectl`, `helm`, `terraform`, `pulumi`, `gsutil`, `bq`, `gh`, `doctl`, `heroku`, `vercel`, `netlify`, `wrangler`, `flyctl`, `railway` and more all fail at the bash allowlist before regex even runs.
+- **DANGEROUS_PATTERNS denylist (~50 added)** — destructive subcommands across all the above CLIs, plus `git push --delete`, `branch -D`, `tag -d`, `reflog expire`, `gc --prune`, `restore .`/`checkout -- .`, storage tools (`lvremove`, `mkfs`, `dd of=/dev/`, `parted`, `zfs destroy`, `btrfs delete`, `mdadm --remove`, `cryptsetup luksClose`), persistence (`crontab -r`, `systemctl disable/stop`, `pm2 delete`), database CLI inline `DROP/TRUNCATE/DELETE FROM/FLUSHALL/SHUTDOWN`, redirects into `/etc/`/`/usr/`/`system32/`, `chmod 000`, `chattr +i`, and remote-execute pipes (`curl|sh`).
+- **DANGEROUS_PYTHON denylist (~12 added)** — `cursor.execute("DROP/TRUNCATE/DELETE")`, SQLAlchemy `metadata.drop_all`, MongoDB `dropDatabase/deleteMany({})`, Redis `flushall/flushdb`, `os.unlink` and `pathlib` destructive ops on system paths, `shutil.rmtree` outside tmp/home.
+- **Hidden catch-all (line 1558)** — blocks every boto3 / google.cloud / azure SDK mutating method call (`.delete_*`, `.terminate_*`, `.stop_*`, `.destroy_*`, etc.) regardless of which SDK.
+- **HIGH_RISK_TOOLS bypass guard** — `bash`, `python_exec`, `task`, `web_fetch` are excluded from the "Always Approve" UI shortcut. Even if you click "Approve all" earlier, the next bash/python_exec command **still prompts**. The "Always Approve" button is hidden for those tools. There is no UI path to a permanent bypass.
+
+Coverage proof: 5 test groups / 107 cases in `test_v410_destructive_coverage.py`. All pass.
+
+This was also propagated cross-surface: the same denylist patterns are mirrored into `~/.claude/hooks/pre-bash-safety.sh` (Claude Code global) and `Learning_Factory/hooks/pre-bash-safety.sh` (LF source of truth, auto-installed by `setup.sh` on new machines). Arcsage_OPC inherits via the global hook. Codex CLI has no PreToolUse hook surface — relies on its own elevated sandbox + per-command approval.
 
 ## What's new in v4.10.6 (2026-04-28, `html` skill for design deliverables)
 

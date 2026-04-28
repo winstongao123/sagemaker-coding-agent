@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.6)</title>
+<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.7)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== Design System (matches Demo Tech docs) ===== */
@@ -187,7 +187,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 
 <!-- Navigation -->
 <nav class="topnav">
-    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.6)</div>
+    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.7)</div>
     <div class="topnav-links">
         <a href="#v410" class="active"><span class="nav-dot" style="background:#10b981"></span> What's New</a>
         <a href="#what"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
@@ -206,13 +206,13 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 <!-- Hero -->
 <div class="hero">
     <div class="badges">
-        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.6</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.7</span>
         <span class="badge"><span class="dot" style="background:var(--blue)"></span> Bedrock-only</span>
         <span class="badge"><span class="dot" style="background:var(--amber)"></span> 91/91 V4.10 Tests</span>
         <span class="badge"><span class="dot" style="background:var(--purple)"></span> 5/5 Codex Review PASS</span>
     </div>
-    <h1>SageAgent V4 &mdash; v4.10.6</h1>
-    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.6 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check.</p>
+    <h1>SageAgent V4 &mdash; v4.10.7</h1>
+    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.5 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check. v4.10.6 added the html skill: presentation / design / flowchart / architecture HTML deliverables, with screenshot-iteration loop. v4.10.7 hardened destructive-command coverage: ~50 new bash patterns + ~12 python patterns spanning cloud / IaC / orchestration / storage / DB CLI / persistence / system-overwrite, HIGH_RISK_TOOLS excluded from Always-Approve UI, 107-case test coverage, cross-surface mirrored into Claude Code + Learning_Factory hooks.</p>
 </div>
 
 <!-- Stats -->
@@ -220,7 +220,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     <div class="stat-card"><div class="stat-value blue">23</div><div class="stat-label">Built-in Tools</div></div>
     <div class="stat-card"><div class="stat-value green">11,553</div><div class="stat-label">Lines of Code</div></div>
     <div class="stat-card"><div class="stat-value amber">16</div><div class="stat-label">Security Layers</div></div>
-    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.6)</div></div>
+    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.7)</div></div>
     <div class="stat-card"><div class="stat-value teal">200K</div><div class="stat-label">Default Context (auto-derived)</div></div>
 </div>
 
@@ -261,6 +261,11 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
                 <div class="card-icon">✅</div>
                 <div class="card-title">Skill auto-load STILL OFF</div>
                 <div class="card-desc">The v4.9.6 fix is intact: <code>CONFIG.enable_skill_auto_trigger=False</code> by default AND per-skill <code>auto_trigger=false</code> by default. Both gates must be explicitly turned on. <code>test_v49_auto_trigger.py</code> regression: <strong>12/12 still green</strong>. The "skill caused coding issue" bug from earlier sessions cannot recur.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">🛡️</div>
+                <div class="card-title">v4.10.7 — Destructive-command hardening</div>
+                <div class="card-desc">~50 new bash <code>DANGEROUS_PATTERNS</code> covering cloud destructive subcommands (AWS/GCP/Azure/PaaS/IaC/orchestration), git destructive (remote-branch del, <code>branch -D</code>, <code>tag -d</code>, <code>reflog expire</code>, <code>restore .</code>), storage tools (<code>lvremove</code>, <code>mkfs</code>, <code>dd of=/dev/</code>, <code>zfs destroy</code>, <code>cryptsetup luksClose</code>), persistence (<code>crontab -r</code>, <code>systemctl disable/stop</code>, <code>pm2 delete</code>), DB CLI inline (<code>DROP/TRUNCATE/DELETE FROM/FLUSHALL/SHUTDOWN</code>), system-path overwrite, perm lockout, <code>curl|sh</code>. ~12 new <code>DANGEROUS_PYTHON</code> patterns (<code>cursor.execute DROP</code>, SQLAlchemy <code>drop_all</code>, Mongo <code>dropDatabase/deleteMany</code>, Redis <code>flushall</code>, <code>os.unlink</code>/<code>shutil.rmtree</code> on system paths). <strong>HIGH_RISK_TOOLS = {bash, python_exec, task, web_fetch}</strong> excluded from Always-Approve UI shortcut — even with auto-approve on, these still prompt; the "Always Approve" button is hidden for them, so there's no UI path to a permanent bypass. Cross-surface: same denylist mirrored into <code>~/.claude/hooks/pre-bash-safety.sh</code> + Learning_Factory source-of-truth. <strong>107/107 tests in test_v410_destructive_coverage.py.</strong></div>
             </div>
         </div>
         <div style="margin-top:24px; padding:16px; background:var(--bg-card); border-left:4px solid var(--green); border-radius:4px;">

@@ -4,15 +4,28 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.5
+# SageAgent V4.10.7
 
-AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.6**.
+AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, and bypass-proof destructive-command coverage (cloud / IaC / storage / DB / persistence / system overwrite). **v4.10.7**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.7
+
+**v4.10.7 — destructive-command hardening (cross-surface bypass-proof gate):**
+1. **~50 new DANGEROUS_PATTERNS** covering cloud destructive subcommands (AWS/GCP/Azure), orchestration (kubectl/helm), IaC (terraform/terragrunt/pulumi), PaaS (heroku/vercel/netlify/wrangler/flyctl/railway), git (remote del/branch -D/tag -d/reflog expire/restore .), storage (lvremove/mkfs/dd to dev/zfs/btrfs/cryptsetup), persistence (crontab -r/systemctl disable/pm2 delete), DB CLI inline (DROP/TRUNCATE/DELETE/FLUSHALL/SHUTDOWN), system-path overwrite, perm lockout, curl|sh.
+2. **~12 new DANGEROUS_PYTHON patterns** for cursor.execute DROP, SQLAlchemy drop_all, Mongo dropDatabase/deleteMany, Redis flushall, os.unlink/shutil.rmtree on system paths.
+3. **HIGH_RISK_TOOLS = {bash, python_exec, task, web_fetch}** — excluded from Always-Approve UI shortcut, button hidden for those tools, no permanent bypass possible.
+4. **Cross-surface propagation** — same denylist mirrored into Claude Code global hook + Learning_Factory source-of-truth hook. OPC inherits. Codex relies on its own sandbox.
+5. New test file `test_v410_destructive_coverage.py` — 5 groups, 107 cases, all pass.
+
+### What's new in v4.10.6
+
+**v4.10.6 — html skill: presentation / design / flowchart / architecture HTML deliverables.** Ships 3 reference templates inside `skills/html/references/`. Screenshot-iteration loop (3 rounds) substitutes for Playwright on SageMaker. Anti-patterns enforced: no emojis, HTML IS KING, no truncated tables, Mermaid safe syntax.
 
 ### What's new in v4.10.5
 

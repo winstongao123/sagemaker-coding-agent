@@ -76,6 +76,32 @@ Tests: test_v410_destructive_coverage.py — 5 groups covering 107 cases (72 des
 
 Version: 4.10.6 → 4.10.7
 
+### V4.10.7 cross-surface propagation (2026-04-28, follow-up to compact_v4 ship)
+
+User asked: "after done, check my local machine ... all destructive command for any cloud any service any git, anything local files anything possible, must be gated by hook for review regardless what authority level given to coding agent" + "as i am also using codex, ensure hook apply to all" + "also check learning factory and OPC, ensure same idea apply to all of them".
+
+Propagated the v4.10.7 denylist into the shell-hook layer so every coding agent surface is bypass-proof:
+
+- `~/.claude/hooks/pre-bash-safety.sh` (Claude Code global) — extended with the v4.10.7 mirror block: AWS/GCP/Azure destructive subcommands, kubectl/helm, terraform/terragrunt/pulumi, doctl/heroku/vercel/netlify/wrangler/flyctl/railway, gh repo/release/key/secret delete + auth logout, git remote-state mutation (--delete, branch -D, tag -d, reflog expire, restore .), storage/volume tooling, persistence/services, DB CLI inline DROP/TRUNCATE/DELETE/FLUSHALL, system-path overwrite, perm lockout, curl|sh. Hook fires *before* `permissions.allow` matching — no auto-approve / nonstop / wide allowlist can escape.
+- `D:/Github/Learning_Factory/hooks/pre-bash-safety.sh` (LF source of truth) — synced byte-identical. `setup.sh` already includes `pre-bash-safety` in the install loop, so any new machine that runs setup gets the v4.10.7-parity hook automatically. Pushed `5af016b` to `origin/main` with CHANGELOG entry.
+- Arcsage_OPC — *no edit needed*. Its `.claude/settings.json` explicitly notes "Global LF hooks at `~/.claude/hooks/` stay active. They gate commits + catch destructive bash." So OPC inherits via the global hook automatically. OPC's own `permissions.deny` (rm -rf, git push --force, sudo, chmod 777, curl|sh) layers on top.
+- Codex CLI — *gap documented*. Audited `C:/Users/winst/.codex/config.toml`: no PreToolUse hook surface. Codex relies on its own `[windows] sandbox = "elevated"` + per-command approval prompt + `trust_level = "trusted"` per project. Same destructive commands are still gated by Codex's own gate (different mechanism), but the v4.10.7 regex denylist isn't installable into Codex today. Acceptable; revisit if OpenAI ships hooks.
+
+37/37 self-test cases green for the LF/global hook mirror (smoke covered AWS s3 destructive, gcloud delete, gsutil rm, az delete, kubectl delete, helm uninstall, terraform destroy, gh repo delete, git push --delete, git branch -D, git restore ., mkfs, dd to device, zfs destroy, crontab -r, psql DROP, redis FLUSHALL, > /etc/, chmod 000, curl|sh, rm -rf /etc, git reset --hard — and 15 legitimate commands that must still pass: git status / push / log / commit, gh pr view/create, kubectl get/describe, gcloud auth list, aws s3 ls, terraform plan, npm install, psql SELECT, ls /etc, echo to /tmp).
+
+### V4.10.7 doc/HTML/companion sweep (2026-04-28, finalising the release)
+
+User asked: "is compact v4 updated, including any html, docs, status, memory, and github main?" Audit found that source code + CHANGELOG + tests + SESSION_STATE.md + sageagent/master were already at v4.10.7 (commit `3fd8d51`), but downstream artefacts were stale. Bumped:
+
+- `compact_v4/MAIN/agent/USER_GUIDE.md` — title v4.10.7 + new "What's new" section explaining the bypass-proof gate and HIGH_RISK_TOOLS guard.
+- `compact_v4/MAIN/agent/chat.md` (notebook companion) — title v4.10.7 + v4.10.7 + v4.10.6 sections (was 2 versions behind).
+- `compact_v4/MAIN/agent/chat.ipynb` cell 0 — title bumped + v4.10.7 entry in the highlights list.
+- `compact_v4/MAIN/agent/v3_architecture.html` — 7 banner occurrences bumped (title, brand, badge, h1, stats card label, etc.), subtitle attribution corrected (v4.10.5 = LF patterns, v4.10.6 = html, v4.10.7 = destructive hardening), new v4.10.7 card added to "What's New" section.
+- `compact_v4/docs/HERMES_VS_CODING_AGENT.html` — release banner extended with full v4.10.7 description, release count 6 → 8.
+- `compact_v4/MAIN/agent/AGENT_STATUS.md` — Plan / Progress / Files Changed / Verification / Next Step sections populated with v4.10.7 work.
+- `memory.md` — left empty (intentional; runtime-populated by the agent).
+- `compact_v4.zip` rebuilt: 26 entries / 296.3 KB. Ship-gate verifier PASS, including version sanity (4.10.7), Sonnet 4.5 default, all 10 required skills (incl. html), notebook_edit + context_collapse + enforce_verify_contract + BEDROCK_MODEL_CONTEXT_WINDOWS present, no forbidden artefacts, flat root layout.
+
 ### Round-12 source-tree restore + AGENT_STATUS.md ship-template fix
 After v4.10.6 ship, user unzipped `compact_v4.zip` over `compact_v4/`, flattening the working tree to runtime-only. Git status showed every `MAIN/agent/*` source file as deleted. Recovery:
 - `git checkout HEAD -- compact_v4/` — restored full source tree (`MAIN/`, `docs/`, `_rebuild_zip.py`, `verify_ship_zip.py`, `CHANGELOG.md`, `changelogs/`).

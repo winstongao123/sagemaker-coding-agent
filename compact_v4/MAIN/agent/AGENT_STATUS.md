@@ -15,19 +15,36 @@ Purpose: durable handoff state for long-running SageAgent work. Keep this file c
 - Do not claim production readiness without evidence.
 
 ## Plan
-- Pending: record the next concrete steps here.
+- v4.10.7 destructive-command hardening shipped 2026-04-28 (commit `3fd8d51` on `sageagent/master`).
+- Cross-surface propagation done same day: Claude Code global hook + Learning_Factory source-of-truth hook + OPC inherits + Codex gap documented.
+- Doc/HTML/companion sweep done same day to bump every artifact to v4.10.7 (USER_GUIDE, chat.md, chat.ipynb, v3_architecture.html, HERMES_VS_CODING_AGENT.html).
 
 ## Progress
-- Pending: summarize completed work here.
+- v4.10.7 added ~50 new `DANGEROUS_PATTERNS` (bash) covering cloud destructive subcommands, git destructive, storage/volume, persistence, DB CLI inline, system-path overwrite, perm lockout, `curl|sh`. Plus ~12 new `DANGEROUS_PYTHON` patterns (cursor.execute DROP, drop_all, dropDatabase, deleteMany, flushall, shutil.rmtree on system paths).
+- HIGH_RISK_TOOLS = {bash, python_exec, task, web_fetch} confirmed excluded from `always_allow` shortcut at line 10414; "Always Approve" button hidden for these tools at line 10423.
+- 107/107 cases pass in `test_v410_destructive_coverage.py` (5 groups: bash patterns, safe-bash, python patterns, read-only classification, HIGH_RISK_TOOLS membership).
+- Same denylist mirrored into `~/.claude/hooks/pre-bash-safety.sh` (Claude Code) + `Learning_Factory/hooks/pre-bash-safety.sh` (LF). 37/37 hook self-test green. LF pushed `5af016b` to `origin/main`.
 
 ## Blockers And Risks
-- Pending: list open risks, missing tests, or environment blockers here.
+- Codex CLI has no PreToolUse hook surface — destructive-command coverage there relies on Codex's built-in sandbox + per-command approval, not the v4.10.7 mirror. Acceptable today; revisit if Codex adds hooks.
+- `origin` remote on this repo is `winstongao123/sagemaker-coding-agent.git` (not the canonical `sageagent`). Always push to `sageagent` per CLAUDE.md.
 
 ## Files Changed
-- Pending: list important edited files here.
+- `compact_v4/MAIN/agent/sagemaker_agent.py` — DANGEROUS_PATTERNS + DANGEROUS_PYTHON additions; `__version__ = "4.10.7"`.
+- `compact_v4/MAIN/agent/test_v410_destructive_coverage.py` — new (107 cases).
+- `compact_v4/CHANGELOG.md` — v4.10.7 entry top.
+- `SESSION_STATE.md` — v4.10.7 release entry.
+- `compact_v4/MAIN/agent/USER_GUIDE.md` — v4.10.7 section + title bump.
+- `compact_v4/MAIN/agent/chat.md` — v4.10.7 + v4.10.6 sections + title bump.
+- `compact_v4/MAIN/agent/chat.ipynb` — cell 0 markdown bumped.
+- `compact_v4/MAIN/agent/v3_architecture.html` — banners bumped + new v4.10.7 card in What's New section.
+- `compact_v4/docs/HERMES_VS_CODING_AGENT.html` — v4.10.7 entry added to release banner.
+- `compact_v4.zip` — pending rebuild after this sweep.
 
 ## Verification
-- Pending: record compile/test/build commands and results here.
+- `python compact_v4/MAIN/agent/test_v410_destructive_coverage.py` → 107/107 pass.
+- LF hook self-test (`_test_destructive.sh`) → 37/37 pass.
+- Ship-gate: pending re-run after zip rebuild.
 
 ## Next Step
-- Pending: write the next action so a resumed session can continue immediately.
+- Rebuild `compact_v4.zip` via `_rebuild_zip.py` to pick up doc/HTML bumps, run `verify_ship_zip.py` ship-gate, commit + push to `sageagent/master`.
