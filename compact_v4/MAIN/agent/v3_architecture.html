@@ -295,7 +295,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 23 tools covering file operations, code execution, document generation, and codebase intelligence.
+            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 24 tools covering file operations, code execution, document generation, and codebase intelligence.
         </div>
 
         <div class="insight blue" style="margin-top:20px">
@@ -712,7 +712,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            <strong>Why 23 tools?</strong> Each tool is a specific action the agent can take. More tools = more capabilities. For comparison, Claude Code has ~12 tools, Aider has ~8, Codex has ~8. V3 has the most tools of any coding agent we tested, including unique ones like create_word, create_chart, and view_image.
+            <strong>Why 24 tools?</strong> Each tool is a specific action the agent can take. More tools = more capabilities. For comparison, Claude Code has ~12 tools, Aider has ~8, Codex has ~8. V3 has the most tools of any coding agent we tested, including unique ones like create_word, create_chart, and view_image.
         </div>
     </div>
 </div>
@@ -826,7 +826,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
             <div class="card" style="border-top:4px solid var(--green)">
                 <div class="card-title">Step 2: Lazy Loading (Smart Optimization)</div>
                 <div class="card-desc">
-                    V3 doesn't always send all 23 tools. Document creation tools (Word, Excel, Chart, PDF, Markdown, Notebook) are <strong>excluded</strong> unless your recent messages mention doc-related keywords.<br><br>
+                    V3 doesn't always send all 24 tools. Document creation tools (Word, Excel, Chart, PDF, Markdown, Notebook) are <strong>excluded</strong> unless your recent messages mention doc-related keywords.<br><br>
                     <strong>Why:</strong> 23 tool definitions = ~2,400 tokens. Without doc tools = ~1,627 tokens. This saves 30% on every API call for coding tasks.
                 </div>
             </div>

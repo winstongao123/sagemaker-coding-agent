@@ -29,6 +29,13 @@ All 3 additions live in the cached static portion of SYSTEM_PROMPT (before the `
 
 ### Version: 4.10.4 → 4.10.5
 
+### Round-7 doc accuracy sweep (post-v4.10.5)
+Codex caught 3 stale claims in PRODUCTION_READINESS_STATUS.md after v4.10.5 ship:
+- "23 tools" — actual count is **24** (`skill_propose_patch` is a separate tool from `skill`). Fixed across PRODUCTION_READINESS_STATUS.md, RUNNABLE_APPLICABILITY_REVIEW.md, chat.md, USER_GUIDE.md, v3_architecture.html.
+- "~1.8K tokens" for tool schema cost — actual measurement (cl100k tokenizer over JSON-serialized name + description + input_schema for all 24 tools) is **~4.9K tokens**. Updated to honest number.
+- "Sub-agent handoff is prompt-dependent" — STALE since v4.10.4 added the bounded auto-handoff block (env-details + AGENT_STATUS slice + active todos + last 10 changed files). Rewrote item #3 to describe the v4.10.4 behaviour accurately.
+Pure doc accuracy fix; no code change. Ship gate still PASS.
+
 
 ## 2026-04-28 — V4.10.4 Release: Sub-agent work-context handoff (closes largest review gap)
 
