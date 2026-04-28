@@ -6,7 +6,7 @@
 
 # SageAgent V4.10.5
 
-AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.5**.
+AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.6**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 

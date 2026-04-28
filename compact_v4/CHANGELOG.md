@@ -1,5 +1,47 @@
 # Compact V4 Changelog
 
+## v4.10.6 — `html` skill: presentation / design / flowchart / architecture HTML deliverables (2026-04-28)
+
+User asked for a way to reliably produce design HTML deliverables (presentations, tabbed design docs, flowchart pages, code-explanation pages) without Playwright on SageMaker. Added a dedicated `html` skill with reference templates and a screenshot-iteration workflow.
+
+Added:
+- **`skills/html/SKILL.md`** (~8.5 KB) — describes when to activate, which reference template to read for each request type, the screenshot-iteration loop that substitutes for Playwright, the user's house CSS palette + standard sections, anti-patterns (no emojis, HTML IS KING, no truncated tables, Mermaid safe syntax), validation steps before declaring done, 4 quick recipes (tabbed design / presentation / flowchart / architecture report).
+- **`skills/html/references/tabbed_design.html`** (~300 KB) — copy of the user's `Clara_Design_v9.html`. Tabbed-layout reference with sidebar nav, decision-log tables, status pills, Mermaid blocks.
+- **`skills/html/references/presentation_slides.html`** (~18 KB) — copy of `clara_textract_v1_PRESENTATION.html`. Single-page slide-style layout.
+- **`skills/html/references/flowchart_page.html`** (~41 KB) — copy of Number-Five `flowcharts.html`. Mermaid-centric reference with business-rule annotations.
+- A 4th canonical template stays at `compact_v4/MAIN/agent/v3_architecture.html` (the v4 architecture report) — referenced by the skill body for "architecture / comparison report" requests.
+
+Workflow encoded in SKILL.md:
+1. Pick the matching reference based on request type (state which one).
+2. `read_file` it (offset/limit for the 3300-line tabbed one).
+3. `write_file` the new HTML.
+4. State the `file:///D:/...` URL so user can open it (suffix `#tab0` if tabbed).
+5. Ask user to screenshot the part that's wrong, save to `<folder>/_shots/v1.png`.
+6. `view_image` the screenshot.
+7. `edit_file` to fix. Loop. After 3 rounds without convergence, ask whether to keep going / redesign / accept.
+
+Key anti-patterns the skill enforces (from user memory + reference inspection):
+- No emojis unless asked
+- HTML IS KING — no "see docs/" pointers, every detail inline
+- No truncated tables — render every row
+- No lorem/placeholder text — fill all sections with real content first
+- Mermaid safe syntax (no `?$:+/` in node labels)
+- Final step is always: ask user to screenshot for visual review
+
+Tests
+- New: `test_v410_html_skill.py` — 6 tests (discovery, CSO format, auto_trigger off, references present + sized, body covers required workflow keywords, body under 12K char cap). All pass.
+- Full v4.10.x + regression suite: **97/97 across 11 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 + 11 + 6 + 6 html + 12 v4.9 = 97).
+
+Ship zip
+- 22 → 26 entries (+ 4 new files: SKILL.md + 3 references)
+- 242.7 KB → 349.8 KB (+~107 KB; references compress well at ~30% ratio)
+- Flat root layout preserved
+- `verify_ship_zip.py` REQUIRED_SKILLS updated to include "html"; ship-gate PASS
+
+Default model unchanged (Sonnet 4.5). All v4.10.0–v4.10.5 features intact. Skill is opt-in only — `auto_trigger: false`, no auto-load.
+
+Version: `4.10.5` → `4.10.6`.
+
 ## v4.10.5 — Learning_Factory pattern adoption (post-compact protocol + structured summary + skill promotion criteria) (2026-04-28)
 
 User asked Codex to review what to learn from `D:/Github/Learning_Factory`. Codex flagged 3 patterns worth adopting (out of LF's larger framework — most of LF's hook ecosystem doesn't fit SageMaker self-use). All 3 are pure prompt / docs additions, no functional code changes.

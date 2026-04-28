@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Presentation Template — minimal example for the html skill</title>
+<!-- This file is a CLEAN, GENERIC presentation template shipped with the
+     html skill at compact_v4/MAIN/agent/skills/html/references/.
+     The agent should mimic the structure (hero / stat row / numbered
+     sections / conclusion), NOT the placeholder text. Replace every
+     [REPLACE] block with real content. Add Mermaid blocks where
+     appropriate. -->
+<style>
+:root {
+  --navy: #0f172a; --navy-light: #1e293b;
+  --blue: #3b82f6; --blue-hover: #2563eb;
+  --sky: #0ea5e9;
+  --green: #10b981; --green-light: #d1fae5;
+  --amber: #f59e0b; --amber-light: #fef3c7;
+  --purple: #8b5cf6; --purple-light: #ede9fe;
+  --red: #ef4444; --red-light: #fef2f2;
+  --teal: #0d9488;
+  --bg: #f8fafc; --bg-card: #ffffff;
+  --text: #0f172a; --text-secondary: #475569;
+  --border: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+  --radius: 8px; --radius-lg: 14px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; }
+.main { max-width: 1100px; margin: 0 auto; padding: 32px 32px 64px; }
+
+/* Hero */
+.hero { text-align: center; padding: 48px 0 32px; }
+.hero h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; }
+.hero .subtitle { font-size: 16px; color: var(--text-secondary); max-width: 720px; margin: 12px auto 0; }
+.badges { display: flex; justify-content: center; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); }
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Stats row */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 32px 0; }
+.stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; text-align: center; box-shadow: var(--shadow); }
+.stat-value { font-size: 28px; font-weight: 800; }
+.stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.stat-value.blue { color: var(--blue); } .stat-value.green { color: var(--green); }
+.stat-value.amber { color: var(--amber); } .stat-value.purple { color: var(--purple); }
+.stat-value.teal { color: var(--teal); } .stat-value.red { color: var(--red); }
+
+/* Section */
+.section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 24px; overflow: hidden; box-shadow: var(--shadow); }
+.section-header { padding: 24px 28px 16px; border-bottom: 1px solid var(--border); }
+.section-header h2 { font-size: 22px; font-weight: 700; }
+.section-header .number { color: var(--blue); margin-right: 10px; }
+.section-header p { font-size: 14px; color: var(--text-secondary); margin-top: 6px; }
+.section-body { padding: 24px 28px; }
+
+/* Card grid */
+.card-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card { background: var(--bg); border-radius: var(--radius); padding: 20px; border-top: 4px solid var(--blue); }
+.card-icon { font-size: 24px; margin-bottom: 8px; }
+.card-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.card-desc { font-size: 14px; color: var(--text-secondary); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+th { background: var(--navy-light); color: white; text-align: left; padding: 10px 12px; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:nth-child(even) td { background: var(--bg); }
+
+/* Code */
+code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 13px; }
+pre { background: var(--navy); color: #e2e8f0; padding: 16px; border-radius: var(--radius); overflow-x: auto; }
+
+/* Footer */
+.footer { text-align: center; padding: 32px 0; color: var(--text-secondary); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="main">
+
+  <!-- HERO: replace [REPLACE] with actual title + subtitle -->
+  <div class="hero">
+    <div class="badges">
+      <span class="badge"><span class="dot" style="background:var(--green)"></span> [REPLACE: status]</span>
+      <span class="badge"><span class="dot" style="background:var(--blue)"></span> [REPLACE: version]</span>
+      <span class="badge"><span class="dot" style="background:var(--amber)"></span> [REPLACE: scope]</span>
+    </div>
+    <h1>[REPLACE: presentation title]</h1>
+    <p class="subtitle">[REPLACE: one-line description — what this presentation is about, who it's for, what they'll learn.]</p>
+  </div>
+
+  <!-- STATS ROW: 4-6 numeric callouts -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-value blue">[N]</div><div class="stat-label">[Metric 1]</div></div>
+    <div class="stat-card"><div class="stat-value green">[N]</div><div class="stat-label">[Metric 2]</div></div>
+    <div class="stat-card"><div class="stat-value amber">[N]</div><div class="stat-label">[Metric 3]</div></div>
+    <div class="stat-card"><div class="stat-value purple">[N]</div><div class="stat-label">[Metric 4]</div></div>
+  </div>
+
+  <!-- SECTION 1 -->
+  <div class="section" id="s1">
+    <div class="section-header">
+      <h2><span class="number">01</span> [REPLACE: section 1 heading]</h2>
+      <p>[REPLACE: one-line context for what this section covers.]</p>
+    </div>
+    <div class="section-body">
+      <div class="card-grid-3">
+        <div class="card" style="border-top-color:var(--blue)">
+          <div class="card-icon">[icon]</div>
+          <div class="card-title">[Concept 1]</div>
+          <div class="card-desc">[REPLACE: 1-2 sentence explanation. No "see docs/" — every detail inline.]</div>
+        </div>
+        <div class="card" style="border-top-color:var(--green)">
+          <div class="card-icon">[icon]</div>
+          <div class="card-title">[Concept 2]</div>
+          <div class="card-desc">[REPLACE: 1-2 sentence explanation.]</div>
+        </div>
+        <div class="card" style="border-top-color:var(--amber)">
+          <div class="card-icon">[icon]</div>
+          <div class="card-title">[Concept 3]</div>
+          <div class="card-desc">[REPLACE: 1-2 sentence explanation.]</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: comparison table example -->
+  <div class="section" id="s2">
+    <div class="section-header">
+      <h2><span class="number">02</span> [REPLACE: comparison heading]</h2>
+      <p>[REPLACE: one-line context.]</p>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Dimension</th>
+            <th>Option A</th>
+            <th>Option B</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>[Row 1 dimension]</td><td>[A details]</td><td>[B details]</td><td>[verdict]</td></tr>
+          <tr><td>[Row 2 dimension]</td><td>[A details]</td><td>[B details]</td><td>[verdict]</td></tr>
+          <tr><td>[Row 3 dimension]</td><td>[A details]</td><td>[B details]</td><td>[verdict]</td></tr>
+          <!-- Add ALL rows. Never truncate. The skill's HTML-IS-KING rule applies. -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECTION 3: code example -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <h2><span class="number">03</span> [REPLACE: code-explanation heading]</h2>
+      <p>[REPLACE: what does this code do, why does it matter.]</p>
+    </div>
+    <div class="section-body">
+      <p>[REPLACE: 1-2 paragraphs of context before the code block.]</p>
+      <pre><code>[REPLACE: real code example, not lorem ipsum]</code></pre>
+      <p>[REPLACE: explanation of what the code does, line by line if useful.]</p>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    [REPLACE: author / date / repo link / version]
+  </div>
+
+</div>
+
+</body>
+</html>

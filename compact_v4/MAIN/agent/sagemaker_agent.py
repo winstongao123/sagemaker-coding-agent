@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.5 (April 2026)
+Version: 4.10.6 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.5"
+__version__ = "4.10.6"
 
 # ============================================================
 # IMPORTS

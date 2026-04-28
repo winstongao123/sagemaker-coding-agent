@@ -30,7 +30,7 @@ REQUIRED_AT_ROOT = {
 
 # Required skill subfolders (must each have a SKILL.md).
 REQUIRED_SKILLS = {
-    "batch", "clara", "design", "reflexion", "report", "review",
+    "batch", "clara", "design", "html", "reflexion", "report", "review",
     "security-review", "simplify", "verify",
 }
 

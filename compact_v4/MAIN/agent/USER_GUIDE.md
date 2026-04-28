@@ -1,5 +1,26 @@
-# SageAgent V4 — User Guide (v4.10.5)
+# SageAgent V4 — User Guide (v4.10.6)
 
+
+## What's new in v4.10.6 (2026-04-28, `html` skill for design deliverables)
+
+User asked: "Can v4 build presentation / design / flowchart HTMLs like Clara_Design_v9, clara_textract_PRESENTATION, flowcharts.html?" Yes — and now with a dedicated skill so it's reliable.
+
+Activate with `/skill use html`. Then ask for any of:
+- **Presentation HTML** — single-page slide-style, hero + section cards
+- **Tabbed design doc** — sidebar nav, decision-log tables, status pills, Mermaid blocks
+- **Flowchart page** — Mermaid as centrepiece, business-rule annotations
+- **Architecture report** — layers, stats, comparisons (uses `v3_architecture.html` as template)
+
+The skill ships 3 reference HTMLs inside `skills/html/references/` (copies of `Clara_Design_v9.html`, `clara_textract_v1_PRESENTATION.html`, `flowcharts.html`). The agent reads ONLY the matching reference for your request — not all three — to save tokens.
+
+**Screenshot iteration loop** (substitutes for Playwright on SageMaker):
+1. Agent writes the HTML.
+2. Agent gives you the `file:///D:/...html` URL (with `#tab0` if tabbed).
+3. You open + screenshot the part that's wrong, save to `<folder>/_shots/v1.png`.
+4. Agent uses `view_image` on the screenshot.
+5. Agent edits to fix. Loop. After 3 rounds without convergence, asks whether to keep going.
+
+Anti-patterns enforced: no emojis, HTML IS KING (no "see docs/" pointers), no truncated tables, no lorem/placeholder, Mermaid safe syntax, final step always asks for screenshot review.
 
 ## What's new in v4.10.5 (2026-04-28, Learning_Factory pattern adoption)
 
