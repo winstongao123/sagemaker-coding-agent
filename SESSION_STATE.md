@@ -29,6 +29,15 @@ All 3 additions live in the cached static portion of SYSTEM_PROMPT (before the `
 
 ### Version: 4.10.4 → 4.10.5
 
+### Round-9 HTML banner sync (post-v4.10.5)
+User asked "all htmls updated?" — found 3 issues:
+- `v3_architecture.html` subtitle had v4.10.4 mis-attributed to v4.10.5 (my earlier global replace overshot). Restored correct narrative: v4.10.4 = handoff, v4.10.5 = LF patterns.
+- `v3_architecture.html` test-count badge said "55/55 V4.10 Tests" — stale from before v4.10.4/5. Updated to 91/91.
+- `PS_FLOWCHART_V4.html` test-count "55/55" — same fix.
+- `compact_v4/docs/HERMES_VS_CODING_AGENT.html` narrative ended at v4.10.4 — added v4.10.5.
+- `PS_DEEP_DIVE_RUNNABLE.html` narrative ended at v4.10.4 — added v4.10.5.
+All 4 HTMLs now consistent: version markers v4.10.5, narratives describe v4.10.0–v4.10.5 (6 same-day releases), test count 91/91.
+
 ### Round-8 systematic folder cleanup (post-v4.10.5)
 User asked for systematic cleanup. Cleaned:
 - 39 leaked v410_nb_* test tempdirs at compact_v4/ root (atexit cleanup didn't fire when Python was killed mid-test). Deleted.

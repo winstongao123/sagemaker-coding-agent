@@ -192,8 +192,9 @@ tr:nth-child(even) { background: var(--card); }
   <b>v4.10.1</b> closed the 6th — segment-level contextCollapse — plus default model switched to Sonnet 4.5;
   <b>v4.10.2</b> softened the verify-contract after Codex caught a contradiction;
   <b>v4.10.3</b> added a ship-gate verifier, cache-boundary regression test, many-skill stress test, and clearer permission denials;
-  <b>v4.10.4</b> closed the largest remaining gap — sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) so they don't fly blind on the parent's larger goal.
-  85 tests across 9 files green; per-phase Codex review (gpt-5.3-codex) caught 15 real correctness issues across the 5 releases — all fixed and re-verified before merging. Full plan: <code>compact_v4/docs/V4_10_0_PLAN.md</code>.</span>
+  <b>v4.10.4</b> closed the largest remaining gap — sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) so they don't fly blind on the parent's larger goal;
+  <b>v4.10.5</b> adopted 3 Learning_Factory prompt-only patterns — post-compact resume protocol (don't ask user, continue first unchecked task), structured summary sections (Standing Constraints + Critical Don't-Forget Context), skill self-patching 4-rule promotion check.
+  91 tests across 10 files green; per-phase Codex review (gpt-5.3-codex) caught 15 real correctness issues across the 6 releases — all fixed and re-verified before merging. Full plan: <code>compact_v4/docs/V4_10_0_PLAN.md</code>.</span>
 </div>
 
 <div class="stats">
