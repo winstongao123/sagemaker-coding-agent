@@ -1,5 +1,20 @@
 # Compact V4 Changelog
 
+## v4.10.9 — Backtick eval+downloader parity (2026-04-29)
+
+User asked: "we made so many fix on safety after 22:27 zip rebuild — all in zip?". Audit found that during the v4.10.8 cross-surface push, Codex's third finding (backtick command-substitution bypass for eval+downloader/decoder) was applied to the local hook + Learning_Factory hook but **not** to v4 itself. v4.10.9 closes that parity gap.
+
+**One narrow new pattern in DANGEROUS_PATTERNS:**
+- Backtick eval pattern that requires both `eval` and a backtick payload containing a remote-fetcher (`curl`, `wget`, `fetch`) or decoder (`base64`, `xxd`, `hexdump`).
+
+**Defense-in-depth, zero new false-positive risk.** v4 already blocked all `eval` usage at the bash allowlist level (`eval` not in `BASE_ALLOWED_COMMANDS`). The new regex provides a clearer attack-specific error message if `eval` ever gets allowlisted, and mirrors the local-hook fix Codex flagged.
+
+**Why narrow-by-design:** the regex requires backtick AND a remote-fetcher OR decoder. Legitimate backtick uses like `` eval `date` ``, `` eval `git ...` ``, `` eval `pwd` `` would NOT trip this regex even if `eval` were allowlisted.
+
+**Tests:** 5 new bash block cases. Total **134 cases** (92 bash block + 14 bash allow + 28 python block) up from v4.10.8's 129. Full v4 unit suite (122 tests) still green.
+
+### Version: 4.10.8 → 4.10.9
+
 ## v4.10.8 — Obfuscation hardening + recursive folder removal hard-block (2026-04-28)
 
 User asked two safety questions after v4.10.7 ship:

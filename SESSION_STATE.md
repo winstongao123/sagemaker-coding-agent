@@ -1,5 +1,27 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-29 — V4.10.9 Release: backtick eval+downloader parity
+
+### Context
+After v4.10.8 ship, user noticed the zip was rebuilt at 22:27 but Codex iterations after that were hook-only (LF + ~/.claude). Audit identified one Codex finding that didn't propagate to v4 itself: the bare backtick form of `eval` + remote-fetcher/decoder.
+
+### v4.10.9 Changes
+**One narrow new pattern in DANGEROUS_PATTERNS** (sagemaker_agent.py): backtick eval that catches `` eval `curl ...` ``, `` eval `wget ...` ``, `` eval `base64 -d ...` ``, `` eval `xxd -r ...` ``.
+
+**Defense-in-depth only** — `eval` is already excluded from v4's bash allowlist (`BASE_ALLOWED_COMMANDS`), so all `eval` forms fail at allowlist BEFORE regex runs. Verified with sanity test: legit forms like `` eval `date +%s` ``, `` eval `git rev-parse HEAD` ``, `` eval `pwd` `` all return "Command not allowed: 'eval'" at the allowlist layer.
+
+**Why narrow-by-design** (per user instruction "minimum false positives possible"): the pattern requires backtick AND a remote-fetcher (`curl`/`wget`/`fetch`) OR decoder (`base64`/`xxd`/`hexdump`). Won't match legitimate backtick uses. Zero false-positive risk.
+
+### Tests
+- 5 new bash block cases for eval+backtick+fetcher/decoder.
+- Total **134 destructive coverage cases** (92 bash block + 14 bash allow + 28 python block) up from v4.10.8's 129. All 5 test groups green.
+- Full v4 unit suite: 122 tests across 12 files, all green.
+
+### Cross-surface
+No hook changes needed — this is v4-only catch-up. Local hook + LF hook already had this pattern from v4.10.8 round. v4.10.9 closes the parity gap.
+
+### Version: 4.10.8 → 4.10.9
+
 ## 2026-04-28 — V4.10.8 Release: obfuscation hardening + recursive folder-removal hard-block
 
 ### Context

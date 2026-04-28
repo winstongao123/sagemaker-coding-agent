@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.8 (April 2026)
+Version: 4.10.9 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.8"
+__version__ = "4.10.9"
 
 # ============================================================
 # IMPORTS
@@ -1494,6 +1494,12 @@ class SecurityManager:
         (r"\beval\s+\$", "Eval with variable"),
         (r"\beval\s+['\"]", "Eval string execution"),
         (r"\beval\s+.*\$\(", "Eval with command substitution"),
+        # V4.10.9: narrow backtick eval+downloader/decoder pattern. Mirrors the
+        # parity fix Codex caught in the local hook. Intentionally narrow so
+        # legitimate eval+backtick usage (e.g. `eval `date``, `eval `git ...``)
+        # doesn't false-positive — only blocks when the backtick payload contains
+        # an actual remote-fetch or decode tool.
+        (r"\beval\s+[^|;&]*`[^`]*\b(curl|wget|fetch|base64|xxd|hexdump)\b", "Eval of remote-fetch/decode backtick (download, inspect, then run)"),
         (r"\bpython[23]?\s+-c\b", "Python -c bypasses python_exec security; use python_exec tool instead"),
         (r"\bperl\s+-e", "Perl one-liner"),
 

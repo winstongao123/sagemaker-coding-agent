@@ -1,6 +1,6 @@
 # Agent Status
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 Purpose: durable handoff state for long-running SageAgent work. Keep this file concise and current.
 
@@ -19,6 +19,7 @@ Purpose: durable handoff state for long-running SageAgent work. Keep this file c
 - Cross-surface propagation done same day: Claude Code global hook + Learning_Factory source-of-truth hook + OPC inherits + Codex gap documented.
 - Doc/HTML/companion sweep done same day to bump every artifact to v4.10.7 (USER_GUIDE, chat.md, chat.ipynb, v3_architecture.html, HERMES_VS_CODING_AGENT.html).
 - v4.10.8 obfuscation hardening + recursive folder removal hard-block shipped 2026-04-28: closes residual encoded-payload escape route + adds policy-driven folder-removal block per user instruction "I will not use the agent for folder removal".
+- v4.10.9 backtick eval+downloader parity shipped 2026-04-29: closes Codex's third local-hook finding from v4.10.8 round in v4 itself. Defense-in-depth only — eval is already excluded from v4's bash allowlist; zero new false-positive risk.
 
 ## Progress
 - v4.10.7 added ~50 new `DANGEROUS_PATTERNS` (bash) covering cloud destructive subcommands, git destructive, storage/volume, persistence, DB CLI inline, system-path overwrite, perm lockout, `curl|sh`. Plus ~12 new `DANGEROUS_PYTHON` patterns (cursor.execute DROP, drop_all, dropDatabase, deleteMany, flushall, shutil.rmtree on system paths).

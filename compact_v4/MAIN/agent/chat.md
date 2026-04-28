@@ -4,15 +4,22 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.8
+# SageAgent V4.10.9
 
-AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, bypass-proof destructive-command coverage (cloud / IaC / storage / DB / persistence / system overwrite), obfuscation hardening (base64/xxd/eval pipe-to-shell), and folder-removal hard-block (no recursive rm / shutil.rmtree from agent). **v4.10.8**.
+AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, bypass-proof destructive-command coverage (cloud / IaC / storage / DB / persistence / system overwrite), obfuscation hardening (base64/xxd/eval pipe-to-shell), folder-removal hard-block, and backtick-eval+downloader parity. **v4.10.9**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.9
+
+**v4.10.9 — backtick eval+downloader parity (2026-04-29):**
+- One narrow new bash DANGEROUS_PATTERNS entry: `eval` followed by a backtick payload containing `curl`/`wget`/`fetch`/`base64`/`xxd`/`hexdump`. Mirrors Codex's third local-hook finding from v4.10.8.
+- Defense-in-depth only — `eval` is already excluded from v4's bash allowlist, so all `eval` forms fail at allowlist before regex runs. Zero new false-positive risk.
+- 134 destructive-coverage tests pass (was 129); 122 v4 unit tests still green.
 
 ### What's new in v4.10.8
 

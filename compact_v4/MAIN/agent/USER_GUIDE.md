@@ -1,5 +1,9 @@
-# SageAgent V4 — User Guide (v4.10.8)
+# SageAgent V4 — User Guide (v4.10.9)
 
+
+## What's new in v4.10.9 (2026-04-29, backtick eval+downloader parity)
+
+Tiny patch closing one Codex-flagged gap that was fixed in the local hook during the v4.10.8 cross-surface push but missed in v4 itself: the bare backtick form of `eval` + remote-fetcher/decoder. The new pattern is **defense-in-depth only** — `eval` is already excluded from v4's bash allowlist, so all `eval` forms fail at allowlist before regex runs. The new pattern provides clear attack-specific messaging and parity with the local hook. **Zero new false-positive risk** since legitimate `eval` usage was never reachable in v4 anyway. 134 destructive-coverage tests pass (up from 129); 122 v4 unit tests still green.
 
 ## What's new in v4.10.8 (2026-04-28, obfuscation hardening + folder-removal hard-block)
 
