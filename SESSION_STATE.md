@@ -47,6 +47,9 @@ The v4.9.6 fix is intact (both `CONFIG.enable_skill_auto_trigger` and per-skill 
 
 ### Version: 4.9.7 → 4.10.0
 
+### Follow-up doc commit (same day)
+After commit 213528a shipped, the live status doc `compact_v4/docs/V4_10_0_PLAN.md` was finalized with: all 5 phases + HTML/Doc/Ship/Push/Re-review marked DONE; per-phase Codex record table; closed-gap roster (5 of 6); deferred-to-v4.11.0 note (#41b Context Collapse); post-ship deep re-review verdict (v4.10.0 ≥ Runnable on every dimension that matters for self-use SageMaker); cache integrity / Haiku-friendliness / metrics correctness / skill-load safety all verified. No code changes — doc-only.
+
 
 ## 2026-04-23 — V4.9.5 Release: self-patching skills with safety rails (opt-in, handy use)
 

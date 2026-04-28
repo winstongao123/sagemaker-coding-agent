@@ -23,9 +23,11 @@
 | 3 | #44 | `context_window` config + Bedrock model→window map + threshold rebasing | ~80 (incl. fixes) | **DONE** | **PASS** (after 2 fix rounds) | Codex caught: invalid-JSON freeze, bool-as-int trap, weak e2e test. All fixed. 10/10 tests green. |
 | 4 | #10 | `notebook_edit` surgical .ipynb cell tool | ~165 (incl. fix) | **DONE** | **PASS** (after 1 fix round) | Codex caught: write phase narrow-exception (json.dump TypeError could escape). Broadened to Exception. 13/13 tests green. |
 | 5 | #41a | Reactive Compact on `CONTEXT_OVERFLOW` (compact + retry once) | ~110 (incl. fixes) | **DONE** | **PASS** (after 1 fix round) | Codex caught: file-read state + cache-broken flag only set on one branch (now both); retry stop path missing usage tracking. All fixed. 5/5 tests green. |
-| HTML | — | Update v3_architecture.html, PS_FLOWCHART_V4, PS_DEEP_DIVE_RUNNABLE, HERMES_VS_CODING_AGENT | — | TODO | — | per HTML-IS-KING rule |
-| Doc | — | CHANGELOG.md, USER_GUIDE.md | — | TODO | — | |
-| Ship | — | rebuild compact_v4.zip (runtime-only) | — | TODO | — | per `feedback_runtime_only_ship` |
+| HTML | — | Update v3_architecture.html, PS_FLOWCHART_V4, PS_DEEP_DIVE_RUNNABLE, HERMES_VS_CODING_AGENT | — | **DONE** | — | All 4 updated with v4.10.0 banner / section / stats |
+| Doc | — | CHANGELOG.md, USER_GUIDE.md, SESSION_STATE.md | — | **DONE** | — | v4.10.0 entries added to all three |
+| Ship | — | rebuild compact_v4.zip (runtime-only) | — | **DONE** | — | 57 files / 245.7 KB / runtime-only (no test files) |
+| Push | — | commit + push to sageagent remote | — | **DONE** | — | commit 213528a; +2215 / -62 across 16 files |
+| Re-review | — | Post-ship deep re-review vs Runnable | — | **DONE** | — | See "Outcome" section below |
 
 ---
 
@@ -155,6 +157,51 @@
 
 ---
 
-## Outcome (filled at end)
+## Outcome (2026-04-28)
 
-_TBD — populated after final diff + zip._
+**Status: SHIPPED.** Commit `213528a` on `master`, pushed to `sageagent` remote.
+
+### Closed gaps (5 of 6)
+- #10 NotebookEdit ✅
+- #24 Skill listing budget ✅
+- #41a Reactive Compact ✅
+- #44 1M-readiness via model→window map + JSON-validated override ✅
+- #47 Per-sub-agent env-details ✅
+
+### Deferred to v4.11.0 (1)
+- #41b Context Collapse (segment-level summary) — non-trivial (~200 LOC). Microcompact + reactive compact cover the common cases for self-use sessions; full segment collapse helps marathon (100+ turn) sessions only.
+
+### Codex per-phase review record
+| Phase | Round 1 | Round 2 | Round 3 | Final |
+|---|---|---|---|---|
+| 1 #24 | ISSUES (3 bugs) | ISSUES (1 bug) | PASS | PASS |
+| 2 #47 | PASS | — | — | PASS |
+| 3 #44 | ISSUES (2 bugs) | ISSUES (2 bugs) | PASS | PASS |
+| 4 #10 | ISSUES (1 bug) | PASS | — | PASS |
+| 5 #41a | ISSUES (3 bugs) | PASS | — | PASS |
+
+**9 real correctness issues caught and fixed** before any phase advanced. Issues: first-entry-over-budget overshoot, hint cost not budgeted, degenerate-budget overshoot, freeze-on-invalid-JSON, bool-as-int trap, weak e2e test, narrow OSError catch, file-read state cleared only on one branch, retry stop-check missing token-billing parity.
+
+### Post-ship deep re-review verdict
+
+**For self-use SageMaker coding agent: v4.10.0 ≥ Runnable on every dimension that matters.** The remaining Runnable advantages depend on infrastructure that doesn't exist on Bedrock/SageMaker (multi-scope cache, ant-only feature gates, GitHub tooling, cron/notifications, 1M beta header). v4.10.0 adds 11 SageMaker-specific advantages Runnable doesn't have (single-file deploy, Bedrock-native auth, AGENT_STATUS.md handoff, custom compaction model, skill self-patching, spec-first critique, mandatory verification, document tools, python_exec, no-network guardrails, dual-gate skill-auto-load default OFF).
+
+**Caching activation verified:** every v4.10.0 addition sits AFTER the `# === DYNAMIC ===` marker; the cached `SYSTEM_PROMPT` prefix is byte-identical across turns. Bedrock ephemeral cache will activate when static prefix exceeds the per-model checkpoint size (4096 tokens for Haiku 4.5).
+
+**Haiku-friendliness verified:** main system prompt grew by 2 lines net. Sub-agent prompts grew by 4–6 lines (env-details only). No nested directives.
+
+**Metrics correctness verified:** all percent triggers (`MICROCOMPACT_TRIGGER_PERCENT=0.70`, `SUMMARY_TRIGGER_PERCENT=0.80`) compute against `CONFIG.context_max_tokens`, which auto-derives from `model_id` via `BEDROCK_MODEL_CONTEXT_WINDOWS`. Reactive compact does not double-count tokens.
+
+**Skill-load safety (the previous bug):** fully resolved. Dual-gate default OFF (`enable_skill_auto_trigger=False` global + `auto_trigger=false` per-skill). `test_v49_auto_trigger.py` 12/12 still green.
+
+### Test totals
+- New v4.10.0: 9 + 6 + 10 + 13 + 5 = **43 tests, all PASS**
+- Plus auto-trigger regression: 12/12 still green
+- Combined: **55/55 across 6 files**
+
+### Ship metadata
+- Commit: `213528a`
+- Files: 16 changed (+2215 / -62)
+- Zip: `compact_v4.zip` 57 files / 245.7 KB / runtime-only
+- Remote: pushed to `sageagent`
+
