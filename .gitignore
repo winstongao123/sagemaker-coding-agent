@@ -54,6 +54,13 @@ compact_v4/MAIN/agent/AGENT_STATUS.md
 
 # v4.10.3: standalone analysis scratch files — not v4 runtime
 compact_v4/analyze_*.py
+
+# v4.10.3 (broader): runtime artefacts the agent leaves anywhere it's run
+**/.snapshots/
+**/.tool_cache/
+**/.exec_budget.json
+compact_v4/**/analyze_*.py
+compact_v4/**/refactor_me.py
 nul
 _archive/compare_code/gg-claude-code-runnable
 test-results/

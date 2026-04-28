@@ -31,6 +31,9 @@ Outstanding (deliberately deferred, documented as caveats):
 - Live Bedrock smoke test on real SageMaker (user-side, out of scope for me)
 - Long-task token-cost benchmark vs Runnable (out of scope; cache-boundary test proves cache *can* activate, hit-rate measurement is a separate exercise)
 
+### Round-5 hygiene (final gitignore sweep)
+After c3a70ba, the agent kept leaving runtime artefacts in MAIN/ and MAIN/tests/ subdirs (`.exec_budget.json`, `.snapshots/`, `.tool_cache/`, `analyze_sales.py`, `refactor_me.py` scratch). Existing .gitignore rules only matched the top-level paths. Generalised to `**/.snapshots/`, `**/.tool_cache/`, `**/.exec_budget.json`, `compact_v4/**/analyze_*.py`, `compact_v4/**/refactor_me.py`. Working tree now clean except the unrelated `_archive` submodule pointer drift. Pure repo hygiene; no code change.
+
 
 ## 2026-04-28 — V4.10.2 Release (Codex-surfaced contradiction fix): verify-contract softened
 
