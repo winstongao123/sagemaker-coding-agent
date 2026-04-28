@@ -1,5 +1,36 @@
 # Compact V4 Changelog
 
+## v4.10.5 — Learning_Factory pattern adoption (post-compact protocol + structured summary + skill promotion criteria) (2026-04-28)
+
+User asked Codex to review what to learn from `D:/Github/Learning_Factory`. Codex flagged 3 patterns worth adopting (out of LF's larger framework — most of LF's hook ecosystem doesn't fit SageMaker self-use). All 3 are pure prompt / docs additions, no functional code changes.
+
+Added (prompt-only):
+
+- **Post-compact restore protocol** — `# System` section of `SYSTEM_PROMPT` now explicitly tells the agent: after auto-compact, do NOT ask the user what to do; read the `[CONVERSATION SUMMARY]` block, the restored TODOs, the recently-read files block, `AGENT_STATUS.md`, and continue from the first unchecked task. The summary's "Pending Questions" section is the FIRST thing to look at on resume. Closes the most common post-compact UX failure: agent gets compacted, then asks "what would you like me to do?" instead of resuming.
+
+- **Structured compact summary additions** — `Compactor.create_summary_prompt()` now requires two extra sections in every LLM-generated summary:
+  - **12. Standing Constraints** — hard rules / standing user instructions / project-wide constraints that MUST survive compaction (e.g., "always use Python 3.11", "never push to GitHub", security/compliance constraints). One bullet each, skip if none apply.
+  - **13. Critical Don't-Forget Context** — the 1-3 most important pieces of context where forgetting WOULD cause a regression. Re-orientation anchor for the next turn. Quote the user's exact wording when load-bearing. Mirrors LF's hermes-format pre-compact record.
+
+- **Skill self-patching expanded to 4-rule promotion check** — was 1 rule (3+ same-correction in session); now 4 rules (Repeated + Non-trivial + Generalizable + Real-pitfall-avoiding) plus an explicit memory-vs-skill distinction (memory.md = small facts; skill patches = procedural knowledge that meets all 4 criteria). Stops the agent from proposing skill patches for stylistic preferences or one-off task quirks.
+
+Deliberately NOT adopted from Learning_Factory (per Codex's filter):
+- Full hook ecosystem (not a natural fit for SageMaker notebook runtime)
+- Smart approval LLM judge (adds cost + failure surface)
+- Tool-failure thresholds 5/3/8 (existing 3-repeat doom-loop at L8993 is already stricter at 3; we're NOT loosening to LF's 5)
+- Heavy rollback ecosystem (local git + worktrees + snapshots already cover this)
+- Team / remote-agent machinery (single-process SageMaker scope)
+
+Tests
+- New: `test_v410_lf_patterns.py` — 6 tests covering all 3 additions + cache-boundary integrity check + doom-loop-still-strict check. All pass.
+- Full v4.10.x + regression suite: **91/91 across 10 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 + 11 + 6 + 12 v4.9 = 91)
+
+Cache safety verified: new additions all live in the cached static portion of `SYSTEM_PROMPT` (before the `# === DYNAMIC ===` boundary). Boundary marker count remains exactly 1.
+
+Codex review (1 round, PASS): all 3 LF adoptions correctly placed, cache boundary integrity preserved, version bump consistent, doom-loop threshold deliberately unchanged.
+
+Version: `4.10.4` → `4.10.5`.
+
 ## v4.10.4 — Sub-agent work-context handoff (Codex follow-up review) (2026-04-28)
 
 User's Codex follow-up review pointed out that v4.10.3 sub-agents only got env-details (cwd / git HEAD / depth) but NOT the work context (current goal, active todos, changed files). If the parent forgot to brief them in the prompt argument, sub-agents flew blind. This was the largest remaining gap from earlier reviews. Closed in v4.10.4.

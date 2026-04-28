@@ -4,15 +4,23 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.4
+# SageAgent V4.10.5
 
-AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.4**.
+AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, and cache-boundary regression test. **v4.10.5**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.5
+
+**v4.10.5 — Learning_Factory pattern adoption (3 prompt-only additions, no functional changes):**
+1. **Post-compact resume protocol** — agent no longer asks "what would you like me to do?" after compact. Reads summary + TODOs + AGENT_STATUS + recently-read files, continues from first unchecked task.
+2. **Structured summary sections #12 + #13** — every LLM compact summary now captures Standing Constraints (hard rules surviving compact) and Critical Don't-Forget Context (1-3 most important re-orientation anchors).
+3. **Skill self-patching 4-rule check** — was 1 rule, now 4 (Repeated + Non-trivial + Generalizable + Real-pitfall) + explicit memory-vs-skill distinction.
+6 new tests, Codex PASS first review. Deliberately NOT adopted: LF's full hook ecosystem, smart-approval judge, tool-failure 5/3/8 (current 3-repeat doom-loop is stricter, not loosening).
 
 ### What's new in v4.10.4
 

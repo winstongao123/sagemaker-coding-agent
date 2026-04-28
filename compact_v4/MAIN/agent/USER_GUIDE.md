@@ -1,5 +1,17 @@
-# SageAgent V4 — User Guide (v4.10.4)
+# SageAgent V4 — User Guide (v4.10.5)
 
+
+## What's new in v4.10.5 (2026-04-28, Learning_Factory pattern adoption)
+
+User asked Codex what to learn from Learning_Factory. Codex flagged 3 prompt-only patterns worth adopting:
+
+- **Post-compact resume protocol** — system prompt now tells the agent: after compact, do NOT ask "what would you like me to do?". Read the `[CONVERSATION SUMMARY]` block + restored TODOs + AGENT_STATUS.md + recently-read files block, and continue from the first unchecked task. Asks user only when blocked on a real decision.
+- **Structured summary sections #12 + #13** — every LLM-generated compact summary now also captures **Standing Constraints** (hard rules / standing user instructions that must survive compaction) and **Critical Don't-Forget Context** (the 1-3 most important re-orientation anchors).
+- **Skill self-patching 4-rule check** — was 1 rule (3+ same correction); now 4 (Repeated + Non-trivial + Generalizable + Real-pitfall-avoiding) plus explicit memory-vs-skill distinction. Stops noise patches for one-off preferences.
+
+Deliberately NOT adopted: LF's full hook ecosystem (not a SageMaker fit), smart approval LLM judge (cost), tool-failure 5/3/8 thresholds (current 3-repeat doom-loop is already stricter — NOT loosened), heavy rollback ecosystem (local git is enough).
+
+6 new tests in `test_v410_lf_patterns.py`. Codex PASS on first review (no fix round needed). Full v4.10.x + regression suite: 91/91 across 10 files.
 
 ## What's new in v4.10.4 (2026-04-28, sub-agent work-context handoff)
 

@@ -7,9 +7,9 @@
 
 ## Status by V4.10.x
 
-V4.10.0 closed 5 Runnable-parity gaps (notebook_edit, skill listing budget, sub-agent env-details, model-aware context window, reactive compact). V4.10.1 closed a 6th (segment-level Context Collapse) + flipped default model to Sonnet 4.5. V4.10.2 softened the verify-contract (suggest by default, opt-in strict mode). V4.10.3 added ship-gate verifier, cache-boundary regression test, many-skill stress test, clearer permission denials. V4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) on top of the v4.10.0 env-details — they no longer fly blind when the parent forgets to brief them.
+V4.10.0 closed 5 Runnable-parity gaps (notebook_edit, skill listing budget, sub-agent env-details, model-aware context window, reactive compact). V4.10.1 closed a 6th (segment-level Context Collapse) + flipped default model to Sonnet 4.5. V4.10.2 softened the verify-contract (suggest by default, opt-in strict mode). V4.10.3 added ship-gate verifier, cache-boundary regression test, many-skill stress test, clearer permission denials. V4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block. V4.10.5 adopted 3 prompt-only Learning_Factory patterns: post-compact resume protocol, structured summary sections (Standing Constraints + Critical Don't-Forget Context), skill self-patching 4-rule promotion check.
 
-**Of the 18 "must learn / apply" items in the production-readiness review: 14 already done in v4.10.2, 4 added in v4.10.3, 1 final largest-gap closed in v4.10.4.** See `docs/V4_10_0_PLAN.md` for the live status table and `CHANGELOG.md` for per-release detail.
+**Of the 18 "must learn / apply" items in the production-readiness review: 14 already done in v4.10.2, 4 added in v4.10.3, 1 final largest-gap closed in v4.10.4. V4.10.5 adds polish from a separate Learning_Factory review.** See `docs/V4_10_0_PLAN.md` for the live status table and `CHANGELOG.md` for per-release detail.
 
 ## Scope Boundary
 

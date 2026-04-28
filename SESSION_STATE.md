@@ -1,5 +1,35 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.5 Release: Learning_Factory pattern adoption (3 prompt-only additions)
+
+### Context
+After v4.10.4 ship, user asked Codex what to learn from `D:/Github/Learning_Factory`. Codex's filtered review identified 3 patterns worth adopting (out of LF's larger framework):
+- Post-compact restore protocol
+- Structured pre-compact record schema (Goal/Constraints/Progress/Decisions/Files/Next/Critical)
+- Skill promotion criteria (4-rule check)
+
+And explicitly NOT-adopt:
+- Full hook ecosystem (not a SageMaker fit)
+- Smart approval LLM judge (cost + failure surface)
+- Tool-failure thresholds 5/3/8 (current 3-repeat doom-loop already stricter)
+- Heavy rollback ecosystem (local git + worktrees + snapshots cover this)
+
+### V4.10.5 Changes (all prompt/docs only, no functional code change)
+1. **SYSTEM_PROMPT '# System' section** gained one explicit post-compact resume rule: do NOT ask user what to do, read [CONVERSATION SUMMARY] + restored TODOs + AGENT_STATUS.md + recently-read files block, continue from first unchecked task.
+2. **`Compactor.create_summary_prompt()`** gained sections 12 (Standing Constraints — hard rules / standing user instructions surviving compact) and 13 (Critical Don't-Forget Context — 1-3 most-important re-orientation anchors).
+3. **SYSTEM_PROMPT '# Skill self-patching' section** WHEN-criteria expanded from 1 rule (3+ same correction) to 4 rules (Repeated + Non-trivial + Generalizable + Real-pitfall-avoiding) + explicit memory-vs-skill distinction (memory.md = small facts; skill patches = procedural knowledge meeting all 4 criteria).
+
+### Verification
+- New: `test_v410_lf_patterns.py` — **6/6 PASS** (post-compact rule, both summary sections, 4-rule check, doom-loop unchanged, cache-boundary integrity)
+- Full v4.10.x + regression suite: **91/91 across 10 files** (10 + 6 + 10 + 13 + 5 + 12 + 6 + 11 + 6 + 12 v4.9 = 91)
+- Codex review: PASS on first review (no fix round needed)
+
+### Cache safety
+All 3 additions live in the cached static portion of SYSTEM_PROMPT (before the `# === DYNAMIC ===` boundary). Boundary marker count remains exactly 1.
+
+### Version: 4.10.4 → 4.10.5
+
+
 ## 2026-04-28 — V4.10.4 Release: Sub-agent work-context handoff (closes largest review gap)
 
 ### Context
