@@ -46,6 +46,18 @@ PASS on confidentiality + content + workflow clarity. Two minor recommendations 
 
 ### Version: 4.10.5 → 4.10.6
 
+### Round-12 source-tree restore + AGENT_STATUS.md ship-template fix
+After v4.10.6 ship, user unzipped `compact_v4.zip` over `compact_v4/`, flattening the working tree to runtime-only. Git status showed every `MAIN/agent/*` source file as deleted. Recovery:
+- `git checkout HEAD -- compact_v4/` — restored full source tree (`MAIN/`, `docs/`, `_rebuild_zip.py`, `verify_ship_zip.py`, `CHANGELOG.md`, `changelogs/`).
+- Removed flat duplicates at `compact_v4/` root (sagemaker_agent.py, USER_GUIDE.md, chat.ipynb, AGENT_STATUS.md, memory.md, skills/) — they were unzip output, redundant with the canonical source at `MAIN/agent/`.
+
+Also caught: `AGENT_STATUS.md` was wrongly gitignored at `compact_v4/MAIN/agent/AGENT_STATUS.md` since round-8. That path is the SHIP TEMPLATE (committed), not the runtime-populated user file (which lives at `<workspace>/AGENT_STATUS.md` per CONFIG.workspace, typically NOT in the source dir). Fixed:
+- Removed the `compact_v4/MAIN/agent/AGENT_STATUS.md` gitignore line.
+- Generated the canonical template by calling `sa._status_doc_template()` (the agent's own default content) → wrote to `compact_v4/MAIN/agent/AGENT_STATUS.md`.
+- Now the zip ships with a clean default template; runtime user state stays gitignored elsewhere.
+
+After fix: ship-gate **PASS** (was FAIL on missing AGENT_STATUS.md). Zip: 26 entries / 291.4 KB / runtime-only / flat root. Tests: 98/98 across 11 files still green.
+
 
 ## 2026-04-28 — V4.10.5 Release: Learning_Factory pattern adoption (3 prompt-only additions)
 

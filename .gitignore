@@ -50,7 +50,9 @@ v410_ctxwin_*/
 # v4.10.2: agent runtime artefacts — created/written every session, not source
 compact_v4/.snapshots/
 compact_v4/.exec_budget.json
-compact_v4/MAIN/agent/AGENT_STATUS.md
+# v4.10.6: AGENT_STATUS.md at MAIN/agent/ is the SHIP TEMPLATE (committed)
+# Runtime-populated AGENT_STATUS.md files at user workspace cwd are NOT this path
+# and remain ignored by patterns above.
 
 # v4.10.3: standalone analysis scratch files — not v4 runtime
 compact_v4/analyze_*.py
