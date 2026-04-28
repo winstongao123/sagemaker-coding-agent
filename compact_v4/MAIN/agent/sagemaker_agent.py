@@ -1560,7 +1560,10 @@ class SecurityManager:
         #         PowerShell `Remove-Item -Recurse`.
         (r"\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*\b|--recursive\b)", "Recursive folder delete blocked. Single-file rm allowed; folder cleanup goes through 🧹 Clean button or your own terminal."),
         (r"\brmdir\b", "rmdir blocked. Folder removal must be manual or via 🧹 Clean button."),
-        (r"\bRemove-Item\b[^|;&]*-(?:Recurse|R)\b", "PowerShell Remove-Item -Recurse blocked. Folder removal must be manual."),
+        # Belt-and-suspenders: re.IGNORECASE is already applied at line 1881 when
+        # this regex is matched. The inline `(?i)` flag here documents the intent
+        # explicitly so it survives any future refactor that drops the global flag.
+        (r"(?i)\bRemove-Item\b[^|;&]*-(?:Recurse|R)\b", "PowerShell Remove-Item -Recurse blocked. Folder removal must be manual."),
     ]
 
     # Dangerous Python code patterns (40+ patterns)

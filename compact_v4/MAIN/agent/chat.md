@@ -20,7 +20,7 @@ AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, promp
 - Cell 2 gains a `bedrock_only_toggle` checkbox (default ticked = strict).
 - Cell 3 reads `bedrock_only_toggle.value` into `CONFIG.aws_bedrock_only` (was hardcoded `True`). Config banner now shows AWS scope.
 - Untick the checkbox to allow S3 read/write, Textract, Lambda invoke, DynamoDB writes (with approval). Destructive AWS ops remain hard-blocked.
-- Codex review: PASS. No false-positive risk. No test changes (UI-surfacing only).
+- Codex initial review: PASS. Comprehensive cumulative re-review after fixing 1 MEDIUM + 1 LOW finding in-place: **PASS** (no findings). Defensive `(?i)` inline flag added to Remove-Item regex (belt-and-suspenders). Cell 0 setup text rewritten for unambiguous cell-by-cell guidance.
 
 ### What's new in v4.10.9
 

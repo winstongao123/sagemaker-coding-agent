@@ -11,7 +11,11 @@ When ticked → only `boto3.client('bedrock-runtime')` is reachable. When untick
 
 The Configuration Applied banner shown by cell 3 now displays the AWS scope so you can see which mode you're in at a glance.
 
-Codex review on this change: **PASS** ("change is correct, no impairment"). 134 destructive-coverage tests + 122 v4 unit tests still green.
+Codex reviews on this change:
+- Initial UI-toggle review: **PASS** ("change is correct, no impairment").
+- Comprehensive cumulative v4.10.7→v4.10.10 review: initial flag of 1 MEDIUM (PowerShell `Remove-Item` regex case sensitivity) + 1 LOW (notebook setup text) — both addressed in-place. Re-review after fixes: **PASS** ("no findings, Remove-Item bypass closed, cell 0 setup text unambiguous, no additional bugs").
+
+134 destructive-coverage tests + 122 v4 unit tests still green.
 
 ## What's new in v4.10.9 (2026-04-29, backtick eval+downloader parity)
 

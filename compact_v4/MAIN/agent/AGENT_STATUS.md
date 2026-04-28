@@ -20,7 +20,7 @@ Purpose: durable handoff state for long-running SageAgent work. Keep this file c
 - Doc/HTML/companion sweep done same day to bump every artifact to v4.10.7 (USER_GUIDE, chat.md, chat.ipynb, v3_architecture.html, HERMES_VS_CODING_AGENT.html).
 - v4.10.8 obfuscation hardening + recursive folder removal hard-block shipped 2026-04-28: closes residual encoded-payload escape route + adds policy-driven folder-removal block per user instruction "I will not use the agent for folder removal".
 - v4.10.9 backtick eval+downloader parity shipped 2026-04-29: closes Codex's third local-hook finding from v4.10.8 round in v4 itself. Defense-in-depth only — eval is already excluded from v4's bash allowlist; zero new false-positive risk.
-- v4.10.10 `aws_bedrock_only` UI toggle shipped 2026-04-29: cell 2 of chat.ipynb now has a Bedrock-only checkbox (default ticked = strict). Codex review PASS on the change. No validator logic change.
+- v4.10.10 `aws_bedrock_only` UI toggle shipped 2026-04-29: cell 2 of chat.ipynb now has a Bedrock-only checkbox (default ticked = strict). In-place refinements after comprehensive Codex re-review: defensive `(?i)` inline flag on Remove-Item regex + clearer cell-by-cell setup text in cell 0. Re-review after fixes: PASS (no findings). 134 destructive + 122 unit tests still green.
 
 ## Progress
 - v4.10.7 added ~50 new `DANGEROUS_PATTERNS` (bash) covering cloud destructive subcommands, git destructive, storage/volume, persistence, DB CLI inline, system-path overwrite, perm lockout, `curl|sh`. Plus ~12 new `DANGEROUS_PYTHON` patterns (cursor.execute DROP, drop_all, dropDatabase, deleteMany, flushall, shutil.rmtree on system paths).

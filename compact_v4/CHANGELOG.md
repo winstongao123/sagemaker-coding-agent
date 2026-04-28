@@ -12,9 +12,14 @@ User asked: *"3 [bedrock-only] is fine. When say bedrock only, then just it only
 - Default (ticked): strict Bedrock-only. Only `boto3.client('bedrock-runtime')` reachable; other AWS service clients blocked at validate_python layer (line 1974-2000) and AWS CLI blocked at validate_command (line 1856).
 - Unticked: agent default `False` applies — S3 read/write, Textract, Lambda invoke, DynamoDB writes all allowed (with approval prompt; destructive ops still hard-blocked at lines 1571-1574 and per-service blocks at 1561-1569).
 
-**Codex review:** PASS. *"change is correct, no impairment."*
+**Codex reviews:**
+- Initial review of UI toggle: PASS. *"change is correct, no impairment."*
+- Comprehensive re-review of cumulative v4.10.7→v4.10.10 state: initial run flagged 1 MEDIUM (claimed PowerShell `Remove-Item` regex bypass via lowercase) and 1 LOW (notebook cell-numbering wording). Both addressed in-place:
+  1. **Remove-Item regex:** added inline `(?i)` flag for documentation/refactor safety. Verified by direct test: `Remove-Item`, `remove-item`, `REMOVE-ITEM`, `rEmOvE-ItEm` all blocked. (`re.IGNORECASE` was already applied at the matching layer line 1884; the inline flag is belt-and-suspenders.)
+  2. **Cell 0 setup text:** rewritten to explicitly map each cell's purpose: cell 1 = packages, cell 2 = config widgets (incl. Bedrock-only checkbox), cell 3 = launch + banner.
+- **Codex re-review after fixes: PASS** — *"No findings. Remove-Item bypass closed. Cell 0 setup text unambiguous. No additional bugs."*
 
-**Tests:** unchanged (134 destructive coverage cases + 122 v4 unit tests still green; no logic added to validators, only UI surfacing).
+**Tests:** unchanged (134 destructive coverage cases + 122 v4 unit tests still green; no logic added to validators, only UI surfacing + defensive flag + docs).
 
 ### Version: 4.10.9 → 4.10.10
 

@@ -10,11 +10,16 @@ After v4.10.9 ship + Codex audit, user accepted the strict bedrock-only default 
 - **chat.ipynb cell 3** — replaced hardcoded `CONFIG.aws_bedrock_only = True` with `CONFIG.aws_bedrock_only = bedrock_only_toggle.value`. Config-applied banner now includes "AWS scope: Bedrock-only ..." or "All AWS services allowed (with approval)".
 - **No validator logic changed.** Existing per-method blocks (delete_bucket, delete_object, terminate_instances, etc., line 1571-1574) and per-service blocks (IAM, STS, KMS, EC2, RDS, CloudFormation, line 1561-1569) remain in place regardless of toggle state.
 
-### Codex Review
-Run via `codex exec --full-auto -s read-only -m gpt-5.3-codex`. **VERDICT: PASS** — *"change is correct, no impairment."* Codex specifically verified: ipywidgets syntax, cell 3 wiring, no namespace regression, no breakage of other CONFIG assignments, default value matches strict policy.
+### Codex Review (multiple rounds)
+1. **Initial UI-toggle review** (`codex exec --full-auto -s read-only -m gpt-5.3-codex`): **VERDICT: PASS** — *"change is correct, no impairment."*
+2. **Comprehensive cumulative v4.10.7→v4.10.10 review** (final round): initial flag of 1 MEDIUM (claimed PowerShell `Remove-Item` regex bypass via lowercase) + 1 LOW (notebook cell-numbering wording).
+3. **Both addressed in-place** (no version bump per user request "still in 4.10.10"):
+   - sagemaker_agent.py:1564 — added inline `(?i)` flag to PowerShell Remove-Item pattern. (Note: `re.IGNORECASE` was already applied at the matching layer line 1884; the inline flag is belt-and-suspenders documentation.) Verified by direct test: 4/4 case variations (`Remove-Item`, `remove-item`, `REMOVE-ITEM`, `rEmOvE-ItEm`) all blocked.
+   - chat.ipynb cell 0 — rewrote setup text to explicitly map each cell's purpose (cell 1 = install, cell 2 = config + Bedrock-only checkbox, cell 3 = launch + banner).
+4. **Codex re-review after fixes: PASS** — *"No findings. Remove-Item bypass closed. Cell 0 setup text unambiguous. No additional bugs."*
 
 ### Tests
-No new tests needed (UI-surfacing only). Existing 134 destructive-coverage cases + 122 v4 unit tests still green.
+No new tests needed (UI-surfacing + defensive flag + docs only). Existing 134 destructive-coverage cases + 122 v4 unit tests still green.
 
 ### Version: 4.10.9 → 4.10.10
 
