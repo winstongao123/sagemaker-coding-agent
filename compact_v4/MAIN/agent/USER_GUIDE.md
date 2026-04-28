@@ -1,5 +1,10 @@
-# SageAgent V4 — User Guide (v4.10.0)
+# SageAgent V4 — User Guide (v4.10.1)
 
+
+## What's new in v4.10.1 (2026-04-28, same-day follow-up)
+
+- **`#41b` Context Collapse (segment-level)** — after microcompact replaces stale tool outputs with markers, runs of 3+ consecutive stale tool round-trips collapse into one synthetic 2-message pair. Strict classification: thinking / image / unknown block types in the assistant message block the collapse; marker match is exact equality, not substring. Mirrors Runnable's `contextCollapse` feature gate. 12 tests, Codex PASS.
+- **Default model: Haiku 4.5 → Sonnet 4.5.** Cost ~10x per token but cache activates earlier (threshold 1024 vs 4096 tokens), so multi-turn sessions partially offset. Override in `agent_config.json` via `model_id`.
 
 ## What's new in v4.10.0 (2026-04-28)
 

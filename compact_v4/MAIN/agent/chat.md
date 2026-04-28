@@ -4,15 +4,49 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.7.2
+# SageAgent V4.10.1
 
-AI coding assistant for SageMaker notebooks. 25+ tools, 16 security layers, prompt caching, sub-agent coordination, 11 skills, Runnable-grade review/verification, local-git regression protection, auto self-review at checkpoints. **v4.7.2**.
+AI coding assistant for SageMaker notebooks. 23 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination, 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, and surgical Jupyter cell editing. **v4.10.1**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
-**Core files:** `sagemaker_agent.py` (~9,900 lines) + this notebook + `memory.md` (auto-populated) + `skills/` (11 skills).
+**Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.1
+
+**v4.10.1 — Context Collapse + default Sonnet 4.5:**
+1. **`#41b` Context Collapse (segment-level)** — after microcompact replaces stale tool outputs with markers, runs of 3+ consecutive stale tool round-trips collapse into one synthetic Bedrock-safe assistant/user pair. Strict classification: thinking blocks / images / unknown types block the collapse, marker match is exact equality (not substring). 12 tests.
+2. **Default model: Haiku 4.5 → Sonnet 4.5** — `au.anthropic.claude-sonnet-4-5-20250929-v1:0`. Cost is ~10x Haiku per token, but the prompt-cache checkpoint threshold drops from 4096 → 1024 tokens, so caching activates earlier and offsets the cost on multi-turn sessions. Switch back via `model_id` in `agent_config.json`.
+
+### What's new in v4.10.0
+
+**v4.10.0 — Runnable parity (5 additions, Codex-reviewed per phase):**
+1. **`notebook_edit` tool** — surgically insert / replace / delete a single cell in an existing `.ipynb` (atomic write, preserves cell IDs, resets execution state on code cells). Use this — NOT `create_notebook` — when modifying an existing notebook so you don't blow away cells you didn't touch.
+2. **Skill listing token budget** — `SkillManager.list_for_prompt` capped at 1% of context window (hard ceiling 2000 tokens). Auto-trigger surfacing also caps each description at 250 chars. Stops the prompt cache from being blown out by skill churn.
+3. **Per-sub-agent env-details** — every sub-agent now sees a 4–6 line block (agent type, depth/max, workspace cwd, git HEAD, working-tree status) injected after the cached SYSTEM_PROMPT boundary. Means a fresh `verify` agent picks up parent's worktree swap automatically.
+4. **Model-aware context window** — `BEDROCK_MODEL_CONTEXT_WINDOWS` map covers every Bedrock model. `CONFIG.context_max_tokens` auto-derives from `model_id` at startup. When AWS exposes 1M variants the only change is one entry in the map.
+5. **Reactive Compact on `CONTEXT_OVERFLOW`** — when Bedrock rejects "prompt is too long" / "too many tokens", the agent runs microcompact (or placeholder-summary fallback if microcompact freed less than `MICROCOMPACT_MIN_SAVINGS`) and retries the same request once. From your perspective the request just succeeds.
+
+**Skill auto-load REMAINS default OFF** (the v4.9.6 fix is intact). 55 new tests across 5 phases all green; `test_v49_auto_trigger.py` regression 12/12 still green. Codex caught 9 real correctness issues across the five phases — all fixed and re-verified before merging.
+
+### What's new in v4.9.7
+
+**v4.9.7 — Context diagnostic parity:**
+1. **`/context` diagnostic** — shows context percentage, fixed overhead estimate, top tool request/result token sources, duplicate full-file reads, and the next recommended action.
+2. **Runnable comparison close-out** — keeps V4 focused on SageMaker self-use: local git tree, explicit skills, durable status doc, and no GitHub/remote runtime assumption.
+
+### What's new in v4.9.6
+
+**v4.9.6 — Production hardening from deep review:**
+1. **No skill auto-load by default** — `CONFIG.enable_skill_auto_trigger = False`; skills also need explicit `auto_trigger: true` before keyword matching can activate them.
+2. **Bedrock-safe compaction** — compacted histories now start with a user summary plus assistant acknowledgement, avoiding assistant-first message history.
+3. **Build worktree isolation fixed** — build sub-agents now actually create worktrees, see dirty/untracked parent files, merge back on success, and clean up.
+4. **Parallel build safety** — build sub-agent calls serialize when worktree isolation is enabled because notebook `CONFIG.workspace` is process-global.
+5. **Durable status handoff** — `AGENT_STATUS.md` is loaded each top-level run and `/status` can inspect or initialize it.
+6. **Local-git-only SageMaker policy** — local git tree operations are supported; GitHub/`gh`/PR/push/pull/fetch/clone are not assumed.
+7. **Regression tests** — `test_v42_gap_closure.py` covers the new failure modes.
 
 ### What's new in v4.7.2
 
@@ -82,6 +116,7 @@ Applies widget config and calls `create_chat_ui()`.
 | Send message | Type in input box, press Send |
 | Stop agent | Click Stop button |
 | Check cost | `/cost` (shows token usage, cache savings, session cost) |
+| Check context | `/context` (shows token bloat sources and duplicate file reads) |
 | Activate skill | `/skill use review` |
 | Deactivate one skill (sticky) | `/unskill clara-review` |
 | Deactivate all skills (sticky) | `/skill clear` |
@@ -162,6 +197,10 @@ Sub-agents use structured output format (Scope, Result, Key files, Issues).
 
 Auto-extracted at session end. Stored in `memory.md`. Capped at 200 lines / 25KB. WHAT_NOT_TO_SAVE rules exclude code/git noise.
 
+### Long-Running Status
+
+`AGENT_STATUS.md` is loaded on every top-level run. Keep it concise and current for critical or multi-phase work: current goal, standing user instructions, plan, progress, blockers, changed files, verification, and next step. Use `/status`, `/status init`, and `/status path` from chat.
+
 ### Model Pricing (Bedrock, Sydney region)
 
 | Model | Input / 1M | Output / 1M |
@@ -239,15 +278,17 @@ The agent can spawn sub-agents for complex tasks. This happens two ways:
 | build | Full development — read, write, execute, test | Yes |
 | general | Multi-step research + execution | Yes |
 
-### Git Worktree Isolation (V4.4.0)
+### Git Worktree Isolation (V4.4.0, hardened in V4.9.6)
 
 When a **build** sub-agent runs, V4 protects your workspace:
 
 1. If workspace is a git repo → creates an isolated worktree copy
 2. If workspace is NOT a git repo → auto-initializes git (no credentials needed)
-3. Build agent works in the isolated copy
+3. Dirty tracked files and untracked files are overlaid into the worktree so the build agent sees your current workspace state
 4. On success → changes merged back to your workspace
 5. On failure → changes discarded, your workspace is untouched
+
+If multiple `build` sub-agents are requested at once, V4.9.6 runs them sequentially when worktree isolation is enabled. This preserves isolation because `CONFIG.workspace` is process-global inside the notebook kernel.
 
 **You'll see these messages in chat:**
 - `[Worktree] Auto-initialized git for workspace protection` (first time only)
@@ -257,12 +298,16 @@ When a **build** sub-agent runs, V4 protects your workspace:
 
 **No setup needed.** Works automatically. Your real git config is never touched.
 
+**SageMaker git scope:** this is local git only. Use status/diff/log/worktree/local commits for review and safety. Do not expect GitHub, `gh`, PR creation, or remote git operations from the notebook runtime.
+
 Disable with `"enable_worktree": false` in `agent_config.json` if not wanted.
 
 ### Version History
 
 | Version | Key Changes |
 |---------|-------------|
+| V4.9.7 | Context diagnostic command: token bloat, tool-output sources, duplicate file reads, suggested action |
+| V4.9.6 | Production hardening: no default skill auto-load, Bedrock-safe compact history, fixed build worktree isolation, dirty-state worktree overlay, serialized parallel builds, durable status doc |
 | V4.4.0 | [CRITICAL] Rich tool descriptions (7 tools, 15-32 lines each), git worktree isolation for build agents, auto git-init, 6 review fixes |
 | V4.3.3 | UI redesign, markdown rendering, cost display, diminishing returns fix, cache savings display |
 | V4.3.2 | Complete Runnable learning: cache-breakage detection, WHEN-not-WHAT tool descriptions, verify agent, explore RO enforcement, bash git safety, absolute paths |

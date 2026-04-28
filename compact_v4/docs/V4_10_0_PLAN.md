@@ -8,9 +8,7 @@
 
 ## Scope
 
-5 fixes from the rescan check table, addressing items #10, #24, #41a, #44, #47.
-
-**Deferred to v4.11.0:** #41b Context Collapse (segment-level summary) — non-trivial (~200 LOC), lower ROI for self-use.
+6 fixes from the rescan check table, addressing items #10, #24, #41a, #41b, #44, #47.
 
 ---
 
@@ -23,9 +21,10 @@
 | 3 | #44 | `context_window` config + Bedrock model→window map + threshold rebasing | ~80 (incl. fixes) | **DONE** | **PASS** (after 2 fix rounds) | Codex caught: invalid-JSON freeze, bool-as-int trap, weak e2e test. All fixed. 10/10 tests green. |
 | 4 | #10 | `notebook_edit` surgical .ipynb cell tool | ~165 (incl. fix) | **DONE** | **PASS** (after 1 fix round) | Codex caught: write phase narrow-exception (json.dump TypeError could escape). Broadened to Exception. 13/13 tests green. |
 | 5 | #41a | Reactive Compact on `CONTEXT_OVERFLOW` (compact + retry once) | ~110 (incl. fixes) | **DONE** | **PASS** (after 1 fix round) | Codex caught: file-read state + cache-broken flag only set on one branch (now both); retry stop path missing usage tracking. All fixed. 5/5 tests green. |
+| 6 (v4.10.1) | #41b | Context Collapse (segment-level stale tool summary) | ~100 | **DONE** | **PASS** (after 1 fix round) | Collapses 3+ consecutive already-microcompacted tool round-trips into a synthetic Bedrock-safe pair. Codex caught: unknown assistant block types accepted; marker substring not exact. Both fixed. **12/12 tests green.** |
 | HTML | — | Update v3_architecture.html, PS_FLOWCHART_V4, PS_DEEP_DIVE_RUNNABLE, HERMES_VS_CODING_AGENT | — | **DONE** | — | All 4 updated with v4.10.0 banner / section / stats |
 | Doc | — | CHANGELOG.md, USER_GUIDE.md, SESSION_STATE.md | — | **DONE** | — | v4.10.0 entries added to all three |
-| Ship | — | rebuild compact_v4.zip (runtime-only) | — | **DONE** | — | 57 files / 245.7 KB / runtime-only (no test files) |
+| Ship | — | rebuild compact_v4.zip (runtime-only) | — | **DONE** | — | 22 files / 234.6 KB / runtime-only, flat root layout |
 | Push | — | commit + push to sageagent remote | — | **DONE** | — | commit 213528a; +2215 / -62 across 16 files |
 | Re-review | — | Post-ship deep re-review vs Runnable | — | **DONE** | — | See "Outcome" section below |
 
@@ -168,8 +167,8 @@
 - #44 1M-readiness via model→window map + JSON-validated override ✅
 - #47 Per-sub-agent env-details ✅
 
-### Deferred to v4.11.0 (1)
-- #41b Context Collapse (segment-level summary) — non-trivial (~200 LOC). Microcompact + reactive compact cover the common cases for self-use sessions; full segment collapse helps marathon (100+ turn) sessions only.
+### Closed follow-up gap (v4.10.1, same-day)
+- #41b Context Collapse (segment-level summary) — shipped as v4.10.1, the same-day follow-up to v4.10.0. Microcompact clears stale tool output bodies, then `context_collapse()` collapses runs of 3+ stale tool round-trips into one synthetic Bedrock-safe pair. Also v4.10.1 changed the default model from Haiku 4.5 to Sonnet 4.5 (cache activates from 1024 tokens vs 4096).
 
 ### Codex per-phase review record
 | Phase | Round 1 | Round 2 | Round 3 | Final |
@@ -196,12 +195,12 @@
 
 ### Test totals
 - New v4.10.0: 9 + 6 + 10 + 13 + 5 = **43 tests, all PASS**
-- Plus auto-trigger regression: 12/12 still green
-- Combined: **55/55 across 6 files**
+- v4.10.1 #41b: 12 tests, all PASS
+- Plus v4.9.x auto-trigger regression: 12/12 still green
+- Combined new/regression subset: **67/67 across 7 files** (43 + 12 + 12)
 
 ### Ship metadata
 - Commit: `213528a`
 - Files: 16 changed (+2215 / -62)
-- Zip: `compact_v4.zip` 57 files / 245.7 KB / runtime-only
+- Zip: `compact_v4.zip` 22 files / 234.6 KB / runtime-only, flat root layout
 - Remote: pushed to `sageagent`
-

@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.0 (April 2026)
+Version: 4.10.1 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.0"
+__version__ = "4.10.1"
 
 # ============================================================
 # IMPORTS
@@ -1010,7 +1010,13 @@ class Config:
     region: str = "ap-southeast-2"  # Sydney
     # Default runtime model: Haiku 4.5 inference profile for normal AWS usage.
     # Sonnet 4.5 remains available for prompt-cache validation and harder turns.
-    model_id: str = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+    # V4.10.1: default switched from Haiku 4.5 to Sonnet 4.5 (user-set, 2026-04-28).
+    # Cost note: Sonnet 4.5 is ~10x the per-token cost of Haiku 4.5, but the
+    # prompt-cache checkpoint threshold drops from 4096 (Haiku) to 1024 tokens
+    # (Sonnet), so caching activates earlier and offsets some of the cost on
+    # multi-turn sessions. To switch back to Haiku for cost-sensitive runs,
+    # set model_id to "au.anthropic.claude-haiku-4-5-20251001-v1:0" in agent_config.json.
+    model_id: str = "au.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
     # Workspace - use absolute paths to avoid confusion
     workspace: str = os.getcwd()
@@ -3697,6 +3703,119 @@ def _context_block_tokens(block: Any) -> int:
     except Exception:
         text = str(block)
     return Compactor.estimate_tokens(text)
+
+
+# V4.10.0 #41b: Segment-level context collapse.
+# Microcompact replaces stale tool_result content with a marker, but it leaves
+# the full structure in place — every cleared round-trip still costs one
+# assistant message + one user message of envelope tokens. Once enough
+# consecutive round-trips have been microcompacted away, replace the empty
+# structure with a single 2-message synthetic pair, preserving Bedrock role
+# alternation. Mirrors the spirit of Runnable's contextCollapse feature gate.
+COLLAPSE_MIN_SEGMENT_LEN: int = 3   # min consecutive stale tool round-trips to bother collapsing
+COLLAPSE_ELIDED_MARKER: str = "[Elided {n} stale tool calls from a research segment — re-run any tool if details are needed.]"
+COLLAPSE_CONTINUE_MARKER: str = "[Continue from here.]"
+
+
+def _is_stale_round_trip(messages: List[Dict], a_idx: int) -> bool:
+    """V4.10.1 #41b: True iff messages[a_idx] is an assistant tool_use-only
+    message AND messages[a_idx+1] is a user message whose tool_result blocks
+    have already been replaced by MICROCOMPACT_MARKER (i.e. microcompact
+    already cleared the content). Such pairs carry no signal and are safe
+    to collapse."""
+    if a_idx + 1 >= len(messages):
+        return False
+    a = messages[a_idx]
+    u = messages[a_idx + 1]
+    if a.get("role") != "assistant" or u.get("role") != "user":
+        return False
+    a_content = a.get("content")
+    u_content = u.get("content")
+    if not isinstance(a_content, list) or not isinstance(u_content, list):
+        return False
+    has_text = False
+    has_tool_use = False
+    for b in a_content:
+        if not isinstance(b, dict):
+            return False
+        bt = b.get("type")
+        # Codex review 2026-04-28: only known signal-free block types qualify
+        # as stale. Thinking / image / document / etc. carry signal — bail.
+        if bt == "text":
+            if (b.get("text") or "").strip():
+                has_text = True
+        elif bt == "tool_use":
+            has_tool_use = True
+        else:
+            return False
+    if has_text or not has_tool_use:
+        return False
+    if not u_content:
+        return False
+    for b in u_content:
+        if not isinstance(b, dict) or b.get("type") != "tool_result":
+            return False
+        cf = b.get("content", "")
+        # Codex review 2026-04-28: exact-equality on the marker so a real
+        # tool result containing the marker substring is not misclassified.
+        if isinstance(cf, str):
+            if cf.strip() != MICROCOMPACT_MARKER:
+                return False
+        elif isinstance(cf, list):
+            # Microcompact produces exactly one text block with the marker.
+            # Anything else is non-stale.
+            if len(cf) != 1:
+                return False
+            sub = cf[0]
+            if not isinstance(sub, dict) or sub.get("type") != "text":
+                return False
+            if (sub.get("text") or "").strip() != MICROCOMPACT_MARKER:
+                return False
+        else:
+            return False
+    return True
+
+
+def context_collapse(messages: List[Dict]) -> Tuple[List[Dict], int]:
+    """V4.10.0 #41b: Collapse runs of stale tool round-trips.
+
+    Walks messages oldest-to-newest. Whenever it finds COLLAPSE_MIN_SEGMENT_LEN+
+    consecutive stale round-trips (assistant tool_use + user marker-only
+    tool_result), replaces the run with a 2-message synthetic pair so Bedrock
+    role alternation is preserved.
+
+    Returns (new_messages, segments_collapsed).
+
+    Must run AFTER microcompact (which produces the markers). Otherwise no-op.
+    """
+    if not messages:
+        return list(messages), 0
+    out: List[Dict] = []
+    collapsed_count = 0
+    i = 0
+    n = len(messages)
+    while i < n:
+        if _is_stale_round_trip(messages, i):
+            run_start = i
+            pair_count = 0
+            while i < n - 1 and _is_stale_round_trip(messages, i):
+                pair_count += 1
+                i += 2
+            if pair_count >= COLLAPSE_MIN_SEGMENT_LEN:
+                out.append({
+                    "role": "assistant",
+                    "content": COLLAPSE_ELIDED_MARKER.format(n=pair_count),
+                })
+                out.append({"role": "user", "content": COLLAPSE_CONTINUE_MARKER})
+                collapsed_count += 1
+            else:
+                # Run too short — keep the original pairs as-is.
+                for j in range(run_start, run_start + pair_count * 2):
+                    out.append(messages[j])
+        else:
+            out.append(messages[i])
+            i += 1
+    return out, collapsed_count
 
 
 def _context_add(counter: Dict[str, int], key: str, tokens: int) -> None:
@@ -8354,6 +8473,19 @@ class Agent:
                 if _mc_saved >= MICROCOMPACT_MIN_SAVINGS:
                     self.messages = _mc_msgs
                     output_fn(f"[Microcompact: freed ~{_mc_saved} tokens]")
+                    # V4.10.1 #41b: After microcompact has produced markers,
+                    # collapse runs of stale tool round-trips into one synthetic
+                    # 2-message pair. Only fires when there are at least
+                    # COLLAPSE_MIN_SEGMENT_LEN consecutive stale pairs, so quick
+                    # sessions are unaffected. Cumulative savings reported.
+                    _cc_msgs, _cc_segments = context_collapse(self.messages)
+                    if _cc_segments > 0:
+                        _saved_tokens = max(0, CONTEXT.estimate_tokens(self.messages) - CONTEXT.estimate_tokens(_cc_msgs))
+                        self.messages = _cc_msgs
+                        output_fn(
+                            f"[Context collapse: elided {_cc_segments} research segment(s), "
+                            f"saved ~{_saved_tokens} tokens]"
+                        )
 
             # Smart compaction when context gets high (2-stage)
             if COMPACTOR.should_compact(self.messages, CONFIG.context_max_tokens):
@@ -8555,6 +8687,13 @@ class Agent:
                     if _mc_saved >= MICROCOMPACT_MIN_SAVINGS:
                         self.messages = _mc_msgs
                         output_fn(f"[Reactive: microcompact freed ~{_mc_saved:,} tokens]")
+                    # V4.10.0 #41b: piggyback context_collapse on the
+                        # reactive path too — squeezes more space when the
+                        # immediate retry needs every byte it can get.
+                        _cc_msgs, _cc_segments = context_collapse(self.messages)
+                        if _cc_segments > 0:
+                            self.messages = _cc_msgs
+                            output_fn(f"[Reactive: collapsed {_cc_segments} stale research segment(s)]")
                     else:
                         output_fn("[Reactive: microcompact insufficient — placeholder compaction]")
                         _summary = (
@@ -9111,9 +9250,9 @@ def escape_html(text: str) -> str:
 
 # Available Bedrock models (cross-region rates)
 BEDROCK_MODELS = [
-    ("Claude 4.5 Haiku (AU) - default", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    ("Claude 4.5 Sonnet (AU) - default", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    ("Claude 4.5 Haiku (AU)", "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
     ("Claude 4.6 Sonnet (AU)", "au.anthropic.claude-sonnet-4-6"),
-    ("Claude 4.5 Sonnet (AU)", "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
     ("Claude 4.6 Opus (AU)", "au.anthropic.claude-opus-4-6-v1"),
     ("Claude 4.5 Opus (Global)", "global.anthropic.claude-opus-4-5-20251101-v1:0"),
     ("Claude 3.5 Sonnet v2", "anthropic.claude-3-5-sonnet-20241022-v2:0"),

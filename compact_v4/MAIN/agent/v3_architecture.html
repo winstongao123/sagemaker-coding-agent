@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.0)</title>
+<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.1)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== Design System (matches Demo Tech docs) ===== */
@@ -187,7 +187,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 
 <!-- Navigation -->
 <nav class="topnav">
-    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.0)</div>
+    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.1)</div>
     <div class="topnav-links">
         <a href="#v410" class="active"><span class="nav-dot" style="background:#10b981"></span> What's New</a>
         <a href="#what"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
@@ -206,13 +206,13 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 <!-- Hero -->
 <div class="hero">
     <div class="badges">
-        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.0</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.1</span>
         <span class="badge"><span class="dot" style="background:var(--blue)"></span> Bedrock-only</span>
         <span class="badge"><span class="dot" style="background:var(--amber)"></span> 55/55 V4.10 Tests</span>
         <span class="badge"><span class="dot" style="background:var(--purple)"></span> 5/5 Codex Review PASS</span>
     </div>
-    <h1>SageAgent V4 &mdash; v4.10.0</h1>
-    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 ships five Runnable-parity upgrades: surgical notebook_edit, skill listing budget cap, per-subagent env-details, model-aware context window, and reactive compact on Bedrock prompt-too-long.</p>
+    <h1>SageAgent V4 &mdash; v4.10.1</h1>
+    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped five Runnable-parity upgrades — surgical notebook_edit, skill listing budget cap, per-subagent env-details, model-aware context window, and reactive compact on Bedrock prompt-too-long. v4.10.1 (same-day follow-up) added the sixth: segment-level Context Collapse, plus default-model switch to Sonnet 4.5.</p>
 </div>
 
 <!-- Stats -->
@@ -220,14 +220,14 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     <div class="stat-card"><div class="stat-value blue">23</div><div class="stat-label">Built-in Tools</div></div>
     <div class="stat-card"><div class="stat-value green">11,553</div><div class="stat-label">Lines of Code</div></div>
     <div class="stat-card"><div class="stat-value amber">16</div><div class="stat-label">Security Layers</div></div>
-    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.0)</div></div>
+    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.1)</div></div>
     <div class="stat-card"><div class="stat-value teal">200K</div><div class="stat-label">Default Context (auto-derived)</div></div>
 </div>
 
 <!-- ========== V4.10.0 What's New ========== -->
 <div class="section" id="v410">
     <div class="section-header" style="background:linear-gradient(135deg, #ecfdf5 0%, #f0f9ff 100%);">
-        <h2><span style="color:#10b981">★</span> v4.10.0 &mdash; Runnable Parity Upgrade (2026-04-28)</h2>
+        <h2><span style="color:#10b981">★</span> v4.10.1 &mdash; Runnable Parity Upgrade (2026-04-28)</h2>
         <p>Five additions from a deep rescan against <code>gg-claude-code-runnable</code>. Each phase had its own Codex review (gpt-5.3-codex, read-only). Codex caught 9 real correctness issues across the five phases; all fixed and re-verified before merging.</p>
     </div>
     <div class="section-body">

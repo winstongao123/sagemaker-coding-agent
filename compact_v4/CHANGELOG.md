@@ -1,8 +1,28 @@
 # Compact V4 Changelog
 
-## v4.10.0 — Runnable parity: notebook editing, reactive compact, skill budget, env-details, context map (2026-04-28)
+## v4.10.1 — Same-day follow-up: Context Collapse + default model Sonnet 4.5 (2026-04-28)
 
-Five-phase upgrade after a deep rescan against `gg-claude-code-runnable`. Each phase shipped behind its own Codex review (gpt-5.3-codex, read-only sandbox), with regression catches re-fixed before moving on. **55 new tests across 5 files, all green; `test_v49_auto_trigger.py` skill-auto-load regression also still 12/12.**
+Same-day patch on top of v4.10.0 (`commit 213528a`). User asked to ship #41b Context Collapse now (no v4.11 wait) and switch the default model from Haiku 4.5 to Sonnet 4.5.
+
+Added:
+- **#41b Context Collapse (segment-level):** new `context_collapse(messages)` walks the conversation oldest-to-newest, finds runs of `COLLAPSE_MIN_SEGMENT_LEN=3+` consecutive stale tool round-trips (assistant tool_use + user marker-only tool_result, where the marker is the one microcompact produces), and replaces each run with a 2-message synthetic pair (assistant ack + user "continue") so Bedrock role alternation is preserved. Wired into both the proactive 70%-trigger path (after microcompact) and the reactive-compact path. Strict classification: any assistant block type other than `text`/`tool_use` (thinking/image/document/etc.) blocks collapse; marker match is exact equality (not substring) so a real result containing the marker text is never misclassified. Mirrors Runnable's `contextCollapse` feature gate. **12/12 tests, Codex PASS after 1 fix round.**
+
+Changed:
+- **Default model: Haiku 4.5 → Sonnet 4.5** (`au.anthropic.claude-sonnet-4-5-20250929-v1:0`). Cost note: Sonnet 4.5 is ~10x the per-token cost of Haiku 4.5, but the prompt-cache checkpoint threshold drops from 4096 → 1024 tokens, so caching activates earlier and offsets some of the cost on multi-turn sessions. To switch back, set `model_id` to the Haiku ARN in `agent_config.json`. `BEDROCK_MODELS` list reordered with Sonnet 4.5 first as default; Haiku 4.5 remains in the list as an explicit option.
+
+Codex issues caught and fixed (1 review round)
+1. `_is_stale_round_trip` accepted unknown assistant block types → now bails on anything that isn't `text` or `tool_use`, so thinking/image/document blocks are protected.
+2. Marker match used substring (`MICROCOMPACT_MARKER in cf`) → now uses strict equality, so real results containing the marker as a substring are not misclassified as stale.
+
+Tests
+- New: `test_v410_context_collapse.py` (12 tests, all PASS).
+- Full v4.10.x + regression suite: **67/67 across 7 files** (9 + 6 + 10 + 13 + 5 + 12 v4.10.x = 55, plus 12 v4.9 auto-trigger regression = 67).
+
+Version: `4.10.0` → `4.10.1`.
+
+## v4.10.0 — Runnable parity: notebook editing, reactive/context compact, skill budget, env-details, context map (2026-04-28)
+
+Runnable-parity upgrade after a deep rescan against `gg-claude-code-runnable`. Each phase shipped behind its own review path, with regression catches re-fixed before moving on. **65 new/regression tests across 7 V4.10/skill-auto-load files, all green; combined targeted deterministic suite now 159/159.**
 
 Added:
 - **`notebook_edit` tool (#10):** surgical insert / replace / delete of a single `.ipynb` cell, atomic write (tmp + rename), preserves cell `id` on replace, resets `execution_count` and `outputs` on code cells, returns an `Error:` string instead of raising. Use this — not `create_notebook` — when modifying an existing notebook so you don't blow away cells the model didn't touch. Mirrors Runnable's `NotebookEditTool`. 13 tests.
@@ -10,14 +30,17 @@ Added:
 - **Per-subagent env-details (#47):** every sub-agent now gets a 4–6-line "Sub-agent Environment" block (agent type, depth/max, workspace cwd, git HEAD, git working-tree summary) appended after the cached `SYSTEM_PROMPT` boundary. Git probes are 5s timeout, fail-quiet, and the helper never raises. Mirrors Runnable's `enhanceSystemPromptWithEnvDetails`. 6 tests.
 - **`BEDROCK_MODEL_CONTEXT_WINDOWS` map + `resolve_context_window()` + `_auto_derive_context_window()` (#44):** every model in `BEDROCK_MODELS` now has an explicit per-model context window (200K across the board today), and `CONFIG.context_max_tokens` auto-derives from `model_id` at startup unless the user explicitly overrides it via `agent_config.json`. The override path validates the JSON value (positive int, not a `bool` masquerading as int) so an invalid override no longer silently freezes the dataclass default. When AWS exposes a 1M-context Bedrock variant, the only change is one entry in the map. 10 tests.
 - **Reactive Compact on `CONTEXT_OVERFLOW` (#41a):** when Bedrock rejects a request with "prompt is too long" / "too many tokens" / "input is too long", the agent now runs microcompact (or, if microcompact freed less than `MICROCOMPACT_MIN_SAVINGS`, a placeholder-summary compaction with NO additional LLM call), clears file-read state, sets `_cache_broken_by_compact`, and retries the same request exactly once. Capped at 1 reactive recovery per `run()` call so we cannot infinite-loop. Other error categories surface unchanged. Mirrors the spirit of Runnable's `reactiveCompact` feature gate without the Anthropic-API-only beta header. 5 tests.
+- **Context Collapse (#41b):** ⚠️ NOT in v4.10.0 (commit 213528a) — moved to v4.10.1 same-day follow-up. See v4.10.1 entry above for details.
 
 Operational:
 - Version bumped from `4.9.7` to `4.10.0` (`__version__` and module docstring header).
 - New module-level constants: `SKILL_LISTING_BUDGET_PERCENT`, `SKILL_LISTING_DESC_CAP`, `SKILL_LISTING_HARD_CAP_TOKENS`, `_SUBAGENT_ENV_GIT_TIMEOUT_S`, `BEDROCK_MODEL_CONTEXT_WINDOWS`, `DEFAULT_CONTEXT_WINDOW`.
 - `_apply_config_file` now accepts `context_max_tokens` as a scalar override field.
-- New tests: `test_v410_skill_listing_budget.py` (9), `test_v410_subagent_env.py` (6), `test_v410_context_window.py` (10), `test_v410_notebook_edit.py` (13), `test_v410_reactive_compact.py` (5). Existing `test_v49_auto_trigger.py` regression test (12/12) still green — skill auto-load remains default OFF.
+- New tests in v4.10.0: `test_v410_skill_listing_budget.py` (9), `test_v410_subagent_env.py` (6), `test_v410_context_window.py` (10), `test_v410_notebook_edit.py` (13), `test_v410_reactive_compact.py` (5). `test_v410_context_collapse.py` (12) is added in v4.10.1. Existing `test_v49_auto_trigger.py` regression test (12/12) still green — skill auto-load remains default OFF.
 - System prompt grew by 2 lines total (one in `# Documents` calling out `notebook_edit`, one updating the tools comment) — within the small-model-friendly limit.
 - Cache integrity preserved: every new piece of dynamic content (env-details, reactive-compact markers, skill listing) sits AFTER the `# === DYNAMIC ===` boundary; the cached `SYSTEM_PROMPT` prefix is byte-identical across turns.
+- Combined deterministic targeted suite after V4.10.0: **159/159 passing**.
+- `compact_v4.zip` rebuilt from runtime files: **22 files / 234.6 KB**, flat root layout, no `MAIN/agent/` wrapper.
 
 Process discipline:
 - Codex review per phase (5 reviews total, gpt-5.3-codex, read-only sandbox). Codex caught 9 real correctness issues across the five phases — first-entry-over-budget overshoot, unbudgeted truncation hint, degenerate-budget overshoot, freeze-on-invalid-JSON, `bool`-as-`int` JSON trap, narrow `OSError` catch on notebook write, file-read state cleared only on one reactive branch, `_cache_broken_by_compact` set only on one reactive branch, retry stop-check missing token-billing parity. All fixed and re-verified by Codex with PASS verdicts before moving on.

@@ -1,5 +1,28 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.1 Release (same-day follow-up): Context Collapse + default Sonnet 4.5
+
+### Context
+After v4.10.0 shipped (commit 213528a), user asked to fix the deferred #41b Context Collapse now (no v4.11 wait) and switch the default model from Haiku 4.5 to Sonnet 4.5.
+
+### V4.10.1 Changes
+1. **#41b Context Collapse (segment-level):** new `context_collapse(messages)` walks oldest-to-newest, finds runs of 3+ consecutive stale tool round-trips (assistant tool_use + user marker-only tool_result, where marker is what microcompact produces), and replaces each run with a 2-message synthetic pair (assistant ack + user "continue") so Bedrock role alternation is preserved. Wired into BOTH the proactive 70%-trigger path (after microcompact) AND the reactive-compact path. Strict classification:
+   - any assistant block type other than `text` / `tool_use` (thinking / image / document / etc.) blocks the collapse — never drops signal
+   - marker match is exact equality (not substring) so a real tool result containing the marker text is never misclassified as stale
+2. **Default model: Haiku 4.5 → Sonnet 4.5** (`au.anthropic.claude-sonnet-4-5-20250929-v1:0`). Cost note: ~10x per-token, but prompt-cache checkpoint threshold drops 4096 → 1024 tokens so caching activates earlier and offsets some of the cost. `BEDROCK_MODELS` reordered with Sonnet 4.5 first.
+
+### Codex review (1 round)
+- ISSUES (round 1): unknown assistant block types accepted; marker substring not exact-match.
+- PASS (round 2): both fixes applied + 2 new tests (`test_thinking_block_protects_from_collapse`, `test_marker_substring_in_real_result_not_collapsed`).
+
+### Verification
+- `test_v410_context_collapse.py` — **12/12 PASS**
+- Full v4.10.x + regression suite: **67/67 across 7 files** (9 + 6 + 10 + 13 + 5 + 12 v4.10.x = 55, plus 12 v4.9 auto-trigger regression = 67)
+- Default-model sanity: `CONFIG.model_id == 'au.anthropic.claude-sonnet-4-5-20250929-v1:0'`, auto-derived `context_max_tokens=200000`
+
+### Version: 4.10.0 → 4.10.1
+
+
 ## 2026-04-28 — V4.10.0 Release: Runnable parity (notebook_edit, skill budget, env-details, context window, reactive compact)
 
 ### Context
