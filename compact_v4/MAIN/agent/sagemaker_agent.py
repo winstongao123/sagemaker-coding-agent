@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.6 (April 2026)
+Version: 4.10.7 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.6"
+__version__ = "4.10.7"
 
 # ============================================================
 # IMPORTS
@@ -1393,6 +1393,90 @@ class SecurityManager:
         (r"\bgit\s+(push|pull|fetch|clone)\b", "Git remote operation unavailable in SageMaker; use local git tree only"),
         (r"\bgit\s+remote\s+(add|remove|rm|rename|set-url|set-head|prune)\b", "Git remote modification unavailable in SageMaker; use local git tree only"),
 
+        # === V4.10.7: GIT DESTRUCTIVE FLAGS ===
+        # git is in the bash allowlist; specific destructive flags need explicit block.
+        (r"\bgit\s+reset\s+--hard\b", "Git destructive reset (loses uncommitted work)"),
+        (r"\bgit\s+clean\s+-[a-z]*[fd]", "Git clean -fd removes untracked files (no undo)"),
+        (r"\bgit\s+checkout\s+--?\s*(\.|HEAD|--all)", "Git destructive working-tree checkout"),
+        (r"\bgit\s+restore\s+(--source|--worktree|--staged)?\s*\.", "Git restore on whole tree"),
+        (r"\bgit\s+reflog\s+expire\b", "Git reflog expire (purges recovery history)"),
+        (r"\bgit\s+gc\s+--prune", "Git aggressive prune (purges loose objects)"),
+
+        # === V4.10.7: CLOUD CLI HARD-BLOCK ===
+        # Policy: NO cloud CLI in compact_v4. The agent uses Bedrock via boto3
+        # (read-only S3, Bedrock, Textract — Python SDK with approval). All
+        # cloud CLIs and orchestration CLIs are blocked even if a user adds
+        # them to the allowlist. Belt-and-suspenders: most are also not in
+        # BASE_ALLOWED_COMMANDS (so they fail at allowlist), this layer is the
+        # explicit-intent guardrail with a clear error message.
+        (r"\bgh\s+", "GitHub CLI blocked: gh not allowed in compact_v4 (no GitHub publishing from SageMaker)"),
+        (r"\bgcloud\s+", "Cloud CLI blocked: gcloud (GCP) not allowed in compact_v4"),
+        (r"\bgsutil\s+", "Cloud CLI blocked: gsutil (GCS) not allowed in compact_v4"),
+        (r"\bbq\s+", "Cloud CLI blocked: bq (BigQuery) not allowed in compact_v4"),
+        (r"\baz\s+", "Cloud CLI blocked: az (Azure) not allowed in compact_v4"),
+        (r"\bazcopy\s+", "Cloud CLI blocked: azcopy (Azure Storage) not allowed in compact_v4"),
+        (r"\bkubectl\s+", "Orchestration CLI blocked: kubectl not allowed in compact_v4"),
+        (r"\bhelm\s+", "Orchestration CLI blocked: helm not allowed in compact_v4"),
+        (r"\bkustomize\s+", "Orchestration CLI blocked: kustomize not allowed in compact_v4"),
+        (r"\bterraform\s+", "IaC CLI blocked: terraform not allowed in compact_v4"),
+        (r"\bterragrunt\s+", "IaC CLI blocked: terragrunt not allowed in compact_v4"),
+        (r"\bpulumi\s+", "IaC CLI blocked: pulumi not allowed in compact_v4"),
+        (r"\bdoctl\s+", "Cloud CLI blocked: doctl (DigitalOcean) not allowed in compact_v4"),
+        (r"\boci\s+", "Cloud CLI blocked: oci (Oracle Cloud) not allowed in compact_v4"),
+        (r"\bibmcloud\s+", "Cloud CLI blocked: ibmcloud not allowed in compact_v4"),
+        (r"\blinode-cli\s+", "Cloud CLI blocked: linode-cli not allowed in compact_v4"),
+        (r"\bhcloud\s+", "Cloud CLI blocked: hcloud (Hetzner) not allowed in compact_v4"),
+        (r"\bheroku\s+", "Platform CLI blocked: heroku not allowed in compact_v4"),
+        (r"\bvercel\s+", "Platform CLI blocked: vercel not allowed in compact_v4"),
+        (r"\bnetlify\s+", "Platform CLI blocked: netlify not allowed in compact_v4"),
+        (r"\bwrangler\s+", "Platform CLI blocked: wrangler (Cloudflare Workers) not allowed in compact_v4"),
+        (r"\bcloudflared\s+", "Platform CLI blocked: cloudflared not allowed in compact_v4"),
+        (r"\bflyctl\s+", "Platform CLI blocked: flyctl (Fly.io) not allowed in compact_v4"),
+        (r"\brailway\s+", "Platform CLI blocked: railway not allowed in compact_v4"),
+        (r"\brender-cli\s+", "Platform CLI blocked: render-cli not allowed in compact_v4"),
+
+        # === V4.10.7: PACKAGE DESTRUCTIVE ===
+        (r"\bpip\d?\s+uninstall\b", "Package uninstall (pip) — requires approval"),
+        (r"\bconda\s+(remove|uninstall|env\s+remove)\b", "Conda remove — requires approval"),
+        (r"\bnpm\s+uninstall\b", "npm uninstall — requires approval"),
+        (r"\b(yarn|pnpm|bun)\s+remove\b", "Package remove (yarn/pnpm/bun)"),
+        (r"\b(apt|apt-get)\s+(remove|purge|autoremove)\b", "apt remove/purge"),
+        (r"\byum\s+(remove|erase)\b", "yum remove/erase"),
+        (r"\bdnf\s+(remove|erase)\b", "dnf remove/erase"),
+        (r"\bbrew\s+(uninstall|remove)\b", "brew uninstall"),
+
+        # === V4.10.7: STORAGE / VOLUME / FILESYSTEM DESTRUCTIVE ===
+        (r"\blvremove\b", "LVM logical volume remove"),
+        (r"\bvgremove\b", "LVM volume group remove"),
+        (r"\bpvremove\b", "LVM physical volume remove"),
+        (r"\bzfs\s+destroy\b", "ZFS destroy"),
+        (r"\bbtrfs\s+(subvolume\s+delete|filesystem\s+delete)\b", "Btrfs destroy"),
+        (r"\bmdadm\s+--remove\b", "mdadm RAID remove"),
+        (r"\bcryptsetup\s+(luksClose|erase|luksRemoveKey)\b", "LUKS erase/close"),
+        (r"\btar\s+.*--(remove-files|delete)\b", "tar destructive flag"),
+        (r"\b(rsync|scp)\s+.*--delete\b", "rsync/scp --delete (deletes at destination)"),
+
+        # === V4.10.7: PERMISSION / OWNERSHIP DESTRUCTIVE ===
+        (r"\bchmod\s+(-R\s+)?0?00\b", "chmod 000 (locks files inaccessible)"),
+        (r"\bchattr\s+[+-]i\b", "chattr immutable change (can lock files unrecoverably)"),
+
+        # === V4.10.7: SYSTEM-FILE OVERWRITE ===
+        (r">\s*(/etc|/usr|/sbin|/bin|/lib|/boot)/", "Redirect into system directory"),
+        (r"\b(echo|cat|printf)\s+.*>\s*(/etc/sudoers|/etc/passwd|/etc/shadow|/etc/hosts|/root/\.ssh)", "Overwrite sensitive system file"),
+
+        # === V4.10.7: PERSISTENCE / SCHEDULING ===
+        (r"\bcrontab\s+(-r|-e|-i)\b", "crontab modify/remove"),
+        (r"\bat\s+(now|\+)", "at scheduled job"),
+        (r"\bsystemctl\s+(mask|disable|enable|stop|start|restart)\s+", "systemctl service control"),
+        (r"\bservice\s+\S+\s+(stop|start|restart)\b", "service control"),
+        (r"\bpm2\s+(delete|kill|stop|restart)\b", "pm2 process control"),
+        (r"\bsupervisorctl\s+(stop|remove|update)\b", "supervisorctl control"),
+
+        # === V4.10.7: DATABASE CLI ===
+        # These bin names are not in BASE_ALLOWED_COMMANDS so they fail at allowlist;
+        # explicit DANGEROUS_PATTERNS gives a clear error message.
+        (r"\b(psql|mysql|mongosh?|redis-cli|cqlsh|sqlite3)\s+", "Database CLI not allowed in compact_v4 (use Python with approval gate)"),
+
         # === NETWORK - EXTERNAL REQUESTS ===
         # V4.8.0: Relaxed wget/curl restrictions. Only block pipe-to-shell (RCE risk).
         # wget/curl for downloading files is legitimate (e.g., installing tools, fetching data).
@@ -1528,6 +1612,25 @@ class SecurityManager:
         (r"169\.254\.169\.254", "EC2 metadata endpoint - blocked for security"),
         (r"\brequests\.(get|post).*verify\s*=\s*False", "Disable SSL verification"),
         (r"\burllib.*verify\s*=\s*False", "Disable SSL verification"),
+
+        # === V4.10.7: DATABASE DESTRUCTIVE VIA PYTHON ===
+        # Raw SQL destructive statements via DB drivers / ORMs. Catches the
+        # most common bypass: `cursor.execute("DROP TABLE x")` or
+        # `engine.execute("TRUNCATE x")` slipping past the cloud-SDK pattern.
+        (r"\.(execute|executemany|execute_query|exec_driver_sql|raw|run|scalar)\s*\(\s*[fr]?['\"]\s*(?i:DROP\s+(TABLE|DATABASE|SCHEMA|INDEX|VIEW|USER)|TRUNCATE\s+TABLE|DELETE\s+FROM)", "Raw SQL destructive via Python (DROP/TRUNCATE/DELETE)"),
+        (r"\.\s*metadata\s*\.\s*drop_all\s*\(", "SQLAlchemy metadata.drop_all (drops all tables)"),
+        (r"\bMetaData\s*\([^)]*\)\s*\.\s*drop_all\s*\(", "SQLAlchemy MetaData(...).drop_all"),
+        (r"\bdrop_all\s*\(\s*(engine|bind\s*=)", "drop_all on engine/bind"),
+        (r"\bsession\.delete\s*\(", "ORM session.delete"),
+        (r"\bsession\.execute\s*\(\s*[fr]?['\"]\s*(?i:DROP|TRUNCATE|DELETE\s+FROM)", "ORM session.execute destructive SQL"),
+        (r"\.dropDatabase\s*\(\s*\)", "MongoDB dropDatabase()"),
+        (r"\.deleteMany\s*\(\s*\{\s*\}\s*\)", "MongoDB deleteMany({}) — wipes collection"),
+        (r"\.flushdb\s*\(\)|\.flushall\s*\(\)", "Redis FLUSHDB / FLUSHALL"),
+
+        # === V4.10.7: FILESYSTEM DESTRUCTIVE VIA PYTHON ===
+        (r"\bos\.unlink\s*\(\s*['\"]/?(etc|usr|sbin|bin|lib|boot|root)/", "os.unlink on system path"),
+        (r"\bpathlib\.Path\s*\(\s*['\"]/?(etc|usr|sbin|bin|lib|boot|root)/.*\)\.\s*(unlink|rmdir)", "pathlib destructive on system path"),
+        (r"\bshutil\.rmtree\s*\(\s*['\"](?!\.|/(?:tmp|home))", "shutil.rmtree outside tmp/home (potentially destructive)"),
 
         # === DESERIALIZATION ===
         (r"\bpickle\.loads?\s*\(", "pickle - deserialization attack risk"),

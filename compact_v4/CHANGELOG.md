@@ -1,5 +1,32 @@
 # Compact V4 Changelog
 
+## v4.10.7 — Destructive-command hardening: cloud CLI hard-block + comprehensive coverage (2026-04-28)
+
+User requested: "all destructive commands must be checked by user. no cloud command allowed in compact_v4." Plus: must cover storage, services, GitHub, local files, every destructive surface — gated by hard-coded checks, not LLM judgement.
+
+Added (~50 new patterns):
+
+- **Cloud CLI hard-block** (24 CLIs): `gh`, `gcloud`, `gsutil`, `bq`, `az`, `azcopy`, `kubectl`, `helm`, `kustomize`, `terraform`, `terragrunt`, `pulumi`, `doctl`, `oci`, `ibmcloud`, `linode-cli`, `hcloud`, `heroku`, `vercel`, `netlify`, `wrangler`, `cloudflared`, `flyctl`, `railway`, `render-cli`.
+- **Git destructive flags**: `git reset --hard`, `git clean -fd`, `git checkout -- .`, `git restore .`, `git reflog expire`, `git gc --prune`.
+- **Package destructive**: `pip uninstall`, `conda remove`, `npm/yarn/pnpm/bun uninstall/remove`, `apt remove/purge`, `yum remove`, `dnf erase`, `brew uninstall`.
+- **Storage / volume destructive**: `lvremove`, `vgremove`, `pvremove`, `zfs destroy`, `btrfs subvolume delete`, `mdadm --remove`, `cryptsetup luksClose`, `tar --remove-files`, `rsync/scp --delete`.
+- **Permission destructive**: `chmod 000`, `chattr +i`.
+- **System-file overwrite**: `>` into `/etc/`, `/usr/`, `/sbin/`, `/bin/`, `/lib/`, `/boot/`; explicit blocks for `/etc/sudoers`, `/etc/passwd`, `/etc/shadow`, `/etc/hosts`, `/root/.ssh`.
+- **Persistence / scheduling**: `crontab -r/-e`, `at now`, `systemctl mask/disable/stop`, `service stop`, `pm2 delete`, `supervisorctl stop/remove`.
+- **Database CLI**: `psql`, `mysql`, `mongosh`, `redis-cli`, `cqlsh`, `sqlite3` blocked at bash. Use Python ORM with approval gate instead.
+- **Database destructive via Python**: `cursor.execute('DROP/TRUNCATE/DELETE FROM ...')`, `metadata.drop_all()`, `drop_all(engine)`, `session.delete()`, MongoDB `dropDatabase()` / `deleteMany({})`, Redis `flushall()` / `flushdb()`.
+- **Filesystem destructive via Python**: `os.unlink('/etc/...')`, `pathlib.Path('/etc/...').unlink()`, `shutil.rmtree(...)` outside `tmp/home`.
+
+Approval-cannot-be-skipped guarantees (verified by tests):
+- `_classify_bash_ro` (the read-only bash skip path) only allowlists known read-only commands. Destructive commands always trigger approval.
+- `bash` and `python_exec` are in `HIGH_RISK_TOOLS` — `always_allow` shortcut never bypasses approval for them.
+
+Tests
+- New: `test_v410_destructive_coverage.py` — 5 test groups covering **107 cases** (72 destructive bash phrases must block, 14 safe bash phrases must pass, 21 destructive Python patterns must block, plus 2 approval-cannot-be-skipped guarantees).
+- Full v4.10.x + regression suite all green.
+
+Version: `4.10.6` → `4.10.7`. Follow-up: propagate same policy to `~/.claude/hooks/pre-bash-safety.sh` (Claude Code), Codex hook (if any), Learning_Factory and Arcsage_OPC hooks.
+
 ## v4.10.6 — `html` skill: presentation / design / flowchart / architecture HTML deliverables (2026-04-28)
 
 User asked for a way to reliably produce design HTML deliverables (presentations, tabbed design docs, flowchart pages, code-explanation pages) without Playwright on SageMaker. Added a dedicated `html` skill with reference templates and a screenshot-iteration workflow.

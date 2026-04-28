@@ -46,6 +46,36 @@ PASS on confidentiality + content + workflow clarity. Two minor recommendations 
 
 ### Version: 4.10.5 → 4.10.6
 
+### V4.10.7 Release — Destructive-command hardening (2026-04-28)
+User requirements:
+1. All destructive commands must hit the approval gate (no bypass)
+2. No cloud CLI commands in compact_v4 — hard block
+3. SageMaker local file remove must always require approval, even with auto-approve
+4. All commands hard-coded checked, not LLM-judged
+5. Apply same policy across all coding-agent surfaces (compact_v4, Claude Code, Codex, Learning_Factory, Arcsage_OPC)
+
+V4.10.7 covers items 1-4 in compact_v4. Cross-surface hook propagation (item 5) is a follow-up commit.
+
+Added ~50 patterns to DANGEROUS_PATTERNS / DANGEROUS_PYTHON:
+- 24 cloud CLI hard-blocks (gh, gcloud, gsutil, bq, az, azcopy, kubectl, helm, kustomize, terraform, terragrunt, pulumi, doctl, oci, ibmcloud, linode-cli, hcloud, heroku, vercel, netlify, wrangler, cloudflared, flyctl, railway, render-cli)
+- 6 git destructive flags
+- 8 package destructive (pip/conda/npm/yarn/apt/yum/dnf/brew)
+- 9 storage/volume destructive (lvremove/vgremove/pvremove/zfs/btrfs/mdadm/cryptsetup/tar --remove-files/rsync --delete)
+- 2 permission destructive (chmod 000, chattr +i)
+- 2 system-file overwrite (>/etc redirect, echo > /etc/sudoers)
+- 6 persistence (crontab/at/systemctl/service/pm2/supervisorctl)
+- 1 database CLI (psql/mysql/mongosh/redis-cli/cqlsh/sqlite3)
+- 9 database destructive via Python (cursor.execute DROP, metadata.drop_all, MongoDB dropDatabase, Redis flushall, etc.)
+- 3 filesystem destructive via Python (os.unlink on system path, pathlib destructive, shutil.rmtree outside tmp/home)
+
+Approval-cannot-be-skipped guarantees verified by tests:
+- _classify_bash_ro is conservative — destructive commands never classified read-only (returns False)
+- bash + python_exec are in HIGH_RISK_TOOLS — always_allow shortcut excluded
+
+Tests: test_v410_destructive_coverage.py — 5 groups covering 107 cases (72 destructive bash + 14 safe bash + 21 destructive python + 2 approval-skip guarantees). All pass. Full v4.10.x regression suite still green.
+
+Version: 4.10.6 → 4.10.7
+
 ### Round-12 source-tree restore + AGENT_STATUS.md ship-template fix
 After v4.10.6 ship, user unzipped `compact_v4.zip` over `compact_v4/`, flattening the working tree to runtime-only. Git status showed every `MAIN/agent/*` source file as deleted. Recovery:
 - `git checkout HEAD -- compact_v4/` — restored full source tree (`MAIN/`, `docs/`, `_rebuild_zip.py`, `verify_ship_zip.py`, `CHANGELOG.md`, `changelogs/`).
