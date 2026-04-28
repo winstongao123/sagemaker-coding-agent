@@ -15,13 +15,32 @@ Tests:
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import shutil
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sagemaker_agent as sa
+
+
+# v4.10.2: track and clean up tempdirs at process exit. Without this the test
+# leaves dozens of v410_nb_* dirs inside CONFIG.workspace which then end up
+# in the ship zip if rebuilt before manual cleanup.
+_TEMP_DIRS: list = []
+
+
+def _cleanup_tempdirs():
+    for d in _TEMP_DIRS:
+        try:
+            shutil.rmtree(d, ignore_errors=True)
+        except Exception:
+            pass
+
+
+atexit.register(_cleanup_tempdirs)
 
 
 def _seed_notebook(path: str, sources):
@@ -55,6 +74,7 @@ def _read_cells(path: str):
 def _setup():
     """Create tmp .ipynb inside CONFIG.workspace so SECURITY.validate_path passes."""
     tmp = tempfile.mkdtemp(prefix="v410_nb_edit_", dir=sa.CONFIG.workspace)
+    _TEMP_DIRS.append(tmp)
     nb_path = os.path.join(tmp, "test.ipynb")
     _seed_notebook(nb_path, ["a", "b", "c"])
     return tmp, nb_path
@@ -173,6 +193,7 @@ def test_missing_cell_type_on_replace():
 
 def test_nonexistent_file():
     tmp = tempfile.mkdtemp(prefix="v410_nb_missing_", dir=sa.CONFIG.workspace)
+    _TEMP_DIRS.append(tmp)
     out = sa.tool_notebook_edit({
         "path": os.path.join(tmp, "missing.ipynb"),
         "action": "insert", "cell_index": 0, "cell_type": "code", "source": "x",
@@ -187,6 +208,7 @@ def test_non_serialisable_metadata_returns_error_string():
     tool must return 'Error: ...' rather than propagate the exception, AND
     the original notebook must remain untouched (atomicity)."""
     tmp = tempfile.mkdtemp(prefix="v410_nb_corrupt_", dir=sa.CONFIG.workspace)
+    _TEMP_DIRS.append(tmp)
     nb_path = os.path.join(tmp, "test.ipynb")
     # Hand-craft a notebook with non-JSON-serialisable metadata embedded as a
     # placeholder. We can't put bytes in via json.dump (it would fail on seed),

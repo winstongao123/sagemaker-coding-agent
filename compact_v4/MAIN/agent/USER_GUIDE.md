@@ -428,6 +428,55 @@ Slash commands are typed directly in the chat input box (not as natural language
 
 ---
 
+## Sub-agents — when, how, and what they share
+
+V4 spawns sub-agents through the **`task` tool**. There is **no agent-team / inter-process coordination** (that's a Runnable feature for multi-Claude scenarios — irrelevant for SageMaker self-use). What you have is one parent agent that can spawn typed children. **7 agent types**, each with its own tool allowlist and prompt suffix:
+
+| Type | When to use it | Tools | Context inheritance |
+|------|---|---|---|
+| `general` | Catch-all when no other type fits. Default. | All | empty start |
+| `explore` | Research / search across files (3+ queries) | Read-only | empty start |
+| `plan` | Design before code. 2-3 options with tradeoffs. | Read-only allowlist | empty start |
+| `build` | Implement features spanning 3+ files | All + git worktree isolation | empty start |
+| `verify` | Adversarial probe (tries to BREAK the code) | All | empty start |
+| `review` | One focused review dimension (reuse / quality / efficiency) | Read-only | empty start |
+| `fork` | Continue a thread you were just on | All | **shares parent context** (deep copy) |
+
+**What sub-agents share with the parent:**
+- The cached `SYSTEM_PROMPT` prefix (same prompt cache hit for parent + sub-agents).
+- The `IterationBudget` (default 90, set via `CONFIG.max_iteration_budget`) — parent + children **collectively** can't blow this ceiling.
+- The token tracker (`TOKENS` singleton) — sub-agent costs ARE counted in the running total shown in the cost bar / `/cost` / `/context` output.
+- The depth limit (`CONFIG.subagent_max_depth = 2`) — no infinite recursion.
+- Sonnet 4.5 model by default (or whatever `CONFIG.model_id` is). Override per-type via `CONFIG.agent_overrides[<type>]["model"]`.
+
+**What sub-agents DON'T share:**
+- Conversation history — except for `fork`, every sub-agent starts with empty `messages` ([sagemaker_agent.py:7822](compact_v4/MAIN/agent/sagemaker_agent.py)).
+- Per-agent token breakdown is NOT displayed; only the running total.
+
+**How does the sub-agent know what to read first?**
+The parent passes a `prompt` argument when calling `task`. That string is the entire briefing. As of v4.10.0 the sub-agent also sees a small **env-details block** (cwd, git HEAD, working tree summary) appended after the cached prompt boundary, so a fresh `verify` agent picks up the parent's worktree state automatically. Past that, the sub-agent uses its own grep/glob/read tools to discover what it needs.
+
+**Best-practice parent prompt:**
+> "Read `D:/path/foo.py:50-200` and verify the new error handler. Tests at `tests/test_foo.py`. Original spec is in AGENT_STATUS.md Plan section. Verdict: PASS / PARTIAL / FAIL."
+
+NOT this:
+> "check the foo code"
+
+**Do you need to say "use a sub-agent for X"?**
+**No** — but you can. Three triggers:
+1. The model decides to call `task` based on the system prompt heuristic: "Use task tool for complex work (3+ queries or multi-file). Use glob/grep directly for simple searches."
+2. You explicitly ask: "use the explore agent for X" or "spawn a build subagent". Model honors.
+3. **Verify after 3+ logic-changing edits** — as of v4.10.2 this is a **suggestion, not auto** (default). Agent says *"I edited N files. Want me to run /verify?"* and waits for your confirmation. Strict mode is opt-in via `CONFIG.enforce_verify_contract = True` in `agent_config.json`.
+
+There is **no keyword pattern** that auto-spawns a sub-agent from your phrasing. Saying "subagent" in a question won't trigger anything. (Skill auto-trigger is a separate mechanism — also default OFF since V4.9.6.)
+
+**Costs and metrics:**
+- Sub-agent calls go through the same `BedrockClient` (or a per-type model override) → `TOKENS.add(...)` → running total shown in the cost bar.
+- The cache-line indicator (e.g. "cache_read=15K, write=2K") shows only for the top-level agent (`subagent_depth == 0`) to avoid noise from sub-agent calls.
+- Use `/cost` for the per-session running total, `/context` for what's currently consuming context, `/diffs` for what's been edited, `/status` for the long-running handoff file.
+
+---
+
 ## Skills System
 
 ### What are Skills?
@@ -436,9 +485,15 @@ Skills are **instruction files** that tell the AI how to behave for a specific t
 
 **Example:** The included `code-review` skill tells the AI to check for security issues, code quality, performance, and testing when reviewing code.
 
-### Activating Skills (V4.8.0+)
+### Activating Skills (V4.8.0+, hardened V4.9.6)
 
-Skills require explicit activation via `/command`. They do NOT auto-trigger on keywords — this prevents unwanted skill activation when you're just having a conversation.
+Skills require explicit activation via `/command`. They do NOT auto-trigger on keywords by default — this prevents unwanted skill activation when you're just having a conversation. (This was a real bug in V4.8: a message saying "review the X code" would silently inject a 8K-char `clara-review` audit methodology into every prompt thereafter. V4.9.6 closed it with two independent gates.)
+
+**Two gates, both default OFF:**
+1. Global flag: `CONFIG.enable_skill_auto_trigger: bool = False`
+2. Per-skill frontmatter: `auto_trigger: false` (default false when key absent)
+
+Auto-trigger only fires when **BOTH** gates are flipped to True. The `test_v49_auto_trigger.py` regression test (12 cases) enforces this — it runs as part of every release verification.
 
 ```
 /skills                  ← list all available skills

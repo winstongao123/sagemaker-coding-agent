@@ -5,11 +5,16 @@ notebook environment. Drops dev artefacts, test files, audit docs, historical
 HTMLs, and powerbi skills (per user request, kept out since v4.9.0).
 
 Kept (runtime essentials only):
-- sagemaker_agent.py (the agent)
-- chat.ipynb (entry notebook — md companion excluded)
-- USER_GUIDE.md (full user docs)
-- memory.md (auto-loaded persistent memory file, even if empty)
+- sagemaker_agent.py (the agent, at zip root)
+- chat.ipynb (entry notebook, at zip root — md companion excluded)
+- USER_GUIDE.md (full user docs, at zip root)
+- memory.md (auto-loaded persistent memory file, even if empty, at zip root)
+- AGENT_STATUS.md (auto-loaded long-running task handoff file, at zip root)
 - skills/<all skill SKILL.md and dependent files>
+
+Zip layout intentionally strips the source `MAIN/agent/` prefix so extraction does
+not create deep wrapper folders. Skill subfolders are preserved because the agent
+expects `skills/<name>/SKILL.md`.
 
 Dropped:
 - chat.md (md companion of chat.ipynb — redundant with USER_GUIDE.md)
@@ -30,8 +35,9 @@ import os
 import zipfile
 import fnmatch
 
-SRC_DIR = "MAIN"
+SRC_DIR = os.path.join("MAIN", "agent")
 OUT_ZIP = "compact_v4.zip"
+ARCHIVE_PREFIX = SRC_DIR.replace(os.sep, "/") + "/"
 
 # Extra paths to include at the zip root (outside MAIN/).
 EXTRA_FILES = []   # release-context files (CHANGELOG.md, etc.) are NOT shipped — runtime-only zip
@@ -50,6 +56,16 @@ EXCLUDE_DIR_NAMES = {
     "powerbi-dashboard",
     "powerbi-dashboard-v2",
 }
+# v4.10.x: glob patterns for test-tempdir directories that
+# tempfile.mkdtemp(dir=CONFIG.workspace) leaves behind in MAIN/agent/. The
+# tests deliberately use the workspace as the parent dir so SECURITY.validate_path
+# accepts the file. Without this filter the ship zip can carry 50+ stale test fixtures.
+EXCLUDE_DIR_PATTERNS = [
+    "v410_nb_*",          # test_v410_notebook_edit.py tempdirs
+    "v410_skills_*",      # test_v410_skill_listing_budget.py tempdirs
+    "v410_subagent_env_*",  # test_v410_subagent_env.py tempdirs
+    "v410_ctxwin_*",      # test_v410_context_window.py tempdirs
+]
 EXCLUDE_REL_PATHS = {
     "MAIN/tests",                # whole tests/ dir — dev-only, not shipped
     "MAIN/tests/competition",    # legacy, kept for clarity
@@ -75,10 +91,23 @@ def _rel(path: str) -> str:
     return os.path.relpath(path, ".").replace(os.sep, "/")
 
 
+def _archive_name(path: str) -> str:
+    """Map source paths into the flat runtime zip layout."""
+    rel_path = _rel(path)
+    if rel_path.startswith(ARCHIVE_PREFIX):
+        return rel_path[len(ARCHIVE_PREFIX):]
+    return rel_path
+
+
 def _is_dir_excluded(rel_path: str) -> bool:
     parts = rel_path.split("/")
     if any(p in EXCLUDE_DIR_NAMES for p in parts):
         return True
+    # v4.10.x: glob-pattern match against any path part (catches test-tempdirs
+    # like MAIN/agent/v410_nb_edit_xxxxx that tempfile.mkdtemp leaves behind).
+    for pat in EXCLUDE_DIR_PATTERNS:
+        if any(fnmatch.fnmatch(p, pat) for p in parts):
+            return True
     for ex in EXCLUDE_REL_PATHS:
         if rel_path == ex or rel_path.startswith(ex + "/"):
             return True
@@ -108,7 +137,7 @@ def main():
                 if _is_file_excluded(f):
                     continue
                 abs_p = os.path.join(root, f)
-                rel_p = _rel(abs_p)
+                rel_p = _archive_name(abs_p)
                 z.write(abs_p, rel_p)
                 files_added += 1
                 total_raw += os.path.getsize(abs_p)
