@@ -1,7 +1,7 @@
-# Production Readiness Status — compact_v4 V4.10.3
+# Production Readiness Status — compact_v4 V4.10.4
 
-**Date:** 2026-04-28 (final cleanup pass)
-**Runtime version:** `__version__ = "4.10.3"` ([sagemaker_agent.py:74](../MAIN/agent/sagemaker_agent.py#L74))
+**Date:** 2026-04-28 (sub-agent handoff release)
+**Runtime version:** `__version__ = "4.10.4"` ([sagemaker_agent.py](../MAIN/agent/sagemaker_agent.py))
 **Scope:** personal / self-use SageMaker coding agent using AWS Bedrock
 **Status:** **ship-ready for self-use SageMaker.** Not production-grade for shared / regulated / unattended operation (those would need a live Bedrock smoke test recorded, multi-user concurrency review, and a measured Runnable cost-benchmark — all out of scope for self-use).
 

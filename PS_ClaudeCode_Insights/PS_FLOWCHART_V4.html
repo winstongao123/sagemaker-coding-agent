@@ -212,17 +212,20 @@
 <body>
 <div class="shell">
   <section class="hero">
-    <h1>SageMaker Coding Agent V4.10.2</h1>
+    <h1>SageMaker Coding Agent V4.10.4</h1>
     <p class="subtitle">
-      Architecture map of V4.10.2 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (11,553 lines),
-      plus comparison against Claude Code runnable source. <b>V4.10.2 is the Runnable-parity release</b> — five surgical
+      Architecture map of V4.10.4 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (11,553 lines),
+      plus comparison against Claude Code runnable source. <b>V4.10.4 is the Runnable-parity release</b> — five surgical
       additions after a deep rescan: <b>notebook_edit</b> (surgical .ipynb cell editor),
       <b>skill listing token budget</b> (1% of context, hard-capped at 2000 tokens),
       <b>per-sub-agent env-details</b> (cwd + git HEAD injected after the cached SYSTEM_PROMPT boundary),
       <b>model-aware context window auto-derive</b> (BEDROCK_MODEL_CONTEXT_WINDOWS map, ready for AWS 1M variants),
       <b>reactive compact on CONTEXT_OVERFLOW</b> (microcompact + retry, capped at 1 reactive recovery per run),
       and <b>segment-level Context Collapse</b> (collapses runs of 3+ stale tool round-trips into one synthetic pair).
-      v4.10.1 also flips the default model to <b>Sonnet 4.5</b> (cache activates from 1024 tokens vs Haiku's 4096).
+      v4.10.1 flipped the default model to <b>Sonnet 4.5</b> (cache activates from 1024 tokens vs Haiku's 4096).
+      v4.10.2 softened the verify-contract (suggest-and-confirm by default, opt-in strict mode via CONFIG.enforce_verify_contract).
+      v4.10.3 added a ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials.
+      v4.10.4 closed the largest remaining gap: sub-agents now get a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) so they don't fly blind on the parent's larger goal.
       Codex-reviewed per phase (gpt-5.3-codex, read-only). 55 new tests across 5 phases, all green; existing skill auto-trigger
       regression test (12/12) still green — skill auto-load remains default OFF.
     </p>
@@ -232,7 +235,7 @@
       <div class="stat"><strong>7</strong><span>Sub-Agent Types</span></div>
       <div class="stat"><strong>11</strong><span>Skills</span></div>
       <div class="stat"><strong>11,553</strong><span>Lines of Code</span></div>
-      <div class="stat"><strong>V4.10.2</strong><span>Current Version</span></div>
+      <div class="stat"><strong>V4.10.4</strong><span>Current Version</span></div>
       <div class="stat"><strong>55/55</strong><span>V4.10 Tests Pass</span></div>
       <div class="stat"><strong>5/5</strong><span>Codex PASS</span></div>
     </div>

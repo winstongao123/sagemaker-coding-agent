@@ -268,7 +268,7 @@ Every tool is just a Python function that does something locally (read a file, r
 
 ### How the AI picks tools
 
-You never tell the AI "use the read_file tool". You say "read main.py" in plain English. The AI (Claude) has been given a description of all 22 tools in the system prompt. Based on your request, it decides which tool to call and with what arguments. This is called **tool use** (or "function calling") — it's a built-in capability of Claude models.
+You never tell the AI "use the read_file tool". You say "read main.py" in plain English. The AI (Claude) has been given a description of all 23 tools in the system prompt. Based on your request, it decides which tool to call and with what arguments. This is called **tool use** (or "function calling") — it's a built-in capability of Claude models.
 
 ### Summary diagram
 
@@ -293,7 +293,7 @@ You never tell the AI "use the read_file tool". You say "read main.py" in plain 
 │  │       │                              │    │
 │  │       ▼ tool calls                   │    │
 │  │  ┌──────────────────────────────┐   │    │
-│  │  │ Tool Functions (22 tools)    │   │    │
+│  │  │ Tool Functions (23 tools)    │   │    │
 │  │  │ read_file, bash, grep, ...   │   │    │
 │  │  │ All run locally as Python    │   │    │
 │  │  └──────────────────────────────┘   │    │

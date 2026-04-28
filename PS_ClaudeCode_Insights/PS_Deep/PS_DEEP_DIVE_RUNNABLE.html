@@ -187,11 +187,13 @@ tr:nth-child(even) { background: var(--card); }
 
 <div style="background:#0d2818; border:1px solid #10b981; border-radius:8px; padding:14px 18px; margin:14px 0 20px 0; font-size:14px;">
   <strong style="color:#34d399;">★ SageAgent V4.10.x Runnable-parity update (2026-04-28):</strong>
-  <span style="color:#c9d1d9;">After this deep dive, we ran a fresh rescan of compact_v4 vs runnable and shipped 3 same-day releases:
-  <b>v4.10.0</b> closed 5 lagging dimensions — NotebookEdit, SKILL_BUDGET_CONTEXT_PERCENT, enhanceSystemPromptWithEnvDetails, context_window auto-derive (Bedrock equivalent of CONTEXT_1M_BETA_HEADER), reactiveCompact;
+  <span style="color:#c9d1d9;">After this deep dive, we ran a fresh rescan of compact_v4 vs runnable and shipped 5 same-day releases:
+  <b>v4.10.0</b> closed 5 lagging dimensions — NotebookEdit, SKILL_BUDGET_CONTEXT_PERCENT, enhanceSystemPromptWithEnvDetails, context_window auto-derive, reactiveCompact;
   <b>v4.10.1</b> closed the 6th — segment-level contextCollapse — plus default model switched to Sonnet 4.5;
-  <b>v4.10.2</b> softened the verify-contract after Codex caught a contradiction (now suggest-and-confirm by default, opt-in strict mode).
-  67 tests across 7 files green; per-phase Codex review (gpt-5.3-codex) caught 13 real correctness issues across the 3 releases — all fixed and re-verified before merging. Full plan: <code>compact_v4/docs/V4_10_0_PLAN.md</code>.</span>
+  <b>v4.10.2</b> softened the verify-contract after Codex caught a contradiction;
+  <b>v4.10.3</b> added a ship-gate verifier, cache-boundary regression test, many-skill stress test, and clearer permission denials;
+  <b>v4.10.4</b> closed the largest remaining gap — sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) so they don't fly blind on the parent's larger goal.
+  85 tests across 9 files green; per-phase Codex review (gpt-5.3-codex) caught 15 real correctness issues across the 5 releases — all fixed and re-verified before merging. Full plan: <code>compact_v4/docs/V4_10_0_PLAN.md</code>.</span>
 </div>
 
 <div class="stats">

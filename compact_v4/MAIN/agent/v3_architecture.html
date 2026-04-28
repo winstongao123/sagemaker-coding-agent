@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.2)</title>
+<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.4)</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ===== Design System (matches Demo Tech docs) ===== */
@@ -187,7 +187,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 
 <!-- Navigation -->
 <nav class="topnav">
-    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.2)</div>
+    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.4)</div>
     <div class="topnav-links">
         <a href="#v410" class="active"><span class="nav-dot" style="background:#10b981"></span> What's New</a>
         <a href="#what"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
@@ -206,13 +206,13 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
 <!-- Hero -->
 <div class="hero">
     <div class="badges">
-        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.2</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.4</span>
         <span class="badge"><span class="dot" style="background:var(--blue)"></span> Bedrock-only</span>
         <span class="badge"><span class="dot" style="background:var(--amber)"></span> 55/55 V4.10 Tests</span>
         <span class="badge"><span class="dot" style="background:var(--purple)"></span> 5/5 Codex Review PASS</span>
     </div>
-    <h1>SageAgent V4 &mdash; v4.10.2</h1>
-    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped five Runnable-parity upgrades — surgical notebook_edit, skill listing budget cap, per-subagent env-details, model-aware context window, and reactive compact on Bedrock prompt-too-long. v4.10.1 (same-day) added the sixth: segment-level Context Collapse, plus default-model switch to Sonnet 4.5. v4.10.2 (same-day) softened the verify-contract from MANDATORY-after-3-edits to suggest-and-confirm, after Codex review caught a system-prompt contradiction.</p>
+    <h1>SageAgent V4 &mdash; v4.10.4</h1>
+    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details.</p>
 </div>
 
 <!-- Stats -->
@@ -220,14 +220,14 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     <div class="stat-card"><div class="stat-value blue">23</div><div class="stat-label">Built-in Tools</div></div>
     <div class="stat-card"><div class="stat-value green">11,553</div><div class="stat-label">Lines of Code</div></div>
     <div class="stat-card"><div class="stat-value amber">16</div><div class="stat-label">Security Layers</div></div>
-    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.2)</div></div>
+    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.4)</div></div>
     <div class="stat-card"><div class="stat-value teal">200K</div><div class="stat-label">Default Context (auto-derived)</div></div>
 </div>
 
 <!-- ========== V4.10.0 What's New ========== -->
 <div class="section" id="v410">
     <div class="section-header" style="background:linear-gradient(135deg, #ecfdf5 0%, #f0f9ff 100%);">
-        <h2><span style="color:#10b981">★</span> v4.10.2 &mdash; Runnable Parity Upgrade (2026-04-28)</h2>
+        <h2><span style="color:#10b981">★</span> v4.10.4 &mdash; Runnable Parity Upgrade (2026-04-28)</h2>
         <p>Five additions from a deep rescan against <code>gg-claude-code-runnable</code>. Each phase had its own Codex review (gpt-5.3-codex, read-only). Codex caught 9 real correctness issues across the five phases; all fixed and re-verified before merging.</p>
     </div>
     <div class="section-body">
@@ -295,7 +295,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 22 tools covering file operations, code execution, document generation, and codebase intelligence.
+            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 23 tools covering file operations, code execution, document generation, and codebase intelligence.
         </div>
 
         <div class="insight blue" style="margin-top:20px">
@@ -712,7 +712,7 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
         </div>
 
         <div class="explain">
-            <strong>Why 22 tools?</strong> Each tool is a specific action the agent can take. More tools = more capabilities. For comparison, Claude Code has ~12 tools, Aider has ~8, Codex has ~8. V3 has the most tools of any coding agent we tested, including unique ones like create_word, create_chart, and view_image.
+            <strong>Why 23 tools?</strong> Each tool is a specific action the agent can take. More tools = more capabilities. For comparison, Claude Code has ~12 tools, Aider has ~8, Codex has ~8. V3 has the most tools of any coding agent we tested, including unique ones like create_word, create_chart, and view_image.
         </div>
     </div>
 </div>
@@ -826,8 +826,8 @@ dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
             <div class="card" style="border-top:4px solid var(--green)">
                 <div class="card-title">Step 2: Lazy Loading (Smart Optimization)</div>
                 <div class="card-desc">
-                    V3 doesn't always send all 22 tools. Document creation tools (Word, Excel, Chart, PDF, Markdown, Notebook) are <strong>excluded</strong> unless your recent messages mention doc-related keywords.<br><br>
-                    <strong>Why:</strong> 22 tool definitions = ~2,336 tokens. Without doc tools = ~1,627 tokens. This saves 30% on every API call for coding tasks.
+                    V3 doesn't always send all 23 tools. Document creation tools (Word, Excel, Chart, PDF, Markdown, Notebook) are <strong>excluded</strong> unless your recent messages mention doc-related keywords.<br><br>
+                    <strong>Why:</strong> 23 tool definitions = ~2,400 tokens. Without doc tools = ~1,627 tokens. This saves 30% on every API call for coding tasks.
                 </div>
             </div>
             <div class="card" style="border-top:4px solid var(--amber)">

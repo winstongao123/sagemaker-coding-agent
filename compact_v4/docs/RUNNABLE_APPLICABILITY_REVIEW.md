@@ -1,15 +1,15 @@
 # Runnable Applicability Review For compact_v4
 
-**Date:** 2026-04-28 (originally written against V4.9.7; updated through V4.10.3)
+**Date:** 2026-04-28 (originally written against V4.9.7; updated through V4.10.4)
 **Reviewed against:** `D:\Github\gg_claude_code\gg-claude-code-runnable`
-**Target:** compact_v4 V4.10.3, self-use SageMaker Bedrock coding agent
+**Target:** compact_v4 V4.10.4, self-use SageMaker Bedrock coding agent
 **Rule for V4 changes:** review first, alter runtime only when the feature clearly improves SageMaker self-use without adding GitHub/remote dependency or hidden context bloat.
 
 ## Status by V4.10.x
 
-V4.10.0 closed 5 Runnable-parity gaps (notebook_edit, skill listing budget, sub-agent env-details, model-aware context window, reactive compact). V4.10.1 closed a 6th (segment-level Context Collapse) + flipped default model to Sonnet 4.5. V4.10.2 softened the verify-contract (suggest by default, opt-in strict mode). V4.10.3 added ship-gate verifier, cache-boundary regression test, many-skill stress test, clearer permission denials.
+V4.10.0 closed 5 Runnable-parity gaps (notebook_edit, skill listing budget, sub-agent env-details, model-aware context window, reactive compact). V4.10.1 closed a 6th (segment-level Context Collapse) + flipped default model to Sonnet 4.5. V4.10.2 softened the verify-contract (suggest by default, opt-in strict mode). V4.10.3 added ship-gate verifier, cache-boundary regression test, many-skill stress test, clearer permission denials. V4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) on top of the v4.10.0 env-details — they no longer fly blind when the parent forgets to brief them.
 
-**Of the 18 "must learn / apply" items in the production-readiness review: 14 already done in v4.10.2, 4 added in v4.10.3.** See `docs/V4_10_0_PLAN.md` for the live status table and `CHANGELOG.md` for per-release detail.
+**Of the 18 "must learn / apply" items in the production-readiness review: 14 already done in v4.10.2, 4 added in v4.10.3, 1 final largest-gap closed in v4.10.4.** See `docs/V4_10_0_PLAN.md` for the live status table and `CHANGELOG.md` for per-release detail.
 
 ## Scope Boundary
 
@@ -31,7 +31,7 @@ V4 is not trying to become runnable's full product stack. V4 should beat runnabl
 | Context analysis | `src/utils/contextAnalysis.ts` | Yes | V4.9.7 added `/context` diagnostic | Adopted |
 | Read/search collapse | `src/utils/collapseReadSearch.ts` | Partly | V4 has file dedup, unchanged-read stub, tool-result caps, microcompact | Defer deeper UI collapse; current need is token safety, not terminal UI polish |
 | Automatic compaction and retry | changelog + context utilities | Yes | V4 has Bedrock-safe compact, prompt-too-long retry, pre-prune, aux model option | Keep; strengthen only after live Bedrock smoke |
-| ToolSearch/deferred schemas | `src/tools/ToolSearchTool/prompt.ts` | Partly | V4 filters tool schemas by context and plan mode, but does not lazy-load schemas | Defer; useful for huge tool ecosystems, less urgent for V4's 22 tools |
+| ToolSearch/deferred schemas | `src/tools/ToolSearchTool/prompt.ts` | Partly | V4 filters tool schemas by context and plan mode, but does not lazy-load schemas | Defer; useful for huge tool ecosystems, less urgent for V4's 23 tools |
 | Skill discovery/search ecosystem | `src/tools/SkillTool/prompt.ts`, `src/services/skillSearch/*` | Partly | V4 intentionally keeps explicit skill activation; auto-trigger default off | Reject auto-loading; maybe adopt bounded skill listing budgets only if skill count grows |
 | Background/fork/team agents | `src/tools/AgentTool/*`, `src/utils/teammate.ts`, team memory | Partly | V4 has build/plan/explore/verify/fork agents with shared budget and worktree safety | Defer team/remote; keep focused sub-agents |
 | Verification agent | `src/tools/AgentTool/built-in/verificationAgent.ts` | Yes | V4 has `/verify`, `/done`, verify skill, and regression hooks | Keep; next improvement is more automatic verification trigger documentation/tests |

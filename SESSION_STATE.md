@@ -27,6 +27,22 @@ With v4.10.3 alone, a parent that spawned a `verify` sub-agent and forgot "the g
 
 ### Version: 4.10.3 → 4.10.4
 
+### Round-6 doc-polish (post-v4.10.4)
+User flagged remaining stale references after v4.10.4 ship: "22/23 tools" and "V4.10.3" in HTML/doc banners. Cleaned in this pass:
+- PRODUCTION_READINESS_STATUS.md header V4.10.3 → V4.10.4
+- RUNNABLE_APPLICABILITY_REVIEW.md target V4.10.3 → V4.10.4 + status block extended with v4.10.4 entry
+- v3_architecture.html: all v4.10.2 markers → v4.10.4 (was stuck two versions behind), tool count 22 → 23
+- PS_FLOWCHART_V4.html: V4.10.2 → V4.10.4 + subtitle expanded with v4.10.2/3/4 narrative
+- PS_DEEP_DIVE_RUNNABLE.html: banner extended to describe v4.10.0/1/2/3/4 (was v4.10.0/1/2)
+- HERMES_VS_CODING_AGENT.html: banner extended with v4.10.3 + v4.10.4 entries
+- USER_GUIDE.md: 22 tools → 23 tools (literal)
+
+Legacy docs left unchanged (intentional — historical V3-era / pre-v4.10 analysis):
+- Documentations/[CRITICAL]_V4_TOKEN_EFFICIENCY.md
+- PS_ClaudeCode_Insights/[CRITICAL]_V4_TOKEN_EFFICIENCY.md
+- MAIN/tests/competition/COMPETITION_RESULTS.md
+- gap_analysis_v4_vs_runnable.md
+
 
 ## 2026-04-28 — V4.10.3 Release: Codex production-readiness review apply
 
