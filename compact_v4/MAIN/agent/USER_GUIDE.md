@@ -1,5 +1,25 @@
-# SageAgent V4 — User Guide (v4.10.7)
+# SageAgent V4 — User Guide (v4.10.8)
 
+
+## What's new in v4.10.8 (2026-04-28, obfuscation hardening + folder-removal hard-block)
+
+Two follow-ups after v4.10.7 ship:
+
+**Obfuscation hardening** — closes the residual escape path "LLM smuggles destructive command past regex by encoding it (base64/hex), tired user clicks Approve". New blocks:
+- `base64 -d ... | zsh / python / perl / node / ...` (v4.10.7 only matched `sh/bash`).
+- `xxd -r/-p ... | <shell>` — hex-decode pipe-to-shell.
+- `od / hexdump | tr/sed/awk | sh` — hex-decode chains.
+
+**Recursive folder removal — hard-block from any path:**
+- `rm -r/-rf/-fr/-R/--recursive`, `rmdir`, PowerShell `Remove-Item -Recurse` — all blocked, regardless of target.
+- Python: `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()` — all blocked from `python_exec`.
+
+What still works:
+- Single-file removal via `python_exec` + `os.unlink('temp.py')` for ephemeral test cleanup.
+- 🧹 Clean button — runs from the agent process directly (not through `python_exec`), uses hardcoded paths (`audit_logs/`, `.snapshots/`, `.code_index/`, `truncated_outputs/`, `.exec_budget.json`). Unaffected by the new blocks.
+- Manual folder removal in the user's own terminal — outside the agent.
+
+129 test cases pass (87 bash block + 14 bash allow + 28 python block), up from v4.10.7's 107.
 
 ## What's new in v4.10.7 (2026-04-28, destructive-command hardening)
 

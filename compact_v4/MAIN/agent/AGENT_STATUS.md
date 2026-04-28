@@ -18,12 +18,14 @@ Purpose: durable handoff state for long-running SageAgent work. Keep this file c
 - v4.10.7 destructive-command hardening shipped 2026-04-28 (commit `3fd8d51` on `sageagent/master`).
 - Cross-surface propagation done same day: Claude Code global hook + Learning_Factory source-of-truth hook + OPC inherits + Codex gap documented.
 - Doc/HTML/companion sweep done same day to bump every artifact to v4.10.7 (USER_GUIDE, chat.md, chat.ipynb, v3_architecture.html, HERMES_VS_CODING_AGENT.html).
+- v4.10.8 obfuscation hardening + recursive folder removal hard-block shipped 2026-04-28: closes residual encoded-payload escape route + adds policy-driven folder-removal block per user instruction "I will not use the agent for folder removal".
 
 ## Progress
 - v4.10.7 added ~50 new `DANGEROUS_PATTERNS` (bash) covering cloud destructive subcommands, git destructive, storage/volume, persistence, DB CLI inline, system-path overwrite, perm lockout, `curl|sh`. Plus ~12 new `DANGEROUS_PYTHON` patterns (cursor.execute DROP, drop_all, dropDatabase, deleteMany, flushall, shutil.rmtree on system paths).
 - HIGH_RISK_TOOLS = {bash, python_exec, task, web_fetch} confirmed excluded from `always_allow` shortcut at line 10414; "Always Approve" button hidden for these tools at line 10423.
-- 107/107 cases pass in `test_v410_destructive_coverage.py` (5 groups: bash patterns, safe-bash, python patterns, read-only classification, HIGH_RISK_TOOLS membership).
-- Same denylist mirrored into `~/.claude/hooks/pre-bash-safety.sh` (Claude Code) + `Learning_Factory/hooks/pre-bash-safety.sh` (LF). 37/37 hook self-test green. LF pushed `5af016b` to `origin/main`.
+- v4.10.8 added 6 more bash patterns (obfuscation: `base64 -d | <interp>` extended interpreter set, `xxd -r/-p | <shell>`, `od/hexdump | tr | sh`; recursive folder: `rm -r/-rf/-fr/-R/--recursive`, `rmdir`, PowerShell `Remove-Item -Recurse`) and 4 more Python patterns (folder removal: `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()` — all blanket-blocked from `python_exec`).
+- 129/129 cases pass in `test_v410_destructive_coverage.py` (up from 107). 22/22 cases pass in hook obfuscation self-test.
+- Cross-surface: obfuscation patterns mirrored to `~/.claude/hooks/pre-bash-safety.sh` + `Learning_Factory/hooks/pre-bash-safety.sh`. Folder-removal block intentionally NOT in local hook (would break routine `rm -rf node_modules/`, `.next/`, `dist/`, etc.).
 
 ## Blockers And Risks
 - Codex CLI has no PreToolUse hook surface — destructive-command coverage there relies on Codex's built-in sandbox + per-command approval, not the v4.10.7 mirror. Acceptable today; revisit if Codex adds hooks.

@@ -1,5 +1,46 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.8 Release: obfuscation hardening + recursive folder-removal hard-block
+
+### Context
+After v4.10.7 ship + cross-surface propagation, user asked two follow-up safety questions:
+1. *"Is there still a chance v4 deletes things via prompt injection / obfuscated payload?"* — yes, the residual escape: LLM smuggles a destructive command past regex by base64/hex-encoding it, tired user clicks Approve. Closed in v4.10.8.
+2. *"I won't use the agent for folder removal in SageMaker — should we hard-block, or just keep approval?"* — yes, hard-block. User policy: agent never auto-removes folders; single-file cleanup via `python_exec` + `os.unlink` is fine; bulk via 🧹 Clean button (in-process, hardcoded paths); manual folder removal happens in user's terminal.
+
+### V4.10.8 Changes
+
+**Bash DANGEROUS_PATTERNS — 6 new entries:**
+- Obfuscation hardening (extends v4.10.7's narrow `(ba)?sh` matcher):
+  - `base64 -d/--decode/-D ... | <interpreter>` — interpreter set extended to zsh, dash, ksh, fish, python, python3, perl, ruby, node, pwsh, powershell.
+  - `xxd -r/-p ... | <shell>` — hex-decode pipe-to-shell.
+  - `od/hexdump ... | tr/sed/awk ... | sh/bash` — hex-decode chains.
+- Recursive folder removal — hard-block from any path:
+  - `rm -r/-rf/-fr/-R/--recursive <anything>`.
+  - `rmdir <anything>`.
+  - PowerShell `Remove-Item -Recurse / -R`.
+
+**Python DANGEROUS_PYTHON — 4 new entries:**
+- `shutil.rmtree(...)` — blanket block from `python_exec` (replaces v4.10.7's path-restricted check).
+- `os.rmdir(...)`, `os.removedirs(...)`.
+- `Path(...).rmdir(...)` — covers both bare `Path` and `pathlib.Path`.
+
+The 🧹 Clean button is unaffected because it calls `shutil.rmtree` directly from the agent process (NOT through `python_exec`), so it bypasses the python validator entirely. Its target paths are hardcoded (`audit_logs/`, `.snapshots/`, `.code_index/`, `truncated_outputs/`, `.exec_budget.json`).
+
+### Tests
+`test_v410_destructive_coverage.py` extended: 14 new bash block cases (7 obfuscation + 7 recursive folder) + 7 new python block cases (shutil.rmtree variants, os.rmdir, os.removedirs, Path.rmdir). Removed 3 incorrect "single-file rm allowed" cases (rm itself was never on the bash allowlist; my plan had assumed it was). **Total 129 cases**, 5 groups, all green. Up from v4.10.7's 107.
+
+### Cross-surface
+Obfuscation patterns added to `~/.claude/hooks/pre-bash-safety.sh` (Claude Code global) + `Learning_Factory/hooks/pre-bash-safety.sh` (LF source of truth). 22/22 hook self-test green. Fixed a POSIX grep portability issue (`\d` → `[0-9]`). Pending: commit + push to LF `origin/main`.
+
+**Folder-removal block intentionally NOT mirrored to local hook** — `rm -rf node_modules/`, `.next/`, `dist/`, `target/`, `__pycache__/` are routine local coding workflow on dev machines. The system-path guards from v4.10.7 (`rm -rf /etc`, `rm -rf C:/Windows`, `rm -rf ~/.claude`, etc.) still apply globally.
+
+### Version: 4.10.7 → 4.10.8
+
+### Pending in this session
+- Rebuild `compact_v4.zip` + ship-gate
+- Commit + push v4 to `sageagent/master`
+- Commit + push LF hook update to `origin/main`
+
 ## 2026-04-28 — V4.10.6 Release: `html` skill for design / presentation / flowchart / architecture HTML deliverables
 
 ### Context

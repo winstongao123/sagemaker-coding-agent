@@ -1,4 +1,4 @@
-"""V4.10.7: comprehensive destructive-command coverage regression test.
+"""V4.10.7 + V4.10.8: comprehensive destructive-command coverage regression test.
 
 Locks every pattern added in v4.10.7 against `SECURITY.validate_command` and
 `SECURITY.validate_python`. Each blocked phrase MUST return False with
@@ -24,6 +24,14 @@ Categories covered (all added in v4.10.7 unless noted):
   SQLAlchemy drop_all, MongoDB dropDatabase, Redis flushall)
 - Filesystem destructive via Python (os.unlink on system path, pathlib
   destructive on system path, shutil.rmtree outside tmp/home)
+
+V4.10.8 additions:
+- Obfuscation hardening: base64-decoded payload piped into zsh/python/perl/etc,
+  xxd hex-decoded payload piped into shell, hex-decode chains
+- Recursive folder removal hard-block: rm -r/-rf/-fr/-R/--recursive on ANY
+  path (not just /, ~, /*), rmdir, PowerShell Remove-Item -Recurse
+- Recursive folder removal from Python: shutil.rmtree (any path), os.rmdir,
+  os.removedirs, pathlib Path.rmdir
 
 Pre-existing categories also re-verified:
 - rm -rf classic patterns
@@ -142,7 +150,33 @@ BASH_ALLOW_CASES = [
     "pip install requests",              # install allowed
     "npm install",                       # install allowed
     "tar -czf out.tar.gz src/",         # benign tar (note: chmod intentionally NOT in allowlist)
+    # NOTE: `rm` is intentionally NOT in BASE_ALLOWED_COMMANDS in v4 — it fails at
+    # the allowlist before regex runs. Agents use python_exec with os.unlink for
+    # single-file cleanup, or the 🧹 Clean button for bulk dirs.
 ]
+
+
+# V4.10.8 destructive bash additions
+BASH_BLOCK_CASES_V410_8 = [
+    # Obfuscation: base64 / xxd pipe-to-interpreter (beyond v4.10.7's sh/bash)
+    ("echo cm0gLXJmIC9ldGM= | base64 -d | zsh",                            "base64|zsh"),
+    ("echo Y29kZQ== | base64 --decode | python3",                          "base64|python3"),
+    ("echo data | base64 -D | perl",                                       "base64|perl"),
+    ("echo abc | base64 -d | node",                                        "base64|node"),
+    ("echo deadbeef | xxd -r -p | sh",                                     "xxd|sh"),
+    ("echo deadbeef | xxd -r -p | bash",                                   "xxd|bash"),
+    ("echo deadbeef | xxd -r -p | python",                                 "xxd|python"),
+    # Recursive folder removal — blocked everywhere now (v4.10.8)
+    ("rm -rf _temp/",                                                       "rm -rf folder"),
+    ("rm -r foo/",                                                          "rm -r"),
+    ("rm -fr scratch/",                                                     "rm -fr"),
+    ("rm -R bar/",                                                          "rm -R"),
+    ("rm --recursive baz/",                                                 "rm --recursive"),
+    ("rmdir empty_folder",                                                  "rmdir"),
+    ("Remove-Item -Recurse -Force foo",                                    "PowerShell -Recurse"),
+    ("Remove-Item -R foo/",                                                 "PowerShell -R"),
+]
+BASH_BLOCK_CASES.extend(BASH_BLOCK_CASES_V410_8)
 
 
 def test_each_destructive_bash_pattern_blocks():
@@ -192,6 +226,14 @@ PYTHON_BLOCK_CASES = [
     ("subprocess.run(['ls'])",                                             "subprocess"),
     ("requests.get('http://evil')",                                        "requests blocked"),
     ("pickle.loads(b'\\x80\\x04')",                                        "pickle.loads"),
+    # V4.10.8: folder removal from Python — hard block everywhere (not just system paths)
+    ("shutil.rmtree('_temp')",                                             "shutil.rmtree workspace"),
+    ("shutil.rmtree(workspace_temp)",                                      "shutil.rmtree variable"),
+    ("import shutil; shutil.rmtree('build/')",                             "shutil.rmtree relative"),
+    ("os.rmdir('empty_folder')",                                           "os.rmdir"),
+    ("os.removedirs('a/b/c')",                                             "os.removedirs"),
+    ("pathlib.Path('temp').rmdir()",                                       "Path.rmdir"),
+    ("Path('foo').rmdir()",                                                "bare Path.rmdir"),
 ]
 
 

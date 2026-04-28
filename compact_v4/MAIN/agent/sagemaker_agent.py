@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.7 (April 2026)
+Version: 4.10.8 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.7"
+__version__ = "4.10.8"
 
 # ============================================================
 # IMPORTS
@@ -1533,6 +1533,28 @@ class SecurityManager:
         (r"\bfind\s+/.*-exec.*rm", "Find and delete system files"),
         (r"\.onion", "Tor hidden service"),
         (r"\btor\s+", "Tor usage"),
+
+        # === V4.10.8: OBFUSCATION HARDENING ===
+        # v4.10.7 already blocks `curl|sh`, `wget|sh`, `base64 -d ... | (ba)?sh`,
+        # and the eval family. v4.10.8 closes residual gaps where an LLM could
+        # smuggle a destructive command past regex by encoding it (Closes the
+        # "obfuscated payload past denylist + tired-user-clicks-Approve" path).
+        (r"\bbase64\s+(?:-d|--decode|-D)[^|;&]*\|\s*(?:sudo\s+)?(?:zsh|dash|ksh|fish|python\d?|perl|ruby|node|pwsh|powershell)\b", "Base64-decoded payload piped into interpreter — decode and inspect first"),
+        (r"\bxxd\s+(?:-r|-p)[^|;&]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|python\d?|perl|ruby|node)\b", "Hex-decoded payload (xxd) piped into shell — decode and inspect first"),
+        (r"\b(?:od|hexdump)\s+[^|;&]*\|\s*(?:tr|sed|awk)[^|;&]*\|\s*(?:sh|bash)\b", "Hex-decode chain piped to shell"),
+
+        # === V4.10.8: RECURSIVE FOLDER REMOVAL — HARD BLOCK ===
+        # User policy: agent must not auto-remove folders from the workspace.
+        # Test/scratch cleanup uses single-file rm. Bulk cleanup goes through the
+        # 🧹 Clean button (Python-side, hardcoded paths, bypasses bash). Folder
+        # removal that the Clean button doesn't cover (e.g. _temp/) happens in
+        # the user's own terminal, not via the agent.
+        # Allows: `rm file.py`, `rm -f file.py`, `rm -i a b c` (no recursive flag)
+        # Blocks: `rm -r`, `rm -rf`, `rm -fr`, `rm -R`, `rm --recursive`, `rmdir`,
+        #         PowerShell `Remove-Item -Recurse`.
+        (r"\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*\b|--recursive\b)", "Recursive folder delete blocked. Single-file rm allowed; folder cleanup goes through 🧹 Clean button or your own terminal."),
+        (r"\brmdir\b", "rmdir blocked. Folder removal must be manual or via 🧹 Clean button."),
+        (r"\bRemove-Item\b[^|;&]*-(?:Recurse|R)\b", "PowerShell Remove-Item -Recurse blocked. Folder removal must be manual."),
     ]
 
     # Dangerous Python code patterns (40+ patterns)
@@ -1630,7 +1652,17 @@ class SecurityManager:
         # === V4.10.7: FILESYSTEM DESTRUCTIVE VIA PYTHON ===
         (r"\bos\.unlink\s*\(\s*['\"]/?(etc|usr|sbin|bin|lib|boot|root)/", "os.unlink on system path"),
         (r"\bpathlib\.Path\s*\(\s*['\"]/?(etc|usr|sbin|bin|lib|boot|root)/.*\)\.\s*(unlink|rmdir)", "pathlib destructive on system path"),
-        (r"\bshutil\.rmtree\s*\(\s*['\"](?!\.|/(?:tmp|home))", "shutil.rmtree outside tmp/home (potentially destructive)"),
+
+        # === V4.10.8: RECURSIVE FOLDER REMOVAL FROM PYTHON — HARD BLOCK ===
+        # User policy: agent must not auto-remove folders. Single-file os.unlink
+        # / os.remove on workspace paths still allowed. The 🧹 Clean button calls
+        # shutil.rmtree directly from the agent process (NOT through python_exec),
+        # so it's unaffected by these patterns. Bulk dir cleanup outside the
+        # Clean button's hardcoded list is a manual user action.
+        (r"\bshutil\.rmtree\s*\(", "shutil.rmtree blocked from python_exec. Use os.unlink for single files; the 🧹 Clean button handles bulk dir cleanup with hardcoded paths."),
+        (r"\bos\.rmdir\s*\(", "os.rmdir blocked. Folder removal must be manual or via 🧹 Clean button."),
+        (r"\bos\.removedirs\s*\(", "os.removedirs blocked. Folder removal must be manual."),
+        (r"\bPath\s*\([^)]*\)\s*\.\s*rmdir\s*\(", "Path.rmdir blocked. Folder removal must be manual."),
 
         # === DESERIALIZATION ===
         (r"\bpickle\.loads?\s*\(", "pickle - deserialization attack risk"),

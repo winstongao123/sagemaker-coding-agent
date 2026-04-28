@@ -1,5 +1,51 @@
 # Compact V4 Changelog
 
+## v4.10.8 — Obfuscation hardening + recursive folder removal hard-block (2026-04-28)
+
+User asked two safety questions after v4.10.7 ship:
+1. *"Is there still a chance v4 deletes things via prompt injection / obfuscated payload?"* — yes, the residual 0.1% path: LLM smuggles a destructive command past regex by base64/hex-encoding it, tired user clicks Approve. Closed.
+2. *"Should v4 just hard-block local folder removal? I won't use the agent for that anyway."* — yes. Added.
+
+### Bash DANGEROUS_PATTERNS additions (~6 new patterns)
+
+**Obfuscation hardening** (closes the encoded-payload-pipe-to-shell escape route):
+- `base64 -d/--decode/-D ... | <interpreter>` — extends v4.10.7's narrow `(ba)?sh` block to `zsh`, `dash`, `ksh`, `fish`, `python`, `python3`, `perl`, `ruby`, `node`, `pwsh`, `powershell`.
+- `xxd -r/-p ... | <shell>` — hex-decode pipe-to-shell, same interpreter set.
+- `od / hexdump | tr/sed/awk | sh/bash` — hex-decode chains via standard tools.
+
+**Recursive folder removal — hard-block from any path** (not just `/`, `~`, `/*`):
+- `rm -r`, `rm -rf`, `rm -fr`, `rm -R`, `rm --recursive` on any target.
+- `rmdir <anything>`.
+- PowerShell `Remove-Item -Recurse / -R`.
+
+`rm` itself is intentionally NOT in `BASE_ALLOWED_COMMANDS` (already enforced since earlier versions), so single-file `rm file.py` also fails at the allowlist. Agents use `python_exec` with `os.unlink` for individual file cleanup, or the 🧹 Clean button (Python-side, hardcoded paths) for bulk dirs. Manual folder removal happens in the user's own terminal.
+
+### Python DANGEROUS_PYTHON additions (4 new patterns)
+
+Recursive folder removal from `python_exec` — replaces v4.10.7's path-restricted `shutil.rmtree` (which only blocked outside `/tmp` and `/home`). Now blocks regardless of path:
+- `shutil.rmtree(...)` — any argument.
+- `os.rmdir(...)` — any argument.
+- `os.removedirs(...)` — any argument.
+- `Path(...).rmdir(...)` — any pathlib usage (covers both bare `Path` and `pathlib.Path`).
+
+The 🧹 Clean button is unaffected because it calls `shutil.rmtree` directly from the agent process (NOT through `python_exec`), so it bypasses the python validator entirely. Its target paths are hardcoded inside the on_cleanup function.
+
+### Tests
+
+`test_v410_destructive_coverage.py` extended:
+- 14 new bash block cases (7 obfuscation + 7 recursive folder).
+- 7 new python block cases (shutil.rmtree variants, os.rmdir, os.removedirs, Path.rmdir bare and qualified).
+- Removed 3 incorrect `rm` "allow" cases — `rm` was never on the bash allowlist; my v4.10.8 plan had assumed it was.
+- Total: **129 cases** (87 bash block + 14 bash allow + 28 python block) + 2 approval-skip guarantees = 5 test groups, all green.
+
+### Cross-surface mirror
+
+Same obfuscation patterns added to `~/.claude/hooks/pre-bash-safety.sh` (Claude Code global) and `Learning_Factory/hooks/pre-bash-safety.sh` (LF source of truth, `setup.sh` syncs to new machines). 22/22 hook self-test green.
+
+**Folder-removal block intentionally NOT mirrored to local hook** — `rm -rf node_modules/`, `rm -rf .next/`, `rm -rf dist/`, `rm -rf target/`, `rm -rf __pycache__/` are routine local coding workflow on Windows/Mac/Linux dev machines. The system-path guards from v4.10.7 (e.g. `rm -rf /etc`, `rm -rf C:/Windows`, `rm -rf ~/.claude`) still apply globally.
+
+### Version: 4.10.7 → 4.10.8
+
 ## v4.10.7 — Destructive-command hardening: cloud CLI hard-block + comprehensive coverage (2026-04-28)
 
 User requested: "all destructive commands must be checked by user. no cloud command allowed in compact_v4." Plus: must cover storage, services, GitHub, local files, every destructive surface — gated by hard-coded checks, not LLM judgement.

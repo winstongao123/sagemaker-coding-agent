@@ -4,15 +4,24 @@
 
 ## Cell 0 — Title (Markdown)
 
-# SageAgent V4.10.7
+# SageAgent V4.10.8
 
-AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, and bypass-proof destructive-command coverage (cloud / IaC / storage / DB / persistence / system overwrite). **v4.10.7**.
+AI coding assistant for SageMaker notebooks. 24 tools, 16 security layers, prompt caching (Sonnet 4.5 default — caching activates from 1024 tokens), sub-agent coordination (suggest-not-mandatory verify by default), 11 skills, Runnable-grade review/verification, local-git regression protection, durable status handoff, explicit skill activation, context diagnostics, hardened compaction (microcompact + segment-level Context Collapse + reactive compact + LLM summary), build-agent worktree isolation, surgical Jupyter cell editing, ship-gate verifier, cache-boundary regression test, html skill, bypass-proof destructive-command coverage (cloud / IaC / storage / DB / persistence / system overwrite), obfuscation hardening (base64/xxd/eval pipe-to-shell), and folder-removal hard-block (no recursive rm / shutil.rmtree from agent). **v4.10.8**.
 
 **Setup:** Run cells 1-3 in order. Cell 1 installs packages (once). Cell 2 shows config widgets. Cell 3 launches the agent.
 
 **Core files:** `sagemaker_agent.py` (~11,800 lines) + this notebook + `memory.md` (auto-populated) + `AGENT_STATUS.md` (long-running handoff) + `skills/` (11 skills).
 
 **Docs:** See `USER_GUIDE.md` for full documentation, `TEST_LOG.md` for Bedrock test results, `../CHANGELOG.md` for release notes.
+
+### What's new in v4.10.8
+
+**v4.10.8 — obfuscation hardening + folder-removal hard-block:**
+1. **Obfuscation hardening** — `base64 -d | zsh/python/perl/node/...`, `xxd -r/-p | sh/bash`, `od/hexdump | tr | sh` chains all blocked. Closes the encoded-payload escape past v4.10.7's narrow `(ba)?sh` matcher.
+2. **Recursive folder removal hard-block** — `rm -r/-rf/-fr/-R/--recursive`, `rmdir`, PowerShell `Remove-Item -Recurse` — all blocked from any path. Python: `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()` — all blocked from `python_exec`.
+3. **🧹 Clean button still works** — bypasses `python_exec` (runs in-process), uses hardcoded paths.
+4. Cross-surface: obfuscation patterns also added to Claude Code + Learning_Factory hooks. Folder-removal block is v4-only (local hook keeps `rm -rf node_modules/` etc. allowed for routine npm/build cleanup).
+5. 14 new bash + 7 new python block cases. Total 129 destructive coverage cases, all green.
 
 ### What's new in v4.10.7
 
