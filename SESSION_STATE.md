@@ -29,6 +29,21 @@ All 3 additions live in the cached static portion of SYSTEM_PROMPT (before the `
 
 ### Version: 4.10.4 → 4.10.5
 
+### Round-8 systematic folder cleanup (post-v4.10.5)
+User asked for systematic cleanup. Cleaned:
+- 39 leaked v410_nb_* test tempdirs at compact_v4/ root (atexit cleanup didn't fire when Python was killed mid-test). Deleted.
+- All `__pycache__/` directories under compact_v4/, compact_v4/MAIN/, etc. Deleted.
+- 3 zip files in repo root cleaned in round-6 (`__old_compact_v4.zip` + `_new_compact_v4.zip` archived to `_archive/old_ship_zips/`; `_old_compact_v4.zip` 0-byte trash deleted).
+- Other root cruft (`__pycache__/`, `.codex_review/`, `.codex_tmp/`) removed.
+
+Zip canonical location moved to repo root (`D:\Github\sagemaker-coding-agent\compact_v4.zip`) per user's "moved to root" decision:
+- `compact_v4/_rebuild_zip.py` `OUT_ZIP` updated to `../compact_v4.zip`
+- `compact_v4/verify_ship_zip.py` default path updated to `../compact_v4.zip`
+- `compact_v4/compact_v4.zip` removed from git tracking (`git rm --cached`)
+- `.gitignore` extended with `compact_v4.zip`, `**/compact_v4.zip`, `**/v410_*/` patterns, `**/__pycache__/`, runtime dirs at every level (`compact_v4/audit_logs/`, `MAIN/audit_logs/`, etc.)
+
+After cleanup: working tree clean except submodule pointer drift. Root has 12 entries (was 17). Ship zip at root, ship-gate PASS.
+
 ### Round-7 doc accuracy sweep (post-v4.10.5)
 Codex caught 3 stale claims in PRODUCTION_READINESS_STATUS.md after v4.10.5 ship:
 - "23 tools" — actual count is **24** (`skill_propose_patch` is a separate tool from `skill`). Fixed across PRODUCTION_READINESS_STATUS.md, RUNNABLE_APPLICABILITY_REVIEW.md, chat.md, USER_GUIDE.md, v3_architecture.html.

@@ -36,7 +36,10 @@ import zipfile
 import fnmatch
 
 SRC_DIR = os.path.join("MAIN", "agent")
-OUT_ZIP = "compact_v4.zip"
+# v4.10.5: ship zip lives at REPO ROOT, not inside compact_v4/. The user
+# moved it there as the canonical deliverable location. The "compact_v4/"
+# prefix is for SOURCE; the zip is the ASSET.
+OUT_ZIP = os.path.join("..", "compact_v4.zip")
 ARCHIVE_PREFIX = SRC_DIR.replace(os.sep, "/") + "/"
 
 # Extra paths to include at the zip root (outside MAIN/).

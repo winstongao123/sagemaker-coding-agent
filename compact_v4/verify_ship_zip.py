@@ -62,7 +62,7 @@ def _check(name: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
-def main(zip_path: str = "compact_v4.zip") -> int:
+def main(zip_path: str = "../compact_v4.zip") -> int:
     if not os.path.exists(zip_path):
         print(f"ERROR: zip not found: {zip_path}")
         return 1
@@ -157,5 +157,5 @@ def main(zip_path: str = "compact_v4.zip") -> int:
 
 
 if __name__ == "__main__":
-    zp = sys.argv[1] if len(sys.argv) > 1 else "compact_v4.zip"
+    zp = sys.argv[1] if len(sys.argv) > 1 else "../compact_v4.zip"
     sys.exit(main(zp))
