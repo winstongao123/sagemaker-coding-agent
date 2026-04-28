@@ -433,3 +433,17 @@ Hermes auto-applies skill mutations — the closed learning loop runs without hu
 - USER_GUIDE.md gains a full "Self-patching skills" section with example session.
 - chat.ipynb v4.9.X highlights banner updated; quick-reminder cell adds the new commands.
 - Backwards compatible: feature OFF by default, existing flows unaffected.
+
+## 14. v4.9.6 — auto-trigger policy tightened to explicit opt-in
+
+The deeper production review found that "honour `auto_trigger: false`" was not strict enough for the user's current requirement: skills should not auto-load unless explicitly enabled.
+
+V4.9.6 changes the policy:
+
+- `CONFIG.enable_skill_auto_trigger = False` by default.
+- `SkillInfo.auto_trigger = False` by default.
+- Missing `auto_trigger` frontmatter now parses as false.
+- Keyword auto-match runs only when both the global flag is true and the skill explicitly says `auto_trigger: true`.
+- Explicit flows remain unchanged: `/skill use <name>`, slash commands, and deliberate `skill` tool calls still work.
+
+This makes "no accidental skill injection" the default posture. Auto-trigger is now a conscious operator choice rather than an ambient feature.

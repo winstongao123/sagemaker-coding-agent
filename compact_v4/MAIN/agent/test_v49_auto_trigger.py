@@ -10,9 +10,10 @@ Covers the fixes described in docs/V4_8_SKILL_AUTOTRIGGER_AUDIT.md:
       so we don't need a live ipywidgets kernel.)
   3. Word-boundary match: "review" should NOT match "unreviewable"; "clara" should NOT
      match "Clara_WIP" via a substring `in` check any more.
-  4. auto_trigger: true (default) still matches when name words appear as whole words.
-  5. Parser defaults auto_trigger=True when the frontmatter key is absent.
-  6. Existing skills in skills/ directory have the expected defaults.
+  4. auto_trigger: true still matches when name words appear as whole words if global auto-trigger is enabled.
+  5. Parser defaults auto_trigger=False when the frontmatter key is absent.
+  6. Global auto-trigger is opt-in; when disabled, no skill auto-matches.
+  7. Existing skills in skills/ directory have the expected defaults.
 
 Run: python test_v49_auto_trigger.py
 """
@@ -80,9 +81,11 @@ def _fresh_manager(skills_root: str) -> sa.SkillManager:
 # The auto-match contract from sagemaker_agent.py:9324-9362 (v4.9). Reproduced here
 # as a pure function so tests don't need ipywidgets / a running UI. Kept in sync
 # manually; if this drifts the tests will fail as a signal.
-def _auto_match(mgr: sa.SkillManager, msg: str) -> str | None:
+def _auto_match(mgr: sa.SkillManager, msg: str, global_enabled: bool = True) -> str | None:
     """Mirror of the production auto-match loop (sagemaker_agent.py:9340-9366 in v4.9.0).
     If this function drifts from production, tests will fail as a signal."""
+    if not global_enabled:
+        return None
     msg_lower = msg.lower()
     msg_words = set(re.findall(r"[a-z0-9]+", msg_lower))
     for name, skill in mgr._cache.items():
@@ -99,10 +102,10 @@ def _auto_match(mgr: sa.SkillManager, msg: str) -> str | None:
 # ============ Tests ============
 
 def test_skill_info_has_auto_trigger_field():
-    """SkillInfo dataclass must expose auto_trigger with default True."""
+    """SkillInfo dataclass must expose auto_trigger with default False."""
     info = sa.SkillInfo(name="x", description="", location="/x", base_dir="/")
     assert hasattr(info, "auto_trigger"), "SkillInfo missing auto_trigger field"
-    assert info.auto_trigger is True, "auto_trigger default should be True"
+    assert info.auto_trigger is False, "auto_trigger default should be False"
 
 
 def test_parser_reads_auto_trigger_false():
@@ -114,13 +117,13 @@ def test_parser_reads_auto_trigger_false():
         assert info.auto_trigger is False, f"expected False, got {info.auto_trigger}"
 
 
-def test_parser_defaults_auto_trigger_true_when_missing():
+def test_parser_defaults_auto_trigger_false_when_missing():
     with tempfile.TemporaryDirectory() as tmp:
         _write_skill(tmp, "bar-skill", "")  # no auto_trigger line
         mgr = _fresh_manager(tmp)
         info = mgr._cache.get("bar-skill")
         assert info is not None
-        assert info.auto_trigger is True, f"expected True by default, got {info.auto_trigger}"
+        assert info.auto_trigger is False, f"expected False by default, got {info.auto_trigger}"
 
 
 def test_auto_match_respects_false_flag():
@@ -141,6 +144,16 @@ def test_auto_match_fires_when_flag_true():
         msg = "please do a clara review of this file"
         hit = _auto_match(mgr, msg)
         assert hit == "clara-review", f"clara-review should match when flag is true, got {hit}"
+
+
+def test_global_auto_trigger_disabled_blocks_even_opted_in_skill():
+    """V4.9.6 production policy: no skill auto-loads unless the global switch is on."""
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_skill(tmp, "clara-review", "auto_trigger: true")
+        mgr = _fresh_manager(tmp)
+        msg = "please do a clara review of this file"
+        hit = _auto_match(mgr, msg, global_enabled=False)
+        assert hit is None, f"global auto-trigger off should block all auto-matches, got {hit}"
 
 
 def test_word_boundary_match_rejects_substring_only_hits():
@@ -204,7 +217,7 @@ def test_discover_relevant_skips_auto_trigger_false():
 
 def test_real_skills_dir_defaults():
     """Smoke test against the repo's real skills/ directory.
-    Confirms clara-review has auto_trigger=False and at least one skill has True."""
+    Confirms slash-command/high-impact skills stay opt-out and absent frontmatter defaults false."""
     repo_skills = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills")
     if not os.path.isdir(repo_skills):
         # Running outside the repo — skip gracefully.
@@ -214,6 +227,9 @@ def test_real_skills_dir_defaults():
     clara = mgr._cache.get("clara-review")
     assert clara is not None, "clara-review not discovered from real skills dir"
     assert clara.auto_trigger is False, "clara-review should ship with auto_trigger=False"
+    report = mgr._cache.get("report")
+    assert report is not None, "report skill not discovered from real skills dir"
+    assert report.auto_trigger is False, "skills without auto_trigger should default to False in v4.9.6"
 
 
 # ============ Main ============
@@ -226,12 +242,13 @@ def main():
     print("\n[SkillInfo + parser]")
     _run("SkillInfo has auto_trigger field", test_skill_info_has_auto_trigger_field)
     _run("parser reads auto_trigger: false", test_parser_reads_auto_trigger_false)
-    _run("parser defaults auto_trigger=True", test_parser_defaults_auto_trigger_true_when_missing)
+    _run("parser defaults auto_trigger=False", test_parser_defaults_auto_trigger_false_when_missing)
     _run("triggers stays None when auto_trigger=false", test_auto_trigger_false_triggers_never_populated)
 
     print("\n[auto-match contract]")
     _run("auto_trigger=false blocks auto-match", test_auto_match_respects_false_flag)
     _run("auto_trigger=true still auto-matches", test_auto_match_fires_when_flag_true)
+    _run("global auto-trigger disabled blocks auto-match", test_global_auto_trigger_disabled_blocks_even_opted_in_skill)
     _run("word-boundary rejects substring-only hits", test_word_boundary_match_rejects_substring_only_hits)
     _run("whole-word hit via separators still matches", test_word_boundary_match_accepts_punctuation_separated_words)
     _run("skill name with non-hyphen separators tokenizes consistently", test_name_tokenization_handles_non_hyphen_separators)

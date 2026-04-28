@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -129,3 +130,242 @@ def test_parallel_read_only_tools_execute_concurrently(monkeypatch):
 
     assert result == "Done"
     assert elapsed < 0.45
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+
+
+def _init_repo(repo: Path) -> None:
+    _git(repo, "init")
+    _git(repo, "config", "user.name", "SageAgent Test")
+    _git(repo, "config", "user.email", "agent-test@example.local")
+    (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+    _git(repo, "add", "tracked.txt")
+    _git(repo, "commit", "-m", "baseline")
+
+
+def test_compact_starts_with_user_and_alternates_roles():
+    messages = [
+        {"role": "user", "content": "original request"},
+        {"role": "assistant", "content": "analysis"},
+        {"role": "user", "content": "latest user message"},
+    ]
+
+    compacted = sa.COMPACTOR.compact(messages, "summary text")
+    roles = [m["role"] for m in compacted]
+
+    assert roles[0] == "user"
+    assert "CONVERSATION SUMMARY" in compacted[0]["content"]
+    assert roles[1] == "assistant"
+    for left, right in zip(roles, roles[1:]):
+        assert left != right, f"consecutive {left} messages after compact: {roles}"
+
+
+def test_skill_auto_trigger_global_default_is_off():
+    assert sa.CONFIG.enable_skill_auto_trigger is False
+    info = sa.SkillInfo(name="x", description="", location="/x", base_dir="/")
+    assert info.auto_trigger is False
+
+
+def test_status_doc_loads_from_workspace(monkeypatch, tmp_path):
+    status = tmp_path / "AGENT_STATUS.md"
+    status.write_text("# Agent Status\n\n## Current Goal\n- keep durable state\n", encoding="utf-8")
+
+    monkeypatch.setattr(sa.CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(sa.CONFIG, "enable_status_doc", True)
+    monkeypatch.setattr(sa.CONFIG, "status_doc", "AGENT_STATUS.md")
+
+    loaded = sa._load_project_status()
+
+    assert "# Project Status" in loaded
+    assert "keep durable state" in loaded
+
+
+def test_status_doc_can_be_disabled(monkeypatch, tmp_path):
+    (tmp_path / "AGENT_STATUS.md").write_text("# Agent Status\n", encoding="utf-8")
+
+    monkeypatch.setattr(sa.CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(sa.CONFIG, "enable_status_doc", False)
+    monkeypatch.setattr(sa.CONFIG, "status_doc", "AGENT_STATUS.md")
+
+    assert sa._load_project_status() == ""
+
+
+def test_status_doc_rejects_path_outside_workspace(monkeypatch, tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}_outside_status.md"
+    outside.write_text("# Outside\n", encoding="utf-8")
+
+    try:
+        monkeypatch.setattr(sa.CONFIG, "workspace", str(tmp_path))
+        monkeypatch.setattr(sa.CONFIG, "enable_status_doc", True)
+        monkeypatch.setattr(sa.CONFIG, "status_doc", str(outside))
+
+        assert sa._status_doc_path() is None
+        assert sa._load_project_status() == ""
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_sagemaker_git_policy_blocks_remote_operations():
+    blocked_commands = [
+        "git push origin main",
+        "git pull --rebase",
+        "git fetch origin",
+        "git clone https://github.com/example/repo.git",
+        "git remote set-url origin https://github.com/example/repo.git",
+    ]
+    for command in blocked_commands:
+        ok, reason = sa.SECURITY.validate_command(command)
+        assert ok is False, command
+        assert "local git tree only" in reason
+
+    for command in ["git status", "git diff HEAD --stat", "git log --oneline -1", "git remote -v"]:
+        ok, reason = sa.SECURITY.validate_command(command)
+        assert ok is True, f"{command}: {reason}"
+
+
+def test_context_report_surfaces_tool_bloat_and_duplicate_reads():
+    messages = [
+        {"role": "user", "content": "inspect the file"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r1", "name": "read_file", "input": {"file_path": "app.py"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r1", "content": "print('one')\n" * 200},
+        ]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "r2", "name": "read_file", "input": {"file_path": "app.py"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "r2", "content": "print('one')\n" * 200},
+        ]},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "b1", "name": "bash", "input": {"command": "pytest -q"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "b1", "content": "FAILED test\n" * 300},
+        ]},
+    ]
+
+    stats = sa.analyze_context_messages(messages)
+    report = sa.format_context_report(messages)
+
+    assert stats["duplicate_reads"]["app.py"]["count"] == 2
+    assert stats["tool_result_tokens"]["bash"] > 0
+    assert "Context Diagnostic" in report
+    assert "Duplicate File Reads" in report
+    assert "app.py: 2 reads" in report
+    assert "bash" in report
+
+
+def test_build_subagent_uses_worktree_and_merges_back(monkeypatch, tmp_path):
+    _init_repo(tmp_path)
+
+    captured = {}
+    outputs = []
+
+    def fake_run(self, user_message, output_fn=print, **kwargs):
+        if self.subagent_depth > 0:
+            captured["workspace"] = sa.CONFIG.workspace
+            Path(sa.CONFIG.workspace, "created_by_subagent.txt").write_text("from isolated build\n", encoding="utf-8")
+            return "sub-agent done"
+        return "parent done"
+
+    monkeypatch.setattr(sa.CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(sa.CONFIG, "enable_worktree", True)
+    monkeypatch.setattr(sa.Agent, "run", fake_run)
+
+    parent = sa.Agent(sa.BedrockClient(sa.CONFIG.model_id, sa.CONFIG.region, mock_mode=True), session_id="wt-test")
+    result = parent._run_task_tool(
+        {"subagent_type": "build", "description": "write file", "prompt": "write a file"},
+        outputs.append,
+    )
+
+    assert "sub-agent done" in result
+    assert captured["workspace"] != str(tmp_path)
+    assert Path(captured["workspace"]).exists() is False
+    assert (tmp_path / "created_by_subagent.txt").read_text(encoding="utf-8") == "from isolated build\n"
+    assert any("Build agent isolated" in o for o in outputs)
+    assert any("merged back" in o for o in outputs)
+
+
+def test_build_worktree_sees_dirty_and_untracked_parent_files(monkeypatch, tmp_path):
+    _init_repo(tmp_path)
+    (tmp_path / "tracked.txt").write_text("dirty parent edit\n", encoding="utf-8")
+    (tmp_path / "untracked.txt").write_text("untracked parent file\n", encoding="utf-8")
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "new.txt").write_text("nested untracked file\n", encoding="utf-8")
+
+    seen = {}
+
+    def fake_run(self, user_message, output_fn=print, **kwargs):
+        if self.subagent_depth > 0:
+            wt = Path(sa.CONFIG.workspace)
+            seen["tracked"] = (wt / "tracked.txt").read_text(encoding="utf-8")
+            seen["untracked"] = (wt / "untracked.txt").read_text(encoding="utf-8")
+            seen["nested"] = (wt / "nested" / "new.txt").read_text(encoding="utf-8")
+            return "saw dirty state"
+        return "parent done"
+
+    monkeypatch.setattr(sa.CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(sa.CONFIG, "enable_worktree", True)
+    monkeypatch.setattr(sa.Agent, "run", fake_run)
+
+    parent = sa.Agent(sa.BedrockClient(sa.CONFIG.model_id, sa.CONFIG.region, mock_mode=True), session_id="wt-dirty-test")
+    result = parent._run_task_tool(
+        {"subagent_type": "build", "description": "read dirty state", "prompt": "inspect files"},
+        lambda _text: None,
+    )
+
+    assert "saw dirty state" in result
+    assert seen["tracked"] == "dirty parent edit\n"
+    assert seen["untracked"] == "untracked parent file\n"
+    assert seen["nested"] == "nested untracked file\n"
+
+
+def test_parallel_build_tasks_are_serialized_when_worktrees_enabled(monkeypatch):
+    class TwoBuildTasksClient:
+        model_id = "mock"
+        prompt_cache_supported = False
+
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return sa.Response(
+                    "",
+                    [
+                        sa.ToolCall("t1", "task", {"subagent_type": "build", "description": "one", "prompt": "one"}),
+                        sa.ToolCall("t2", "task", {"subagent_type": "build", "description": "two", "prompt": "two"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            return sa.Response("done", [], "end_turn", {})
+
+    skip_flags = []
+    outputs = []
+
+    def fake_run_task(self, args, output_fn, _skip_cache_isolation=False):
+        skip_flags.append(_skip_cache_isolation)
+        return f"ran {args['description']}"
+
+    monkeypatch.setattr(sa.CONFIG, "enable_worktree", True)
+    monkeypatch.setattr(sa.Agent, "_run_task_tool", fake_run_task)
+
+    agent = sa.Agent(TwoBuildTasksClient(), session_id="parallel-build-test", on_approval=lambda *_: True)
+    result = agent.run("spawn two builds", outputs.append, system_prompt="test", max_turns_override=3)
+
+    assert result == "done"
+    assert skip_flags == [False, False]
+    assert any("sequentially" in o for o in outputs), outputs

@@ -21,6 +21,16 @@ Already correctly gated. Deterministic tests in `MAIN/agent/test_v410_*.py` (no 
 
 ### Version: 4.10.2 → 4.10.3
 
+### Final docs/working-tree cleanup (Codex round 4)
+After v4.10.3 shipped (commit 6f56e48), Codex flagged 3 remaining gaps:
+- PRODUCTION_READINESS_STATUS.md still said V4.10.0 / 159 tests. Updated to V4.10.3 / 160 deterministic tests / known-limitations section addressing the 4 weak spots Codex called out (no ToolSearch deferred-schema, simpler Todo, prompt-dependent sub-agent handoff, no Runnable benchmark trace).
+- RUNNABLE_APPLICABILITY_REVIEW.md still targeted V4.9.7. Updated to V4.10.3 with v4.10.0/1/2/3 status by-version note.
+- Working tree had untracked v4.9.6/v4.9.7 in-flight items: per-version changelogs (CHANGELOG_v4.9.6.md, CHANGELOG_v4.9.7.md), test_v493_enhancements / test_v49_auto_trigger / test_v42_gap_closure modifications, _rebuild_zip.py + V4_8_SKILL_AUTOTRIGGER_AUDIT.md doc updates. All committed in this cleanup pass. analyze_*.py scratch files added to .gitignore.
+
+Outstanding (deliberately deferred, documented as caveats):
+- Live Bedrock smoke test on real SageMaker (user-side, out of scope for me)
+- Long-task token-cost benchmark vs Runnable (out of scope; cache-boundary test proves cache *can* activate, hit-rate measurement is a separate exercise)
+
 
 ## 2026-04-28 — V4.10.2 Release (Codex-surfaced contradiction fix): verify-contract softened
 

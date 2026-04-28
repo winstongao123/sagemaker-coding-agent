@@ -138,13 +138,16 @@ def test_cso_check_warns_on_non_use_when_description():
         records = []
         handler = logging.Handler()
         handler.emit = lambda r: records.append(r.getMessage())
+        previous_disable = logging.root.manager.disable
         logging.getLogger().addHandler(handler)
+        logging.disable(logging.NOTSET)
         logging.getLogger().setLevel(logging.WARNING)
         try:
             mgr = sa.SkillManager(workspace=tmp, skills_dir=tmp)
             mgr.discover()
         finally:
             logging.getLogger().removeHandler(handler)
+            logging.disable(previous_disable)
         cso_warnings = [r for r in records if "CSO-CHECK" in r and "non-cso-skill" in r]
         assert len(cso_warnings) >= 1, f"expected CSO warning for non-cso-skill, got: {records}"
 
@@ -155,13 +158,16 @@ def test_cso_check_passes_on_use_when_description():
         records = []
         handler = logging.Handler()
         handler.emit = lambda r: records.append(r.getMessage())
+        previous_disable = logging.root.manager.disable
         logging.getLogger().addHandler(handler)
+        logging.disable(logging.NOTSET)
         logging.getLogger().setLevel(logging.WARNING)
         try:
             mgr = sa.SkillManager(workspace=tmp, skills_dir=tmp)
             mgr.discover()
         finally:
             logging.getLogger().removeHandler(handler)
+            logging.disable(previous_disable)
         cso_warnings = [r for r in records if "CSO-CHECK" in r and "cso-skill" in r]
         assert cso_warnings == [], f"CSO-compliant description should not warn, got: {cso_warnings}"
 

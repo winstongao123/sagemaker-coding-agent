@@ -51,6 +51,9 @@ v410_ctxwin_*/
 compact_v4/.snapshots/
 compact_v4/.exec_budget.json
 compact_v4/MAIN/agent/AGENT_STATUS.md
+
+# v4.10.3: standalone analysis scratch files — not v4 runtime
+compact_v4/analyze_*.py
 nul
 _archive/compare_code/gg-claude-code-runnable
 test-results/
