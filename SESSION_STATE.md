@@ -1,5 +1,33 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-28 — V4.10.2 Release (Codex-surfaced contradiction fix): verify-contract softened
+
+### Context
+After v4.10.1 shipped, user asked detailed production-readiness questions about subagents/skills/teams and pushed for another Codex review. Codex confirmed the layered safety (no keyword auto-spawn, no team-coordination vestiges, context_collapse wired correctly) BUT surfaced a real contradiction in the system prompt: the Sub-agent Coordination + Verification Contract sections said verify was MANDATORY after 3+ logic edits, while the Doing Tasks section said SUGGEST and don't auto-run. Model behaviour was unpredictable depending on which sentence won attention. Also caught: a stale "Haiku default" comment in the model dropdown.
+
+### V4.10.2 Changes
+1. **Verify-contract softened.** All three system-prompt sections (Sub-agent Coordination, Verification Contract, `verify` agent type description in `task` tool) now align: SUGGEST `/verify` after 3+ logic-changing edits, wait for user confirm, do NOT auto-spawn unless `CONFIG.enforce_verify_contract=True`.
+2. **`CONFIG.enforce_verify_contract: bool = False`** — new opt-in flag for production-discipline workflows. Default OFF means casual self-use sessions don't get over-spammed with verify subagents.
+3. **Stale comment fix.** "Model selector — default to Haiku" comment updated to reflect v4.10.1's Sonnet 4.5 default.
+
+### Codex review record (this session)
+- Pre-fix: Codex flagged the contradiction explicitly + the stale comment + 1 minor wording drift.
+- Post-fix: PASS expected (no functional code change, prompt-only edits + 1 config flag).
+
+### Verification
+- 67/67 tests still green (no functional change)
+- `CONFIG.enforce_verify_contract` defaults False, sanity-check confirms
+
+### Version: 4.10.1 → 4.10.2
+
+### Final consistency sweep (Codex round 2)
+After the initial v4.10.2 fix, a second Codex pass found three remaining inconsistencies:
+- L6686 todo_write nudge still said "you should spawn verify" (verbiage from old MANDATORY rule). Softened to "SUGGEST /verify and wait for confirmation; only auto-spawn if CONFIG.enforce_verify_contract=True".
+- chat.ipynb cell 0 title still said V4.10.1; bumped to V4.10.2 + new highlight bullet for the verify-contract softening.
+- v3_architecture.html and PS_FLOWCHART_V4.html still had v4.10.1 markers; bumped to v4.10.2.
+All fixed in the same v4.10.2 commit.
+
+
 ## 2026-04-28 — V4.10.1 Release (same-day follow-up): Context Collapse + default Sonnet 4.5
 
 ### Context

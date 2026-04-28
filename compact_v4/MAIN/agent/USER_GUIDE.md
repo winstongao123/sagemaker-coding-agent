@@ -1,5 +1,12 @@
-# SageAgent V4 — User Guide (v4.10.1)
+# SageAgent V4 — User Guide (v4.10.2)
 
+
+## What's new in v4.10.2 (2026-04-28, contradiction fix)
+
+Codex review caught a real contradiction in the system prompt: it simultaneously demanded `verify` after 3+ logic-changing edits AND told the model to SUGGEST it without auto-running. Model behaviour was unpredictable. Resolved:
+
+- **Verify is now suggest-and-confirm by default.** After 3+ logic-changing edits the agent will say "I edited N files. Want me to run /verify (adversarial probe) before declaring done?" and wait for your reply. No more surprise verify-subagent spawns.
+- **Strict mode opt-in.** Set `enforce_verify_contract: true` in `agent_config.json` for production-discipline workflows where verify must always run before completion. Default `False`.
 
 ## What's new in v4.10.1 (2026-04-28, same-day follow-up)
 

@@ -2,7 +2,7 @@
 SageMaker Coding Agent - Compact Version (AWS Bedrock)
 A secure AI coding assistant powered by AWS Bedrock Claude.
 
-Version: 4.10.1 (April 2026)
+Version: 4.10.2 (April 2026)
 
 UI Layout:
     Row 1: [Name] [💾Save] [Session▼] [📁Load] [+New] | [Model▼]
@@ -71,7 +71,7 @@ Usage:
     create_chat_ui()
 """
 
-__version__ = "4.10.1"
+__version__ = "4.10.2"
 
 # ============================================================
 # IMPORTS
@@ -1102,6 +1102,13 @@ class Config:
     # User reviews via `/skill suggestions` and applies via `/skill apply <name>`.
     # Default OFF — propose mode only when explicitly enabled per session.
     enable_skill_patching: bool = False
+
+    # V4.10.2: control whether the verify-after-3-edits Verification Contract is
+    # MANDATORY or merely SUGGESTED. Default False = suggest-and-let-user-confirm
+    # (matches the prompt's "Doing Tasks" line about /verify being a suggestion,
+    # avoids over-spawning verify subagents in self-use sessions). Flip to True for
+    # production-discipline workflows where verify must run before a completion claim.
+    enforce_verify_contract: bool = False
 
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)  # {"review": {"template": "...", "agent": "plan"}}
@@ -6675,10 +6682,12 @@ def tool_todo_write(args: Dict) -> str:
     has_verify = any("verif" in t.get("content", "").lower() for t in completed)
     if len(completed) >= 3 and not has_verify:
         lines.append("")
+        # V4.10.2: align with the softened Verification Contract — SUGGEST not MANDATE.
         lines.append("NOTE: You have completed 3+ tasks and none was a verification step. "
-                      "Per the Verification Contract, if these tasks involved non-trivial code changes "
-                      "(3+ file edits to logic/API/data flow), you should spawn a verify sub-agent "
-                      "before reporting completion.")
+                      "If these tasks involved non-trivial code changes (3+ file edits to "
+                      "logic/API/data flow), SUGGEST `/verify` to the user and wait for "
+                      "confirmation before declaring done. Only auto-spawn verify if "
+                      "CONFIG.enforce_verify_contract=True.")
 
     return "\n".join(lines)
 
@@ -7156,7 +7165,7 @@ TOOLS = {
         "- review: Specialized code review (one of three parallel reviewers). USE WHEN: launched by simplify/code-review skills "
         "for focused analysis on one dimension (reuse, quality, or efficiency). Read-only.\n"
         "- verify: Adversarial verification. USE WHEN: after non-trivial implementation (3+ file edits to logic/API/data flow). "
-        "Tries to BREAK the code. MANDATORY per Verification Contract. Cannot modify source.\n"
+        "Tries to BREAK the code. RECOMMENDED per Verification Contract — by default, SUGGEST it and let user confirm; only auto-spawn when CONFIG.enforce_verify_contract=True. Cannot modify source.\n"
         "- build: Full development. USE WHEN: implementing features spanning 3+ files. Can read, write, execute, test. "
         "Isolated in git worktree if enabled.\n"
         "- general: Multi-step research + execution. USE WHEN: none of the above fit. All tools. Default.\n"
@@ -7806,7 +7815,7 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - Use task tool for complex work (3+ queries or multi-file). Use glob/grep directly for simple searches (<3 queries).
 - Spawn multiple sub-agents in parallel when independent (single message, multiple tool calls).
 - Never delegate understanding: synthesize sub-agent findings yourself. Never write "based on findings, fix it."
-- Workflow: Research (explore) → Synthesize → Implement (build) → Verify (verify). Verify is MANDATORY after 3+ file edits.
+- Workflow: Research (explore) → Synthesize → Implement (build) → Verify (verify). After 3+ logic-changing file edits, SUGGEST `/verify` and let the user confirm; only auto-spawn the verify sub-agent when `CONFIG.enforce_verify_contract=True` (default OFF, opt-in for production-discipline workflows).
 - Explore agent: specify thoroughness — "quick" for simple lookup, "medium" for moderate, "very thorough" for deep analysis.
 - Don't peek at running sub-agent output. Wait for completion notification. Don't fabricate or predict results mid-wait.
 
@@ -7817,11 +7826,11 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 - Keep it concise and factual. Do not bury stale history; keep the latest next step obvious.
 
 # Verification Contract
-When non-trivial implementation happens (3+ file edits that change logic, API, or data flow — not just renames or formatting), independent adversarial verification MUST happen before you report completion.
-- Spawn a verify sub-agent (subagent_type: "verify"). Pass: the original task description, list of files changed, and approach taken.
+When non-trivial implementation happens (3+ file edits that change logic, API, or data flow — not just renames or formatting), independent adversarial verification SHOULD happen before you report completion.
+- Default mode (`CONFIG.enforce_verify_contract=False`): SUGGEST `/verify` to the user and wait for confirmation. Do NOT auto-spawn the verify sub-agent. Phrase it like "I edited N files. Want me to run /verify (adversarial probe) before declaring done?" — keep it one sentence.
+- Strict mode (`CONFIG.enforce_verify_contract=True`): spawn a verify sub-agent (subagent_type: "verify") automatically before reporting completion. Pass: the original task description, list of files changed, and approach taken.
 - The verify agent tries to BREAK the implementation. It runs builds, tests, linters, and adversarial probes.
 - On VERDICT: FAIL — fix the issues and re-verify. On VERDICT: PASS — report completion. On VERDICT: PARTIAL — report what was verified and what could not be.
-- Do NOT skip verification because "the code looks correct" or "tests pass." The verify agent exists precisely because implementers (including LLMs) miss edge cases.
 - This does NOT apply to: documentation-only changes, config tweaks, single-file fixes with obvious correctness, or exploration/research tasks.
 
 # Memory
@@ -9682,7 +9691,9 @@ def create_chat_ui(mock_mode: bool = None):
     ask_user_box.layout.display = 'none'
     pending_user_input = {"result": None, "event": None}
 
-    # Model selector - default to Haiku (first option) with fallback
+    # Model selector - default is whatever CONFIG.model_id resolves to (Sonnet 4.5
+    # since v4.10.1, was Haiku 4.5 prior). Falls back to BEDROCK_MODELS[0] if the
+    # configured ARN is missing from the dropdown options.
     model_values = [m[1] for m in BEDROCK_MODELS]
     default_model = CONFIG.model_id if CONFIG.model_id in model_values else BEDROCK_MODELS[0][1]
     model_dropdown = widgets.Dropdown(

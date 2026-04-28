@@ -1,5 +1,20 @@
 # Compact V4 Changelog
 
+## v4.10.2 — Verify-contract softened, opt-in strict mode (2026-04-28)
+
+Same-day follow-up to v4.10.1. Codex review surfaced a real prompt contradiction: the system prompt simultaneously said `verify` was MANDATORY (Sub-agent Coordination + Verification Contract sections) AND that the model should SUGGEST it without auto-running (Doing Tasks section). Model behavior was unpredictable depending on which sentence won attention. Resolved by aligning all three sections to suggest-and-confirm by default, with strict mode opt-in.
+
+Changed:
+- **System prompt** — "verify is MANDATORY after 3+ file edits" → "SUGGEST `/verify` and let the user confirm". Sub-agent Coordination, Verification Contract, and the `verify` agent type description all aligned.
+- **Strict mode opt-in** — new `CONFIG.enforce_verify_contract: bool = False`. Set to `True` in `agent_config.json` for production-discipline workflows where the agent must run verify before claiming completion. Default OFF: ideal for self-use casual sessions where over-spawning verify is annoying and expensive.
+- **Stale comment fix** — "default to Haiku (first option)" comment in the model dropdown updated to reflect v4.10.1's Sonnet 4.5 default.
+
+Doc & process
+- Codex pre-commit review (gpt-5.3-codex, read-only) confirmed the contradiction and that no other team-coordination / keyword-auto-spawn risks exist in compact_v4.
+- 67/67 tests still green (no functional code changes; only prompt + config flag + 1 stale comment).
+
+Version: `4.10.1` → `4.10.2`.
+
 ## v4.10.1 — Same-day follow-up: Context Collapse + default model Sonnet 4.5 (2026-04-28)
 
 Same-day patch on top of v4.10.0 (`commit 213528a`). User asked to ship #41b Context Collapse now (no v4.11 wait) and switch the default model from Haiku 4.5 to Sonnet 4.5.

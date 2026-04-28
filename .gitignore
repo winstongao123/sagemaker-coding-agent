@@ -47,6 +47,10 @@ v410_nb_*/
 v410_skills_*/
 v410_subagent_env_*/
 v410_ctxwin_*/
+# v4.10.2: agent runtime artefacts — created/written every session, not source
+compact_v4/.snapshots/
+compact_v4/.exec_budget.json
+compact_v4/MAIN/agent/AGENT_STATUS.md
 nul
 _archive/compare_code/gg-claude-code-runnable
 test-results/
