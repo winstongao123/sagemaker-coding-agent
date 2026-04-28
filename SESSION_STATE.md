@@ -29,6 +29,14 @@ All 3 additions live in the cached static portion of SYSTEM_PROMPT (before the `
 
 ### Version: 4.10.4 → 4.10.5
 
+### Round-10 final HTML accuracy fix
+PS_FLOWCHART_V4.html still had v4.10.0's 5 features mis-labeled as "V4.10.5 is the Runnable-parity release", duplicate v4.10.1 line, stale "55 new tests across 5 phases" count, and missing v4.10.5 entry. Corrected:
+- "V4.10.5 is the Runnable-parity release" → "V4.10.x is the Runnable-parity series — 6 same-day releases" with v4.10.0 as the original 5-phase ship.
+- Removed duplicate v4.10.1 line.
+- Test count "55/5 phases" → "91 deterministic tests across 10 files".
+- Added v4.10.5 entry (Learning_Factory pattern adoption).
+HTML status: all 4 files now consistent on v4.10.5 / 91 tests / 6 same-day releases.
+
 ### Round-9 HTML banner sync (post-v4.10.5)
 User asked "all htmls updated?" — found 3 issues:
 - `v3_architecture.html` subtitle had v4.10.4 mis-attributed to v4.10.5 (my earlier global replace overshot). Restored correct narrative: v4.10.4 = handoff, v4.10.5 = LF patterns.

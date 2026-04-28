@@ -214,20 +214,19 @@
   <section class="hero">
     <h1>SageMaker Coding Agent V4.10.5</h1>
     <p class="subtitle">
-      Architecture map of V4.10.5 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (11,553 lines),
-      plus comparison against Claude Code runnable source. <b>V4.10.5 is the Runnable-parity release</b> — five surgical
-      additions after a deep rescan: <b>notebook_edit</b> (surgical .ipynb cell editor),
+      Architecture map of V4.10.5 in <code>compact_v4/MAIN/agent/sagemaker_agent.py</code> (~11,800 lines),
+      plus comparison against Claude Code runnable source. <b>V4.10.x is the Runnable-parity series</b> — 6 same-day releases.
+      <b>v4.10.0</b> shipped 5 surgical Runnable-parity additions: <b>notebook_edit</b> (surgical .ipynb cell editor),
       <b>skill listing token budget</b> (1% of context, hard-capped at 2000 tokens),
       <b>per-sub-agent env-details</b> (cwd + git HEAD injected after the cached SYSTEM_PROMPT boundary),
       <b>model-aware context window auto-derive</b> (BEDROCK_MODEL_CONTEXT_WINDOWS map, ready for AWS 1M variants),
-      <b>reactive compact on CONTEXT_OVERFLOW</b> (microcompact + retry, capped at 1 reactive recovery per run),
-      and <b>segment-level Context Collapse</b> (collapses runs of 3+ stale tool round-trips into one synthetic pair).
-      v4.10.1 flipped the default model to <b>Sonnet 4.5</b> (cache activates from 1024 tokens vs Haiku's 4096).
-      v4.10.2 softened the verify-contract (suggest-and-confirm by default, opt-in strict mode via CONFIG.enforce_verify_contract).
-      v4.10.3 added a ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials.
-      v4.10.4 closed the largest remaining gap: sub-agents now get a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) so they don't fly blind on the parent's larger goal.
-      Codex-reviewed per phase (gpt-5.3-codex, read-only). 55 new tests across 5 phases, all green; existing skill auto-trigger
-      regression test (12/12) still green — skill auto-load remains default OFF.
+      and <b>reactive compact on CONTEXT_OVERFLOW</b> (microcompact + retry, capped at 1 reactive recovery per run).
+      <b>v4.10.1</b> added the 6th: <b>segment-level Context Collapse</b> (collapses runs of 3+ stale tool round-trips into one synthetic pair) + flipped default model to <b>Sonnet 4.5</b> (cache activates from 1024 tokens vs Haiku's 4096).
+      <b>v4.10.2</b> softened the verify-contract (suggest-and-confirm by default, opt-in strict mode via <code>CONFIG.enforce_verify_contract</code>).
+      <b>v4.10.3</b> added a ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials.
+      <b>v4.10.4</b> closed the largest remaining gap: sub-agents now get a bounded work-context handoff block (AGENT_STATUS slice + active todos + last 10 changed file paths) so they don't fly blind on the parent's larger goal.
+      <b>v4.10.5</b> adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections (Standing Constraints + Critical Don't-Forget Context), skill self-patching 4-rule check.
+      Codex-reviewed per phase (gpt-5.3-codex, read-only). <b>91 deterministic tests across 10 files</b>, all green; the existing v4.9.6 skill auto-trigger regression test (12/12) still green — skill auto-load remains default OFF.
     </p>
     <div class="stats">
       <div class="stat"><strong>23</strong><span>Tools</span></div>
