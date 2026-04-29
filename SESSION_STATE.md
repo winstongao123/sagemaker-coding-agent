@@ -44,6 +44,27 @@ User reported real-session log showing the agent confused after hitting 40-call 
 - chat.md updated.
 - AGENT_STATUS round 2 entry.
 
+### Round 3 in-place fixes — 5-investigator deep dive (2026-04-29)
+
+User asked for deeper investigation than round 2's single Codex review. Dispatched 5 parallel investigators (Team A1 prompt engineering, A2 tool design, B1 session forensics, B2 hermes/runnable comparative, Codex deep architectural). All 5 returned within 7 minutes with consensus root cause: tool-availability matrix added in round 2 was BURIED mid-list in a 15-bullet section, and under cognitive load the LLM under-attends to mid-list bullets. Plus several parallel branches (time-budget message, user-denied message, generic exception) had the same poor wording as the call-count branch I'd fixed in round 2.
+
+**Round 3 code changes (8 fixes + 1 new test file, all in v4.10.10):**
+1. Tool capability classes promoted to top-level prompt section.
+2. Self-correction rules added.
+3. `task` tool semantics clarified.
+4. Call-count block message reworded ("STILL AVAILABLE..." + "try grep/read_file/edit_file FIRST").
+5. Time-budget branch fixed (parallel of #4 — round 2 missed this).
+6. User-denied message rewritten at both call sites.
+7. Generic exception fallback rewritten.
+8. Path normalization in read_file dedup (`realpath + abspath`).
+9. New test file `test_v410_actual_use.py` with 12 regression tests.
+
+**Codex final re-review of round 3: VERDICT PASS** — "fixes correctly implemented and materially close the identified failure mode; only minor residual risk is Windows case-normalization and lack of behavioral/integration test proof."
+
+**Multi-repo integration root-cause meta-finding**: prompt grew to ~5000+ static tokens across v4.9.4 Hermes + v4.10.0 Runnable x5 + v4.10.5 LF x3 + v4.10.7-10 v4-original additions. Aggregate cognitive load caused attention drift. The fix is structural (Runnable's deferred-tool-schema pattern saves ~5500 tokens/turn) — backlogged for future version.
+
+**Tests:** 12 new + 134 destructive + 122 v4 unit, all green. Zip rebuilt 303.9 KB.
+
 ### Version: 4.10.9 → 4.10.10
 
 ## 2026-04-29 — V4.10.9 Release: backtick eval+downloader parity

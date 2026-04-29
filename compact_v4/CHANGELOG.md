@@ -39,6 +39,29 @@ User reported real-session issues from a coding session that hit the 40-call exe
 
 **Documentation**: comprehensive [`compact_v4/docs/PS_actual_use_problems.md`](docs/PS_actual_use_problems.md) created, covering 7 distinct issues with root cause + fix + Codex findings.
 
+### Round 3 — 5-investigator deep dive (2026-04-29)
+
+User requested deeper investigation than the round-2 single-Codex pass. Spawned 5 parallel investigators (Team A1 prompt-engineering, Team A2 tool-design, Team B1 session forensics, Team B2 hermes/runnable comparative, Codex deep architectural). All 5 returned with consensus on root cause + 9 actionable fixes.
+
+**Code changes (in v4.10.10, no version bump):**
+1. **Promoted "Tool capability classes"** to top-level system prompt section (was buried mid-list at line 8041; cognitive load caused LLM to under-attend under stress).
+2. **Added self-correction rules**: "After ANY 'Blocked:' result, re-read matrix" + "BEFORE saying 'I can't', re-read matrix".
+3. **Clarified `task` semantics** in matrix: tool itself uncounted, but spawned sub-agents share global bash/python_exec budget.
+4. **Reworded call-count block message** to point at read tools FIRST, not "ask user to start new session".
+5. **Time-budget block message** rewritten with same template (round 2 only fixed call-count branch — Team A2 HIGH miss).
+6. **"User denied permission"** rewritten at both call sites (lines 9237 + 9446) to action-guided multi-line message.
+7. **Generic exception fallback** rewritten with substitution guidance.
+8. **Path normalization in read_file dedup**: `os.path.realpath(os.path.abspath(fp))` so abs vs relative same key (Codex C2 HIGH).
+9. **New test file `test_v410_actual_use.py`** with 12 regression tests, all PASS, locking each round-2 + round-3 fix.
+
+**Codex final re-review verdict: PASS** — *"round 3 fixes are correctly implemented and materially close the identified failure mode; only minor residual risk is Windows case-normalization and lack of behavioral/integration test proof."*
+
+**Multi-repo integration root-cause analysis**: documented in PS_actual_use_problems.md. Multiple integrations (Hermes, Runnable, Learning_Factory) each added prompt text. Aggregate growth (~5000+ static tokens) caused cognitive-load attention drift. Solution direction: adopt Runnable's deferred-tool-schema pattern (saves ~5500 tokens/turn) — backlogged.
+
+**Tests**: 12 new + 134 destructive + 122 v4 unit, all green.
+
+**Total round 3 fixes: 8 code changes + 1 new test file (12 tests). All in v4.10.10 in-place.**
+
 ### Version: 4.10.9 → 4.10.10
 
 ## v4.10.9 — Backtick eval+downloader parity (2026-04-29)

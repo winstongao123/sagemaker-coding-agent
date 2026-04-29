@@ -295,6 +295,74 @@ This is what hermes/runnable do well — the **failure-message-as-instruction** 
 
 ---
 
+---
+
+## Round 3 deep investigation: 5-investigator team review
+
+After v4.10.10 round 2 shipped, user requested deeper investigation. 5 parallel investigators were dispatched:
+
+| Investigator | Role | Verdict |
+|---|---|---|
+| Team A1 | Prompt-engineering deep analysis | "2 critical gaps + 1 high. Tool matrix BURIED in mid-list under cognitive load." |
+| Team A2 | Tool-design gap analysis | "Time-budget branch missed in round 2. 'User denied permission' too terse. Generic exception fallback missing substitutes." |
+| Team B1 | Real session log forensics (turn-by-turn) | "Failure was not lack of capability — it was lack of *runtime reminder of capability*." |
+| Team B2 | Hermes/Runnable comparative analysis | "v4 mostly at parity or AHEAD. 6 gaps remain, 2 HIGH (skill filtering + dynamic tool references)." |
+| Codex deep | Architectural review | **VERDICT: FAIL initially** — race risk, path-normalization gaps, missing regression tests. After round-3 re-fixes: **VERDICT: PASS**. |
+
+### Cross-cutting consensus
+
+Every investigator independently identified the **buried tool matrix + non-self-introspecting prompt** as the immediate failure cause. The agreement across 5 different angles is itself the strongest evidence.
+
+### Round 3 fixes applied (all in v4.10.10, no version bump)
+
+| Fix | File:line | Source finding |
+|---|---|---|
+| Promoted "Tool capability classes" to top-level section before "Using Tools" | sagemaker_agent.py:~8038-8052 | A1 CRITICAL, B1 P0, B2 P6 |
+| Added self-correction rules: "After ANY Blocked: re-read matrix" + "BEFORE saying 'I can't': re-read" | sagemaker_agent.py:~8036-8037 | A1 CRITICAL, B1 P0 |
+| Clarified `task` semantics (uncounted itself, but sub-agents share budget) | sagemaker_agent.py:~8044 | Codex B1 |
+| Reworded call-count block message: "STILL AVAILABLE..." + "try grep/read_file/edit_file FIRST" | sagemaker_agent.py:~9467 | A2 HIGH, B1 P0, Codex B2 |
+| **Same fix on time-budget branch** (missed in round 2) | sagemaker_agent.py:~9482 | A2 HIGH (parallel branch) |
+| Rewrote "User denied permission" → action-guided 4-line message at both call sites | sagemaker_agent.py:9237, 9446 | A2 HIGH |
+| Rewrote generic exception fallback with substitution guidance | sagemaker_agent.py:9509 | A2 MEDIUM |
+| Path normalization in read_file dedup: `os.path.realpath(os.path.abspath(fp))` | sagemaker_agent.py:9156 | Codex C2 HIGH |
+| New test file `test_v410_actual_use.py` with 12 regression tests | new file | Codex E HIGH |
+
+### Codex final re-review (round 3)
+> *"VERDICT: PASS — round 3 fixes are correctly implemented and materially close the identified failure mode; only minor residual risk is Windows case-normalization and lack of behavioral/integration test proof."*
+
+### How runnable Claude Code solves these problems (reference patterns)
+
+- **Tool descriptions with WHEN/WHEN-NOT inline** (`tools/BashTool/prompt.ts`): substitution table inside the tool description, not buried in global prompt. v4 round 3 brought the global matrix to the top, but per-tool inline guidance is still a future improvement.
+- **Failure-message-as-instruction**: every error tells the LLM what to do next. v4 round 3 propagated this to all 5 error types (call-count, time-budget, user-denied, generic exception, repetition).
+- **Deferred tool loading** (`tools/ToolSearchTool/prompt.ts`): tool names listed upfront, schemas loaded on demand. Saves ~5500 tokens/turn. **NOT YET IN v4** — biggest remaining cognitive-load win.
+- **Path canonicalization** (`realpath + normcase` at state boundaries). v4 round 3 added `realpath + abspath`; `normcase` for Windows still pending.
+- **Stop hooks for "I can't" patterns** (`services/stopHook.ts`): runtime intervention if the agent's output matches give-up patterns. v4 has the prompt-level rule, not runtime.
+
+### What still isn't fixed (honest backlog)
+
+| Gap | Severity | Why deferred |
+|---|---|---|
+| Windows `os.path.normcase()` for case-insensitive paths | LOW | Edge case, Windows-only |
+| Tests are string-presence not behavioral | MEDIUM | Behavioral testing needs Bedrock integration |
+| Tool-schema deferred loading (Runnable ToolSearchTool pattern) | HIGH | Saves ~5500 tokens/turn but requires bigger refactor |
+| Skill filtering by available tools (Hermes pattern) | HIGH | Bash-dependent skills still listed when bash exhausted |
+| Dynamic tool-name references in prompt (Hermes AGENTS.md:627-628) | MEDIUM | Static prompt mentions tools that may be disabled in some profiles |
+| Runtime stop-hook for "I can't" patterns | MEDIUM | Prompt-level fix is in; runtime intervention is bigger architectural change |
+| `_GLOBAL_EXEC_LOCK` check-then-act race (Codex A3) | MEDIUM | Pre-existing, not introduced by round 3; needs careful refactor |
+| `.ipynb` cell-index hint in read_file output | MEDIUM | Would prevent the user's 06:31 read-loop confusion; bigger UX change |
+
+### Multi-repo integration analysis (root-cause meta-finding)
+
+The user asked: *"could the root cause be that I've been integrating v4 with other repos (runnable, hermes, learning factory)?"*
+
+**Honest answer: indirectly, yes.** Each integration added ~200-500 tokens to the static system prompt. After 6+ rounds (v4.9.4 hermes, v4.10.0 runnable x5, v4.10.5 LF x3, v4.10.7-10), the static prompt grew to ~5000+ tokens. **Cognitive load on the LLM scaled non-linearly** — at small prompts, mid-list bullets are seen; at long prompts, attention drifts.
+
+The failure was NOT directly from any one integration. It was from the **aggregate prompt size** + **v4's original (not borrowed) decisions** about error messages and limit defaults.
+
+**The solution is what runnable does**: not fewer integrations, but better encapsulation (deferred tool schemas, per-tool inline guidance, dynamic capability lists). v4 round 3 made the most-impactful in-place fix (matrix promotion + self-correction rules). The structural refactor (deferred loading) remains future work.
+
+---
+
 ## Summary table
 
 | # | Issue | Severity | Fixed in v4.10.10 in-place? | Impact |
