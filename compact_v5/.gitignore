@@ -1,0 +1,36 @@
+# Build artifacts (regeneratable)
+compact_v5.zip
+*.zip
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime artifacts
+MAIN/agent/audit_logs/
+MAIN/agent/sessions/
+MAIN/agent/.snapshots/
+MAIN/agent/.code_index/
+MAIN/agent/truncated_outputs/
+MAIN/agent/.exec_budget.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage

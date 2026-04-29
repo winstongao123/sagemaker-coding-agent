@@ -1,5 +1,48 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — v5 build started (Phase 00 scaffold)
+
+### Context
+After v4.10.10 round 3 shipped, user asked for a **fresh v5 implementation** that takes Runnable Claude Code as the textbook (primary architectural source), with Hermes and Learning_Factory as support references. v5 must be **better than Runnable** — same architecture but adapted to SageMaker constraints (Bedrock-only, no GitHub network, python_exec, .ipynb workflow) AND with v4's strengths preserved verbatim (SecurityManager, 10 skills, SnapshotManager, etc.).
+
+### Plan-mode iterative review (6 rounds)
+Plan file at `C:/Users/winst/.claude/plans/vectorized-wandering-swan.md`. 6 Codex plan-review rounds:
+- Round 1 FAIL — 5 axes of findings (Addition Gate budget reservation, audit timing, Runnable cite rule, executability tag rules, risk register gaps)
+- Round 2 FAIL — 8 new findings (request-token p95 metric, ADR reconciliation, source-citation contradiction, DEFER format, phase 8.5 ordering, decimal-tag automation, fixture gaming risk)
+- Round 3 FAIL — Codex still finding inconsistencies (per-turn schema gating, line 29 wording, tag format mixing, codex-review filename ambiguity, identity-drift risk gap)
+- Round 4 FAIL — Last few polish issues (per-turn gate gameable, canonical phase-ID drift in remaining places, head-pipe portability, commit convention, tag rule explicit)
+- Round 5 FAIL — Phase 4 acceptance + folder layout consistency + diff widget UX clarification
+- Round 6 **PASS** — both AXIS A (errors/clarity) and AXIS B (Runnable-fidelity/governance) pass. No material defects.
+
+User approved plan via ExitPlanMode.
+
+### Phase 00 scaffold (today)
+- Branch `v5-build` created off `master`
+- `compact_v5/` folder tree: 15 packages (core, prompt, tools, security, runtime, subagent, skills, ui, mcp, tests/{unit,tools,integration,parity}) + `_status/` + `docs/` + `MAIN/changelogs/`
+- 5 tracking docs in `_status/`: V5_BUILD_STATUS.md, V5_RUNNABLE_PORT_LOG.md (append-only), V5_DESIGN_DECISIONS.md (append-only ADRs), CODEX_REVIEW_TEMPLATE.md (per-phase 2-axis), RESUME.md (cold-resume protocol)
+- 2 ADRs accepted: ADR-001 file-per-tool layout, ADR-002 file-per-section system prompt
+- `.gitignore` (build artifacts, runtime, env)
+- Per-package empty `__init__.py` (15 files)
+- `tests/test_smoke.py` — passes 2/2 (verifies imports + no v4 leaked into Phase 0)
+- `tests/lint_phase_id.py` — pre-tag canonical-Phase-ID lint
+- `compact_v5/docs/V5_PLAN.md` — verbatim copy of approved plan
+- `_status/codex_reviews/phase-00.md` — Phase 00 Codex review stub: scaffold-only, AXIS A PASS, AXIS B vacuously PASS, OVERALL APPROVE.
+
+### Auto mode active
+User enabled auto mode (continuous execution); each phase has natural pause points (commit + tag + Codex review) so nonstop hook is not needed for this work.
+
+### v5 plan summary (high-level)
+- 14 checkpoints (phases 00..13 + hard gate 08_5)
+- v4 strengths preserved verbatim (~6500 LOC moves unchanged): SecurityManager (134-case coverage), 10 skills, SkillManager, SnapshotManager, AuditLogger, Config, MCP clients, microcompact, context_collapse, Truncation, _classify_bash_ro, _GLOBAL_EXEC_LOCK
+- Runnable architecture wraps them: tools/registry.py (Phase 2), tool_search.py deferred-loading (Phase 7, the key win — ~3000 token/turn save), prompt/sections.py + 14 .md files (Phase 6, fixes the buried-matrix failure), QueryEngine.ts → core/query_engine.py (Phase 8), error taxonomy + retry (Phase 8), forkSubagent budget-share (Phase 9), prompt cache break detection (Phase 6), diff widget UI inline+expandable (Phase 4)
+- Hermes/LF as support: IterationBudget (already in v4 from v4.9.4), _skill_should_show filter (Phase 10), STATE/PORT/DECISIONS tracking infrastructure (Phase 00, done)
+- Two-axis Codex review per phase: AXIS A errors/bugs + AXIS B Runnable-fidelity-without-drift (FAITHFUL/FAITHFUL-WITH-JUSTIFIED-ADAPTATION/DRIFTED). Auto-reject if `constraint=none` + adaptation label.
+- Aggregate audit gates before phases 4, 7, 10, 13 + hard gate 8.5 before phase 9. Cognitive-load test simulates blocked-tool recovery from current prompt state.
+- Static prompt budget: ≤2500 tokens after phase 6 (vs v4's ~5000); per-turn schema overhead ≤ v4 baseline − 3000 after phase 9.
+
+### Architectural-integration emphasis (added 2026-04-30 per user)
+User reinforced: when learning Runnable, must go DEEP into architecture and integration, not just local file functionality. Updated CODEX_REVIEW_TEMPLATE.md AXIS B to require integration-semantic verification (not just file-level mimicry) for every adopted pattern.
+
 ## 2026-04-29 — V4.10.10 Release: `aws_bedrock_only` UI toggle
 
 ### Context
