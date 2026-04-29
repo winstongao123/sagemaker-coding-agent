@@ -21,6 +21,24 @@ User asked: *"3 [bedrock-only] is fine. When say bedrock only, then just it only
 
 **Tests:** unchanged (134 destructive coverage cases + 122 v4 unit tests still green; no logic added to validators, only UI surfacing + defensive flag + docs).
 
+### Round 2 — actual-use feedback (2026-04-29)
+
+User reported real-session issues from a coding session that hit the 40-call exec limit and showed semantic confusion. Investigated, fixed, documented in new file `compact_v4/docs/PS_actual_use_problems.md`.
+
+**Changes:**
+1. **`max_exec_calls_per_session: int = 40` → `200`** ([sagemaker_agent.py:1080](MAIN/agent/sagemaker_agent.py)) — old ceiling hit too early in real workflow.
+2. **Error message rewritten** ([sagemaker_agent.py:~9442](MAIN/agent/sagemaker_agent.py)) when limit hits — now spells out which tools ARE blocked (`bash`, `python_exec`) vs which STILL WORK (`read_file`, `grep`, `glob`, `edit_file`, `write_file`, `notebook_edit`, `task`, `ask_user`, `view_image`, `web_fetch`). Hermes "failure-message-as-instruction" pattern.
+3. **`max_iteration_budget: int = 90` → `600`** ([sagemaker_agent.py:1108](MAIN/agent/sagemaker_agent.py), `IterationBudget.DEFAULT_MAX` at line 8181). Was too tight for real complex tasks.
+4. **UI slider** in `chat.ipynb` cell 2 (`Iter Budget: 90-2000, step 50, default 600`).
+5. **CSO-CHECK warnings** ([sagemaker_agent.py:2740](MAIN/agent/sagemaker_agent.py)) — `logging.warning` → `logging.debug`. Was producing 8-10 noisy lines on every startup.
+6. **Session cost persisted across save/load** — Codex review caught my first attempt was wrong (wrote to `Agent.session_cost` which doesn't exist; should be `TOKENS.session_cost`). Re-fixed at lines ~11583 (save) and ~11665 (load).
+
+**Codex review** (in-place changes): 1 HIGH found on first attempt (session_cost wired to Agent instead of TOKENS) → fixed → re-review PASS.
+
+**Tests still green**: 134 destructive + 122 v4 unit.
+
+**Documentation**: comprehensive [`compact_v4/docs/PS_actual_use_problems.md`](docs/PS_actual_use_problems.md) created, covering 7 distinct issues with root cause + fix + Codex findings.
+
 ### Version: 4.10.9 → 4.10.10
 
 ## v4.10.9 — Backtick eval+downloader parity (2026-04-29)

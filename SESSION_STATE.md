@@ -21,6 +21,29 @@ After v4.10.9 ship + Codex audit, user accepted the strict bedrock-only default 
 ### Tests
 No new tests needed (UI-surfacing + defensive flag + docs only). Existing 134 destructive-coverage cases + 122 v4 unit tests still green.
 
+### Round 2 in-place fixes — actual-use feedback (2026-04-29)
+
+User reported real-session log showing the agent confused after hitting 40-call exec limit, plus several other quality-of-life issues. Investigated, fixed, documented in new file `compact_v4/docs/PS_actual_use_problems.md` (300+ lines covering 7 distinct issues).
+
+**Code changes (all in v4.10.10, no version bump):**
+1. `max_exec_calls_per_session: 40 → 200` (line 1080) — old ceiling hit too early.
+2. **Error message rewritten** (line ~9442) — old terse error misled the LLM into thinking ALL tools blocked. New text spells out: "bash + python_exec limit reached. OTHER TOOLS STILL WORK: read_file, grep, glob, edit_file, write_file, notebook_edit, task, ask_user, view_image, web_fetch are NOT counted by this limit." (Hermes failure-message-as-instruction pattern.)
+3. `max_iteration_budget: 90 → 600` (lines 1108, 8181) — was too tight for complex tasks.
+4. **New UI slider** in chat.ipynb cell 2 (`Iter Budget: 90-2000, step 50, default 600`); banner shows `Iter ceiling: <value>`.
+5. CSO-CHECK warnings (line 2740): `logging.warning` → `logging.debug` — was producing 8-10 noisy lines on every startup.
+6. **session_cost save/load** (lines ~11583, ~11665) — Codex review caught my first attempt was wrong (wrote to `Agent.session_cost` which doesn't exist; should be `TOKENS.session_cost`). Re-fixed.
+
+### Codex Review (round 2)
+- First attempt on session_cost: **VERDICT FAIL** — "session_cost save/load is wired to Agent instead of TOKENS, so restored cost is not actually applied to runtime budget/UI tracking." (Real HIGH-severity bug Codex caught.)
+- Re-fix targeting TOKENS singleton: passes review.
+
+### Documentation
+- New file: `compact_v4/docs/PS_actual_use_problems.md` — 7 sections covering each issue with root cause + fix + before/after + Codex findings + lessons. Real session log preserved verbatim for reference.
+- CHANGELOG round 2 entry added.
+- USER_GUIDE round 2 section added.
+- chat.md updated.
+- AGENT_STATUS round 2 entry.
+
 ### Version: 4.10.9 → 4.10.10
 
 ## 2026-04-29 — V4.10.9 Release: backtick eval+downloader parity

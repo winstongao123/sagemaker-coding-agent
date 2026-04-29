@@ -1072,7 +1072,12 @@ class Config:
     auth_token_env: str = "SAGEMAKER_AGENT_AUTH_TOKEN"
     max_user_messages_per_minute: int = 10
     max_user_messages_per_session: int = 150
-    max_exec_calls_per_session: int = 40
+    # V4.10.10 in-place: 40 -> 200. The old 40-call ceiling was hit mid-task in
+    # real SageMaker sessions (real log: agent finished call 40 at 06:29 then
+    # spent 5 minutes confused about which tools were still available). Only
+    # bash + python_exec are counted; read_file/grep/glob/edit_file/etc are
+    # unaffected — those have no session-wide cap.
+    max_exec_calls_per_session: int = 200
     max_exec_seconds_per_session: int = 900
     session_cost_limit: float = 0.0  # Max $ per session (0 = no limit). Warns at 80%, stops at 100%.
     audit_retention_days: int = 30
@@ -1100,8 +1105,13 @@ class Config:
     subagent_max_depth: int = 2
     enable_worktree: bool = True  # V4.4: Git worktree isolation for build sub-agents
 
-    # V4.9.4: shared iteration budget across parent + sub-agents (hermes pattern)
-    max_iteration_budget: int = 90
+    # V4.9.4: shared iteration budget across parent + sub-agents (hermes pattern).
+    # V4.10.10 (in-place): default bumped 90 → 600. The hermes 90 default was for
+    # tightly cost-capped insurance contexts; for normal SageMaker development a
+    # complex task (parent ~30-50 turns + 2-3 sub-agents at 10-20 turns each) easily
+    # blows past 90 or even 300. 600 gives realistic headroom while session_cost_limit
+    # keeps absolute spend bounded. Adjustable via the UI slider in chat.ipynb cell 2.
+    max_iteration_budget: int = 600
 
     # V4.9.4: optional auxiliary model for compaction summaries (cost win — use Haiku for summary
     # while main agent runs Sonnet/Opus). Empty string = use main model. Bedrock-only.
@@ -2734,10 +2744,12 @@ class SkillManager:
                     _triggers = [t.strip().lower() for t in _triggers_raw.split(",") if t.strip()] if (_triggers_raw and _auto_trigger) else None
                     # V4.9.3: CSO format check — descriptions should start with "Use when [trigger]"
                     # so they're easy for the agent to surface ("Consider using X when Y" pattern).
-                    # Warning only — does NOT block load. Skip the legacy code-review skill (name "code-review")
-                    # which pre-dates the CSO convention.
+                    # V4.10.10 in-place: lowered to DEBUG (was WARNING). The check is advisory
+                    # ("no retrofit of existing files" per ADVANCED_PATTERNS.md R-105) and was
+                    # producing 8+ noisy lines on every notebook startup. Keeps the audit signal
+                    # for anyone running with LOG_LEVEL=DEBUG.
                     if desc and not desc.lower().lstrip().startswith("use when"):
-                        logging.warning(
+                        logging.debug(
                             f"[CSO-CHECK] skill '{name}' description does not start with 'Use when' — "
                             f"current: '{desc[:60]}...'  (advisory; see ADVANCED_PATTERNS.md R-105)"
                         )
@@ -8025,6 +8037,12 @@ SYSTEM_PROMPT = """You are SageMaker Coding Agent, an AI coding assistant in AWS
 # Using Tools — EFFICIENCY IS CRITICAL
 - Do NOT use bash when a dedicated tool exists: read_file (not cat/head/tail), edit_file (not sed/awk), write_file (not echo/cat heredoc), glob (not find/ls), grep (not grep/rg).
 - Reserve bash exclusively for git, pip, system commands, and scripts.
+
+# Tool availability matrix — V4.10.10 [Actual Use Issue 7]
+- SESSION-LIMITED tools (counted against `max_exec_calls_per_session`): only `bash` and `python_exec`. When their counter exhausts, you'll see `"Blocked: bash + python_exec limit reached (200/session)"`.
+- NOT counted by that limit (always available unless individually approved): `read_file`, `grep`, `glob`, `edit_file`, `write_file`, `notebook_edit`, `task` (sub-agent), `ask_user`, `view_image`, `web_fetch`.
+- If `bash` or `python_exec` is blocked: keep working with the unlimited tools above. Do NOT say "I can't execute commands" or stop diagnosing — you have read/grep/edit access to keep going. Only fall back to ask_user if a strictly-bash-or-python operation is the bottleneck.
+- Approval prompts (HIGH_RISK_TOOLS = bash, python_exec, task, web_fetch) are SEPARATE from the session counter — those just need user click, but click is always available within the session limit.
 - SEARCH BEFORE READ: Use grep to find specific code, not read_file to scan through large files. Each read_file adds thousands of tokens to context. grep finds the exact lines you need.
 - Use glob to locate files, then grep to find content, then read_file only for the specific section you need (use offset/limit).
 - Call multiple tools in parallel when independent. Do not wait for one to finish before starting another.
@@ -8174,7 +8192,7 @@ class IterationBudget:
     and stops cleanly, preserving partial work.
     """
 
-    DEFAULT_MAX = 90  # default ceiling (matches hermes default; tunable via Config)
+    DEFAULT_MAX = 600  # V4.10.10 in-place: 90 → 600 (hermes 90 too tight for SageMaker dev)
 
     def __init__(self, max_iterations: int = DEFAULT_MAX):
         self._max = max(1, int(max_iterations))
@@ -9132,9 +9150,14 @@ class Agent:
                 elif tc.name in ("create_pdf", "create_chart", "create_excel"):
                     target = hashlib.md5(str(_inp).encode()).hexdigest()[:16]
                 elif tc.name == "read_file":
+                    # V4.10.10 [Actual Use Issue 7]: include `limit` in the dedup key.
+                    # Real session showed agent re-reading near same offset with different
+                    # limits (offset=200 limit=20, then offset=200 limit=50, etc.) and
+                    # the old key only used `path@offset`, missing this distinction.
                     fp = _inp.get("file_path") or _inp.get("path") or _inp.get("filepath") or ""
                     offset = _inp.get("offset") or _inp.get("line_start") or _inp.get("start_line") or 0
-                    target = f"{fp}@{offset}"
+                    limit = _inp.get("limit") or _inp.get("line_count") or 0
+                    target = f"{fp}@{offset}:{limit}"
                 elif tc.name == "edit_file":
                     fp = _inp.get("file_path") or _inp.get("path") or _inp.get("filepath") or ""
                     old_str = _inp.get("old_string") or _inp.get("old_str") or ""
@@ -9151,8 +9174,12 @@ class Agent:
                 key = (tc.name, target)
 
                 repeat_count = sum(1 for h in self.tool_history if h == key)
-                if repeat_count >= 3:
-                    output_fn(f"[Warning: Repetitive {tc.name} calls detected (3+ identical), stopping]")
+                # V4.10.10 [Actual Use Issue 7]: read_file gets a tighter 2-repeat cap
+                # (real session showed it re-reading 3+ times before the loop breaker fired).
+                # Other tools keep the standard 3-repeat threshold.
+                _threshold = 2 if tc.name == "read_file" else 3
+                if repeat_count >= _threshold:
+                    output_fn(f"[Warning: Repetitive {tc.name} calls detected ({_threshold}+ identical), stopping]")
                     # Build complete assistant message with tool_use blocks for proper history
                     assistant_content = []
                     if response.text:
@@ -9429,7 +9456,16 @@ class Agent:
                             # Check GLOBAL budget (shared across all agents + sub-agents)
                             with _GLOBAL_EXEC_LOCK:
                                 if _GLOBAL_EXEC_CALLS >= CONFIG.max_exec_calls_per_session:
-                                    result = f"Blocked: global execution call limit reached ({CONFIG.max_exec_calls_per_session}/session)"
+                                    # V4.10.10 in-place: spell out which tools are limited (bash + python_exec)
+                                    # vs which are NOT — read_file/grep/glob/edit_file/write_file/notebook_edit
+                                    # all remain available. Real-log saw the LLM misread the old terse message
+                                    # as "all tools blocked" and stop trying.
+                                    result = (
+                                        f"Blocked: bash + python_exec limit reached ({CONFIG.max_exec_calls_per_session}/session). "
+                                        f"OTHER TOOLS STILL WORK: read_file, grep, glob, edit_file, write_file, notebook_edit, "
+                                        f"task, ask_user, view_image, web_fetch are NOT counted by this limit. "
+                                        f"Continue with those, or ask the user to start a new session for more bash/python_exec."
+                                    )
                                     tool_results.append({"type": "tool_result", "tool_use_id": tc.id, "content": result})
                                     AUDIT.log(self.session_id, "execution_blocked", tool_name, tc.input, result, False)
                                     continue
@@ -11568,6 +11604,14 @@ def create_chat_ui(mock_mode: bool = None):
             metadata["active_skills"] = list(ui_state.get("active_skills", []))
             metadata["checkpoints"] = copy.deepcopy(ui_state.get("checkpoints", []))
             metadata["token_stats"] = TOKENS.get_stats()
+            # V4.10.10 in-place: persist session_cost so it survives /save + /load.
+            # Previously the running cost would reset to $0.00 on reload — making
+            # multi-session cost tracking impossible. Note: `session_cost` lives on
+            # the global TOKENS (TokenTracker) singleton, NOT on the Agent — Codex
+            # caught this in review. The token_stats dict already returned by
+            # TOKENS.get_stats() includes session_cost_usd, so this is a backstop
+            # that surfaces it explicitly for older clients.
+            metadata["session_cost"] = float(getattr(TOKENS, "session_cost", 0.0) or 0.0)
             ui_state["session"].metadata = metadata
             # Save todos with session (store as metadata)
             ui_state["session"].todos = copy.deepcopy(ui_state["todos"]) if ui_state["todos"] else []
@@ -11646,6 +11690,14 @@ def create_chat_ui(mock_mode: bool = None):
             ui_state["agent"].user_msg_count = int(session.metadata.get("user_msg_count", 0) or 0)
             ui_state["agent"].exec_calls = int(session.metadata.get("exec_calls", 0) or 0)
             ui_state["agent"].exec_seconds = float(session.metadata.get("exec_seconds", 0.0) or 0.0)
+            # V4.10.10 in-place: restore session_cost on the global TOKENS singleton
+            # (Codex review caught the original mistake of writing to ui_state["agent"]).
+            # The budget check at line 3635 and banner at line 3702 both read TOKENS.session_cost.
+            # token_stats already restored via TOKENS.from_stats() if present, but a stale
+            # session JSON without session_cost_usd would otherwise leave it at 0.0.
+            _saved_cost = float(session.metadata.get("session_cost", 0.0) or 0.0)
+            if _saved_cost > 0:
+                TOKENS.session_cost = _saved_cost
             loaded_skills = session.metadata.get("active_skills", [])
             if isinstance(loaded_skills, list):
                 ui_state["active_skills"] = [str(s) for s in loaded_skills if isinstance(s, str)]

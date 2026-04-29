@@ -17,6 +17,16 @@ Codex reviews on this change:
 
 134 destructive-coverage tests + 122 v4 unit tests still green.
 
+**Round 2 (actual-use feedback)** — based on a real session log showing the agent confused after hitting the 40-call exec limit:
+
+- `max_exec_calls_per_session`: 40 → 200 (5× headroom for normal workflow).
+- **Error message rewritten** when the limit hits: now lists which tools ARE limited (`bash`, `python_exec`) vs which STILL WORK (`read_file`, `grep`, `glob`, `edit_file`, `write_file`, `notebook_edit`, etc.). Closes the gap where the LLM read the old terse error as "all execution blocked".
+- `max_iteration_budget`: 90 → 600 default; **new UI slider in cell 2** (range 90-2000, step 50). Cell 3 banner shows `Iter ceiling: <value>`.
+- CSO-CHECK skill warnings lowered to DEBUG (was producing 8-10 noisy lines on startup).
+- `session_cost` now correctly persisted across `/save` + `/load` (Codex caught my first attempt wrote to the wrong object — re-fixed to `TOKENS.session_cost`).
+
+Full root-cause analysis + before/after of each fix in [`docs/PS_actual_use_problems.md`](../../docs/PS_actual_use_problems.md).
+
 ## What's new in v4.10.9 (2026-04-29, backtick eval+downloader parity)
 
 Tiny patch closing one Codex-flagged gap that was fixed in the local hook during the v4.10.8 cross-surface push but missed in v4 itself: the bare backtick form of `eval` + remote-fetcher/decoder. The new pattern is **defense-in-depth only** — `eval` is already excluded from v4's bash allowlist, so all `eval` forms fail at allowlist before regex runs. The new pattern provides clear attack-specific messaging and parity with the local hook. **Zero new false-positive risk** since legitimate `eval` usage was never reachable in v4 anyway. 134 destructive-coverage tests pass (up from 129); 122 v4 unit tests still green.
