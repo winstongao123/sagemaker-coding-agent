@@ -44,6 +44,99 @@ Runnable uses dir-per-tool (`tools/BashTool/{prompt.ts, executor.tsx, UI.tsx}`) 
 
 ---
 
+## ADR-003 — v5 must address ALL 7 issues from `PS_actual_use_problems.md`
+- Date: 2026-04-30
+- Phase ID: 00
+- Status: ACCEPTED
+- Source: User instruction 2026-04-30 + `compact_v4/docs/PS_actual_use_problems.md` (copied to `compact_v5/docs/PS_actual_use_problems.md`)
+
+### Question 1 — Replacement or addition?
+- This is a **scope binding**, not a feature. v4.10.10 in-place fixes addressed issues 1, 2, 5, 6, 7 partially. v5 must address ALL 7 structurally.
+
+### Question 2 — Architectural justification
+v4's failure was that issues were patched individually but the ARCHITECTURE didn't change. v5's structural opportunity (sectioned prompt, deferred loading, Hermes skill filter) lets each issue get a structural fix instead of a patch. Specifically:
+- Issue 1 (CSO warnings) → audit-level discipline (Phase 10 tests)
+- Issue 2 (iter budget) → UI slider + status bar (Phases 1, 8, 11)
+- Issue 3 (cold cache) → reuse v4 + status indicator (Phase 8)
+- Issue 4 (thinking) → docs + status indicator (Phase 1, 6)
+- Issue 5 (session cost persist) → SessionManager.save/load round-trip (Phase 1)
+- Issue 6 (wiring bug pattern) → Codex AXIS-A gate enforcement (every phase)
+- Issue 7 (buried matrix) → sectioned prompt + cognitive-load audit (Phase 6, 7)
+
+### Question 3 — Cost
+- Token cost: 0 (this is process discipline, not prompt content).
+- Code complexity: small additions to V5_PS_ISSUES_MAPPING.md + per-phase tests.
+- Maintenance: each phase that addresses an issue must include a test asserting the issue's failure mode no longer occurs.
+
+### Question 4 — Cost worth it?
+**Yes**. The user explicitly required this. Skipping it means v5 fails on launch the same way v4 did.
+
+### Decision
+- **ACCEPTED for v5.0** — binding constraint on every phase that maps to a PS issue.
+
+### Rationale
+The detailed mapping lives in `compact_v5/docs/V5_PS_ISSUES_MAPPING.md`. Each entry specifies: root cause, v4.10.10 in-place fix (if any), v5 target phase, v5 acceptance criterion, and "better than v4" delta. Aggregate audit checks that mapped issues are addressed before allowing the next phase.
+
+### Runnable-fidelity impact
+**N/A** — this is process discipline, not a Runnable port.
+
+### Affected files
+- compact_v5/docs/V5_PS_ISSUES_MAPPING.md (new this phase)
+- compact_v5/docs/PS_actual_use_problems.md (copied from v4 for reference)
+- Per-phase test files (each phase's tests must include the mapped regression)
+
+### Linked port-log rows
+None — this is process discipline, not a Runnable port.
+
+---
+
+## ADR-004 — Reference HTMLs copied to `compact_v5/docs/htmls/`
+- Date: 2026-04-30
+- Phase ID: 00
+- Status: ACCEPTED
+- Source: User instruction 2026-04-30 + existing v4 HTMLs in `compact_v4/MAIN/agent/` and `PS_ClaudeCode_Insights/`
+
+### Question 1 — Replacement or addition?
+- ADDITION (reference HTMLs to support v5 build context). Not a code feature.
+
+### Question 2 — Architectural justification (ADDITIONS only)
+The user explicitly asked for these as design references during v5 build. They serve as:
+- Architectural diagrams users can compare side-by-side (v4 vs Runnable vs LangGraph)
+- Visual reference for the deep-dive port discipline (Phase 6, 7, 8 will benefit)
+- Future v5 architecture HTMLs (to be generated in Phase 13) will sit alongside, enabling v5-vs-v4-vs-Runnable comparison.
+
+### Question 3 — Cost
+- Token cost: 0 (HTMLs are not loaded by the agent runtime).
+- Repo size: +500 KB (6 HTMLs).
+- Code complexity: 0.
+
+### Question 4 — Cost worth it?
+Yes — small repo cost, valuable design reference for building v5.
+
+### Decision
+- **ACCEPTED for v5.0**
+
+### Files added (Phase 00)
+- compact_v5/docs/htmls/PS_DEEP_DIVE_RUNNABLE.html (Runnable architecture deep-dive)
+- compact_v5/docs/htmls/PS_FLOWCHART_RUNNABLE.html (Runnable flowchart)
+- compact_v5/docs/htmls/PS_FLOWCHART_V4.html (v4 flowchart, for comparison)
+- compact_v5/docs/htmls/PS_RUNNABLE_VS_LANGGRAPH.html (Runnable vs LangGraph comparison)
+- compact_v5/docs/htmls/HERMES_VS_CODING_AGENT_v4.html (Hermes vs v4 comparison)
+- compact_v5/docs/htmls/v4_architecture.html (v4 architecture HTML)
+
+### Future (Phase 13)
+- compact_v5/docs/htmls/v5_architecture.html (NEW — generated at Phase 13)
+- compact_v5/docs/htmls/PS_FLOWCHART_V5.html (NEW — generated at Phase 13)
+- compact_v5/docs/htmls/PS_V5_VS_RUNNABLE.html (NEW — comparison generated at Phase 13)
+
+### Runnable-fidelity impact
+**N/A** — these are reference docs, not adopted patterns.
+
+### Linked port-log rows
+None.
+
+---
+
 ## ADR-002 — File-per-section system prompt with `prompt/*.md`
 - Date: 2026-04-30
 - Phase ID: 00

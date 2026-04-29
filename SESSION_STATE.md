@@ -43,6 +43,18 @@ User enabled auto mode (continuous execution); each phase has natural pause poin
 ### Architectural-integration emphasis (added 2026-04-30 per user)
 User reinforced: when learning Runnable, must go DEEP into architecture and integration, not just local file functionality. Updated CODEX_REVIEW_TEMPLATE.md AXIS B to require integration-semantic verification (not just file-level mimicry) for every adopted pattern.
 
+### Phase 0 follow-ups (after first commit `5259adf`)
+- Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
+- Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.
+- 6 reference HTMLs copied to `compact_v5/docs/htmls/` (PS_DEEP_DIVE_RUNNABLE, PS_FLOWCHART_RUNNABLE, PS_FLOWCHART_V4, PS_RUNNABLE_VS_LANGGRAPH, HERMES_VS_CODING_AGENT_v4, v4_architecture).
+- `compact_v4/docs/PS_actual_use_problems.md` copied to `compact_v5/docs/PS_actual_use_problems.md`.
+- New file `compact_v5/docs/V5_PS_ISSUES_MAPPING.md` — every one of the 7 PS issues mapped to v5 phase + acceptance criterion + "better than v4" delta. Per ADR-003.
+- ADR-003 (v5 addresses all 7 PS issues) and ADR-004 (reference HTMLs) appended to V5_DESIGN_DECISIONS.md.
+- CODEX_REVIEW_TEMPLATE.md AXIS B strengthened with integration-semantic check (up-stream caller match, down-stream dependency match, state/cache contract, error contract) — local mimicry alone is no longer sufficient for FAITHFUL.
+
+### v5 review configuration (per user 2026-04-30)
+- Codex reviews use `gpt-5.5` with `model_reasoning_effort=high` (`-c model_reasoning_effort=high`). Reasoning depth matters more than turnaround time at phase boundaries.
+
 ## 2026-04-29 — V4.10.10 Release: `aws_bedrock_only` UI toggle
 
 ### Context
