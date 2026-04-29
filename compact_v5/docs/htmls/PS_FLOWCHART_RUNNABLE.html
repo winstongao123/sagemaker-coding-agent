@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Runnable - Complete Architecture Reference</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; max-width: 1400px; margin: 0 auto; padding: 20px; }
+ h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+ h2 { color: #79c0ff; margin-top: 40px; }
+ h3 { color: #d2a8ff; margin-top: 25px; }
+ .mermaid { background: #161b22; border-radius: 8px; padding: 20px; margin: 15px 0; display:flex; justify-content:center; }
+ .mermaid svg { margin: 0 auto !important; max-width: 100%; }
+ .desc { color: #8b949e; font-size: 14px; margin-bottom: 10px; }
+ .stats { display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0; }
+ .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; }
+ .stat-num { font-size: 24px; font-weight: bold; color: #58a6ff; }
+ .stat-label { font-size: 11px; color: #8b949e; }
+ /* Tabs */
+ .tabs { display: flex; gap: 0; margin: 30px 0 0 0; border-bottom: 2px solid #30363d; }
+ .tab { padding: 12px 24px; cursor: pointer; color: #8b949e; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+ .tab:hover { color: #c9d1d9; }
+ .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+ .tab-content { display: none; padding: 20px 0; }
+ .tab-content.active { display: block; }
+ /* Nav within tabs */
+ nav { background: #161b22; padding: 12px; border-radius: 8px; margin: 15px 0; display: flex; flex-wrap: wrap; gap: 8px; }
+ nav a { color: #58a6ff; text-decoration: none; font-size: 13px; padding: 4px 8px; border-radius: 4px; background: #0d1117; }
+ nav a:hover { background: #1f2937; text-decoration: underline; }
+ /* Tables */
+ table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+ th { background: #161b22; color: #58a6ff; text-align: left; padding: 10px 12px; border: 1px solid #30363d; }
+ td { padding: 8px 12px; border: 1px solid #30363d; vertical-align: top; }
+ tr:nth-child(even) { background: #161b22; }
+ code { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 2px 6px; font-family: monospace; font-size: 12px; color: #79c0ff; }
+ pre { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; color: #c9d1d9; margin: 10px 0; }
+ /* Badges */
+ .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+ .badge-yes { background: #238636; color: #3fb950; }
+ .badge-no { background: #da3633; color: #f85149; }
+ .badge-partial { background: #9e6a03; color: #f0883e; }
+ .badge-file { background: #1f2937; color: #79c0ff; font-family: monospace; font-size: 11px; }
+ /* Modal */
+ .modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; }
+ .modal-overlay.active { display:flex; align-items:center; justify-content:center; }
+ .modal { background:#161b22; border:1px solid #30363d; border-radius:12px; max-width:700px; width:90%; max-height:85vh; overflow-y:auto; padding:24px; position:relative; }
+ .modal h3 { color:#58a6ff; margin-bottom:12px; font-size:18px; }
+ .modal-body { color:#c9d1d9; font-size:14px; line-height:1.7; }
+ .modal-body ul { padding-left:20px; margin: 8px 0; }
+ .modal-body li { margin: 4px 0; }
+ .modal-close { position:absolute; top:12px; right:16px; background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer; }
+ .modal-close:hover { color:#c9d1d9; }
+ /* Info boxes */
+ .info-box { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; font-size: 13px; }
+ .info-box.warn { border-left-color: #f0883e; }
+ .info-box.good { border-left-color: #3fb950; }
+</style>
+</head>
+<body>
+<h1>Claude Code Runnable - Complete Architecture Reference</h1>
+<p style="color:#8b949e;">Source-verified analysis of the Claude Code CLI v2.1.87 TypeScript codebase (2,010 files across 69 modules).<br>
+Click any flowchart node for implementation details. For full deep-dive, see <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">PS_DEEP_DIVE_RUNNABLE.html</a> (10-chapter e-book with agentic design &amp; harness engineering focus).</p>
+
+<div class="stats">
+ <div class="stat"><div class="stat-num">2,010</div><div class="stat-label">TypeScript Files</div></div>
+ <div class="stat"><div class="stat-num">60+</div><div class="stat-label">Tools (8 categories)</div></div>
+ <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compaction Tiers</div></div>
+ <div class="stat"><div class="stat-num">4/3x</div><div class="stat-label">Token Padding</div></div>
+ <div class="stat"><div class="stat-num">50K/200K</div><div class="stat-label">Per-tool / Batch Cap</div></div>
+ <div class="stat"><div class="stat-num">7</div><div class="stat-label">Task Types</div></div>
+ <div class="stat"><div class="stat-num">10</div><div class="stat-label">Max Parallel Tools</div></div>
+ <div class="stat"><div class="stat-num">25</div><div class="stat-label">Hook Events</div></div>
+ <div class="stat"><div class="stat-num">90+</div><div class="stat-label">Slash Commands</div></div>
+ <div class="stat"><div class="stat-num">120+</div><div class="stat-label">Keybindings</div></div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+ <div class="tab active" onclick="switchTab('arch')">Architecture</div>
+ <div class="tab" onclick="switchTab('v4has')">V4 Has</div>
+ <div class="tab" onclick="switchTab('v4missing')">V4 Missing</div>
+ <div class="tab" onclick="switchTab('v4better')">V4 Does Better</div>
+ <div class="tab" onclick="switchTab('ecosystem')">Tools & Ecosystem</div>
+ <div class="tab" onclick="switchTab('glossary')">Glossary</div>
+ <div class="tab" onclick="switchTab('details')">Deep Details</div>
+</div>
+
+<!-- ========== TAB 1: Architecture ========== -->
+<div id="tab-arch" class="tab-content active">
+
+<nav>
+ <a href="#r-entry">Entry Point</a>
+ <a href="#r-mainloop">Main Loop</a>
+ <a href="#r-tools">Tool Dispatch</a>
+ <a href="#r-compact">Compaction (4-tier)</a>
+ <a href="#r-memory">Memory</a>
+ <a href="#r-permissions">Permissions</a>
+ <a href="#r-security">Security</a>
+ <a href="#r-prompt">System Prompt</a>
+ <a href="#r-subagent">Sub-Agents</a>
+</nav>
+
+<h2 id="r-entry">1. Entry Point Flow</h2>
+<p class="desc"><span class="badge badge-file">QueryEngine.ts</span> CLI entry to agent loop. No DAG - pure while(true) async generator.</p>
+<div class="mermaid">
+flowchart TD
+ A([User types message]) --> B[CLI captures input]
+ B --> C[QueryEngine.submitMessage]
+ C --> D[processUserInput\nvalidate, attach files]
+ D --> E[Enter query loop\nasync generator]
+ E --> F{Check state}
+ F --> G[stream_request_start\nPrepare API call]
+ G --> H[Back-pressure check\nContext management]
+ H --> I[Call Claude API\nStreaming response]
+ I --> J[Parse response\ntext / thinking / tool_use]
+ J --> K{tool_use blocks - }
+ K -->|Yes| L[Collect tool calls\nPartition safe/unsafe]
+ L --> M[Execute tools\nStreamingToolExecutor]
+ M --> N[needsFollowUp - \nCheck if more work]
+ N -->|Yes| F
+ N -->|No| O([Yield final response])
+ K -->|No text only| O
+ click C "nodeClick('query_engine')"
+ click E "nodeClick('query_loop')"
+ click H "nodeClick('back_pressure')"
+ click I "nodeClick('api_call')"
+ click L "nodeClick('partition')"
+ click M "nodeClick('streaming_executor')"
+</div>
+
+<h2 id="r-mainloop">2. Main Loop - 7-Step Cycle</h2>
+<p class="desc"><span class="badge badge-file">query.ts</span> The core async generator. Each iteration = one LLM turn. Not a DAG, not a graph - a while loop.</p>
+<div class="mermaid">
+flowchart TD
+ S([Turn Start]) --> S1["Step 1: Check State\nstop requested - budget exceeded - "]
+ S1 --> S2["Step 2: stream_request_start\nBuild system prompt\nAttach tools + cache headers"]
+ S2 --> S3["Step 3: Context Back-Pressure\nSnip -> Micro -> Collapse -> AutoCompact\n(4-tier cascade)"]
+ S3 --> S4["Step 4: Call Claude API\nStreaming via Anthropic SDK\nPrompt cache: byte-level matching"]
+ S4 --> S5["Step 5: Parse Response\nyield text blocks\nyield thinking blocks\ncollect tool_use blocks"]
+ S5 --> S6["Step 6: Execute Tools\npartitionToolCalls()\nSafe=parallel, Unsafe=serial\nStreamingToolExecutor"]
+ S6 --> S7["Step 7: needsFollowUp - \nMore tool calls - Stop signal - \nTurn budget check"]
+ S7 -->|Continue| S1
+ S7 -->|Done| E([Yield final + exit])
+ click S3 "nodeClick('four_tier')"
+ click S4 "nodeClick('cache_byte')"
+ click S6 "nodeClick('tool_dispatch_detail')"
+</div>
+
+<h2 id="r-tools">3. Tool Dispatch - Parallel Partitioning</h2>
+<p class="desc"><span class="badge badge-file">services/tools/toolOrchestration.ts:91</span> Safe tools run concurrently (up to 10). Unsafe run serially. Streaming starts tools BEFORE full response is received.</p>
+<div class="mermaid">
+flowchart TD
+ A([LLM returns tool_use blocks]) --> B[partitionToolCalls]
+ B --> C{Each tool:\nisConcurrencySafe - }
+ C -->|"Safe (read_file, grep, glob)"| D[Merge into\nconcurrent batch]
+ C -->|"Unsafe (bash, write, edit)"| E[Own serial batch]
+ D --> F["Batch 1: [read,grep,glob]\nRun ALL in parallel\nmax 10 concurrent"]
+ E --> G["Batch 2: [write_file]\nRun alone, serially"]
+ F --> H[StreamingToolExecutor\naddTool as blocks stream in]
+ G --> H
+ H --> I{Tool errors - }
+ I -->|Error in one| J[siblingAbortController.abort\nKill ALL sibling tools]
+ I -->|All OK| K[Buffer results\nin original order]
+ K --> L[Return to LLM]
+ click B "nodeClick('partition_detail')"
+ click H "nodeClick('streaming_exec_detail')"
+ click J "nodeClick('abort_controller')"
+</div>
+
+<h2 id="r-compact">4. Compaction - 4-Tier System</h2>
+<p class="desc">Cheapest first: Cached MC (free) -> Time-Based MC (no LLM) -> Snip (no LLM) -> Full AutoCompact (LLM call). Each tier only fires if cheaper tiers insufficient.</p>
+<div class="mermaid">
+flowchart TD
+ A([Context growing]) --> B{Tier 1:\nCached Microcompact}
+ B -->|"cache_edits API\nDelete tool results from\nserver cache - zero cost\nMessage content UNCHANGED"| C{Sufficient - }
+ C -->|Yes| D([Continue])
+ C -->|No| E{Tier 2:\nTime-Based MC}
+ E -->|"Gap > threshold - \nServer cache is cold\nContent-clear old results\nReset cached MC state"| F{Sufficient - }
+ F -->|Yes| D
+ F -->|No| G{Tier 3:\nSnip Compaction}
+ G -->|"HISTORY_SNIP feature flag\nRemove oldest turn boundary\nNo LLM call needed\nsnipProjection.ts"| H{Sufficient - }
+ H -->|Yes| D
+ H -->|No| I{Tier 4:\nFull AutoCompact}
+ I -->|"Fork agent with compact prompt\nSummarize + truncate\nPost-compact cleanup:\nclear caches, restore files\nPTL retry if needed"| D
+ click B "nodeClick('cached_mc')"
+ click E "nodeClick('time_mc')"
+ click G "nodeClick('snip')"
+ click I "nodeClick('full_compact')"
+</div>
+
+<h2 id="r-memory">5. Memory System - Per-File Storage</h2>
+<p class="desc"><span class="badge badge-file">memdir/memoryTypes.ts</span> Individual .md files with YAML frontmatter. MEMORY.md is an index (&lt;200 lines), not content.</p>
+<div class="mermaid">
+flowchart TD
+ A([Session Start]) --> B[Load MEMORY.md index\npointers to memory files]
+ B --> C[Load each .md file\nParse YAML frontmatter:\nname, description, type]
+ C --> D[4 types:\nUSER / FEEDBACK\nPROJECT / REFERENCE]
+ D --> E[Inject into system prompt\nper-section with labels]
+ E --> F([Session Active])
+ F --> G{Session end - \nClear / New Session}
+ G -->|Yes + enough turns| H[Fork sub-agent\nfor extraction\nFull conversation context]
+ H --> I[WHAT_NOT_TO_SAVE filter\nNo code patterns\nNo git history\nNo ephemeral paths\nNo CLAUDE.md content\nNo fix recipes]
+ I --> J[Staleness annotation\nverify still exists\nMemory drift caveat]
+ J --> K[Write individual .md files\nYAML frontmatter\nUpdate MEMORY.md index]
+ click D "nodeClick('memory_types')"
+ click H "nodeClick('memory_fork')"
+ click I "nodeClick('what_not_save')"
+ click J "nodeClick('memory_drift')"
+</div>
+
+<h2 id="r-permissions">6. Permission System - 4 Sources</h2>
+<p class="desc"><span class="badge badge-file">hooks/toolPermission/PermissionContext.ts</span> Race between hook, classifier, and user input. First to claim wins.</p>
+<div class="mermaid">
+flowchart TD
+ A([Tool call requested]) --> B[Create PermissionRequest]
+ B --> C[Push to permission queue]
+ C --> D[Start 3 resolvers\nin parallel]
+ D --> E1[Hook execution\nCustom rules in .claude/hooks]
+ D --> E2[Bash classifier\nML-based danger prediction]
+ D --> E3[User dialog\nApprove / Deny / Always]
+ E1 --> F{claim atomically\ncreateResolveOnce}
+ E2 --> F
+ E3 --> F
+ F -->|First wins| G{Decision}
+ G -->|Allow| H[Execute tool]
+ G -->|Always Allow| I[persistPermissions\nSave to disk + memory]
+ G -->|Deny| J[Skip tool\nReturn denied error]
+ I --> H
+ click C "nodeClick('perm_queue')"
+ click F "nodeClick('resolve_once')"
+ click I "nodeClick('persist_perm')"
+</div>
+
+<h2 id="r-security">7. Security Architecture</h2>
+<p class="desc">Read-only tools auto-approved. Bash goes through classifier + speculative pre-check. Trust boundary enforced in system prompt.</p>
+<div class="mermaid">
+flowchart TD
+ A([Tool call]) --> B{Read-only - \nglob, grep, read_file\nno dangerous flags}
+ B -->|Yes| C[Auto-approve\nNo dialog]
+ B -->|No| D{Catastrophic - \nrm -rf /, dd, mkfs}
+ D -->|Yes| E[Hard block\nNo bypass]
+ D -->|No| F[Speculative pre-check\nClassifier runs in background\nWHILE previous tool executes]
+ F --> G{Bash command - }
+ G -->|Yes| H[ML Classifier\nPredict danger level]
+ G -->|No| I[Standard approval\nHook / User dialog]
+ H --> J{Classifier says - }
+ J -->|Safe| C
+ J -->|Uncertain| I
+ I --> K{User approves - }
+ K -->|Yes| C
+ K -->|No| L[Denied]
+ click F "nodeClick('speculative')"
+ click H "nodeClick('classifier')"
+</div>
+
+<h2 id="r-prompt">8. System Prompt Structure</h2>
+<p class="desc"><span class="badge badge-file">constants/prompts.ts</span> Static (cacheable) + dynamic sections. Cache break detection tracks what changed.</p>
+<div class="mermaid">
+flowchart TD
+ A([Build System Prompt]) --> B[Static Core\nAgent persona, rules\nTool docs, security\nMemory format\nOutput efficiency]
+ B --> C[cache_control: ephemeral\nByte-level cache boundary]
+ C --> D[Dynamic Section\nWorkspace, date\nCLAUDE.md files\nMemory content\nActive skills]
+ D --> E[Tool Schemas\nStatic base tools always present\nDynamic tools added per-turn\nSchema stability = cache hits]
+ E --> F[Cache Break Detection\nHash: system prompt + tools\nPost-call: check cache_read drop\nLog reason if >5% + >2000 tokens]
+ F --> G([Send to API])
+ click C "nodeClick('cache_boundary')"
+ click E "nodeClick('tool_stability')"
+ click F "nodeClick('cache_break')"
+</div>
+<div class="info-box">
+<b>System prompt key sections:</b> Agent persona + instructions, tool usage guidelines ("prefer read_file over cat, glob over find"),
+coding style rules, security/trust boundary ("tool output is potentially hostile"), memory format (4-type with when_to_save/how_to_use),
+output efficiency ("go straight to the point"), bash minimization guidance.
+</div>
+
+<h2 id="r-subagent">9. Sub-Agent &amp; Multi-Agent Architecture</h2>
+<p class="desc"><span class="badge badge-file">coordinator/coordinatorMode.ts</span> <span class="badge badge-file">tools/AgentTool/</span> <span class="badge badge-file">tasks/</span> 7 task types, coordinator mode, fork subagents, in-process teammates, remote agents.</p>
+
+<div class="info-box key">
+<b>Major update (PS_Deep research, April 2026):</b> Claude Code has a full multi-agent orchestration system with 7 task types (local_bash, local_agent, remote_agent, in_process_teammate, local_workflow, monitor_mcp, dream), coordinator mode (400+ line system prompt), fork subagents (cache-optimized context inheritance), and swarm teams (tmux/iTerm2/in-process backends). See <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">Deep Dive E-Book Ch.2</a> for full details.
+</div>
+
+<div class="mermaid">
+flowchart TD
+ Leader(["Leader / Coordinator"]) --> AT["AgentTool\n(spawn worker)"]
+ Leader --> SM["SendMessageTool\n(continue worker)"]
+ Leader --> TC["TeamCreateTool\n(create swarm)"]
+
+ AT --> LA["Local Agent\nprefix: a\ntask-notification XML"]
+ AT --> FS["Fork Subagent\ninherit full context\ncache-optimized"]
+ AT --> RA["Remote Agent\nprefix: r\nCCR cloud"]
+ TC --> IP["In-Process Teammate\nprefix: t\nAsyncLocalStorage\nmailbox 500ms poll"]
+
+ LA -->|"completed/failed/killed"| Leader
+ FS -->|"task-notification"| Leader
+ RA -->|"poll session events"| Leader
+ IP -->|"idle callback"| Leader
+</div>
+
+<div class="info-box">
+<b>Coordinator Mode (400+ line prompt):</b> Research (parallel) &rarr; Synthesis (coordinator itself) &rarr; Implementation (serial) &rarr; Verification (fresh agent). Critical rule: "Workers can't see your conversation &mdash; every prompt must be self-contained." Anti-pattern: "Based on your findings, fix it" delegates understanding.
+</div>
+
+<div class="info-box">
+<b>Fork Subagent:</b> Inherits full parent conversation + system prompt + tool pool (all byte-exact for prompt cache). Uses identical FORK_PLACEHOLDER_RESULT for all tool_use blocks = near 100% cache hit. 10 non-negotiable rules injected. No recursive forking (FORK_BOILERPLATE_TAG detection).
+</div>
+
+<div class="info-box">
+<b>In-Process Teammates:</b> AsyncLocalStorage isolation (separate MCP, permissions, mailbox per teammate). Leader approves risky actions via ToolUseConfirm dialog with worker badge. Memory capped at 50 messages per teammate (20MB RSS per agent @ 500 turns).
+</div>
+
+<h3>Sub-Agent Isolation (Original Detail)</h3>
+<div class="mermaid">
+flowchart TD
+ A([Parent agent]) --> B{Sub-agent needed}
+ B -->|Yes| C[Create sub-agent\nRecursive query call\nSame system prompt prefix]
+ C --> D[createCacheSafeParams\nReuse parent cached prefix\nAvoid 4K cache_creation cost]
+ D --> E{Isolation}
+ E -->|Worktree| F[git worktree add\nIsolated repo copy\nNo interference with parent\nAuto-cleanup on finish]
+ E -->|In-process| G[Shared workspace\nIsolated state:\ncontext collapse\nmemory cache\nclassifier approvals]
+ E -->|AsyncLocalStorage| H[Same process\nIsolated context per teammate\nMailbox communication]
+ F --> I[Execute with\nturn budget + tool restrictions]
+ G --> I
+ H --> I
+ I --> J[Return result\nto parent]
+ click D "nodeClick('cache_safe')"
+ click F "nodeClick('worktree')"
+</div>
+
+</div><!-- end tab-arch -->
+
+<!-- ========== TAB 2: What V4 Has ========== -->
+<div id="tab-v4has" class="tab-content">
+
+<h2>Runnable Features That V4 Has Implemented</h2>
+<p class="desc">Everything below exists in V4 v4.6.0 - matching or exceeding the runnable. V4.6.0 adds review system parity (simplify, security-review, adversarial verify, feedback refinement).</p>
+
+<table>
+<tr><th>Feature</th><th>Runnable</th><th>V4 Implementation</th><th>Version</th></tr>
+<tr>
+ <td><b>Prompt Cache Boundary</b></td>
+ <td>Static/dynamic split with <code>cache_control: ephemeral</code></td>
+ <td>Same - split at <code># === DYNAMIC ===</code>, Bedrock <code>anthropic_beta</code> header, graceful fallback</td>
+ <td><span class="badge badge-yes">V4.1 #14</span></td>
+</tr>
+<tr>
+ <td><b>Catastrophic Pattern Block</b></td>
+ <td>Patterns in BashTool constant</td>
+ <td>13 precompiled regex, LAYER -1 hard block, cannot be bypassed by config/user/allowlist</td>
+ <td><span class="badge badge-yes">V4.1 #12</span></td>
+</tr>
+<tr>
+ <td><b>Read-Only Auto-Approve</b></td>
+ <td>Classifier + permission system</td>
+ <td><code>_classify_bash_ro()</code> - frozenset of RO commands, pipeline detection, sed/git edge cases</td>
+ <td><span class="badge badge-yes">V4.1 #11</span></td>
+</tr>
+<tr>
+ <td><b>4-Type Memory</b></td>
+ <td>USER / FEEDBACK / PROJECT / REFERENCE with YAML frontmatter per file</td>
+ <td>Same 4 types via <code>## SECTION</code> headings in single file + extraction with type format</td>
+ <td><span class="badge badge-yes">V4.1 #7</span></td>
+</tr>
+<tr>
+ <td><b>Memory Auto-Extraction</b></td>
+ <td>Fork sub-agent with full conversation context</td>
+ <td>Single LLM call at session end, per-type facts, timestamped blocks</td>
+ <td><span class="badge badge-yes">V4.1 #8</span></td>
+</tr>
+<tr>
+ <td><b>WHAT NOT TO SAVE Filter</b></td>
+ <td><code>WHAT_NOT_TO_SAVE_SECTION</code> in extraction prompt</td>
+ <td>Same exclusion list: no code patterns, no git history, no ephemeral paths, staleness annotation</td>
+ <td><span class="badge badge-yes">V4.2 V2-C</span></td>
+</tr>
+<tr>
+ <td><b>Partial View Guard</b></td>
+ <td>No direct equivalent - runnable trusts LLM to re-read</td>
+ <td>Tracks partial reads, warns on edit. <b>V4 exclusive feature.</b></td>
+ <td><span class="badge badge-yes">V4.1 #10</span></td>
+</tr>
+<tr>
+ <td><b>CLAUDE.md Auto-Load</b></td>
+ <td>Walks workspace -> parents -> home</td>
+ <td>Same - walks dirs, dedup via realpath, 8K per-file cap</td>
+ <td><span class="badge badge-yes">V4.0</span></td>
+</tr>
+<tr>
+ <td><b>Tool Result Disk Offload</b></td>
+ <td><code>DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000</code> -> disk</td>
+ <td><code>_offload_large_result()</code> -> <code>.tool_cache/</code>, preview (2000+500 chars), fail-open</td>
+ <td><span class="badge badge-yes">V4.2 V2-A</span></td>
+</tr>
+<tr>
+ <td><b>Batch Aggregate Cap</b></td>
+ <td><code>MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200,000</code></td>
+ <td>200K cap, largest-first trim, protected tools never trimmed</td>
+ <td><span class="badge badge-yes">V4.2 V2-G</span></td>
+</tr>
+<tr>
+ <td><b>4/3x Token Padding</b></td>
+ <td><code>Math.ceil(totalTokens * (4/3))</code></td>
+ <td><code>chars // 3</code> across all estimators</td>
+ <td><span class="badge badge-yes">V4.2 V2-F</span></td>
+</tr>
+<tr>
+ <td><b>Time-Based Microcompact</b></td>
+ <td>Gap > threshold -> clear cold-cache results</td>
+ <td><code>COLD_CACHE_THRESHOLD_SECONDS = 30*60</code>, proactive microcompact before LLM call</td>
+ <td><span class="badge badge-yes">V4.2 V2-E</span></td>
+</tr>
+<tr>
+ <td><b>Clear Approvals on Compact</b></td>
+ <td><code>clearClassifierApprovals()</code> in post-compact cleanup</td>
+ <td><code>always_allow.clear()</code> on all 4 compact paths + <code>on_compact_fn</code> callback</td>
+ <td><span class="badge badge-yes">V4.2 V2-D</span></td>
+</tr>
+<tr>
+ <td><b>Microcompact (context threshold)</b></td>
+ <td>Content-clear old tool results</td>
+ <td>At 70% context, clear oldest results, keep last 3 per type, protected tools</td>
+ <td><span class="badge badge-yes">V4.0</span></td>
+</tr>
+<tr>
+ <td><b>Full AutoCompact</b></td>
+ <td>LLM summarize + truncate + post-compact file restore</td>
+ <td>LLM summary (9-section format) + prune + circuit breaker + file restore (3 files, 32K)</td>
+ <td><span class="badge badge-yes">V4.0</span></td>
+</tr>
+<tr>
+ <td><b>Post-Compact File Restoration</b></td>
+ <td>Restore recently-read files after compact</td>
+ <td>Last 3 files, 12K/file, 32K total, SECURITY.validate_path()</td>
+ <td><span class="badge badge-yes">V4.0</span></td>
+</tr>
+<tr>
+ <td><b>Pre-Edit Staleness Check</b></td>
+ <td>No direct equivalent</td>
+ <td>Tracks file mtime, aborts edit_file if externally modified. <b>V4 exclusive.</b></td>
+ <td><span class="badge badge-yes">V4.0</span></td>
+</tr>
+<tr>
+ <td><b>Post-Edit Git Diff</b></td>
+ <td>No direct equivalent</td>
+ <td>After edit_file, appends <code>git diff HEAD</code> to tool result. <b>V4 exclusive.</b></td>
+ <td><span class="badge badge-yes">V4.0</span></td>
+</tr>
+</table>
+
+</div><!-- end tab-v4has -->
+
+<!-- ========== TAB 3: What V4 is Missing ========== -->
+<div id="tab-v4missing" class="tab-content">
+
+<h2>Runnable Features NOT in V4</h2>
+<p class="desc">Gaps ordered by priority. Some are inherent to the SageMaker environment (marked N/A).</p>
+
+<table>
+<tr><th>Feature</th><th>Runnable Implementation</th><th>Why Missing / Priority</th></tr>
+<tr>
+ <td><b>Hook System (24 events)</b></td>
+ <td><code>PreToolUse</code>, <code>PostToolUse</code>, <code>PreCompact</code>, <code>PostCompact</code> + 20 more. External shell commands intercept tool calls. Can override permissions (allow/deny). Any language.</td>
+ <td><span class="badge badge-no">HIGH</span> V4 has no event-driven hook system. All security/interception is hardcoded Python. Adding hooks would enable cost tracking, approval workflows, audit plugins, and linter-on-edit without code changes.</td>
+</tr>
+<tr>
+ <td><b>Teams / Multi-Agent Coordination</b></td>
+ <td><code>TeamCreate</code> / <code>TeamDelete</code> + <code>SendMessage</code>. True parallelism via tmux panes. File-based mailbox at <code>~/.claude/teams/</code>. Lead + members architecture.</td>
+ <td><span class="badge badge-partial">N/A</span> SageMaker is single-user notebook. tmux panes don't apply. V4 has parallel sub-agents via ThreadPoolExecutor which is sufficient.</td>
+</tr>
+<tr>
+ <td><b>Parallel Safe Tool Execution</b></td>
+ <td><code>partitionToolCalls()</code> groups consecutive read-only tools. Up to 10 run in parallel. <code>StreamingToolExecutor.addTool()</code> starts execution AS blocks stream in.</td>
+ <td><span class="badge badge-yes">V4.2.1</span> Closed. V4 now batches consecutive read-only tools and runs them concurrently via <code>ThreadPoolExecutor</code>. Remaining gap is only true streaming execution while the model is still emitting tool blocks.</td>
+</tr>
+<tr>
+ <td><b>Cached Microcompact (cache_edits)</b></td>
+ <td>Sends <code>cache_edits</code> API block to delete tool results from server cache WITHOUT modifying local messages. Zero cache invalidation.</td>
+ <td><span class="badge badge-no">HIGH</span> Requires Anthropic <code>cache_edits</code> API support via Bedrock. Not available on Bedrock yet. Would save significant cost at high context.</td>
+</tr>
+<tr>
+ <td><b>Snip Compaction</b></td>
+ <td><code>snipProjection.ts</code> + <code>HISTORY_SNIP</code> feature flag. Remove oldest conversation boundary without LLM call.</td>
+ <td><span class="badge badge-partial">MEDIUM</span> V4 goes straight from micro to full compact. Snip would be a middle-ground option. Feature-flagged even in runnable.</td>
+</tr>
+<tr>
+ <td><b>FILE_UNCHANGED_STUB</b></td>
+ <td>If file not changed since last read, return short stub instead of full content. Saves context.</td>
+ <td><span class="badge badge-yes">V4.2.1</span> Closed. V4 now returns an unchanged-file stub before the generic in-context hint, so repeated unchanged reads stay cheap.</td>
+</tr>
+<tr>
+ <td><b>PTL (Prompt-Too-Long) Recovery</b></td>
+ <td><code>truncateHeadForPTLRetry()</code> - if compact itself hits prompt-too-long, iteratively drops oldest rounds. Up to 3 retries.</td>
+ <td><span class="badge badge-yes">V4.2.1</span> Closed at practical parity. V4 now trims the oldest summary context and retries compaction up to 3 times when Bedrock returns prompt-too-long.</td>
+</tr>
+<tr>
+ <td><b>Streaming Tool Execution</b></td>
+ <td><code>StreamingToolExecutor</code> starts tool execution AS tool_use blocks stream in (before full response received).</td>
+ <td><span class="badge badge-partial">LOW</span> SageMaker/Bedrock latency characteristics differ. V4 waits for full response then dispatches. Streaming within Jupyter is complex.</td>
+</tr>
+<tr>
+ <td><b>ML Bash Classifier</b></td>
+ <td>ML model predicts bash command danger level. Speculative pre-check runs during previous tool execution.</td>
+ <td><span class="badge badge-partial">LOW</span> V4 uses regex denylist + RO classifier. Adequate for SageMaker single-user. ML classifier too complex to ship.</td>
+</tr>
+<tr>
+ <td><b>Cache Break Detection</b></td>
+ <td>Hashes system prompt + tool schemas. Post-call: detects if <code>cache_read_input_tokens</code> dropped >5%. Logs reason.</td>
+ <td><span class="badge badge-partial">LOW</span> Useful for cost monitoring but not functional. V4 doesn't expose cache analytics.</td>
+</tr>
+<tr>
+ <td><b>Immutable Message Design</b></td>
+ <td>Messages never mutated after creation. Enables byte-level prompt cache matching across turns.</td>
+ <td><span class="badge badge-partial">MEDIUM</span> V4 mutates messages (content-clear in microcompact). Causes cache misses on cleared sections. Could redesign but complex.</td>
+</tr>
+<tr>
+ <td><b>7 Message Types</b></td>
+ <td>AssistantMessage, UserMessage, SystemMessage, ProgressMessage, AttachmentMessage, ToolUseSummaryMessage, TombstoneMessage</td>
+ <td><span class="badge badge-partial">LOW</span> V4 uses plain dicts. Adequate for Bedrock Converse API. TombstoneMessage (graceful degradation) is interesting but not critical.</td>
+</tr>
+<tr>
+ <td><b>Worktree Isolation</b></td>
+ <td>Sub-agents run in git worktree - isolated repo copy, no interference, auto-cleanup.</td>
+ <td><span class="badge badge-partial">LOW</span> V4 sub-agents share workspace. Not critical for SageMaker single-user.</td>
+</tr>
+<tr>
+ <td><b>Per-File Memory Storage</b></td>
+ <td>Individual .md files per memory item. MEMORY.md is just an index.</td>
+ <td><span class="badge badge-partial">LOW</span> V4 uses single flat file. Fine for SageMaker where memory stays small.</td>
+</tr>
+<tr>
+ <td><b>Memory Extraction as Fork</b></td>
+ <td>Extraction runs as a forked sub-agent with full conversation context + parallel read strategy.</td>
+ <td><span class="badge badge-partial">LOW</span> V4 does single LLM call. Simpler, adequate for session sizes.</td>
+</tr>
+<tr>
+ <td><b>Feature Flags</b></td>
+ <td>PRIMETIME, CONSULTANT_MODE, TOOL_SNAPSHOT, HIDDEN, TEAMWORK - runtime feature toggles.</td>
+ <td><span class="badge badge-partial">N/A</span> V4 uses config file. Feature flags are for multi-user SaaS deployment.</td>
+</tr>
+<tr>
+ <td><b>Auto-Dream (Cross-Session Consolidation)</b></td>
+ <td>After 24h+5 sessions, auto-consolidates memories across sessions.</td>
+ <td><span class="badge badge-partial">N/A</span> SageMaker sessions are independent. Cross-session consolidation requires persistent state.</td>
+</tr>
+<tr>
+ <td><b>Retry Logic (529 + PTL)</b></td>
+ <td>10 retries, 500ms base delay, 3 max 529 retries. Unattended mode: infinite retries with 5min backoff.</td>
+ <td><span class="badge badge-partial">MEDIUM</span> V4 has basic retry but not as sophisticated. Could add exponential backoff.</td>
+</tr>
+<tr>
+ <td><b>Model Hierarchy (Haiku/Capybara/Opus)</b></td>
+ <td>Different models for different tasks: Haiku for classification, Capybara for inner calls, Opus for main.</td>
+ <td><span class="badge badge-partial">MEDIUM</span> V4 supports model override per agent type via CONFIG.agent_overrides. Not fully utilized yet.</td>
+</tr>
+<tr>
+ <td><b>Sub-Agent State Isolation</b></td>
+ <td>Module-level state (context collapse, memory cache) reset per sub-agent scope.</td>
+ <td><span class="badge badge-partial">MEDIUM</span> V4 sub-agents share <code>_FILE_READ_TIMES</code>, <code>_FILES_READ</code> globals. Could corrupt on concurrent sub-agents.</td>
+</tr>
+</table>
+
+</div><!-- end tab-v4missing -->
+
+<!-- ========== TAB 4: What V4 Does Better ========== -->
+<div id="tab-v4better" class="tab-content">
+
+<h2>Features Where V4 Exceeds the Runnable</h2>
+<p class="desc">V4 isn't just a copy - it has features the runnable doesn't have, specifically optimized for SageMaker/Bedrock.</p>
+
+<table>
+<tr><th>Feature</th><th>V4</th><th>Runnable</th></tr>
+<tr>
+ <td><b>CATASTROPHIC_PATTERNS LAYER -1</b></td>
+ <td>Precompiled hard-block patterns. Cannot be disabled by ANY config, user approval, or allowlist modification. Fail-closed: bad regex fails at import.</td>
+ <td>YOLO classifier is configurable and can be overridden.</td>
+</tr>
+<tr>
+ <td><b>Doom Loop Detection</b></td>
+ <td>Hash-based 3-repeat threshold with <code>deque(30)</code> history. Per-tool target extraction (filepath@offset, pattern, MD5). Catches infinite tool loops before context exhaustion.</td>
+ <td>No equivalent. Relies on turn budget to catch loops indirectly.</td>
+</tr>
+<tr>
+ <td><b>Audit Trail with Integrity</b></td>
+ <td>Local JSONL with SHA-256 hashes. Enterprise-appropriate for regulated environments.</td>
+ <td>Telemetry-based. Sends data to Anthropic servers.</td>
+</tr>
+<tr>
+ <td><b>Tool Auto-Repair (5 layers)</b></td>
+ <td>Case-insensitive lookup, fuzzy prefix match, argument auto-fix (path -> file_path, text -> content), type coercion. Reduces wasted turns.</td>
+ <td>Basic error messages. No auto-repair.</td>
+</tr>
+<tr>
+ <td><b>Session Budget Enforcement</b></td>
+ <td><code>session_cost_limit</code> with 80%/100% thresholds. Warns then stops. Tracks across all calls in session.</td>
+ <td><code>maxBudgetUsd</code> per-turn only. No persistent session guard.</td>
+</tr>
+<tr>
+ <td><b>Docker Execution Sandbox</b></td>
+ <td>Optional rootfs/network isolation for bash and python_exec.</td>
+ <td>Executes in-process. Relies on permission system only.</td>
+</tr>
+<tr>
+ <td><b>Bedrock-Specific Robustness</b></td>
+ <td>Role alternation enforcement, cache fallback on unsupported models, AU regional pricing (10% premium), 600s read timeout.</td>
+ <td>Targets Anthropic API directly. No Bedrock-specific handling.</td>
+</tr>
+<tr>
+ <td><b>Pre-Edit Staleness Check</b></td>
+ <td>Tracks file mtime. Aborts edit_file if externally modified since last read (0.5s tolerance).</td>
+ <td>No equivalent. Trusts LLM to re-read if needed.</td>
+</tr>
+<tr>
+ <td><b>Post-Edit Git Diff</b></td>
+ <td>After every edit_file, appends <code>git diff HEAD</code> (3000 char cap, 5s timeout) to tool result.</td>
+ <td>No equivalent. User must manually check diffs.</td>
+</tr>
+<tr>
+ <td><b>Lazy Doc Tool Loading</b></td>
+ <td>Scans last 4 messages for document keywords. Excludes 6 doc tools if not needed (~1-2K token savings per call).</td>
+ <td>All tools sent every call. No lazy loading.</td>
+</tr>
+<tr>
+ <td><b>Python AST Security (3-layer)</b></td>
+ <td>Regex + AST import validation + AST call validation catches aliased dangerous calls.</td>
+ <td>No python_exec equivalent. Bash-only execution.</td>
+</tr>
+<tr>
+ <td><b>Compact Circuit Breaker</b></td>
+ <td>After 3 consecutive compact failures, auto-compact paused. Manual button still works. Pre-send also tracked.</td>
+ <td>No circuit breaker. Failed compacts retry indefinitely.</td>
+</tr>
+<tr>
+ <td><b>Review System Parity (V4.6.0)</b></td>
+ <td>9 skills including: simplify (3-agent parallel review+fix), security-review (3-phase with false-positive filtering), adversarial verify (anti-rationalization), code-review (parallel+feedback). All ported from Runnable's prompt engineering patterns.</td>
+ <td>Has same patterns in TypeScript (simplify.ts, verificationAgent.ts, security-review.ts). V4 now matches via skills/sub-agent system.</td>
+</tr>
+<tr>
+ <td><b>Workspace Path Resolution (V4.6.1)</b></td>
+ <td>Workspace info injected into cached system prompt. glob falls through to allowed_paths. Informative errors (workspace root + allowed roots + glob recovery template). Startup announcement [Workspace: /path]. Unit test: 11/11 PASS.</td>
+ <td>Runnable has implicit workspace awareness via CLI cwd and persistent terminal context. V4 had to make it explicit because notebook kernels don't have a stable cwd, and the sandbox check was silently filtering valid paths.</td>
+</tr>
+</table>
+
+<h2>Engineering Patterns Ported from Runnable to V4</h2>
+<p class="desc">This section lists the 15 prompt-engineering and coordination patterns V4 learned from Runnable, with pointers to both codebases. If you're building your own agent, these are the load-bearing ideas.</p>
+
+<table>
+<tr><th>#</th><th>Pattern</th><th>What it is</th><th>Runnable source</th><th>V4 source</th></tr>
+
+<tr>
+ <td>1</td>
+ <td><b>Parallel 3-agent review</b></td>
+ <td>/simplify spawns 3 specialized agents concurrently — Code Reuse (find duplicate utilities), Code Quality (anti-patterns), Efficiency (N+1, hot-path, memory leaks). Each does one thing well. Coordinator merges findings and fixes.</td>
+ <td><code>src/skills/simplify/</code></td>
+ <td><code>skills/simplify/SKILL.md</code> — 3 parallel task() agents with distinct prompts</td>
+</tr>
+
+<tr>
+ <td>2</td>
+ <td><b>Anti-rationalization prompting</b></td>
+ <td>Names 4 specific excuses LLMs use to skip verification — "the code looks right", "this is a simple change", "I already tested a similar thing", "the existing tests cover it" — and counters each with an explicit instruction. Prevents satisficing.</td>
+ <td><code>src/verificationAgent.ts</code> + verify prompts</td>
+ <td><code>skills/verify/SKILL.md</code> prompt_suffix in <code>AGENT_TYPES["verify"]</code></td>
+</tr>
+
+<tr>
+ <td>3</td>
+ <td><b>Evidence-based verification</b></td>
+ <td>Every PASS claim must include the exact Command that was run and the exact Output observed. No "looks good" without evidence. Makes it impossible to fake a green verification.</td>
+ <td><code>src/verificationAgent.ts</code></td>
+ <td><code>skills/verify/SKILL.md</code> Evidence Format section + critical_reminder field</td>
+</tr>
+
+<tr>
+ <td>4</td>
+ <td><b>Type-specific verification strategies</b></td>
+ <td>Different verification approaches for different change types: Backend (curl endpoints), CLI (run with inputs), Bug fix (reproduce bug first, then confirm gone), Python (pytest + lint), Data pipelines (run on sample data, check output schema), DB migrations (dry-run, rollback test).</td>
+ <td><code>src/verificationAgent.ts</code></td>
+ <td>verify agent prompt_suffix (lines 6857-6900 in sagemaker_agent.py) — 7 type-specific strategies</td>
+</tr>
+
+<tr>
+ <td>5</td>
+ <td><b>False-positive filtering</b></td>
+ <td>Security review uses a 3-phase workflow: (1) scan for candidates, (2) assess each with confidence scoring (≥0.8 threshold), (3) spawn parallel verify agents to try to DISPROVE each finding. Only survivors reach the user. 14 hard exclusions + precedent library prevent common false alarms.</td>
+ <td><code>src/skills/security-review/</code></td>
+ <td><code>skills/security-review/SKILL.md</code> — 3 phases + multi-agent Step 4</td>
+</tr>
+
+<tr>
+ <td>6</td>
+ <td><b>Machine-parseable VERDICT</b></td>
+ <td>Verify agents end with a specific token: <code>VERDICT: PASS</code>, <code>VERDICT: FAIL</code>, or <code>VERDICT: PARTIAL</code>. The coordinator can parse this programmatically to decide next action (ship, fix, or report limitations). No ambiguity, no interpretation.</td>
+ <td><code>src/verificationAgent.ts</code></td>
+ <td><code>AGENT_TYPES["verify"]["critical_reminder"]</code> enforces VERDICT line</td>
+</tr>
+
+<tr>
+ <td>7</td>
+ <td><b>Adversarial verification</b></td>
+ <td>Verify agent's job is to BREAK the code, not confirm it works. Given a fresh context and the list of changes, it runs builds/tests/linters AND tries adversarial probes: concurrency edge cases, boundary values (0, empty, max), idempotency, malformed input. "Can I find a way to make this fail?"</td>
+ <td><code>src/verificationAgent.ts</code> adversarial probes</td>
+ <td>verify skill's Adversarial Probes section + prompt_suffix</td>
+</tr>
+
+<tr>
+ <td>8</td>
+ <td><b>Feedback refinement loop</b></td>
+ <td>After reviewer produces findings, user can respond with feedback ("no that's wrong", "focus on X", "we already decided Y"). Reviewer refines its analysis rather than restarting. Preserves context across iteration.</td>
+ <td><code>src/skills/code-review/</code></td>
+ <td><code>skills/review/SKILL.md</code> Feedback Refinement section</td>
+</tr>
+
+<tr>
+ <td>9</td>
+ <td><b>Skill discovery auto-surfacing</b></td>
+ <td>Skills declare <code>triggers:</code> in YAML frontmatter — short phrases that, when matched against the user message, cause the system prompt to suggest relevant skills. No manual <code>/skill use</code> needed. Prevents users forgetting tools exist.</td>
+ <td><code>src/skills/</code> proactive discovery</td>
+ <td><code>SkillManager.discover_relevant()</code> + injection in <code>Agent.run()</code></td>
+</tr>
+
+<tr>
+ <td>10</td>
+ <td><b>Fork semantics</b></td>
+ <td>Sub-agents normally start with blank context (independence). Fork is the opposite: child inherits a deep copy of parent's full message history. Used when sub-agent needs everything the parent knows ("continue this investigation from where we are").</td>
+ <td><code>src/Task.ts</code> fork mode</td>
+ <td><code>Agent.__init__(initial_messages=...)</code> + <code>fork</code> agent type</td>
+</tr>
+
+<tr>
+ <td>11</td>
+ <td><b>Verification contract</b></td>
+ <td>System-level mandate: "When 3+ file edits change logic/API/data flow, independent adversarial verification MUST happen before reporting completion." Not "should" — MUST. Exclusions listed (docs, config, single-file fixes) to prevent over-triggering.</td>
+ <td>Runnable core system prompt</td>
+ <td><code># Verification Contract</code> section in <code>SYSTEM_PROMPT</code></td>
+</tr>
+
+<tr>
+ <td>12</td>
+ <td><b>Critical reminder pattern</b></td>
+ <td>Important instructions at the START of a prompt fade from attention as the agent generates its response. Critical reminders are appended LAST in the sub-agent's system prompt — closest to the attention window at generation time. Used for "no exceptions" rules.</td>
+ <td>Runnable sub-agent prompt assembly</td>
+ <td><code>critical_reminder</code> field in <code>AGENT_TYPES</code> + injection in <code>_run_task_tool()</code></td>
+</tr>
+
+<tr>
+ <td>13</td>
+ <td><b>USE WHEN guidance</b></td>
+ <td>Each agent type description in the task tool schema ends with <code>USE WHEN: [specific criteria]</code>. Prevents wrong-type selection and over-spawning. Example: "verify USE WHEN you've finished 3+ edits and need independent confirmation."</td>
+ <td><code>src/tools/TaskTool.ts</code> agent type descriptions</td>
+ <td><code>AGENT_TYPES[name]["description"]</code> with USE WHEN lines</td>
+</tr>
+
+<tr>
+ <td>14</td>
+ <td><b>Auto-nudge in todo_write</b></td>
+ <td>When 3+ tasks are marked completed without a verify sub-agent having been spawned, the todo_write tool response appends a reminder: "You've completed 3+ tasks — verification contract applies." Keeps the contract alive even when the system prompt has drifted out of attention.</td>
+ <td>Runnable TodoWrite tool + hooks</td>
+ <td><code>tool_todo_write()</code> completion-count auto-nudge</td>
+</tr>
+
+<tr>
+ <td>15</td>
+ <td><b>Coordinator-worker orchestration</b></td>
+ <td>For 5-30 file tasks: top-level agent becomes COORDINATOR (plan, decompose, synthesize, verify), sub-agents become WORKERS (implement one unit each). Strict role separation — coordinator never writes code, workers never plan. 6-phase workflow with user approval gate.</td>
+ <td><code>src/coordinator/</code> directory</td>
+ <td><code>skills/batch/SKILL.md</code> — 6-phase workflow with role rules</td>
+</tr>
+
+</table>
+
+<p style="margin-top:14px;font-size:13px;color:var(--muted);"><b>What's NOT ported (by design):</b> Runnable's ink TUI, vim mode, keybindings, voice input, SSH/remote sessions, SDK for external apps, plugin system. These are delivery-surface features, not agentic patterns. V4 is notebook-only and deliberately doesn't duplicate Runnable's CLI/TUI surface. If you need a CLI, use Runnable directly — V4 isn't trying to replace it.</p>
+
+<p style="margin-top:10px;font-size:13px;color:var(--muted);"><b>What's NOT ported (worth considering later):</b> Runnable has a <code>buddy</code> system (ambient second-opinion agent that watches the main agent and can interrupt), a <code>proactive</code> mode (agent that surfaces relevant info without being asked), and a <code>remote</code> review session (ultrareview/CCR cloud infrastructure). These are agentic features — V4 could add them if needed. They weren't prioritized because the notebook use case doesn't demand them yet.</p>
+
+</div><!-- end tab-v4better -->
+
+<!-- ========== TAB 5: Tools & Ecosystem ========== -->
+<div id="tab-ecosystem" class="tab-content">
+
+<div class="info-box">
+<b>What are tools?</b> Tools are functions Claude can call — read files, run commands, search code, fetch web pages. Claude decides which tools to use based on your request. There are 58 built-in tools organized into 8 logical categories. Some are "safe" (read-only, can run in parallel) and some are "unsafe" (write operations, must run one at a time to avoid conflicts).
+</div>
+
+<h2>Complete Tool Inventory (58 Tools)</h2>
+<p class="desc"><span class="badge badge-file">src/tools.ts:getAllBaseTools()</span> 56 directories in <code>src/tools/</code>. Many are feature-gated. No explicit category field in code - logical grouping below based on function.</p>
+
+<div class="info-box">
+<b>Safe vs Unsafe:</b> <span class="badge badge-yes">Safe</span> tools are read-only — they can run up to 10 in parallel because they don't change anything. <span class="badge badge-no">Unsafe</span> tools write or modify — they must run one at a time to prevent conflicts. This parallel/serial split is a key performance optimization.
+</div>
+
+<h3>File Operations (6 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>Read</b></td><td><code>ReadFileTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Read file with offset/limit. Images rendered visually. PDFs with page ranges. Notebooks with outputs.</td></tr>
+<tr><td><b>Write</b></td><td><code>WriteFileTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Overwrite/create file. Must Read first for existing files. Prefers Edit for modifications.</td></tr>
+<tr><td><b>Edit</b></td><td><code>FileEditTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Exact string replacement. Fails if old_string not unique. <code>replace_all</code> for bulk rename.</td></tr>
+<tr><td><b>Glob</b></td><td><code>GlobTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Fast file pattern matching. Returns paths sorted by mtime. Replaces <code>find</code>/<code>ls</code>.</td></tr>
+<tr><td><b>Grep</b></td><td><code>GrepTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Ripgrep-based search. Regex, glob filter, multiline. 3 output modes. Replaces <code>grep</code>/<code>rg</code> in bash.</td></tr>
+<tr><td><b>NotebookEdit</b></td><td><code>NotebookEditTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Edit Jupyter notebook cells by index. Insert, replace, or delete cells.</td></tr>
+</table>
+
+<h3>Execution (3 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>Bash</b></td><td><code>BashTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Execute shell command. Timeout up to 600s. Background mode. Sandbox-aware. ML classifier for danger.</td></tr>
+<tr><td><b>PowerShell</b></td><td><code>PowerShellTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Windows PowerShell execution. Same safety model as Bash.</td></tr>
+<tr><td><b>REPL</b></td><td><code>REPLTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Interactive REPL session for language-specific evaluation.</td></tr>
+</table>
+
+<h3>Search & Fetch (3 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>WebFetch</b></td><td><code>WebFetchTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Fetch URL, convert HTML to markdown, process with small model. 15-min cache.</td></tr>
+<tr><td><b>WebSearch</b></td><td><code>WebSearchTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Web search with domain filtering. Returns markdown hyperlinks.</td></tr>
+<tr><td><b>LSP</b></td><td><code>LSPTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Language Server Protocol queries (go-to-definition, references, diagnostics).</td></tr>
+</table>
+
+<h3>Agents & Tasks (10 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>Agent</b></td><td><code>AgentTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Spawn sub-agent. 7 built-in types (explore, verify, plan, review, general, build, code-reviewer). Worktree isolation option.</td></tr>
+<tr><td><b>SendMessage</b></td><td><code>SendMessageTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Send message to running agent by name/ID. Continues agent with full context preserved.</td></tr>
+<tr><td><b>TaskCreate</b></td><td><code>TaskCreateTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Create background task (bash, agent, remote, workflow, monitor, dream). Typed prefix IDs.</td></tr>
+<tr><td><b>TaskGet</b></td><td><code>TaskGetTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Get task status and output by ID.</td></tr>
+<tr><td><b>TaskList</b></td><td><code>TaskListTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>List all tasks with status filtering.</td></tr>
+<tr><td><b>TaskUpdate</b></td><td><code>TaskUpdateTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Update running task parameters.</td></tr>
+<tr><td><b>TaskOutput</b></td><td><code>TaskOutputTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Read task output stream.</td></tr>
+<tr><td><b>TaskStop</b></td><td><code>TaskStopTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Stop running task.</td></tr>
+<tr><td><b>TeamCreate</b></td><td><code>TeamCreateTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Create multi-agent team with tmux panes. Lead + members with shared mailbox.</td></tr>
+<tr><td><b>TeamDelete</b></td><td><code>TeamDeleteTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Tear down team and cleanup panes.</td></tr>
+</table>
+
+<h3>Planning (4 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>EnterPlanMode</b></td><td><code>EnterPlanModeTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Switch to read-only plan mode. Only safe tools allowed until exit.</td></tr>
+<tr><td><b>ExitPlanMode</b></td><td><code>ExitPlanModeV2Tool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Exit plan mode and resume normal execution.</td></tr>
+<tr><td><b>TodoWrite</b></td><td><code>TodoWriteTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Create/update task checklist for progress tracking.</td></tr>
+<tr><td><b>VerifyPlanExecution</b></td><td><code>VerifyPlanExecution.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Verify plan steps were executed correctly.</td></tr>
+</table>
+
+<h3>MCP - Model Context Protocol (4 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>MCPTool</b></td><td><code>MCPTool.ts</code></td><td>Varies</td><td>Generic MCP server tool interface. Auto-discovered from project config.</td></tr>
+<tr><td><b>McpAuthTool</b></td><td><code>McpAuthTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Authenticate with MCP server (OAuth, API key).</td></tr>
+<tr><td><b>ListMcpResources</b></td><td><code>ListMcpResourcesTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>List available resources from connected MCP servers.</td></tr>
+<tr><td><b>ReadMcpResource</b></td><td><code>ReadMcpResourceTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Read specific resource content from MCP server.</td></tr>
+</table>
+
+<h3>System (8 tools)</h3>
+<table>
+<tr><th>Tool</th><th>File</th><th>Concurrency</th><th>What It Does</th></tr>
+<tr><td><b>AskUserQuestion</b></td><td><code>AskUserQuestionTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Ask user a question and wait for response. For genuine blockers only.</td></tr>
+<tr><td><b>Skill</b></td><td><code>SkillTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Execute a registered skill (slash command handler).</td></tr>
+<tr><td><b>ToolSearch</b></td><td><code>ToolSearchTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Search for deferred tools by keyword. Returns full schema for matched tools.</td></tr>
+<tr><td><b>RemoteTrigger</b></td><td><code>RemoteTriggerTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Trigger remote agent execution (cron-scheduled).</td></tr>
+<tr><td><b>CronCreate/Delete/List</b></td><td><code>Cron*Tool.ts</code></td><td>Mixed</td><td>Create, delete, list scheduled remote triggers.</td></tr>
+<tr><td><b>Sleep</b></td><td><code>SleepTool.ts</code></td><td><span class="badge badge-yes">Safe</span></td><td>Pause execution for specified duration.</td></tr>
+<tr><td><b>Snip</b></td><td><code>SnipTool.ts</code></td><td><span class="badge badge-no">Unsafe</span></td><td>Manual snip compaction trigger.</td></tr>
+</table>
+
+<h3>Experimental & Stubs (~15 tools)</h3>
+<table>
+<tr><th>Tool</th><th>Status</th><th>What It Does</th></tr>
+<tr><td><b>Workflow</b></td><td>Active</td><td>Execute predefined workflow sequences.</td></tr>
+<tr><td><b>TerminalCapture</b></td><td>Active</td><td>Capture terminal content for analysis.</td></tr>
+<tr><td><b>EnterWorktree / ExitWorktree</b></td><td>Active</td><td>Manual worktree isolation for sub-agents.</td></tr>
+<tr><td><b>SendUserFile</b></td><td>Active</td><td>Send file to user (download).</td></tr>
+<tr><td><b>StructuredOutput</b></td><td>Internal</td><td>Synthetic tool for structured response formatting.</td></tr>
+<tr><td><b>CtxInspect</b></td><td><span class="badge badge-partial">STUB</span></td><td>Context window inspection (not implemented).</td></tr>
+<tr><td><b>DiscoverSkills</b></td><td><span class="badge badge-partial">STUB</span></td><td>Auto-discover available skills.</td></tr>
+<tr><td><b>ListPeers</b></td><td><span class="badge badge-partial">STUB</span></td><td>List peer agents in team.</td></tr>
+<tr><td><b>Monitor</b></td><td><span class="badge badge-partial">STUB</span></td><td>Dashboard monitoring.</td></tr>
+<tr><td><b>PushNotification</b></td><td><span class="badge badge-partial">STUB</span></td><td>Push notification to user device.</td></tr>
+<tr><td><b>ReviewArtifact</b></td><td><span class="badge badge-partial">STUB</span></td><td>Review generated artifacts.</td></tr>
+<tr><td><b>SubscribePR / SuggestBackgroundPR</b></td><td><span class="badge badge-partial">STUB</span></td><td>GitHub PR automation.</td></tr>
+<tr><td><b>WebBrowser</b></td><td><span class="badge badge-partial">STUB</span></td><td>Browser automation.</td></tr>
+<tr><td><b>Tungsten</b></td><td><span class="badge badge-partial">STUB</span></td><td>Unknown experimental feature.</td></tr>
+<tr><td><b>OverflowTest</b></td><td><span class="badge badge-partial">STUB</span></td><td>Testing tool for context overflow behavior.</td></tr>
+</table>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What are hooks and why do they matter?</b> Hooks let you intercept tool calls with your own scripts — before a tool runs (PreToolUse) or after it finishes (PostToolUse). Use cases: automatically approve safe commands, block dangerous ones, log every action for audit, run a linter after every file edit, track costs. Hooks are external shell commands (Python, Bash, Node — any language) that communicate via JSON. They're the extensibility layer that makes Claude Code customizable without changing its source code.
+</div>
+
+<h2 id="r-hooks">Hook System - 24 Event-Driven Hooks</h2>
+<p class="desc"><span class="badge badge-file">types/hooks.ts + utils/hooks.ts</span> Event-driven interception system. Hooks are shell commands configured in <code>.claude/hooks</code>. Can override permission decisions.</p>
+<div class="mermaid">
+flowchart TD
+ A([Tool call requested]) --> B{PreToolUse hooks\nconfigured -}
+ B -->|Yes| C[Execute hook\nshell commands]
+ C --> D{Hook returns\npermission -}
+ D -->|allow| E[Skip user prompt\nAuto-approve]
+ D -->|deny| F[Block tool\nReturn denied]
+ D -->|ask| G[Fall through to\nnormal permission]
+ D -->|no decision| G
+ B -->|No| G
+ G --> H[Normal permission\nresolution]
+ H --> I[Tool executes]
+ I --> J{PostToolUse hooks\nconfigured -}
+ J -->|Yes| K[Execute post hooks\nCan modify output]
+ J -->|No| L([Return result])
+ K --> L
+</div>
+
+<div class="info-box">
+<b>All 24 Hook Events (from <code>HOOK_EVENTS</code>):</b><br><br>
+<b>Tool lifecycle:</b> PreToolUse, PostToolUse, PostToolUseFailure<br>
+<b>Compaction:</b> PreCompact, PostCompact (can preserve custom instructions across compaction)<br>
+<b>Session:</b> PreSessionStart, PostSessionEnd<br>
+<b>Message:</b> PreUserMessage, PostAssistantMessage<br>
+<b>Plus ~15 more:</b> PreBashExec, PostBashExec, PreFileEdit, PostFileEdit, PreAgentSpawn, PostAgentReturn, PreAPICall, PostAPIResponse, etc.<br><br>
+<b>Key design:</b> Hooks are EXTERNAL shell commands, not in-process callbacks. They run in a subprocess and communicate via JSON stdin/stdout. This means any language can implement a hook - Python, Node, Bash scripts, etc.<br><br>
+<b>Permission override:</b> PreToolUse hooks CAN approve tools (skip user dialog), but CANNOT override explicit deny rules. Deny rules always win.<br>
+<b>V4 gap:</b> V4 has no hook system. All security is hardcoded in Python.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What are Teams and why do they matter?</b> Teams are TRUE multi-agent parallelism — not sub-agents (which share one process), but separate Claude Code processes running in their own tmux terminal panes. A "team lead" coordinates work, "members" execute tasks independently, and they communicate through a file-based mailbox system. Think of it like a group of developers each with their own terminal, passing notes to each other. This is different from sub-agents which are more like one developer switching between tasks.
+</div>
+
+<h2 id="r-teams">Teams System - True Multi-Agent Parallelism</h2>
+<p class="desc"><span class="badge badge-file">utils/swarm/backends/TmuxBackend.ts + teammateMailbox.ts</span> Not sub-agents. Separate agent processes running in tmux panes with file-based messaging.</p>
+<div class="mermaid">
+flowchart TD
+ A([User or Agent]) --> B[TeamCreate tool\nname + description]
+ B --> C[Create tmux session]
+ C --> D[Spawn team-lead\nin first pane]
+ D --> E[Spawn members\nin separate panes]
+ E --> F[Each member gets\nown context window]
+ F --> G[File-based Mailbox\n~/.claude/teams/]
+ G --> H{Communication}
+ H --> I[SendMessage to agent]
+ H --> J[Members reply back]
+ I --> K[Agent reads inbox]
+ J --> K
+ K --> L[Work in parallel panes]
+ L --> M[TeamDelete cleanup]
+</div>
+
+<div class="info-box">
+<b>Key differences from sub-agents:</b><br>
+<ul>
+<li><b>Sub-agents</b> = recursive query() call, same process, shares parent's cached prompt prefix, returns result when done</li>
+<li><b>Team members</b> = separate OS processes in tmux panes, own context window, persistent, communicate via file-based mailbox</li>
+<li><b>Backend options:</b> TmuxBackend (Linux/Mac), iTerm2Backend (Mac), InProcessBackend (fallback)</li>
+<li><b>Layout manager:</b> Colored pane borders, visual distinction between agents</li>
+<li><b>Race condition prevention:</b> Pane creation lock prevents parallel spawn conflicts</li>
+</ul>
+<b>V4 gap:</b> V4 has parallel sub-agents via ThreadPoolExecutor but no team coordination. Not applicable to SageMaker notebooks.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What is MCP and why does it matter?</b> MCP (Model Context Protocol) is a standard way for external systems to provide tools to Claude at runtime. Instead of hardcoding every tool, MCP lets you plug in databases, APIs, deployment scripts, or any custom service. Claude discovers these tools automatically when a session starts. For example: a company could expose their internal ticketing system via MCP, and Claude would be able to create/read/update tickets without any custom code.
+</div>
+
+<h2 id="r-mcp">MCP Integration - Runtime Tool Extension</h2>
+<p class="desc"><span class="badge badge-file">services/mcp/client.js + tools/MCPTool/MCPTool.ts</span> MCP servers contribute additional tools at runtime. Auto-discovered from project config.</p>
+<div class="mermaid">
+flowchart TD
+ A([Session Start]) --> B[Load MCP config\nfrom settings]
+ B --> C{MCP servers\nconfigured -}
+ C -->|Yes| D[Initialize MCP clients\nWebSocket or stdio]
+ D --> E[Discover server tools\nvia MCP protocol]
+ E --> F[Register as MCPTool\nin tool registry]
+ F --> G[Available to LLM\nlike built-in tools]
+ C -->|No| G
+ G --> H([Agent Loop])
+ H --> I{LLM calls\nMCP tool -}
+ I -->|Yes| J[Route to MCP server\nvia transport]
+ J --> K[Server executes\nreturns result]
+ K --> H
+ I -->|No| H
+</div>
+
+<div class="info-box">
+<b>4 dedicated MCP tools:</b><br>
+<ul>
+<li><b>MCPTool</b> - Generic interface for any MCP server tool. Name becomes <code>mcp__servername__toolname</code></li>
+<li><b>McpAuthTool</b> - OAuth/API key authentication for MCP servers</li>
+<li><b>ListMcpResources</b> - List available resources (databases, files, APIs) from MCP servers</li>
+<li><b>ReadMcpResource</b> - Read specific resource content</li>
+</ul>
+<b>Transports:</b> stdio (local process), WebSocket (remote), VS Code SDK (IDE integration)<br>
+<b>Supporting infrastructure:</b> mcpValidation.ts, mcpOutputStorage.ts, mcpInstructionsDelta.ts<br>
+<b>V4 status:</b> V4 HAS MCP support via McpManager. Configured in agent_config.json.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What is the config hierarchy and why does it matter?</b> Claude Code loads settings from 6 sources, each overriding the previous. This lets you set global defaults (user settings), project-specific rules (project settings), personal overrides that aren't shared (local settings), and enterprise policies that can't be overridden (managed settings). Think of it like CSS specificity — more specific rules win.
+</div>
+
+<h2 id="r-config">Configuration Hierarchy - 5 Sources</h2>
+<p class="desc"><span class="badge badge-file">utils/settings/constants.ts + utils/settings/settings.ts</span> Later sources override earlier ones. Policy settings are highest priority and read-only.</p>
+<div class="mermaid">
+flowchart LR
+ A["1. Plugin Settings\n(lowest priority)"] --> B["2. User Settings\n~/.claude/settings.json"]
+ B --> C["3. Project Settings\n.claude/settings.json"]
+ C --> D["4. Local Settings\n.claude/settings.local.json\n(gitignored)"]
+ D --> E["5. CLI Flag Settings\n--settings flag"]
+ E --> F["6. Policy/Managed\nhighest priority\nRemote then HKLM then plist\nthen managed-settings.json"]
+</div>
+
+<div class="info-box">
+<b>SETTING_SOURCES constant:</b> <code>['userSettings', 'projectSettings', 'localSettings', 'flagSettings', 'policySettings']</code><br><br>
+<b>Key details:</b><br>
+<ul>
+<li>Policy settings are READ-ONLY and cannot be overridden by user/project/local</li>
+<li>Environment variables configure WHERE settings load from (e.g., <code>CLAUDE_CODE_HOME</code>), but are NOT a settings tier</li>
+<li>Merge strategy: later sources override earlier for same keys</li>
+<li>Each source can define: <code>permissions.allow</code>, <code>permissions.deny</code>, <code>permissions.ask</code> with glob patterns</li>
+</ul>
+<b>V4 equivalent:</b> 3 layers (code defaults -> agent_config.json -> runtime UI mutations). No policy tier.
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<div class="info-box">
+<b>What is proactive mode?</b> Normally Claude waits for you to type a message. In proactive mode, Claude runs autonomously in a loop — it keeps working without waiting for input. This is useful for background monitoring, continuous refactoring, or long-running tasks. It's feature-flagged (not available to everyone) and experimental.
+</div>
+
+<h2 id="r-proactive">Proactive/Autonomous Mode</h2>
+<p class="desc"><span class="badge badge-file">commands/proactive.ts</span> Feature-flagged (<code>feature('PROACTIVE')</code>). Autonomous tick-based loop without user input.</p>
+<div class="info-box">
+<b>How it works:</b><br>
+<ul>
+<li><code>--proactive</code> CLI flag activates autonomous mode</li>
+<li>System prompt switches to: <i>"You are running autonomously"</i></li>
+<li>Tick-based loop: agent keeps executing without waiting for user messages</li>
+<li>Terminal focus awareness: tracks whether user's terminal is focused or unfocused</li>
+<li>Still feature-gated - not available to all users</li>
+</ul>
+<b>V4 gap:</b> Not applicable. SageMaker notebooks are user-driven (cell execution model).
+</div>
+
+<hr style="border-color:#30363d; margin: 30px 0;">
+
+<h2 id="r-buddy">Buddy System - Virtual Pets</h2>
+<p class="desc"><span class="badge badge-file">buddy/CompanionSprite.tsx + buddy/types.ts</span> Terminal virtual pet with 16 species, animations, speech bubbles. The dragon "Perch" sits beside the input box.</p>
+<div class="info-box">
+<b>Species (16):</b> duck, cat, dragon, penguin, capybara, fox, owl, rabbit, turtle, bear, frog, octopus, unicorn, phoenix, robot, alien<br>
+<b>Features:</b> Idle animations, speech bubbles, hearts animation, rarity levels<br>
+<b>Command:</b> <code>/buddy</code> to manage pet<br>
+<b>Integration:</b> Perch responds when user addresses it by name. Main agent stays out of the way.<br>
+<b>V4 gap:</b> Not applicable for SageMaker.
+</div>
+
+</div><!-- end tab-ecosystem -->
+
+<!-- ========== TAB 6: Glossary ========== -->
+<div id="tab-glossary" class="tab-content">
+
+<h2>Glossary of Key Terms</h2>
+<p class="desc">Plain-English definitions for terms used throughout this reference. If you're new to Claude Code or LLM tooling, start here.</p>
+
+<div class="info-box">
+<b>Token</b> — Unit of text (~4 chars). Claude measures input/output in tokens. 200K token context = ~150K words.
+</div>
+
+<div class="info-box">
+<b>Context window</b> — The total "memory" Claude has per conversation. When full, old content must be pruned (compacted).
+</div>
+
+<div class="info-box">
+<b>Prompt caching</b> — Server stores the system prompt so you don't re-send it every turn. Cached tokens cost 90% less.
+</div>
+
+<div class="info-box">
+<b>Compaction</b> — Shrinking conversation history when context fills up. Like cleaning a desk — summarize old papers, keep recent ones.
+</div>
+
+<div class="info-box">
+<b>Microcompact</b> — Light compaction: clear old tool results without an LLM call. Cheap but limited.
+</div>
+
+<div class="info-box">
+<b>Tool</b> — A function Claude can call (read files, run commands, search code). Claude decides which tools to use.
+</div>
+
+<div class="info-box">
+<b>Safe tool</b> — Read-only tool (grep, glob, read). Can run in parallel because it doesn't change anything.
+</div>
+
+<div class="info-box">
+<b>Unsafe tool</b> — Write tool (bash, edit, write). Must run one at a time to avoid conflicts.
+</div>
+
+<div class="info-box">
+<b>Sub-agent</b> — A separate conversation Claude spawns to handle a specific task. Has its own context window. Returns a summary when done.
+</div>
+
+<div class="info-box">
+<b>Hook</b> — External shell command that intercepts tool calls. Runs before/after tools. Can approve, deny, or modify tool input. Any language.
+</div>
+
+<div class="info-box">
+<b>MCP (Model Context Protocol)</b> — Protocol that lets external systems (databases, APIs) provide tools to Claude at runtime.
+</div>
+
+<div class="info-box">
+<b>Teams</b> — Multiple Claude agents running in parallel tmux panes. Each has its own context. Communicate via file-based mailbox.
+</div>
+
+<div class="info-box">
+<b>Prompt cache boundary</b> — The split between static (cacheable) and dynamic (changes each turn) parts of the system prompt.
+</div>
+
+<div class="info-box">
+<b>cache_edits</b> — Anthropic API to delete tool results from server cache without modifying local messages. Zero cache invalidation.
+</div>
+
+<div class="info-box">
+<b>PTL (Prompt Too Long)</b> — Error when context exceeds model limit. Recovery: drop oldest rounds, retry.
+</div>
+
+<div class="info-box">
+<b>Worktree</b> — Git feature that creates an isolated copy of a repo. Sub-agents can work in a worktree without affecting the main workspace.
+</div>
+
+<div class="info-box">
+<b>Concurrency</b> — Running multiple operations at the same time. Claude Code runs up to 10 safe tools concurrently.
+</div>
+
+<div class="info-box">
+<b>Permission</b> — Approval required before running unsafe tools. Can come from: hooks, ML classifier, user dialog, or settings rules.
+</div>
+
+<div class="info-box">
+<b>Slash command</b> — User-invocable action prefixed with / (e.g., /commit, /review). Claude Code has 112 of these.
+</div>
+
+<div class="info-box">
+<b>Feature flag</b> — Toggle that enables/disables experimental features (e.g., PROACTIVE, HISTORY_SNIP). Not available to all users.
+</div>
+
+</div><!-- end tab-glossary -->
+
+<!-- ========== TAB 7: Deep Details ========== -->
+<div id="tab-details" class="tab-content">
+
+<h2>Deep Architecture Details</h2>
+
+<h3>Compaction Constants (Runnable)</h3>
+<div class="info-box">
+<code>POST_COMPACT_MAX_FILES_TO_RESTORE = 5</code><br>
+<code>POST_COMPACT_TOKEN_BUDGET = 50,000</code><br>
+<code>POST_COMPACT_MAX_TOKENS_PER_FILE = 5,000</code><br>
+<code>POST_COMPACT_MAX_TOKENS_PER_SKILL = 5,000</code><br>
+<code>POST_COMPACT_SKILLS_TOKEN_BUDGET = 25,000</code><br>
+<code>DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000</code> (per tool)<br>
+<code>MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200,000</code> (per batch)<br>
+<code>MAX_TOOL_RESULT_TOKENS = 100,000</code><br>
+Token estimation: <code>Math.ceil(totalTokens * (4/3))</code> - 33% safety pad
+</div>
+
+<h3>Post-Compact Cleanup (Runnable)</h3>
+<div class="info-box">
+<b>Clears:</b> microcompact state, context collapse store (main thread only), getUserContext memoize cache,
+CLAUDE.md/memory file cache, system prompt sections, classifier approvals, speculative checks,
+beta tracing state, session messages cache.<br><br>
+<b>Does NOT clear:</b> invoked skill names (skills survive compaction - avoids 4K token cache_creation on re-inject).
+</div>
+
+<h3>Retry Logic (Runnable)</h3>
+<div class="info-box">
+<code>DEFAULT_MAX_RETRIES = 10</code>, <code>BASE_DELAY_MS = 500</code><br>
+Only foreground sources retry on 529 (capacity). Background sources (titles, summaries) bail immediately.<br>
+<code>MAX_529_RETRIES = 3</code><br>
+Unattended mode: indefinite retries with up to 5min backoff + 30s heartbeat yields.
+</div>
+
+<h3>Task Types (Runnable)</h3>
+<div class="info-box">
+7 types: <code>local_bash</code>, <code>local_agent</code>, <code>remote_agent</code>, <code>in_process_teammate</code>,
+<code>local_workflow</code>, <code>monitor_mcp</code>, <code>dream</code>.<br>
+Each has a typed prefix for IDs (b/a/r/t/w/m/d). Task IDs = 36^8 random bytes.
+</div>
+
+<h3>Auto-Dream (Cross-Session Memory)</h3>
+<div class="info-box">
+Gate: (1) time > 24h since last consolidation, (2) >= 5 sessions with mtime > lastConsolidatedAt.<br>
+Runs <code>/dream</code> prompt as forked sub-agent with <code>createCacheSafeParams</code>.<br>
+Session scan interval: 10 minutes. Disk lock prevents concurrent consolidation.
+</div>
+
+<h3>Token Estimation Breakdown (Runnable)</h3>
+<div class="info-box">
+<code>estimateMessageTokens()</code> counts by block type:<br>
+- text -> <code>roughTokenCountEstimation(text)</code><br>
+- thinking -> <code>roughTokenCountEstimation(thinking)</code><br>
+- tool_result -> sum of content items<br>
+- image/document -> 2000 tokens flat<br>
+- tool_use -> name + JSON(input)<br>
+- Final: <code>Math.ceil(totalTokens * (4/3))</code>
+</div>
+
+<h3>V4 Compaction Constants</h3>
+<div class="info-box">
+<code>MICROCOMPACT_TRIGGER_PERCENT = 70</code><br>
+<code>SUMMARY_TRIGGER_PERCENT = 80</code><br>
+<code>MICROCOMPACT_MIN_SAVINGS = 5,000</code> tokens<br>
+<code>PRUNE_PROTECT_TOKENS = 40,000</code><br>
+<code>MAX_TOOL_RESULT_CHARS = 50,000</code> (V4.2 V2-A)<br>
+<code>BATCH_CAP = 200,000</code> (V4.2 V2-G)<br>
+<code>POST_COMPACT_MAX_CHARS_PER_FILE = 12,000</code><br>
+<code>POST_COMPACT_MAX_TOTAL_CHARS = 32,000</code><br>
+<code>COLD_CACHE_THRESHOLD_SECONDS = 1,800</code> (V4.2 V2-E)<br>
+Token estimation: <code>chars // 3</code> (V4.2 V2-F)
+</div>
+
+<h3>V4 Security Layers</h3>
+<div class="info-box">
+<b>LAYER -1:</b> 13 CATASTROPHIC_PATTERNS (precompiled regex, hard block)<br>
+<b>LAYER 0:</b> 70+ bash denylist patterns + 40+ python denylist + 3-layer AST validation<br>
+<b>LAYER 1:</b> Tool allowlist<br>
+<b>LAYER 2:</b> Argument validation + auto-fix (5 repair strategies)<br>
+<b>LAYER 3:</b> Path validation (workspace boundary, symlink resolution)<br>
+<b>LAYER 4:</b> Permission gate (<code>_classify_bash_ro</code> -> auto-approve or <code>on_approval</code> dialog)<br>
+<b>LAYER 5:</b> Execute + error recovery
+</div>
+
+<h3>Web Doc PDF Accuracy Assessment</h3>
+<table>
+<tr><th>PDF</th><th>Title</th><th>Accuracy</th><th>Best For</th></tr>
+<tr><td>1.pdf</td><td>13 Agent Design Insights (Chinese)</td><td><span class="badge badge-partial">85%</span></td><td>High-level design patterns</td></tr>
+<tr><td>2.pdf</td><td>Deep Dive - Why Claude Code is Strong (Chinese)</td><td><span class="badge badge-yes">90%</span></td><td>Detailed technical analysis</td></tr>
+<tr><td>3.pdf</td><td>Framework Design Analysis (Chinese)</td><td><span class="badge badge-partial">75%</span></td><td>Broad overview, mixed opinions</td></tr>
+</table>
+<div class="info-box warn">
+<b>PDF inaccuracies found:</b><br>
+- PDF 1: "Capybara" described as separate model tier - it is actually an internal routing label<br>
+- PDF 1: "Subscription-tiered parallelism" - not confirmed in source code<br>
+- PDF 3: "1900 files, 810K lines" - our copy has 1,438 files, ~75K lines (may be different version)<br>
+- PDF 3: "[Chinese editorial phrase]" (all routine) - editorial opinion, not architectural fact
+</div>
+
+</div><!-- end tab-details -->
+
+<!-- Modal overlay -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+ <div class="modal">
+ <button class="modal-close" onclick="closeModal()">x</button>
+ <h3 id="modal-title"></h3>
+ <div class="modal-body" id="modal-body"></div>
+ </div>
+</div>
+
+<script>
+const NODE_DETAILS = {
+ query_engine: {
+ title: "QueryEngine - Entry Point",
+ body: `<b>File:</b> <code>QueryEngine.ts</code><br><br>
+ The central orchestrator. Receives user messages, manages the query lifecycle.<br>
+ <code>submitMessage()</code> validates input, attaches files, then enters the async generator loop.<br><br>
+ Key design: NO DAG. The entire agent is a <b>while(true)</b> loop that yields results as an async generator.
+ This is simpler than LangGraph/CrewAI/etc. and more maintainable.`
+ },
+ query_loop: {
+ title: "Main Query Loop - Async Generator",
+ body: `<b>File:</b> <code>query.ts</code><br><br>
+ The loop is an <code>async generator { }</code> function. Each iteration = one LLM turn.<br><br>
+ 7 steps per iteration:<br>
+ <ol>
+ <li>Check state (stop signal, budget)</li>
+ <li>Build request (system prompt, tools, cache headers)</li>
+ <li>Context back-pressure (4-tier cascade)</li>
+ <li>Call Claude API (streaming)</li>
+ <li>Parse response (text, thinking, tool_use)</li>
+ <li>Execute tools (partition + parallel)</li>
+ <li>Check needsFollowUp (more work - )</li>
+ </ol>
+ PDF 2 accurately documents this as the core design.`
+ },
+ back_pressure: {
+ title: "Context Back-Pressure - 4-Tier Cascade",
+ body: `Before each API call, the system checks if context needs reduction.<br>
+ Tiers fire cheapest-first:<br><br>
+ <b>Tier 1 - Cached Microcompact:</b> Uses <code>cache_edits</code> API to delete tool results from server cache.
+ Messages stay unchanged. Zero cache invalidation cost. Feature-flagged.<br><br>
+ <b>Tier 2 - Time-Based MC:</b> If gap since last message > threshold, server cache is cold anyway.
+ Content-clear old results directly. Reset cached MC state.<br><br>
+ <b>Tier 3 - Snip:</b> Feature-flagged (<code>HISTORY_SNIP</code>). Remove oldest conversation boundary. No LLM call.<br><br>
+ <b>Tier 4 - Full AutoCompact:</b> Fork agent with compact prompt. Summarize + truncate.
+ Post-compact cleanup clears 10+ caches. PTL retry if needed.`
+ },
+ api_call: {
+ title: "Claude API Call - Streaming + Prompt Cache",
+ body: `Streaming response via Anthropic SDK. Key optimization: <b>byte-level prompt cache matching</b>.<br><br>
+ Messages are kept <b>immutable</b> after creation. Any mutation (even clearing a tool result)
+ would change the byte sequence and invalidate the cached prefix for ALL subsequent turns.<br><br>
+ This is why Cached Microcompact (Tier 1) uses <code>cache_edits</code> instead of modifying messages - 
+ it deletes from server cache without touching the local message array.`
+ },
+ cache_byte: {
+ title: "Byte-Level Prompt Cache Matching",
+ body: `Anthropic's prompt caching requires <b>exact byte-level matching</b> of the message prefix.<br><br>
+ If you modify ANY message below the cache boundary, ALL cached content above that point is invalidated.<br><br>
+ This means:<br>
+ <ul>
+ <li>System prompt must be byte-stable (static/dynamic split)</li>
+ <li>Tool schemas must be stable (don't add/remove tools mid-conversation)</li>
+ <li>Messages must never be mutated after creation</li>
+ <li>Microcompact uses <code>cache_edits</code> API, not message mutation</li>
+ </ul>
+ Each long conversation could have tens of thousands of cached input tokens. Cache misses cost money.`
+ },
+ partition: {
+ title: "partitionToolCalls() - Safe/Unsafe Split",
+ body: `<b>File:</b> <code>services/tools/toolOrchestration.ts:91</code><br><br>
+ Each tool declares <code>isConcurrencySafe()</code> based on its parsed input.<br><br>
+ <b>Safe (parallel):</b> read_file, grep, glob, list_dir - up to 10 concurrent<br>
+ <b>Unsafe (serial):</b> bash with write ops, write_file, edit_file - own batch<br><br>
+ Consecutive safe tools merge into one parallel batch:<br>
+ <pre>Batch 1: [read, grep, glob] -> parallel (3 at once)
+Batch 2: [write_file] -> serial (alone)
+Batch 3: [read, grep] -> parallel (2 at once)</pre>`
+ },
+ partition_detail: {
+ title: "Tool Partitioning - Detailed Logic",
+ body: `<code>partitionToolCalls(toolCalls)</code> reduces the tool list into batches:<br><br>
+ <ol>
+ <li>For each tool call, check <code>isConcurrencySafe(parsedInput)</code></li>
+ <li>If safe AND previous batch is safe: merge into same batch</li>
+ <li>If safe AND previous batch is unsafe: start new safe batch</li>
+ <li>If unsafe: always start new single-item batch</li>
+ </ol>
+ Max concurrency: <code>CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY</code> env var, default <b>10</b>.<br><br>
+ This is a key performance optimization. V4 runs all tools serially - adding this would cut
+ multi-read latency by ~40%.`
+ },
+ streaming_executor: {
+ title: "StreamingToolExecutor",
+ body: `<b>File:</b> <code>services/tools/StreamingToolExecutor.ts</code><br><br>
+ Starts tool execution <b>as each tool_use block streams in</b> - doesn't wait for full response.<br><br>
+ <code>addTool(toolBlock)</code>: If tool is concurrency-safe and no unsafe tool is running, starts immediately.
+ Results buffered in original order for correct message construction.<br><br>
+ This means: while the LLM is still generating its 3rd tool call, the 1st and 2nd might already be running.`
+ },
+ streaming_exec_detail: {
+ title: "StreamingToolExecutor - Abort & Buffering",
+ body: `Key mechanisms:<br><br>
+ <b>siblingAbortController:</b> Child of main AbortController. When one Bash tool errors,
+ <code>siblingAbortController.abort()</code> kills ALL sibling processes immediately.
+ No waiting for others to complete or timeout.<br><br>
+ <b>Result buffering:</b> Even though tools run in parallel, results are returned in the original
+ tool_use order. This ensures deterministic message construction.<br><br>
+ <b>Concurrency gate:</b> If a non-safe tool arrives while safe tools are running,
+ it waits for all safe tools to complete before starting.`
+ },
+ abort_controller: {
+ title: "AbortController - Tool Cancellation",
+ body: `Hierarchical abort structure:<br><br>
+ <ul>
+ <li><b>Main AbortController</b> - owned by the query loop. Abort = cancel everything.</li>
+ <li><b>siblingAbortController</b> - child of main. Abort = cancel sibling tools only (e.g., one bash fails -> kill others).</li>
+ <li><b>Per-tool AbortSignal</b> - passed to each tool execution. Tool checks signal periodically.</li>
+ </ul>
+ When user presses Ctrl+C or stop button, main controller aborts -> cascades to all children.`
+ },
+ cached_mc: {
+ title: "Tier 1: Cached Microcompact",
+ body: `<b>File:</b> <code>services/compact/microCompact.ts:305</code><br><br>
+ The cheapest compaction. Uses Anthropic's <code>cache_edits</code> API blocks.<br><br>
+ Instead of modifying local messages (which would break prompt cache), it sends a
+ <code>cache_reference</code> + <code>cache_edits</code> block telling the server to delete specific tool results
+ from its cache. The local message array stays byte-identical -> cache hit preserved.<br><br>
+ <b>Constraints:</b><br>
+ <ul>
+ <li>Only available for main thread (not sub-agents)</li>
+ <li>Gated by <code>feature('CACHED_MICROCOMPACT')</code></li>
+ <li>Requires model support check</li>
+ </ul>
+ <b>V4 gap:</b> Bedrock doesn't support <code>cache_edits</code> API. V4 content-clears directly (cache miss).`
+ },
+ time_mc: {
+ title: "Tier 2: Time-Based Microcompact",
+ body: `<b>File:</b> <code>services/compact/microCompact.ts:446</code><br><br>
+ Fires when gap since last assistant message exceeds threshold.<br>
+ Since server cache is cold anyway (cache has TTL), it is safe to content-clear old results directly.<br><br>
+ <code>TIME_BASED_MC_CLEARED_MESSAGE = '[Old tool result content cleared]'</code><br><br>
+ Resets cached MC state (because content changed and cache is invalid anyway).<br><br>
+ <b>V4 equivalent:</b> V4.2 V2-E - <code>COLD_CACHE_THRESHOLD_SECONDS = 30*60</code>. Same concept.`
+ },
+ snip: {
+ title: "Tier 3: Snip Compaction",
+ body: `Feature-flagged: <code>HISTORY_SNIP</code><br><br>
+ A "snip projection" that removes the oldest conversation boundary without an LLM call.
+ Lighter than full compact - just drops old turns.<br><br>
+ <code>snipCompact.ts</code> exports empty <code>{}</code> - actual logic in <code>snipProjection.ts</code>.<br><br>
+ <b>V4 gap:</b> V4 has no equivalent. Goes straight from microcompact (70%) to full compact (80%).
+ Snip would be a useful middle-ground at ~75%.`
+ },
+ full_compact: {
+ title: "Tier 4: Full AutoCompact",
+ body: `<b>File:</b> <code>services/compact/compact.ts</code><br><br>
+ Full LLM-powered summarization:<br>
+ <ul>
+ <li>Fork a sub-agent with the compact prompt</li>
+ <li>Strip images from messages before sending</li>
+ <li>PTL retry: <code>truncateHeadForPTLRetry()</code> - if prompt too long, drop oldest rounds iteratively</li>
+ <li>Post-compact: restore up to 5 recently-read files (50K token budget, 5K per file)</li>
+ <li>Post-compact: restore up to 25K tokens of skills</li>
+ <li><code>runPostCompactCleanup()</code>: clear 10+ caches</li>
+ </ul>
+ <b>V4 equivalent:</b> V4.0 full compact with circuit breaker. Similar but V4 restores 3 files (32K total)
+ vs runnable's 5 files (50K total). V4.2.1 now adds PTL-safe retry by shrinking the oldest summary context and retrying up to 3 times.`
+ },
+ memory_types: {
+ title: "4 Memory Types",
+ body: `<b>File:</b> <code>memdir/memoryTypes.ts</code><br><br>
+ Each type has structured guidance:<br><br>
+ <b>USER:</b> Role, goals, preferences. <i>when_to_save:</i> learn any user details. <i>how_to_use:</i> tailor behavior.<br>
+ <b>FEEDBACK:</b> Corrections AND confirmations. <i>body:</i> rule -> <b>Why:</b> -> <b>How to apply:</b><br>
+ <b>PROJECT:</b> Ongoing work, deadlines, decisions. Convert relative dates to absolute.<br>
+ <b>REFERENCE:</b> Pointers to external systems and their purpose.<br><br>
+ V4.1 #7 implements the same 4 types. V4 uses <code>## SECTION</code> headings in a single file
+ instead of per-file YAML frontmatter.`
+ },
+ memory_fork: {
+ title: "Memory Extraction as Fork",
+ body: `Runnable forks a full sub-agent for memory extraction:<br>
+ <ul>
+ <li>Same system prompt as parent</li>
+ <li>Same message prefix (full conversation context)</li>
+ <li>Restricted tool set (read-only bash + memory dir writes)</li>
+ <li>Strict turn budget</li>
+ <li>Parallel read strategy: Turn 1 = all reads parallel -> Turn 2 = all writes parallel</li>
+ </ul>
+ <b>V4:</b> Single LLM call. Simpler but less context-aware.`
+ },
+ what_not_save: {
+ title: "WHAT_NOT_TO_SAVE Section",
+ body: `<b>File:</b> <code>services/extractMemories/prompts.ts</code><br><br>
+ Explicitly blocks saving:<br>
+ <ul>
+ <li>Code patterns, conventions, architecture (derivable from code)</li>
+ <li>Git history, recent changes (use git log)</li>
+ <li>Debugging solutions, fix recipes (fix is in the code)</li>
+ <li>CLAUDE.md contents (already loaded separately)</li>
+ <li>Ephemeral task details, current conversation context</li>
+ <li>File paths / lists of files read during session (exception: canonical project locations)</li>
+ </ul>
+ <b>V4.2 V2-C:</b> Implements this same list with the canonical-location exception.`
+ },
+ memory_drift: {
+ title: "Memory Drift Caveat",
+ body: `<b>MEMORY_DRIFT_CAVEAT:</b><br><br>
+ <i>"Memory records can become stale. Before answering, verify memory is still correct
+ by reading current state. If recalled memory conflicts with current information,
+ trust what you observe now."</i><br><br>
+ <b>TRUSTING_RECALL_SECTION:</b> Before recommending from memory:<br>
+ <ul>
+ <li>If memory names a file: check file exists</li>
+ <li>If memory names a function/flag: grep for it</li>
+ <li>If user will act on recommendation: verify first</li>
+ </ul>
+ <i>"The memory says X exists is not the same as X exists now."</i>`
+ },
+ perm_queue: {
+ title: "Permission Queue",
+ body: `Permissions are queued and resolved asynchronously. Multiple resolvers race:<br>
+ <ul>
+ <li>Hook execution (custom rules in .claude/hooks)</li>
+ <li>Bash classifier (ML-based danger prediction)</li>
+ <li>User dialog (Approve / Deny / Always Allow)</li>
+ </ul>
+ First resolver to call <code>claim()</code> wins. Others are ignored.`
+ },
+ resolve_once: {
+ title: "createResolveOnce() - Atomic Resolution",
+ body: `Factory function that ensures exactly ONE permission source resolves - even in async races.<br><br>
+ <code>claim()</code>: Atomic check-and-mark. Returns true if this caller is the first to claim.<br><br>
+ This prevents: hook says "allow" + classifier says "deny" -> both try to resolve -> race condition.
+ Only the first to claim() actually resolves the permission.`
+ },
+ persist_perm: {
+ title: "Permission Persistence",
+ body: `<code>persistPermissions()</code> calls:<br>
+ <ul>
+ <li><code>persistPermissionUpdates()</code> - writes to disk (survives restart)</li>
+ <li><code>applyPermissionUpdates()</code> - updates in-memory AppState</li>
+ </ul>
+ "Always Allow" decisions are persisted to disk. "Allow once" is session-only.<br><br>
+ <b>Important:</b> <code>clearClassifierApprovals()</code> is called post-compact.
+ Permissions expire with conversation context.`
+ },
+ speculative: {
+ title: "Speculative Pre-Check",
+ body: `While the PREVIOUS tool is still executing, the permission system pre-checks the NEXT tool call.<br><br>
+ This means: by the time the next tool needs approval, the classifier has already computed its verdict.
+ If it says "safe", the approval dialog is skipped entirely - zero latency.<br><br>
+ <code>clearSpeculativeChecks()</code> in postCompactCleanup - speculative decisions don't carry over
+ across compaction.`
+ },
+ classifier: {
+ title: "ML Bash Classifier",
+ body: `An ML model that predicts bash command danger level. Not a regex denylist - learns from patterns.<br><br>
+ Runs in background while previous tool executes (speculative). If confident "safe", auto-approves.<br><br>
+ Telemetry feeds back into model training: tracks which tools users approve/deny to improve future predictions.<br><br>
+ <b>V4 equivalent:</b> Regex denylist + <code>_classify_bash_ro()</code>. Simpler but adequate for SageMaker single-user.`
+ },
+ cache_boundary: {
+ title: "Prompt Cache Boundary - Static/Dynamic Split",
+ body: `System prompt is split into:<br>
+ <ul>
+ <li><b>Static:</b> Agent persona, tool docs, security rules - marked with <code>cache_control: ephemeral</code></li>
+ <li><b>Dynamic:</b> Workspace, date, memory, CLAUDE.md, active skills - changes per turn</li>
+ </ul>
+ Static section is byte-stable -> cache hit on every turn. ~90% token savings.<br><br>
+ <b>V4.1 #14:</b> Same pattern, split at <code># === DYNAMIC ===</code> marker.`
+ },
+ tool_stability: {
+ title: "Tool Schema Stability for Cache",
+ body: `Tools are split into:<br>
+ <ul>
+ <li><b>Static base tools:</b> Always present in system prompt. Byte-stable.</li>
+ <li><b>Dynamic tools:</b> Added per-turn when invoked. Changes break cache.</li>
+ </ul>
+ Skills are NOT reset after compact (intentional). Resetting would change tool list -> 
+ break cache -> cost 4K tokens of cache_creation to re-cache.<br><br>
+ <b>V4:</b> Re-injects skills after compact. Wastes cache_creation cost.`
+ },
+ cache_break: {
+ title: "Cache Break Detection",
+ body: `<b>File:</b> <code>services/api/promptCacheBreakDetection.ts</code><br><br>
+ Tracks per source: system prompt hash, per-tool schema hash, cache_control hash,
+ tool names, model, fast mode, beta headers, effort value.<br><br>
+ Post-call: checks if <code>cache_read_input_tokens</code> dropped >5% AND >2000 tokens.
+ If it did, logs WHY (system prompt changed, tool added/removed, model changed, etc.).<br><br>
+ Max 10 tracked sources. Excludes Haiku models. <code>notifyCompaction()</code> suppresses
+ false-positive break alerts after compact.`
+ },
+ four_tier: {
+ title: "4-Tier Context Back-Pressure",
+ body: `Cheapest first - each tier fires only if cheaper tiers are insufficient:<br><br>
+ <b>Tier 1 - Cached MC:</b> Free. Server-side cache edit. No message mutation.<br>
+ <b>Tier 2 - Time MC:</b> Free. Content-clear cold results. Cache is already cold.<br>
+ <b>Tier 3 - Snip:</b> Free. Drop oldest turn. No LLM call. Feature-flagged.<br>
+ <b>Tier 4 - Full Compact:</b> Expensive. LLM summarize + truncate + restore files.<br><br>
+ V4 has only Tier 2 equivalent (V2-E) and Tier 4 equivalent (full compact).
+ Missing Tier 1 (cache_edits not on Bedrock) and Tier 3 (snip).`
+ },
+ tool_dispatch_detail: {
+ title: "Tool Dispatch - Full Detail",
+ body: `After LLM response is parsed, tool_use blocks are dispatched:<br>
+ <ol>
+ <li><code>partitionToolCalls()</code> - split into safe/unsafe batches</li>
+ <li>For each batch: if safe -> run all in parallel via StreamingToolExecutor</li>
+ <li>If unsafe -> run alone, serially</li>
+ <li>Results buffered in original order</li>
+ <li>If any tool errors: <code>siblingAbortController.abort()</code> kills siblings</li>
+ <li>Results appended to messages as tool_result blocks</li>
+ </ol>
+ Max 10 concurrent tools. Env var: <code>CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY</code>.`
+ },
+ cache_safe: {
+ title: "createCacheSafeParams - Sub-Agent Cache Sharing",
+ body: `Sub-agents share the parent's cached system prompt prefix.<br><br>
+ <code>createCacheSafeParams()</code> constructs the sub-agent's request to reuse the same
+ static prefix -> avoids 4K tokens of cache_creation cost per sub-agent spawn.<br><br>
+ This is why skills are NOT reset after compact - resetting would change the static prefix
+ and invalidate the shared cache.`
+ },
+ hook_execution: {
+ title: "Hook Execution - Shell Subprocess",
+ body: `<b>File:</b> <code>utils/hooks.ts</code><br><br>
+ Hooks are external shell commands, not in-process callbacks.<br>
+ They run in a subprocess and communicate via JSON stdin/stdout.<br><br>
+ <b>Execution flow:</b><br>
+ <ol>
+ <li>System checks hook config for matching event (e.g., PreToolUse + tool name)</li>
+ <li>Spawns shell subprocess with configured command</li>
+ <li>Passes context as JSON to stdin (tool name, input, session info)</li>
+ <li>Reads JSON response from stdout (permission decision, modified input)</li>
+ </ol>
+ <b>Any language works:</b> Python, Node, Bash, Go - as long as it reads stdin JSON and writes stdout JSON.`
+ },
+ hook_allow: {
+ title: "Hook Permission Override - Allow with Limits",
+ body: `PreToolUse hooks CAN approve tools (skip user dialog).<br><br>
+ <b>But cannot override deny rules:</b><br>
+ <pre>// From toolHooks.ts:372-405
+const ruleCheck = await checkRuleBasedPermissions(tool, hookInput, ctx)
+if (ruleCheck?.behavior === 'deny') {
+  logForDebugging('Hook approved but deny rule overrides')
+  return { decision: ruleCheck, input: hookInput }
+}</pre>
+ <b>Security invariant:</b> Deny rules from settings always win over hook approvals.
+ This prevents a rogue hook from bypassing explicit security policies.`
+ },
+ team_create: {
+ title: "TeamCreate - Multi-Agent Coordination",
+ body: `<b>File:</b> <code>tools/TeamCreateTool/TeamCreateTool.ts</code><br><br>
+ Creates a tmux session with multiple Claude Code instances:<br>
+ <ul>
+ <li><b>Team lead</b> (<code>TEAM_LEAD_NAME = 'team-lead'</code>) coordinates work</li>
+ <li><b>Members</b> get separate tmux panes with own context windows</li>
+ <li>Backend registry: TmuxBackend, iTerm2Backend, InProcessBackend</li>
+ <li>Colored pane layout via <code>teammateLayoutManager.ts</code></li>
+ </ul>
+ This is TRUE parallelism - each agent is a separate OS process, not a sub-agent within one process.`
+ },
+ team_mailbox: {
+ title: "File-Based Mailbox System",
+ body: `<b>File:</b> <code>utils/teammateMailbox.ts</code><br><br>
+ Inter-agent communication via JSON files on disk:<br>
+ <code>~/.claude/teams/{team_name}/inboxes/{agent_name}.json</code><br><br>
+ <b>How it works:</b><br>
+ <ul>
+ <li>Each agent has an inbox file it polls</li>
+ <li>SendMessage tool writes to target agent's inbox</li>
+ <li>Messages include sender, content, and timestamp</li>
+ <li>File-based = survives process crashes, no socket overhead</li>
+ </ul>
+ <b>Identity resolution:</b> <code>teammate.ts</code> uses CLI args + AsyncLocalStorage to resolve agent identity.`
+ },
+ worktree: {
+ title: "Worktree Isolation for Sub-Agents",
+ body: `Sub-agents can run in a <b>git worktree</b> - an isolated copy of the repository.<br><br>
+ <code>isolation: "worktree"</code> creates a temporary worktree via <code>git worktree add</code>.<br>
+ The sub-agent operates on this copy, can't interfere with parent's working directory.<br>
+ Auto-cleanup on finish (if no changes) or returns worktree path + branch (if changes made).<br><br>
+ <b>V4:</b> No equivalent. Sub-agents share workspace. For SageMaker single-user, not critical.`
+ }
+};
+
+function nodeClick(id) {
+ const detail = NODE_DETAILS[id];
+ if (!detail) return;
+ document.getElementById('modal-title').textContent = detail.title;
+ document.getElementById('modal-body').innerHTML = detail.body;
+ document.getElementById('modal').classList.add('active');
+}
+
+function closeModal() {
+ document.getElementById('modal').classList.remove('active');
+}
+
+document.addEventListener('keydown', function(e) {
+ if (e.key === 'Escape') closeModal();
+});
+
+function switchTab(tabId) {
+ document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+ document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+ document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+ document.getElementById('tab-' + tabId).classList.add('active');
+}
+
+// Show all tabs briefly so mermaid can render in visible context, then hide
+mermaid.initialize({
+ startOnLoad: false,
+ theme: 'dark',
+ securityLevel: 'loose',
+ flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+});
+document.addEventListener('DOMContentLoaded', async function() {
+ // Temporarily show all tab panels
+ document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'block');
+ await mermaid.run();
+ // Restore hidden state - only active tab visible
+ document.querySelectorAll('.tab-content').forEach(t => t.style.display = '');
+});
+</script>
+
+<hr style="border-color:#30363d;margin-top:40px;">
+<p style="color:#484f58;font-size:12px;margin-top:20px;">
+ Claude Code Runnable v2.1.87 | 2,010 TypeScript files | 60+ tools (8 categories) | 25 hook events | 4-tier compaction | 7 task types |
+ Source-verified from gg-claude-code-runnable/src/ |
+ Cross-referenced with 3 Chinese deep-dive PDFs + ccunpacked.dev (all claims verified against source) |
+ PS_DEEP_ANALYSIS_V2.md - 583 lines of verified analysis |
+ Updated 2026-04-10 (V4.6.1: workspace path fix added. V4.6.0 parity: all 7 gaps closed, review system parity, fork semantics, skill discovery. Engineering Patterns section added with 15 patterns ported. Full tool inventory, hooks, teams, MCP, config hierarchy, proactive mode, buddy system)
+</p>
+</body>
+</html>

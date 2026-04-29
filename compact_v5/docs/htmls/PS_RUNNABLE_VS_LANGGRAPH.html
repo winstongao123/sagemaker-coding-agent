@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code vs LangGraph - Side-by-Side Architecture Comparison</title>
+<style>
+ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; max-width: 1400px; margin: 0 auto; padding: 20px; }
+ h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+ h2 { color: #79c0ff; margin-top: 40px; }
+ h3 { color: #d2a8ff; margin-top: 25px; }
+ h4 { color: #e3b341; margin-top: 20px; }
+ p { margin: 8px 0; font-size: 14px; }
+ .mermaid { background: #161b22; border-radius: 8px; padding: 20px; margin: 15px 0; display:flex; justify-content:center; }
+ .mermaid svg { margin: 0 auto !important; max-width: 100%; }
+ .desc { color: #8b949e; font-size: 14px; margin-bottom: 10px; }
+ .stats { display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0; }
+ .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; }
+ .stat-num { font-size: 24px; font-weight: bold; color: #58a6ff; }
+ .stat-label { font-size: 11px; color: #8b949e; }
+ /* Tabs */
+ .tabs { display: flex; gap: 0; margin: 30px 0 0 0; border-bottom: 2px solid #30363d; flex-wrap: wrap; }
+ .tab { padding: 12px 20px; cursor: pointer; color: #8b949e; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+ .tab:hover { color: #c9d1d9; }
+ .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+ .tab-content { display: none; padding: 20px 0; }
+ .tab-content.active { display: block; }
+ /* Tables */
+ table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+ th { background: #161b22; color: #58a6ff; text-align: left; padding: 10px 12px; border: 1px solid #30363d; }
+ td { padding: 8px 12px; border: 1px solid #30363d; vertical-align: top; }
+ tr:nth-child(even) { background: #161b22; }
+ code { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 2px 6px; font-family: monospace; font-size: 12px; color: #79c0ff; }
+ pre { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; color: #c9d1d9; margin: 10px 0; line-height: 1.5; }
+ /* Badges */
+ .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+ .badge-runnable { background: #1f3a5f; color: #58a6ff; }
+ .badge-langgraph { background: #1a3a1a; color: #3fb950; }
+ .badge-file { background: #1f2937; color: #79c0ff; font-family: monospace; font-size: 11px; }
+ .badge-takeaway { background: #9e6a03; color: #f0883e; }
+ /* Info boxes */
+ .info-box { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; font-size: 13px; }
+ .info-box.warn { border-left-color: #f0883e; }
+ .info-box.good { border-left-color: #3fb950; }
+ .info-box.key { border-left-color: #d2a8ff; }
+ .info-box.takeaway { border-left-color: #e3b341; background: #1c1c0e; }
+ /* Side by side */
+ .side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+ .side-by-side > div { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; overflow-x: auto; }
+ .side-label { text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #30363d; }
+ .side-label.runnable { color: #58a6ff; }
+ .side-label.langgraph { color: #3fb950; }
+ /* Verdict boxes */
+ .verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+ .verdict > div { padding: 16px; border-radius: 8px; font-size: 13px; }
+ .verdict .r-wins { background: rgba(88,166,255,0.08); border: 1px solid #30363d; }
+ .verdict .l-wins { background: rgba(63,185,80,0.08); border: 1px solid #30363d; }
+ .verdict h4 { margin-top: 0; }
+ .verdict ul { padding-left: 20px; margin: 8px 0; }
+ .verdict li { margin: 4px 0; }
+ /* Modal */
+ .modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; }
+ .modal-overlay.active { display:flex; align-items:center; justify-content:center; }
+ .modal { background:#161b22; border:1px solid:#30363d; border-radius:12px; max-width:700px; width:90%; max-height:85vh; overflow-y:auto; padding:24px; position:relative; }
+ .modal h3 { color:#58a6ff; margin-bottom:12px; font-size:18px; }
+ .modal-body { color:#c9d1d9; font-size:14px; line-height:1.7; }
+ .modal-body ul { padding-left:20px; margin: 8px 0; }
+ .modal-body li { margin: 4px 0; }
+ .modal-close { position:absolute; top:12px; right:16px; background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer; }
+ .modal-close:hover { color:#c9d1d9; }
+ /* Mobile */
+ @media (max-width: 768px) {
+  .side-by-side, .verdict { grid-template-columns: 1fr; }
+  .tab { padding: 10px 12px; font-size: 12px; }
+  .tabs { overflow-x: auto; flex-wrap: nowrap; }
+  table { display: block; overflow-x: auto; }
+ }
+</style>
+</head>
+<body>
+
+<h1>Claude Code vs LangGraph</h1>
+<p class="desc">Side-by-side comparison: how Claude Code (pure TypeScript, zero frameworks) differs from LangGraph (Python framework).<br>
+Every Claude Code pattern mapped to its LangGraph equivalent, with practical takeaways for building chatbots like PS_Agent_Core V4.<br>
+Companion to <a href="PS_FLOWCHART_RUNNABLE.html" style="color:#58a6ff;">PS_FLOWCHART_RUNNABLE.html</a> (complete Claude Code architecture reference).</p>
+
+<details>
+<summary>Glossary — key terms used throughout (click to expand)</summary>
+<div style="padding:12px 16px; font-size:13px; line-height:1.8;">
+<b>LLM</b> = Large Language Model (e.g., Claude, GPT). The AI brain that generates text and decides which tools to use.<br>
+<b>Agent</b> = An LLM plus tools plus a loop. The loop sends messages to the LLM, executes tools the LLM requests, and repeats until done.<br>
+<b>Tool</b> = A function the AI can call (e.g., search a database, read a file, run a command).<br>
+<b>Prompt caching</b> = Storing the system prompt on the server so you don't pay to re-send it every turn. Cached tokens cost 90% less (Anthropic pricing).<br>
+<b>Context window</b> = The maximum "memory" an LLM has per conversation (e.g., 200K tokens for Claude). When full, old content must be pruned.<br>
+<b>Streaming</b> = Sending the AI's response word-by-word as it generates, instead of waiting for the full response.<br>
+<b>DAG</b> = Directed Acyclic Graph — a flowchart where arrows only go forward (no loops back). LangGraph uses this concept.<br>
+<b>TypedDict</b> = Python's way of defining a dictionary with typed fields. Like a struct in C or an interface in TypeScript.<br>
+<b>Reducer</b> = A function that decides how node outputs merge into state. <code>operator.add</code> = "append" instead of "replace".<br>
+<b>Zod</b> = TypeScript validation library (like Pydantic for Python). Checks tool inputs have the right shape and types.<br>
+<b>Pydantic</b> = Python validation library. Defines input schemas with automatic type checking and custom validators.<br>
+<b>Fan-out</b> = Running multiple workers/nodes at the same time (in parallel). LangGraph's <code>Send()</code> does this.<br>
+<b>Super-step</b> = LangGraph term for one complete node execution. The checkpointer saves state after each super-step.
+</div>
+</details>
+
+<div class="stats">
+ <div class="stat"><div class="stat-num">0</div><div class="stat-label">Claude Code Frameworks</div></div>
+ <div class="stat"><div class="stat-num">1,438</div><div class="stat-label">TypeScript Files</div></div>
+ <div class="stat"><div class="stat-num">while(true)</div><div class="stat-label">Claude Code Core</div></div>
+ <div class="stat"><div class="stat-num">StateGraph</div><div class="stat-label">LangGraph Core</div></div>
+ <div class="stat"><div class="stat-num">6</div><div class="stat-label">Tool Pipeline Steps</div></div>
+ <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compaction Tiers</div></div>
+ <div class="stat"><div class="stat-num">9</div><div class="stat-label">Comparison Tabs</div></div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+ <div class="tab active" onclick="switchTab('loop')">Agent Loop</div>
+ <div class="tab" onclick="switchTab('state')">State Mgmt</div>
+ <div class="tab" onclick="switchTab('multi')">Multi-Agent</div>
+ <div class="tab" onclick="switchTab('tools')">Tool Dispatch</div>
+ <div class="tab" onclick="switchTab('enforce')">Enforcement</div>
+ <div class="tab" onclick="switchTab('memory')">Memory</div>
+ <div class="tab" onclick="switchTab('context')">Context Mgmt</div>
+ <div class="tab" onclick="switchTab('perf')">Performance</div>
+ <div class="tab" onclick="switchTab('choose')">Which to Choose</div>
+</div>
+
+<!-- ==================== TAB 1: Agent Loop ==================== -->
+<div id="tab-loop" class="tab-content active">
+
+<h2>1. Agent Loop: while(true) vs StateGraph</h2>
+
+<div class="info-box">
+<b>What is an agent loop?</b> It's the core cycle that makes an AI agent work: send a message to the LLM, get a response, if the LLM wants to use a tool then execute it and loop back, if not then return the answer. Everything else (memory, enforcement, multi-agent) is built ON TOP of this loop. Understanding this loop = understanding agents.
+</div>
+
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> The While Loop</div>
+  <p class="desc"><span class="badge badge-file">QueryEngine.ts</span> Pure async generator. No DAG, no graph, no framework.</p>
+  <div class="mermaid">
+flowchart TD
+    A(["User Input"]) --> B["Build System Prompt<br/>+ Tool Schemas"]
+    B --> C["Call Claude API<br/>(streaming)"]
+    C --> D["Parse Response<br/>text / thinking / tool_use"]
+    D --> E{"tool_use blocks?"}
+    E -->|Yes| F["Dispatch Tools<br/>(6-step pipeline)"]
+    F --> G["Add Results<br/>to Messages Array"]
+    G --> H{"needsFollowUp?"}
+    H -->|Yes| C
+    H -->|No| I(["Return Response"])
+    E -->|No| I
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> The StateGraph</div>
+  <p class="desc">Nodes + conditional edges compiled into a directed graph.</p>
+  <div class="mermaid">
+flowchart TD
+    A(["START"]) --> B["agent node<br/>call_model()"]
+    B --> C{"should_continue()"}
+    C -->|tool_calls| D["tools node<br/>ToolNode()"]
+    D --> B
+    C -->|end| E(["END"])
+  </div>
+ </div>
+</div>
+
+<h3>What, Why, How</h3>
+<table>
+<tr><th>Aspect</th><th><span class="badge badge-runnable">Claude Code</span></th><th><span class="badge badge-langgraph">LangGraph</span></th></tr>
+<tr><td><b>What</b></td><td>A <code>while(true)</code> async generator in <code>QueryEngine.ts</code>. Each iteration = one LLM turn. The loop runs until <code>stop_reason != tool_use</code> or budget is exceeded.</td><td>A <code>StateGraph</code> with named nodes (Python functions) connected by edges. You define nodes, connect them with <code>add_edge()</code> and <code>add_conditional_edges()</code>, then <code>.compile()</code> it into a runnable.</td></tr>
+<tr><td><b>Why this design</b></td><td>Maximum control. No framework abstraction sits between you and the Claude API. You control every byte of the request, every retry, every error path. When something goes wrong, you debug YOUR code, not a framework's internals.</td><td>Declarative structure. The graph IS the documentation — you can visualize it, reason about it, and add persistence/interrupts with one-liners. The framework handles the boring parts (state management, checkpointing, streaming).</td></tr>
+<tr><td><b>How it works</b></td><td>7 steps per turn:<br>1. Check state (budget, stop signal)<br>2. Build system prompt + attach tools + cache headers<br>3. Context back-pressure (4-tier cascade)<br>4. Call Claude API (streaming)<br>5. Parse response (yield text, collect tool_use)<br>6. Execute tools (partition safe/unsafe)<br>7. Check needsFollowUp</td><td>1. Define State schema (TypedDict with Annotated reducers)<br>2. Add nodes — each is a function that takes state, returns updates<br>3. Add edges — static or conditional (routing functions)<br>4. Compile with optional checkpointer<br>5. Invoke or stream</td></tr>
+<tr><td><b>Loop termination</b></td><td><code>needsFollowUp()</code> checks: more tool calls? stop signal? turn budget exceeded? If no, exit.</td><td><code>should_continue()</code> checks last message for <code>tool_calls</code>. If none, routes to END node.</td></tr>
+</table>
+
+<h3>Code: Claude Code Agent Loop</h3>
+<pre>
+// Source: QueryEngine.ts — the actual agent loop (simplified)
+// This is what runs inside Claude Code. No framework. Pure TypeScript.
+
+async function* queryLoop(messages, tools, system) {
+  while (true) {
+    // Step 1: Check budget + stop signal
+    if (stopRequested || budgetExceeded) break;
+
+    // Step 2: Build prompt with cache boundary
+    // Static content (system + tools) is cached. Dynamic (messages) is not.
+    const request = buildApiRequest(system, tools, messages);
+
+    // Step 3: Context back-pressure (4-tier cascade)
+    // Tier 1: Cached microcompact (free) -> Tier 2: Time-based (free)
+    // Tier 3: Snip oldest turn (free) -> Tier 4: LLM summarize (expensive)
+    await manageContext(messages);
+
+    // Step 4: Call Claude API with streaming
+    // User sees output AS it generates — not after
+    const response = await streamApiCall(request);
+
+    // Step 5: Parse response — yield text, collect tool_use blocks
+    for (const block of response.content) {
+      if (block.type === 'text') yield block;  // Stream to user
+    }
+
+    // Step 6: Execute tools through 6-step pipeline
+    const toolCalls = response.content.filter(b =&gt; b.type === 'tool_use');
+    if (toolCalls.length === 0) break;  // No tools = done
+
+    // Partition: read-only tools run in parallel, write tools run serially
+    const batches = partitionToolCalls(toolCalls);
+    const results = await executeBatches(batches);
+    messages.push({ role: 'user', content: results });
+  }
+}
+</pre>
+
+<h3>Code: LangGraph Agent</h3>
+<pre>
+# LangGraph ReAct agent — actual API (langgraph 0.2+)
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
+from typing import TypedDict, Annotated
+from langchain_core.messages import BaseMessage
+import operator
+
+# Step 1: Define state schema
+class AgentState(TypedDict):
+    messages: Annotated[list[BaseMessage], operator.add]
+
+# Step 2: Define nodes (functions)
+def call_model(state: AgentState):
+    response = model.invoke(state["messages"])
+    return {"messages": [response]}
+
+def should_continue(state: AgentState):
+    last = state["messages"][-1]
+    if last.tool_calls:
+        return "tools"       # Route to tools node
+    return END               # Route to END
+
+# Step 3: Build the graph
+graph = StateGraph(AgentState)
+graph.add_node("agent", call_model)
+graph.add_node("tools", ToolNode(tools))
+graph.add_edge(START, "agent")              # START -> agent
+graph.add_conditional_edges("agent", should_continue)  # agent -> tools or END
+graph.add_edge("tools", "agent")            # tools -> agent (loop back)
+
+# Step 4: Compile and run
+app = graph.compile(checkpointer=MemorySaver())
+result = app.invoke(
+    {"messages": [HumanMessage("Fix the bug")]},
+    config={"configurable": {"thread_id": "1"}}
+)
+</pre>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your PS_Agent_Core V4 chatbot uses LangGraph's <code>StateGraph</code> with supervisor + specialist nodes. This is the right choice — LangGraph handles the loop for you so you can focus on routing logic and tool implementation. But understand that UNDER THE HOOD, LangGraph is doing the same while-loop that Claude Code does manually. When you debug LangGraph, you're debugging someone else's loop. When you debug Claude Code, you're debugging your own.
+</div>
+
+<div class="verdict">
+ <div class="r-wins">
+  <h4 style="color:#58a6ff;">Claude Code is better when...</h4>
+  <ul>
+   <li><b>Maximum control</b> — you need to customize every aspect of the API call</li>
+   <li><b>Streaming-first</b> — tools start executing BEFORE full response arrives</li>
+   <li><b>No abstraction tax</b> — debug your own code, not framework internals</li>
+   <li><b>Byte-level optimization</b> — prompt caching, token budgets, cache boundaries</li>
+   <li>Building a CLI tool or long-running agent (100+ turns)</li>
+  </ul>
+ </div>
+ <div class="l-wins">
+  <h4 style="color:#3fb950;">LangGraph is better when...</h4>
+  <ul>
+   <li><b>Rapid prototyping</b> — working agent in 20 lines of Python</li>
+   <li><b>Visual debugging</b> — graph structure IS the documentation</li>
+   <li><b>Built-in persistence</b> — checkpointer handles state across restarts</li>
+   <li><b>Human-in-the-loop</b> — <code>interrupt_before</code> is one line</li>
+   <li>Building a chatbot or web app (your PS_Agent_Core use case)</li>
+  </ul>
+ </div>
+</div>
+
+</div><!-- end tab-loop -->
+
+<!-- ==================== TAB 2: State Management ==================== -->
+<div id="tab-state" class="tab-content">
+
+<h2>2. State Management: Messages Array vs TypedDict + Checkpointer</h2>
+
+<div class="info-box">
+<b>What is state?</b> State = everything the agent "knows" during a conversation. At minimum, this is the message history (what the user said, what the AI replied, what tools returned). But you might also want to track: which tools were used, how many tokens were spent, whether to escalate, the user's role, etc. How you store and manage this state fundamentally shapes your agent.
+</div>
+
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> Messages Array</div>
+  <div class="mermaid">
+flowchart TD
+    A(["messages: Message[]"]) --> B["User message"]
+    B --> C["Assistant message<br/>(text + tool_use)"]
+    C --> D["Tool results<br/>(user role)"]
+    D --> E["Next assistant msg"]
+    E --> F{"Context too large?"}
+    F -->|Yes| G["4-tier compaction<br/>(cheapest first)"]
+    G --> C
+    F -->|No| C
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> TypedDict + Checkpointer</div>
+  <div class="mermaid">
+flowchart TD
+    A(["AgentState(TypedDict)"]) --> B["messages: list"]
+    A --> C["custom fields: any"]
+    B --> D["Checkpointer saves<br/>after each super-step"]
+    C --> D
+    D --> E["SQLite / Postgres<br/>/ MemorySaver"]
+    E --> F["Time-travel:<br/>replay any state"]
+  </div>
+ </div>
+</div>
+
+<h3>Deep Comparison</h3>
+<table>
+<tr><th>Aspect</th><th><span class="badge badge-runnable">Claude Code</span></th><th><span class="badge badge-langgraph">LangGraph</span></th></tr>
+<tr><td><b>State shape</b></td><td><code>Message[]</code> — flat array. 7 message types: AssistantMessage, UserMessage, SystemMessage, ProgressMessage, AttachmentMessage, ToolUseSummaryMessage, TombstoneMessage. That's it.</td><td><code>TypedDict</code> with <code>Annotated</code> reducers. Can hold messages PLUS any custom fields: counters, flags, domain data. Reducers define how node outputs merge (e.g., <code>operator.add</code> appends to list).</td></tr>
+<tr><td><b>Persistence</b></td><td>Messages live in memory during session. Transcript written to disk after conversation ends. No automatic mid-session snapshots.</td><td>Checkpointer auto-saves state after every "super-step" (node execution). SQLite, Postgres, or in-memory. Survives crashes.</td></tr>
+<tr><td><b>Time-travel</b></td><td>Not built in. You'd need to save/restore messages manually. The session transcript is append-only.</td><td>Built-in. <code>get_state_history()</code> returns all snapshots. You can replay from any checkpoint, fork conversations, undo actions.</td></tr>
+<tr><td><b>Reducers</b></td><td>N/A. Messages are appended directly with <code>messages.push()</code>. No merge logic.</td><td><code>Annotated[list, operator.add]</code> means node return values are APPENDED to existing state. Custom reducers possible (e.g., only keep last N messages).</td></tr>
+<tr><td><b>Pruning</b></td><td>4-tier compaction cascade (see Context Mgmt tab). 3 tiers are FREE (no LLM call). Only Tier 4 costs money.</td><td>Manual. You write a node that trims messages. Or use <code>trim_messages()</code> utility. Or use <code>RemoveMessage</code> to delete specific messages from state.</td></tr>
+<tr><td><b>Message immutability</b></td><td>Messages are NEVER mutated after creation. This is critical for prompt caching — any byte change invalidates the cache prefix. Even microcompact uses <code>cache_edits</code> API instead of modifying messages.</td><td>No immutability guarantee. Nodes can return state updates that modify existing values. This is by design — flexibility over cache optimization.</td></tr>
+</table>
+
+<h3>Code: Claude Code State</h3>
+<pre>
+// Source: types/message.ts — 7 message types
+type Message =
+  | { type: 'user'; message: UserMessage }
+  | { type: 'assistant'; message: AssistantMessage }
+  | { type: 'progress'; message: ProgressMessage }
+  | { type: 'tombstone'; message: TombstoneMessage }
+  | { type: 'tool_use_summary'; message: ToolUseSummaryMessage }
+  | { type: 'attachment'; message: AttachmentMessage }
+  | { type: 'system_compact_boundary'; message: SystemCompactBoundaryMessage };
+
+// 7 Message Types explained:
+// - UserMessage: what the human typed
+// - AssistantMessage: what the AI responded (text + tool calls)
+// - ProgressMessage: status updates shown in the UI ("thinking...", "running tool...")
+// - TombstoneMessage: placeholder for messages that were removed gracefully
+//   (e.g., after compaction — the message is gone but a marker remains)
+// - ToolUseSummaryMessage: condensed summary of a tool result (saves context space)
+// - AttachmentMessage: files, images, or data attached to the conversation
+// - SystemCompactBoundaryMessage: marks where compaction happened
+
+// The entire "state" is this array
+const messages: Message[] = [];
+
+// Adding state = pushing to array (immutable — never modify existing entries)
+messages.push({
+  type: 'user',
+  message: createUserMessage(toolResults)
+});
+
+// WHY immutable? Prompt caching.
+// Anthropic caches the byte-level prefix of your messages.
+// If you modify message[3], all cached content from message[3] onward is invalidated.
+// That could waste thousands of cached tokens = real money.
+</pre>
+
+<h3>Code: LangGraph State</h3>
+<pre>
+# LangGraph state — TypedDict with reducers
+from typing import TypedDict, Annotated
+import operator
+
+class AgentState(TypedDict):
+    # WHY Annotated + operator.add?
+    # Without a reducer: if node A returns {"messages": [msg1]} and node B returns
+    # {"messages": [msg2]}, node B's output REPLACES node A's. You lose msg1.
+    # With operator.add as the reducer: msg2 gets APPENDED after msg1. Both kept.
+    # This is critical for chat — you never want to throw away old messages.
+    messages: Annotated[list, operator.add]
+
+    # Custom fields for your domain logic — LangGraph advantage over Claude Code
+    # Claude Code can ONLY store messages. LangGraph can store anything typed.
+    iteration_count: int
+    should_escalate: bool
+    user_role: str        # e.g., "customer" or "admin"
+    tool_calls_made: int
+
+# YOUR PS_Agent_Core V4 state looks like this:
+class V4AgentState(TypedDict):
+    messages: Annotated[list, operator.add]
+    token_usage: dict          # {"input": 0, "output": 0, "total": 0}
+    request_id: str            # For end-to-end tracing
+    latency_breakdown: dict    # Per-node timing
+    cache_metrics: dict        # cache_creation + cache_read tokens
+
+# Checkpointer: auto-save after every node execution
+from langgraph.checkpoint.sqlite import SqliteSaver
+checkpointer = SqliteSaver.from_conn_string(":memory:")
+app = graph.compile(checkpointer=checkpointer)
+
+# Time-travel: replay from any snapshot
+for state in app.get_state_history(config):
+    print(state.created_at, len(state.values["messages"]))
+</pre>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your V4 chatbot already uses LangGraph's TypedDict state with <code>token_usage</code>, <code>request_id</code>, <code>latency_breakdown</code>, and <code>cache_metrics</code>. This is a BETTER fit than Claude Code's flat messages array because you need to track domain-specific data across nodes. What you should take from Claude Code: the idea of MESSAGE IMMUTABILITY for prompt caching. Never mutate old messages in your state — only append new ones.
+</div>
+
+<div class="verdict">
+ <div class="r-wins">
+  <h4 style="color:#58a6ff;">Claude Code wins when...</h4>
+  <ul>
+   <li>You only need message history (most simple agents)</li>
+   <li>Prompt caching requires byte-level message immutability</li>
+   <li>Custom compaction tiers that optimize cost matter</li>
+   <li>You don't need persistence or time-travel</li>
+  </ul>
+ </div>
+ <div class="l-wins">
+  <h4 style="color:#3fb950;">LangGraph wins when...</h4>
+  <ul>
+   <li>You need typed state beyond messages (token counts, user roles, flags)</li>
+   <li>Automatic persistence and crash recovery are important</li>
+   <li>Time-travel debugging helps your development workflow</li>
+   <li>Multiple nodes need to read/write shared state</li>
+  </ul>
+ </div>
+</div>
+
+</div><!-- end tab-state -->
+
+<!-- ==================== TAB 3: Multi-Agent ==================== -->
+<div id="tab-multi" class="tab-content">
+
+<h2>3. Multi-Agent: Coordinator + Workers vs Supervisor + Subgraphs</h2>
+
+<div class="info-box">
+<b>What is multi-agent?</b> One "boss" AI coordinates several "worker" AIs. Instead of one model doing everything, you split the work: a researcher investigates, a coder implements, a reviewer checks. The boss decides who does what and synthesizes results. Your PS_Agent_Core V4 uses exactly this pattern: a supervisor routes to 3 specialist agents (orders, support, returns).
+</div>
+
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> Coordinator Mode</div>
+  <p class="desc"><span class="badge badge-file">coordinatorMode.ts</span> + <span class="badge badge-file">AgentTool/</span></p>
+  <div class="mermaid">
+flowchart TD
+    U(["User"]) --> C["Coordinator<br/>(orchestrator mode)"]
+    C -->|"Agent(research)"| W1["Worker 1<br/>read-only tools"]
+    C -->|"Agent(research)"| W2["Worker 2<br/>read-only tools"]
+    W1 -->|"task-notification"| C
+    W2 -->|"task-notification"| C
+    C -->|"Synthesize"| C
+    C -->|"SendMessage"| W1
+    W1 -->|"task-notification"| C
+    C -->|"Agent(verify)"| W3["Worker 3<br/>fresh eyes"]
+    W3 -->|"task-notification"| C
+    C --> U
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> Supervisor + Subgraphs</div>
+  <p class="desc">Like your V4: supervisor routes to specialists.</p>
+  <div class="mermaid">
+flowchart TD
+    S(["START"]) --> SUP["supervisor<br/>route()"]
+    SUP -->|"orders"| O["orders_specialist<br/>subgraph"]
+    SUP -->|"support"| SP["support_specialist<br/>subgraph"]
+    SUP -->|"returns"| R["returns_specialist<br/>subgraph"]
+    SUP -->|"Send() fan-out"| F1["parallel_1"]
+    SUP -->|"Send() fan-out"| F2["parallel_2"]
+    O --> SUP
+    SP --> SUP
+    R --> SUP
+    F1 --> SUP
+    F2 --> SUP
+    SUP -->|"FINISH"| E(["END"])
+  </div>
+ </div>
+</div>
+
+<h3>Deep Comparison</h3>
+<table>
+<tr><th>Aspect</th><th><span class="badge badge-runnable">Claude Code</span></th><th><span class="badge badge-langgraph">LangGraph</span></th></tr>
+<tr><td><b>Spawning workers</b></td><td><code>Agent({ description, prompt, subagent_type })</code> — spawns an isolated Claude instance. Each worker gets its own conversation, own context window, own tool set. Workers can be typed: explore (read-only), plan, review, worker (full capability).</td><td><code>add_node("worker", subgraph)</code> — subgraph is a compiled StateGraph. Or <code>Send("worker", payload)</code> for dynamic fan-out. Workers share the parent process.</td></tr>
+<tr><td><b>Communication</b></td><td>Async message passing. <code>SendMessage({ to: agentId, message })</code>. Results arrive as <code>&lt;task-notification&gt;</code> XML in the coordinator's message stream. Workers can message each other too.</td><td>Shared state. When a subgraph finishes, its output merges into the parent's state via reducers. No explicit messaging — the supervisor reads <code>state["messages"]</code>.</td></tr>
+<tr><td><b>Isolation</b></td><td><b>Full isolation.</b> Each worker: own conversation history (clean context), own tool restrictions via <code>disallowedTools</code>, optional git worktree (isolated filesystem). Workers CANNOT see parent's conversation history.</td><td><b>Partial isolation.</b> Subgraphs have own internal state, but share input/output through parent state. No filesystem isolation. Same Python process.</td></tr>
+<tr><td><b>Parallelism</b></td><td>Launch multiple <code>Agent()</code> calls in one turn — they run in parallel. Read-only workers run simultaneously. Write workers serialize to prevent conflicts.</td><td><code>Send()</code> API for dynamic fan-out. Returns list of <code>Send</code> objects from a conditional edge function. All targets run in parallel.</td></tr>
+<tr><td><b>4-Phase workflow</b></td><td><b>Enforced phases:</b> 1. Research (parallel workers) -> 2. Synthesis (coordinator MUST understand before directing) -> 3. Implementation (serial workers) -> 4. Verification (fresh worker with clean eyes)</td><td><b>Implicit.</b> Supervisor decides routing based on state. No enforced phase structure — you can build phases with conditional edges, but nothing forces them.</td></tr>
+<tr><td><b>"Never delegate understanding"</b></td><td><b>Core rule.</b> The coordinator MUST read worker results, understand them, then write specific implementation specs with file paths and line numbers. Never write "based on your findings, fix it."</td><td>No equivalent rule. You CAN have the supervisor just route blindly between agents. Whether it works well depends on your prompt engineering.</td></tr>
+</table>
+
+<h3>Code: Claude Code Coordinator</h3>
+<pre>
+// Source: coordinatorMode.ts — getCoordinatorSystemPrompt()
+// The coordinator's system prompt tells it HOW to orchestrate
+
+"You are a coordinator. Your job is to:
+- Help the user achieve their goal
+- Direct workers to research, implement and verify code changes
+- Synthesize results and communicate with the user
+- Answer questions directly when possible"
+
+// Phase 1: Research (parallel workers)
+Agent({
+  description: "Investigate auth bug",
+  subagent_type: "worker",      // Full capability worker
+  prompt: "Find null pointers in src/auth/... Report file paths and line numbers."
+})
+Agent({
+  description: "Research auth tests",
+  subagent_type: "explore",     // Read-only worker (can only search, not modify)
+  prompt: "Find test coverage gaps in src/auth/..."
+})
+// Both run in PARALLEL — launched in same coordinator turn
+
+// Results arrive as XML notifications:
+// &lt;task-notification&gt;
+//   &lt;task-id&gt;agent-a1b&lt;/task-id&gt;
+//   &lt;status&gt;completed&lt;/status&gt;
+//   &lt;result&gt;Found null pointer at validate.ts:42...&lt;/result&gt;
+// &lt;/task-notification&gt;
+
+// Phase 2: Synthesis (coordinator does this — NEVER delegated)
+// Coordinator reads findings, understands, creates specific implementation spec
+
+// Phase 3: Implementation (continue the same worker — it has context)
+SendMessage({
+  to: "agent-a1b",   // Continue worker that did the research
+  message: "Fix null pointer in src/auth/validate.ts:42. Add null check before user.id. Return 401."
+})
+
+// Phase 4: Verification (FRESH worker — clean eyes, no implementation bias)
+Agent({
+  description: "Verify auth fix",
+  subagent_type: "worker",
+  prompt: "Run auth tests. Prove the null pointer at validate.ts:42 is fixed."
+})
+</pre>
+
+<h3>Code: LangGraph Supervisor (like your V4)</h3>
+<pre>
+# This is essentially what your PS_Agent_Core V4 does
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+from langgraph.prebuilt import create_react_agent
+
+# Create specialized agents (like your orders/support/returns specialists)
+orders_agent = create_react_agent(model, tools=[lookup_order, track_shipment])
+support_agent = create_react_agent(model, tools=[search_kb, book_appointment])
+returns_agent = create_react_agent(model, tools=[check_return, calculate_refund])
+
+# Supervisor routing (like your V4 supervisor node)
+def supervisor(state):
+    # LLM decides which specialist handles the query
+    response = model.invoke("Route to: orders, support, returns, or FINISH")
+    return {"next": response.content}
+
+# Dynamic fan-out for compound queries (like your V4 parallel_research)
+def route_parallel(state):
+    return [
+        Send("orders_agent", {"query": "check order status"}),
+        Send("support_agent", {"query": "find return policy"}),
+    ]  # Both run in PARALLEL
+
+# Build the graph
+graph = StateGraph(SupervisorState)
+graph.add_node("supervisor", supervisor)
+graph.add_node("orders_agent", orders_agent)
+graph.add_node("support_agent", support_agent)
+graph.add_node("returns_agent", returns_agent)
+graph.add_conditional_edges("supervisor", route_to_agent)
+graph.add_edge("orders_agent", "supervisor")     # Always return to supervisor
+graph.add_edge("support_agent", "supervisor")
+graph.add_edge("returns_agent", "supervisor")
+graph.add_edge(START, "supervisor")
+app = graph.compile()
+</pre>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your V4 supervisor + 3 specialists is the right LangGraph pattern. What you should take from Claude Code:<br>
+1. <b>"Never delegate understanding"</b> — your supervisor should synthesize specialist results before responding, not just pass them through<br>
+2. <b>Worker isolation</b> — each specialist should have ONLY the tools it needs (you already do this with ADMIN_ONLY_TOOLS)<br>
+3. <b>Verification with fresh eyes</b> — for quality-critical responses, send to a second specialist for independent verification (you have this with USE_VERIFICATION flag)<br>
+4. <b>Continue vs spawn fresh</b> — Claude Code's rule: continue a worker when it has useful context, spawn fresh when verifying (to avoid confirmation bias)<br>
+5. <b>Extended thinking</b> — your V4 enables <code>budget_tokens=5000</code> for deeper reasoning. Claude Code uses thinking blocks too. The thinking content shows in your left sidebar — this is a quality mechanism not available in basic LangGraph.<br>
+6. <b>USE_REFLECTION + USE_VERIFICATION</b> — your V4 has BOTH quality flags. Reflection = agent reviews its own response. Verification = second specialist checks the first. These map to Claude Code's "verification with fresh eyes" pattern.
+</div>
+
+</div><!-- end tab-multi -->
+
+<!-- ==================== TAB 4: Tool Dispatch ==================== -->
+<div id="tab-tools" class="tab-content">
+
+<h2>4. Tool Dispatch: 6-Step Validation Pipeline vs ToolNode</h2>
+
+<div class="info-box">
+<b>What is tool dispatch?</b> When the AI wants to use a tool (look up an order, search the knowledge base, run a bash command), something must validate and execute that request. This is the MOST IMPORTANT difference between Claude Code and LangGraph. Claude Code has a 6-step security pipeline where the tool NEVER executes unless all steps pass. LangGraph uses a ToolNode that calls tools directly.
+</div>
+
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> 6-Step Pipeline</div>
+  <p class="desc"><span class="badge badge-file">toolExecution.ts</span> Every tool call passes through ALL 6 steps.</p>
+  <div class="mermaid">
+flowchart TD
+    A(["Tool Call"]) --> B["1. Schema Validation<br/>(Zod parse)"]
+    B -->|Invalid| X1(["Error returned"])
+    B -->|Valid| C["2. Input Validation<br/>(tool.validateInput)"]
+    C -->|Blocked| X2(["Hard block"])
+    C -->|OK| D["3. PreToolUse Hooks<br/>(shell scripts)"]
+    D -->|"exit 2 = block"| X3(["Hard block"])
+    D -->|OK| E["4. Permission Check<br/>(3 resolvers race)"]
+    E -->|Denied| X4(["Skip tool"])
+    E -->|Allowed| F["5. Execute<br/>(tool.call)"]
+    F --> G["6. PostToolUse Hooks<br/>(warn only)"]
+    G --> H(["Result to LLM"])
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> ToolNode</div>
+  <p class="desc">Prebuilt node that matches tool calls by name and invokes them.</p>
+  <div class="mermaid">
+flowchart TD
+    A(["Tool Calls<br/>from agent node"]) --> B["ToolNode<br/>match by name"]
+    B --> C["Call tool.invoke()"]
+    C --> D["Return<br/>ToolMessage"]
+    D --> E(["Back to<br/>agent node"])
+  </div>
+ </div>
+</div>
+
+<h3>The 6 Steps Explained</h3>
+<table>
+<tr><th>#</th><th>Step</th><th>What It Does</th><th>Can Block?</th><th>LangGraph Equivalent</th><th>Your V4 Equivalent</th></tr>
+<tr><td>1</td><td><b>Schema Validation</b></td><td>Zod parses input JSON against the tool's schema. Invalid JSON or wrong types = error returned, tool never runs.</td><td>Yes</td><td>Pydantic <code>@validator</code> on tool input schema</td><td>LangGraph handles via tool schema</td></tr>
+<tr><td>2</td><td><b>Input Validation</b></td><td>Tool-specific <code>validateInput()</code>. Each tool has custom logic: bash checks for dangerous patterns, edit checks file exists, etc.</td><td>Yes (hard block)</td><td>Custom validation inside tool function</td><td>Your <code>CATASTROPHIC_PATTERNS</code> (13 regex)</td></tr>
+<tr><td>3</td><td><b>PreToolUse Hooks</b></td><td>Shell scripts from <code>.claude/hooks</code> config. Receive tool input via stdin. Exit code 2 or JSON <code>{decision: "block"}</code> = hard block.</td><td>Yes (hard block)</td><td><code>interrupt_before=["tools"]</code></td><td>Your <code>_classify_bash_ro()</code> + LAYER 0-4</td></tr>
+<tr><td>4</td><td><b>Permission Check</b></td><td>3 resolvers race in parallel: hook, ML classifier, user dialog. First to <code>claim()</code> wins. "Always Allow" persisted to disk.</td><td>Yes (user deny)</td><td>No built-in equivalent</td><td>Your <code>ADMIN_ONLY_TOOLS</code> check</td></tr>
+<tr><td>5</td><td><b>Execute</b></td><td>Tool's <code>call()</code> method runs. This is where the actual work happens.</td><td>N/A</td><td><code>tool.invoke(args)</code></td><td>Your @tool function runs</td></tr>
+<tr><td>6</td><td><b>PostToolUse Hooks</b></td><td>Shell scripts fire AFTER execution. Can log, warn, send notifications. Cannot block (it already ran).</td><td>No (warn only)</td><td>LangChain callback handlers</td><td>Your <code>AgentMonitor</code> logging</td></tr>
+</table>
+
+<h3>Code: Claude Code 6-Step Pipeline</h3>
+<pre>
+// Source: toolExecution.ts — the actual pipeline
+async function executeToolCall(toolCall, context) {
+  // STEP 1: Schema validation (Zod)
+  const parsed = tool.inputSchema.safeParse(toolCall.input);
+  if (!parsed.success) return errorResult(parsed.error);
+  // WHY: Catches malformed JSON, wrong types, missing required fields.
+  //      Tool never even sees invalid input.
+
+  // STEP 2: Tool-specific input validation
+  const validation = await tool.validateInput(parsed.data);
+  if (!validation.result) return blockResult(validation.message);
+  // WHY: Each tool has domain-specific rules.
+  //      BashTool checks for catastrophic patterns (rm -rf /).
+  //      EditTool checks that old_string exists in the file.
+  //      WriteTool checks path is within workspace.
+
+  // STEP 3: PreToolUse hooks (shell scripts from .claude/hooks config)
+  const hookResult = await runHooks('PreToolUse', {
+    tool_name: tool.name, input: parsed.data
+  });
+  if (hookResult.decision === 'block') return blocked(hookResult.reason);
+  // WHY: Users can add custom enforcement rules.
+  //      Example: "block any bash command that touches /etc/"
+  //      Exit code 2 = hard block. Cannot be overridden.
+
+  // STEP 4: Permission check (3 resolvers race)
+  // Hook resolver, ML classifier resolver, and user dialog resolver
+  // run in PARALLEL. First to call claim() wins (createResolveOnce).
+  const perm = await checkPermission(tool, parsed.data);
+  if (perm === 'denied') return deniedResult();
+  // WHY: Read-only tools (glob, grep, read_file) auto-approve.
+  //      Dangerous tools require explicit user approval.
+  //      "Always Allow" persisted to disk for next session.
+
+  // STEP 5: Execute
+  const output = await tool.call(parsed.data, context);
+
+  // STEP 6: PostToolUse hooks (warn only — cannot block)
+  await runHooks('PostToolUse', { tool_name: tool.name, output });
+  // WHY: Audit logging, notifications, metrics.
+  //      Tool already ran — blocking now would be meaningless.
+
+  return toolResult(toolCall.id, output);
+}
+</pre>
+
+<h3>Code: LangGraph ToolNode + Custom Validation</h3>
+<pre>
+# LangGraph tool dispatch — simple but extensible
+from langgraph.prebuilt import ToolNode
+from langchain_core.tools import tool
+from pydantic import BaseModel, validator
+
+# Pydantic validation (equivalent to Steps 1-2)
+class BashInput(BaseModel):
+    command: str
+
+    @validator("command")
+    def no_dangerous_commands(cls, v):
+        import re
+        CATASTROPHIC = [r"rm\s+-rf\s+/", r"mkfs\.", r"dd\s+if="]
+        for pattern in CATASTROPHIC:
+            if re.search(pattern, v):
+                raise ValueError(f"Blocked: catastrophic pattern {pattern}")
+        return v
+
+@tool(args_schema=BashInput)
+def bash(command: str) -> str:
+    """Run a shell command."""
+    return subprocess.check_output(command, shell=True).decode()
+
+# ToolNode handles dispatch (equivalent to Step 5)
+tool_node = ToolNode([bash, lookup_order, search_kb])
+
+# For human-in-the-loop (equivalent to Steps 3-4):
+app = graph.compile(
+    checkpointer=checkpointer,
+    interrupt_before=["tools"]  # Graph PAUSES before tools node
+)
+# Graph pauses. Human inspects state. Then:
+result = app.invoke(None, config)  # Resume = approve
+</pre>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your V4 already has a multi-layer security pipeline (LAYER -1 through LAYER 5) that mirrors Claude Code's 6-step approach. This is the RIGHT thing to take from Claude Code — enforcement must be STRUCTURAL, not just prompt-based. Key patterns already in your V4:<br>
+- <code>CATASTROPHIC_PATTERNS</code> (13 regex, hard block) = Claude Code's Step 2<br>
+- <code>_classify_bash_ro()</code> (auto-approve read-only) = Claude Code's permission system<br>
+- <code>ADMIN_ONLY_TOOLS</code> (role-based access) = Claude Code's permission check<br>
+- What's missing: PostToolUse audit hooks (Claude Code Step 6). Your <code>AgentMonitor</code> partially covers this.
+</div>
+
+<h3>Bonus Claude Code Patterns Not in LangGraph</h3>
+<p class="desc">These patterns exist in Claude Code but have no built-in LangGraph equivalent. They're worth understanding even if you don't implement them all.</p>
+
+<table>
+<tr><th>Pattern</th><th>What It Does (Beginner Explanation)</th><th>Why It Matters</th><th>LangGraph Equivalent</th></tr>
+<tr>
+ <td><b>Tool Auto-Repair (5 layers)</b></td>
+ <td>When the AI calls a tool with the wrong name or wrong arguments, instead of failing, Claude Code tries to FIX the call automatically:<br>1. Case-insensitive name lookup ("Read_File" -> "read_file")<br>2. Fuzzy prefix match ("rea" -> "read_file")<br>3. Argument name auto-fix ("path" -> "file_path")<br>4. Type coercion (string "5" -> number 5)<br>5. Missing required field inference</td>
+ <td>Reduces wasted LLM turns. Instead of the AI seeing "tool not found" and retrying, the system fixes the mistake silently. Saves tokens and time.</td>
+ <td>None built-in. You could add a custom middleware node before ToolNode that attempts to repair malformed tool calls.</td>
+</tr>
+<tr>
+ <td><b>Doom Loop Detection</b></td>
+ <td>Tracks the last 30 tool calls using a hash of each call's target (file path, search pattern, etc.). If the SAME call appears 3 times in a row, it breaks the loop. Think of it as: "Hey, you just tried this exact same thing 3 times. Stop."</td>
+ <td>Without this, an agent can get stuck retrying the same failing action until it burns through the entire context window. Claude Code detects this BEFORE context exhaustion.</td>
+ <td>None built-in. You could add a counter in LangGraph state and check it in a conditional edge: if same tool called 3x -> route to END or human escalation.</td>
+</tr>
+<tr>
+ <td><b>Speculative Pre-Check</b></td>
+ <td>While the CURRENT tool is still running, the permission system starts checking the NEXT tool call in the background. If the classifier says "safe", the approval step is skipped entirely when that tool's turn comes — zero wait time.</td>
+ <td>Eliminates permission-check latency for safe tools. Instead of: tool runs -> check permission -> execute, it becomes: tool runs + check permission IN PARALLEL -> execute immediately.</td>
+ <td>None built-in. You could implement this with <code>asyncio.create_task()</code> to pre-check the next tool while the current one runs.</td>
+</tr>
+<tr>
+ <td><b>ML Bash Classifier</b></td>
+ <td>A lightweight ML model (not the main LLM) that predicts whether a bash command is dangerous. It runs in the background (see speculative pre-check above). If it says "safe" with high confidence, the command auto-approves. If uncertain, it asks the user.<br><br>This is NOT the same as a regex denylist. It LEARNS from patterns — commands users approve/deny feed back into training.</td>
+ <td>Smarter than regex. A regex can catch <code>rm -rf /</code> but might miss creative variants. An ML classifier generalizes from patterns.</td>
+ <td>None built-in. Your V4 uses regex denylist + <code>_classify_bash_ro()</code> which is simpler but adequate for a customer service chatbot (you don't have arbitrary bash commands).</td>
+</tr>
+<tr>
+ <td><b>StreamingToolExecutor</b></td>
+ <td>Normal flow: LLM generates FULL response -> parse tool calls -> execute tools.<br>Claude Code flow: As EACH tool_use block streams in (before the full response is done), it STARTS executing that tool immediately.<br><br>Example: LLM generates 3 tool calls. While it's still generating tool call #3, tool calls #1 and #2 are already running.</td>
+ <td>Significant latency reduction. Instead of waiting for the full response (could be seconds), tools start executing as soon as they're parsed from the stream.</td>
+ <td>None built-in. LangGraph's ToolNode waits for the full response before dispatching. You could implement streaming dispatch with custom code, but it's complex.</td>
+</tr>
+<tr>
+ <td><b>createCacheSafeParams</b></td>
+ <td>When Claude Code spawns a sub-agent (worker), the worker reuses the parent's cached system prompt prefix. This avoids paying ~4K tokens of cache_creation cost per worker spawn.<br><br>Think of it as: "The parent already paid to cache the system prompt. The child reuses that cache instead of paying again."</td>
+ <td>In multi-agent setups, you might spawn 5-10 workers. Without cache sharing, each pays 4K tokens to cache the same system prompt. With it, only the first pays. Saves real money.</td>
+ <td>None built-in. In LangGraph, subgraphs share the same process but don't share prompt cache. You'd need to manage cache control headers at the API level.</td>
+</tr>
+<tr>
+ <td><b>Auto-Dream (Cross-Session Memory Consolidation)</b></td>
+ <td>After 24+ hours AND 5+ sessions, Claude Code automatically reviews ALL memories from recent sessions and consolidates them — removing duplicates, resolving conflicts, updating stale entries.<br><br>Think of it as: "Every night, organize your notes from the past few days."</td>
+ <td>Without consolidation, memories accumulate noise over time. Auto-Dream keeps the memory system clean and current without manual intervention.</td>
+ <td>None built-in. You could schedule a periodic job that reads the LangGraph Store, runs an LLM to consolidate, and writes back cleaned entries.</td>
+</tr>
+<tr>
+ <td><b>FILE_UNCHANGED_STUB</b></td>
+ <td>If the agent reads a file it already read, and the file hasn't changed, Claude Code returns a short stub ("file unchanged since last read") instead of the full content. This saves thousands of context tokens on repeated reads of the same file.</td>
+ <td>Agents often re-read files they've already seen. Without this, each re-read wastes context space with identical content. The stub keeps context lean.</td>
+ <td>None built-in. You could track file hashes in LangGraph state and return a stub from your custom read tool if the hash matches.</td>
+</tr>
+<tr>
+ <td><b>Session Budget Enforcement</b></td>
+ <td>Tracks total cost across ALL LLM calls in a session. At 80% of budget: warns. At 100%: stops. <code>session_cost_limit</code> with threshold-based alerts.<br><br>Think of it as: "You've spent $4 of your $5 budget. Warning. $5 reached — stopping."</td>
+ <td>Without a budget guard, a runaway agent (especially with expensive models) can rack up unexpected costs. This is a safety net.</td>
+ <td>None built-in. You could add a cost-tracking node in LangGraph that sums token_usage across turns and routes to END when budget exceeded. Your V4 has <code>CostTracker</code> with <code>set_budget/check_budget</code>.</td>
+</tr>
+<tr>
+ <td><b>Retry Logic (529 + PTL)</b></td>
+ <td>When the API returns errors: 10 retries max, 500ms base delay with exponential backoff. Special handling for HTTP 529 (overloaded): max 3 retries. Prompt-Too-Long: iteratively drops oldest messages and retries up to 3 times.</td>
+ <td>APIs fail. Without retry logic, a transient network blip kills a 30-minute agent session. Exponential backoff prevents hammering the API.</td>
+ <td>LangChain has basic retry via <code>max_retries</code> on the model. But no PTL recovery or 529-specific handling. Your V4 has basic retry; consider adding PTL recovery.</td>
+</tr>
+</table>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> You don't need ALL of these patterns. For a customer service chatbot, the most valuable ones are:<br>
+1. <b>Tool Auto-Repair</b> — reduces failed tool calls, saves LLM turns (implement as Pydantic validators with fallback logic)<br>
+2. <b>Doom Loop Detection</b> — prevents stuck agents from burning tokens (add a counter in your LangGraph state)<br>
+3. <b>StreamingToolExecutor</b> — nice to have for latency but complex to implement with LangGraph
+</div>
+
+</div><!-- end tab-tools -->
+
+<!-- ==================== TAB 5: Enforcement ==================== -->
+<div id="tab-enforce" class="tab-content">
+
+<h2>5. Enforcement: Hooks (PreToolUse Block) vs interrupt_before</h2>
+
+<div class="info-box">
+<b>What is enforcement?</b> Enforcement = stopping the AI from doing something dangerous. This is NOT the same as asking the AI nicely ("please don't delete files"). Enforcement means the system STRUCTURALLY PREVENTS the action. The AI can want to <code>rm -rf /</code> all it wants — the enforcement layer makes it impossible. This is the most important lesson from Claude Code.
+</div>
+
+<h3>Claude Code Hook System</h3>
+<p class="desc"><span class="badge badge-file">hooks/</span> 6 hook events. Only PreToolUse can hard-block.</p>
+
+<table>
+<tr><th>Event</th><th>When</th><th>Can Block?</th><th>Use Case</th></tr>
+<tr><td><code>PreToolUse</code></td><td>BEFORE tool execution</td><td><b>YES</b> (exit code 2 or JSON <code>{decision:"block"}</code>)</td><td>Block dangerous commands, enforce file restrictions, require approval for specific tools/paths</td></tr>
+<tr><td><code>PostToolUse</code></td><td>AFTER tool execution</td><td>No (warn only)</td><td>Audit logging, notifications, metrics collection</td></tr>
+<tr><td><code>PreCompact</code></td><td>Before context compaction</td><td>No</td><td>Save critical state before pruning</td></tr>
+<tr><td><code>PostCompact</code></td><td>After context compaction</td><td>No</td><td>Restore state, clear stale caches</td></tr>
+<tr><td><code>SessionStart</code></td><td>New session begins</td><td>No</td><td>Initialize resources, load config, set up workspace</td></tr>
+<tr><td><code>Stop</code></td><td>Model tries to stop responding</td><td>No</td><td>Save state, flush metrics, cleanup resources</td></tr>
+</table>
+
+<div class="info-box key">
+<b>The critical insight:</b> <code>PreToolUse</code> is the ONLY event that can hard-block execution. All other events can only warn, log, or modify behavior. For enforcement, you MUST use PreToolUse hooks. This is by design: blocking should happen BEFORE execution, never after (too late) or at other lifecycle points (wrong granularity).
+</div>
+
+<h3>Claude Code's 4-Source Permission Race</h3>
+<div class="mermaid">
+flowchart TD
+    A(["Tool call requested"]) --> B["Create PermissionRequest"]
+    B --> C["Start 3 resolvers in parallel"]
+    C --> D1["Hook execution<br/>Custom rules in .claude/hooks"]
+    C --> D2["ML Bash classifier<br/>Predicts danger level"]
+    C --> D3["User dialog<br/>Approve / Deny / Always"]
+    D1 --> E{"First resolver<br/>to respond wins"}
+    D2 --> E
+    D3 --> E
+    E -->|"Winner decides"| F{"Decision"}
+    F -->|Allow| G["Execute tool"]
+    F -->|Always Allow| H["persistPermissions<br/>Save to disk"]
+    F -->|Deny| I["Skip tool<br/>Return denied error"]
+    H --> G
+</div>
+
+<h3>LangGraph's interrupt_before</h3>
+<div class="mermaid">
+flowchart TD
+    A(["Agent Node"]) --> B{"interrupt_before?"}
+    B -->|Yes| C["PAUSE graph<br/>Save checkpoint"]
+    C --> D["Human reviews<br/>pending tool calls"]
+    D --> E{"Approve?"}
+    E -->|Yes| F["Resume: invoke(None)"]
+    E -->|No| G["Update state<br/>with ToolMessage error"]
+    F --> H["Tools Node executes"]
+    B -->|No| H
+    H --> I(["Back to Agent"])
+</div>
+
+<h3>Code: Hook Configuration</h3>
+<pre>
+// .claude/settings.json — hook config example
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "python guard.py"
+        }]
+      }
+    ]
+  }
+}
+
+// guard.py — receives tool input via stdin as JSON
+import json, sys
+data = json.load(sys.stdin)
+command = data["input"].get("command", "")
+
+# Check for dangerous patterns
+if any(p in command for p in ["rm -rf", "DROP TABLE", "mkfs"]):
+    # Exit 2 = HARD BLOCK. Tool NEVER executes.
+    print(json.dumps({
+        "decision": "block",
+        "reason": f"Dangerous command blocked: {command}"
+    }))
+    sys.exit(2)
+
+# Exit 0 = allow (tool proceeds to next pipeline step)
+sys.exit(0)
+</pre>
+
+<h3>Code: LangGraph interrupt_before</h3>
+<pre>
+# Compile with interrupt_before — graph pauses at tools node
+app = graph.compile(
+    checkpointer=checkpointer,
+    interrupt_before=["tools"]
+)
+
+# First invoke: graph runs agent node, then PAUSES before tools
+result = app.invoke({"messages": [HumanMessage("Delete the database")]}, config)
+
+# Inspect what the AI wants to do
+state = app.get_state(config)
+pending = state.values["messages"][-1].tool_calls
+print(pending)  # [{'name': 'bash', 'args': {'command': 'DROP TABLE users'}}]
+
+# Option A: Approve (resume execution)
+result = app.invoke(None, config)
+
+# Option B: Reject (inject error ToolMessage, skip the tool)
+from langchain_core.messages import ToolMessage
+app.update_state(config, {"messages": [
+    ToolMessage(content="Denied: too dangerous", tool_call_id=pending[0]["id"])
+]})
+result = app.invoke(None, config)  # Agent sees rejection, adjusts
+</pre>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your V4 has STRUCTURAL enforcement (CATASTROPHIC_PATTERNS, ADMIN_ONLY_TOOLS, RBAC). This is exactly what Claude Code teaches. What you should add:<br>
+1. <b>PostToolUse logging</b> — log every tool execution with timing, result size, and user role. Your AgentMonitor partially does this.<br>
+2. <b>Cedar Policy integration</b> — your PolicyManager already does what Claude Code's permission hooks do, but for business rules (refund limits, role-based access).<br>
+3. <b>The key difference:</b> Claude Code hooks are PROGRAMMATIC (shell scripts, automated). LangGraph's interrupt_before is HUMAN (pause, wait for approval). Your chatbot needs both: automated enforcement (CATASTROPHIC_PATTERNS) for safety + human escalation (<code>escalate_to_human</code> tool) for business decisions.
+</div>
+
+</div><!-- end tab-enforce -->
+
+<!-- ==================== TAB 6: Memory ==================== -->
+<div id="tab-memory" class="tab-content">
+
+<h2>6. Memory: File-Based memdir vs Checkpointer</h2>
+
+<div class="info-box">
+<b>What is memory?</b> Two different things that share a name:<br>
+<b>Conversation memory</b> = what happened THIS session (messages, tool calls). Both systems handle this well.<br>
+<b>Cross-session memory</b> = what the agent remembers BETWEEN conversations (user preferences, learned rules, project context). This is where Claude Code and LangGraph differ fundamentally.
+</div>
+
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> memdir (File-Based)</div>
+  <p class="desc"><span class="badge badge-file">memdir/memoryTypes.ts</span></p>
+  <div class="mermaid">
+flowchart TD
+    A(["Session Start"]) --> B["Load MEMORY.md<br/>(index: pointers to files)"]
+    B --> C["Load each .md file<br/>Parse YAML frontmatter"]
+    C --> D["4 types:<br/>USER / FEEDBACK<br/>PROJECT / REFERENCE"]
+    D --> E["Inject into<br/>system prompt"]
+    E --> F(["Session Active"])
+    F --> G{"Session End"}
+    G --> H["Fork sub-agent<br/>for extraction"]
+    H --> I["WHAT_NOT_TO_SAVE<br/>filter"]
+    I --> J["Write .md files<br/>Update MEMORY.md"]
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> Checkpointer + Store</div>
+  <div class="mermaid">
+flowchart TD
+    A(["Graph Invoke"]) --> B["Load checkpoint<br/>by thread_id"]
+    B --> C["Restore state dict"]
+    C --> D["Run graph nodes"]
+    D --> E["Auto-save checkpoint<br/>after each super-step"]
+    E --> F{"More nodes?"}
+    F -->|Yes| D
+    F -->|No| G["State persisted"]
+    G --> H["Store API for<br/>cross-thread memory"]
+  </div>
+ </div>
+</div>
+
+<h3>4 Memory Types in Claude Code</h3>
+<table>
+<tr><th>Type</th><th>What It Stores</th><th>When to Save</th><th>How to Use</th><th>Your V4 Equivalent</th></tr>
+<tr><td><b>USER</b></td><td>Role, goals, preferences, expertise level</td><td>When you learn user details</td><td>Tailor responses to the user's expertise</td><td>AgentCore Memory: customer intelligence</td></tr>
+<tr><td><b>FEEDBACK</b></td><td>Corrections ("don't do X") AND confirmations ("yes, keep doing Y")</td><td>Any time user corrects or validates approach</td><td>Don't repeat mistakes, keep working approaches</td><td>Not implemented — could enhance response quality</td></tr>
+<tr><td><b>PROJECT</b></td><td>Ongoing work context, deadlines, decisions</td><td>When you learn project state (who, what, why, when)</td><td>Understand broader context behind requests</td><td>Cedar Policy rules (role-based decisions)</td></tr>
+<tr><td><b>REFERENCE</b></td><td>Pointers to external resources and their purpose</td><td>When you discover external system locations</td><td>Know where to look for up-to-date info</td><td>S3 bucket paths, KB references</td></tr>
+</table>
+
+<h3>WHAT_NOT_TO_SAVE (Critical Filter)</h3>
+<div class="info-box warn">
+Claude Code aggressively filters what gets saved as memory. This prevents memory bloat and stale data:<br>
+<ul>
+<li><b>No code patterns</b> — derivable from reading current code</li>
+<li><b>No git history</b> — <code>git log</code> is authoritative</li>
+<li><b>No debugging solutions</b> — the fix is in the code; commit message has context</li>
+<li><b>No CLAUDE.md contents</b> — already loaded separately</li>
+<li><b>No ephemeral task details</b> — only useful in current session</li>
+<li><b>No file paths/lists</b> — exception: canonical project locations</li>
+</ul>
+Plus a <b>staleness check</b>: before recommending from memory, verify the file/function still exists. "The memory says X exists" is NOT the same as "X exists now."
+</div>
+
+<h3>Code: Claude Code memdir Files</h3>
+<pre>
+// ~/.claude/projects/myproject/memory/
+
+// MEMORY.md (index file — max 200 lines, pointers only)
+# Claude Memory
+- [User Role](user_role.md) — senior eng, deep React, new to Go
+- [No Mocks](feedback_no_mocks.md) — integration tests only, not jest.mock
+- [Auth Rewrite](project_auth_rewrite.md) — compliance-driven, not tech debt
+
+// user_role.md (individual memory file with YAML frontmatter)
+---
+name: User Role
+description: Senior engineer, deep React experience, new to Go backend
+type: user
+---
+Senior software engineer. 10 years React/TypeScript.
+First time touching Go backend code.
+Frame Go explanations using TypeScript analogues.
+
+// feedback_no_mocks.md
+---
+name: No Mocks in Tests
+description: Integration tests must hit real database, never use mocks
+type: feedback
+---
+Integration tests must use real database, not mocks.
+**Why:** Prior incident — mock/prod divergence masked
+a broken migration that hit production.
+**How to apply:** Any test file touching DB models
+must use the test database, never jest.mock().
+</pre>
+
+<h3>Code: LangGraph Checkpointer + Store</h3>
+<pre>
+# Conversation memory: checkpointer
+from langgraph.checkpoint.sqlite import SqliteSaver
+checkpointer = SqliteSaver.from_conn_string("agent.db")
+app = graph.compile(checkpointer=checkpointer)
+
+# Resume conversation by thread_id
+config = {"configurable": {"thread_id": "customer-123"}}
+result = app.invoke({"messages": [msg]}, config)
+
+# Cross-session memory: Store API (like Claude Code's memdir)
+from langgraph.store.memory import InMemoryStore
+store = InMemoryStore()
+app = graph.compile(checkpointer=checkpointer, store=store)
+
+# Write cross-session memory
+store.put(("user", "preferences"), "testing",
+    {"rule": "no mocks", "reason": "prod migration incident"})
+
+# Read in any thread
+prefs = store.search(("user", "preferences"))
+
+# Access store inside graph nodes via context parameter
+def my_node(state, config, *, store):
+    memories = store.search(("user",))
+    # Use memories to personalize response...
+</pre>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your V4 uses AgentCore Memory for customer intelligence (past interactions, preferences). This maps to Claude Code's USER memory type. What you should take from Claude Code:<br>
+1. <b>FEEDBACK memory</b> — track what works and what doesn't for each customer. If a customer says "don't suggest warranty, I already declined", save that as feedback.<br>
+2. <b>WHAT_NOT_TO_SAVE filter</b> — don't save every message. Only save actionable patterns. Your AgentCore Memory should be curated, not a raw transcript dump.<br>
+3. <b>Staleness check</b> — before using memory to personalize a response, verify the remembered fact is still true (product still in stock, policy hasn't changed).
+</div>
+
+</div><!-- end tab-memory -->
+
+<!-- ==================== TAB 7: Context Management ==================== -->
+<div id="tab-context" class="tab-content">
+
+<h2>7. Context Management: 4-Tier Compaction vs Manual Pruning</h2>
+
+<div class="info-box">
+<b>What is context management?</b> AI models have a limited "memory" per conversation (the context window — e.g., 200K tokens for Claude). When the conversation gets too long (many tool calls, long outputs), you need to SHRINK it without losing important information. This is like cleaning your desk — you keep the important papers on top and file away the old ones.
+</div>
+
+<h3>Claude Code's 4-Tier Compaction Cascade</h3>
+<p class="desc">Cheapest first. Each tier only fires if cheaper tiers are insufficient. See <a href="PS_FLOWCHART_RUNNABLE.html#r-compact" style="color:#58a6ff;">PS_FLOWCHART_RUNNABLE.html Section 4</a> for the full flowchart.</p>
+
+<div class="mermaid">
+flowchart TD
+    A(["Context growing"]) --> B{"Tier 1: Cached MC<br/>(FREE)"}
+    B -->|"cache_edits API<br/>Delete from server cache<br/>Messages UNCHANGED"| C{"Enough?"}
+    C -->|Yes| D(["Continue"])
+    C -->|No| E{"Tier 2: Time-Based MC<br/>(FREE)"}
+    E -->|"Cache is cold anyway<br/>Content-clear old results<br/>No LLM call"| F{"Enough?"}
+    F -->|Yes| D
+    F -->|No| G{"Tier 3: Snip<br/>(FREE)"}
+    G -->|"Remove oldest turn<br/>No LLM call"| H{"Enough?"}
+    H -->|Yes| D
+    H -->|No| I{"Tier 4: Full Compact<br/>(EXPENSIVE)"}
+    I -->|"LLM summarizes<br/>Post-compact cleanup<br/>Restore recent files"| D
+</div>
+
+<h3>Compaction Constants</h3>
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> Constants</div>
+  <pre>
+POST_COMPACT_MAX_FILES_TO_RESTORE = 5
+POST_COMPACT_TOKEN_BUDGET = 50,000
+POST_COMPACT_MAX_TOKENS_PER_FILE = 5,000
+DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000 (per tool)
+MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200,000 (per batch)
+Token estimation: Math.ceil(totalTokens * (4/3)) // 33% pad
+  </pre>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> No Built-in Constants</div>
+  <pre>
+# LangGraph has NO built-in compaction.
+# You must build your own. Utilities available:
+
+from langchain_core.messages import trim_messages
+trimmed = trim_messages(
+    state["messages"],
+    max_tokens=4000,
+    token_counter=model,
+    strategy="last",    # Keep most recent
+    start_on="human",   # Ensure valid structure
+)
+
+# Or: RemoveMessage for surgical deletion
+from langchain_core.messages import RemoveMessage
+delete = [RemoveMessage(id=m.id) for m in old_messages]
+  </pre>
+ </div>
+</div>
+
+<h3>Cache Boundary Design</h3>
+<div class="mermaid">
+flowchart LR
+    A["System Prompt<br/>(STATIC)"] --> B["Tool Schemas<br/>(STATIC)"]
+    B --> C["=== DYNAMIC ===<br/>cache_control: ephemeral"]
+    C --> D["Conversation<br/>Messages"]
+    D --> E["Latest User<br/>Message"]
+</div>
+<div class="info-box">
+<b>Why this matters:</b> Everything BEFORE the <code>=== DYNAMIC ===</code> marker is byte-stable and gets cached after the first turn. Subsequent turns serve system prompt + tools from cache = 90% cheaper. Your V4 already implements this with the same <code># === DYNAMIC ===</code> marker. Bedrock prompt caching requires the prefix to be byte-identical across turns.
+</div>
+
+<h3>Post-Compact Cleanup (what Claude Code clears)</h3>
+<div class="info-box">
+After full compaction, Claude Code clears 10+ caches to prevent stale state:<br>
+<b>Clears:</b> microcompact state, context collapse store, getUserContext memoize cache, CLAUDE.md/memory file cache, system prompt sections, classifier approvals (<code>clearClassifierApprovals()</code>), speculative pre-check results, beta tracing state, session messages cache.<br><br>
+<b>Does NOT clear:</b> invoked skill names (skills survive compaction to avoid breaking prompt cache — re-injecting skills would change the static prefix and cost 4K tokens of cache_creation).<br><br>
+<b>Your V4 equivalent:</b> <code>always_allow.clear()</code> on all 4 compact paths + <code>on_compact_fn</code> callback. V4 also has circuit breaker: after 3 consecutive compact failures, auto-compact pauses.
+</div>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> Your V4 already has microcompact (70% threshold) and full autocompact (80% threshold). From Claude Code, consider adding:<br>
+1. <b>Snip tier</b> — a middle-ground between micro and full compact. Drop oldest turn at ~75% threshold. No LLM call needed.<br>
+2. <b>File restoration after compact</b> — your V4 restores 3 files (32K total) which is good. Claude Code restores 5 files (50K total).<br>
+3. <b>PTL retry</b> — your V4.2.1 already has this. If compact itself hits prompt-too-long, trim oldest summary and retry up to 3 times.<br>
+4. <b>Key gap:</b> Cached Microcompact (Tier 1) uses Anthropic's <code>cache_edits</code> API which is not available on Bedrock yet.
+</div>
+
+</div><!-- end tab-context -->
+
+<!-- ==================== TAB 8: Performance ==================== -->
+<div id="tab-perf" class="tab-content">
+
+<h2>8. Performance: Where Each Approach Shines</h2>
+
+<div class="info-box">
+<b>What does "performance" mean for AI agents?</b> Two different things: <b>Runtime performance</b> = how fast the agent responds (measured in seconds per turn). <b>Developer performance</b> = how fast YOU can build and ship the agent (measured in days to production). Claude Code optimizes heavily for runtime (prompt caching, parallel tools, streaming). LangGraph optimizes for developer speed (built-in persistence, visual debugger, ecosystem). Neither is "faster" — they optimize different things.
+</div>
+
+<div class="info-box">
+<b>Performance means different things for different use cases.</b> Claude Code optimizes for RUNTIME performance (cache hits, streaming, parallel tools). LangGraph optimizes for DEVELOPER performance (speed to ship, debugging, iteration). The gap widens as conversations get longer.
+</div>
+
+<h3>Where Time Goes: Claude Code vs LangGraph</h3>
+<p class="desc">In a typical agent turn, most time is spent on the LLM call. The difference is what happens AROUND it.</p>
+<div class="side-by-side">
+ <div>
+  <div class="side-label runnable"><span class="badge badge-runnable">Claude Code</span> Optimized Pipeline</div>
+  <div class="mermaid">
+flowchart TD
+    A(["Turn Start"]) --> B["Build prompt<br/>(cache boundary)"]
+    B --> C["LLM call<br/>(cached = fast)"]
+    C --> D["Stream tool blocks<br/>(start tools EARLY)"]
+    D --> E["Safe tools<br/>run in PARALLEL"]
+    E --> F["Unsafe tools<br/>run serially"]
+    F --> G(["Turn End"])
+  </div>
+ </div>
+ <div>
+  <div class="side-label langgraph"><span class="badge badge-langgraph">LangGraph</span> Standard Pipeline</div>
+  <div class="mermaid">
+flowchart TD
+    A(["Turn Start"]) --> B["Build prompt"]
+    B --> C["LLM call"]
+    C --> D["Wait for FULL<br/>response"]
+    D --> E["ToolNode runs<br/>tools sequentially"]
+    E --> F["Checkpoint<br/>save to DB"]
+    F --> G(["Turn End"])
+  </div>
+ </div>
+</div>
+
+<h3>Performance Comparison Matrix</h3>
+<table>
+<tr><th>Metric</th><th><span class="badge badge-runnable">Claude Code</span></th><th><span class="badge badge-langgraph">LangGraph</span></th><th>Winner</th></tr>
+<tr><td><b>First token latency</b></td><td>Streaming — user sees output as it generates. Tools start BEFORE full response arrives via <code>StreamingToolExecutor.addTool()</code>.</td><td>Streaming available but tools wait for full response. <code>astream_events()</code> for token-level streaming.</td><td style="color:#58a6ff;">Claude Code</td></tr>
+<tr><td><b>Tool execution</b></td><td><code>partitionToolCalls()</code>: safe tools run in parallel (up to 10), unsafe run serially. Streaming starts tools early.</td><td><code>ToolNode</code> executes sequentially by default. Parallel possible with custom node + <code>asyncio.gather()</code>.</td><td style="color:#58a6ff;">Claude Code</td></tr>
+<tr><td><b>Prompt caching</b></td><td>Byte-level cache boundary. Static system+tools cached after turn 1. Immutable messages preserve cache. Cached input tokens cost 90% less than uncached (Anthropic pricing: cached reads = 10% of base price).</td><td>No built-in cache management. Must handle at API call level manually. Possible with <code>ChatAnthropic(cache_control=...)</code>.</td><td style="color:#58a6ff;">Claude Code</td></tr>
+<tr><td><b>Context cost</b></td><td>4-tier compaction: 3 FREE tiers before expensive LLM summary.</td><td>Developer-built pruning. <code>trim_messages()</code> available but no automatic cost optimization.</td><td style="color:#58a6ff;">Claude Code</td></tr>
+<tr><td><b>Setup time</b></td><td>Build from scratch: weeks. Understanding source: hours.</td><td>Working agent in 20 lines. Production-ready in hours to days.</td><td style="color:#3fb950;">LangGraph</td></tr>
+<tr><td><b>Debugging</b></td><td>Read your own TypeScript. Full control but more code to debug.</td><td>LangGraph Studio visual debugger. Graph visualization. State inspection at any node.</td><td style="color:#3fb950;">LangGraph</td></tr>
+<tr><td><b>Checkpoint overhead</b></td><td>None — no automatic checkpointing.</td><td>Database write after every super-step. Adds latency per node execution.</td><td style="color:#58a6ff;">Claude Code</td></tr>
+<tr><td><b>Crash recovery</b></td><td>Session lost. Must restart conversation.</td><td>Resume from last checkpoint. Zero data loss.</td><td style="color:#3fb950;">LangGraph</td></tr>
+<tr><td><b>Multi-agent overhead</b></td><td>Each worker = new Claude instance. Full context isolation. Higher per-worker cost.</td><td>Subgraphs share process. Lower overhead. But less isolated.</td><td>Depends</td></tr>
+</table>
+
+<div class="info-box good">
+<b>Concrete cost example:</b> A 50-turn coding session with ~4,000 token system prompt:<br>
+<b>Without caching:</b> 4,000 × 50 turns × $0.003/1K (Sonnet pricing) = $0.60 just for the system prompt<br>
+<b>With caching:</b> 4,000 × 1 turn full + 49 turns × 10% = $0.012 + $0.059 = $0.07<br>
+<b>Savings:</b> $0.53 per session (~88%). Over 10 sessions/day = $5.30/day saved. This is why Claude Code's byte-level cache stability matters.
+</div>
+
+<h3>Where Your V4 Sits</h3>
+<div class="info-box good">
+<b>Your V4 performance profile:</b><br>
+- <b>Avg latency:</b> 13,157ms per invocation (8 real AgentCore invocations)<br>
+- <b>P50:</b> 12,676ms | <b>P90:</b> 17,816ms | <b>Min:</b> 10,419ms | <b>Max:</b> 17,816ms<br>
+- <b>98% of latency is LLM calls</b> (compound detection 13%, quality verification 28%, response synthesis 22%)<br>
+- <b>Prompt caching:</b> Cache WRITE on turn 1, HIT every turn after. System+tools &gt; 4,096 tokens = Haiku cache activates<br>
+- <b>Cost:</b> ~$0.07/session with cache vs ~$0.25 without cache<br><br>
+Your V4 already gets Claude Code's biggest performance win (prompt caching) without the complexity of building from scratch.
+</div>
+
+<div class="info-box takeaway">
+<b>Takeaway for your chatbot:</b> The performance gap between Claude Code and LangGraph WIDENS as conversations get longer. For your chatbot (typically 3-10 turns per session), LangGraph is fine. For a coding agent (100+ turns with hundreds of tool calls), Claude Code's optimizations save significant time and money. Key V4 optimizations from Claude Code that are already working:<br>
+1. Prompt cache boundary (<code># === DYNAMIC ===</code> marker) — 90% cheaper turns<br>
+2. Rich tool descriptions (15-32 lines each) — Haiku routes correctly<br>
+3. Parallel tool execution via ThreadPoolExecutor — 40% faster for multi-read<br>
+What to add next: <code>SessionCompactor</code> (R9 pattern in runnable_patterns.py) for multi-turn conversations.
+</div>
+
+</div><!-- end tab-perf -->
+
+<!-- ==================== TAB 9: Which to Choose ==================== -->
+<div id="tab-choose" class="tab-content">
+
+<h2>9. Decision Matrix: Which Should You Use?</h2>
+
+<div class="info-box">
+<b>How to think about this decision:</b> Ask yourself these 4 questions in order:<br><br>
+<b>1. What's your deadline?</b> If you need something working in days, use LangGraph — it has batteries included. If you have weeks/months, Claude Code patterns give you more control.<br>
+<b>2. What language does your team know?</b> Python team → LangGraph. TypeScript team → consider Claude Code. Mixed → LangGraph (larger ecosystem).<br>
+<b>3. How long are your conversations?</b> Short (3-20 turns) → LangGraph is fine. Long (50+ turns) → you NEED Claude Code's compaction and caching patterns or costs explode.<br>
+<b>4. How security-sensitive is the use case?</b> If you need per-tool permission control or audit logging, Claude Code's enforcement pipeline is much stronger than LangGraph's interrupt_before.<br><br>
+<b>The practical answer:</b> Most teams should use LangGraph to BUILD their agent (the framework handles the boring stuff), then ADD Claude Code patterns for reliability (caching, enforcement, memory curation). You rarely need to choose just one.
+</div>
+
+<h3>Decision Flowchart</h3>
+<div class="mermaid">
+flowchart TD
+    A{"Building a chatbot?"} -->|Yes| B["Use LangGraph"]
+    A -->|No CLI tool| C["Consider Claude Code"]
+    B --> D["Add Claude Code patterns"]
+    C --> E{"Team knows TS?"}
+    E -->|Yes| F["Build from scratch"]
+    E -->|No| G["LangGraph + patterns"]
+    D --> H(["Production agent"])
+    F --> H
+    G --> H
+</div>
+
+<h3>Full Decision Matrix</h3>
+<table>
+<tr><th>Criteria</th><th><span class="badge badge-runnable">Choose Claude Code When...</span></th><th><span class="badge badge-langgraph">Choose LangGraph When...</span></th></tr>
+<tr><td><b>Team expertise</b></td><td>Strong TypeScript. Comfortable building from scratch. Want zero dependencies.</td><td>Python team. Prefer framework abstractions. Want ecosystem integration (LangChain tools, vector stores, embeddings).</td></tr>
+<tr><td><b>Time to ship</b></td><td>Weeks/months acceptable. Building for the long term.</td><td>Days or hours. Need working prototype fast. (Your PS_Agent_Core scenario.)</td></tr>
+<tr><td><b>Enforcement needs</b></td><td>Custom per-tool validation pipeline. Shell hooks for automated enforcement. Per-tool permission rules.</td><td>Simple <code>interrupt_before</code> for human approval. Pydantic validation on tool inputs.</td></tr>
+<tr><td><b>Conversation length</b></td><td>100+ turns. Cache optimization and compaction are critical for cost.</td><td>Short conversations (3-20 turns). Context window is sufficient.</td></tr>
+<tr><td><b>Persistence</b></td><td>File-based memory is enough. No need for time-travel or crash recovery.</td><td>Need checkpoint persistence, crash recovery, time-travel debugging.</td></tr>
+<tr><td><b>Multi-agent</b></td><td>Workers need TRUE isolation (own context, own filesystem, own git worktree).</td><td>Shared state between agents is desirable. Subgraphs with supervisors.</td></tr>
+<tr><td><b>Cost sensitivity</b></td><td>High — need prompt caching, free compaction tiers, parallel tool execution.</td><td>Low — checkpoint I/O overhead acceptable. Focus on shipping, not optimizing.</td></tr>
+<tr><td><b>Vendor lock-in</b></td><td>Zero. Pure code. Any LLM API.</td><td>Moderate. Tied to LangGraph/LangChain abstractions. But well-maintained ecosystem.</td></tr>
+</table>
+
+<h3>Worked Examples: Real Decisions</h3>
+<div class="info-box">
+<b>Example 1: "I'm a 2-person Python team building a customer support bot. Ship in 2 weeks."</b><br>
+→ <b>Use LangGraph.</b> Small team + Python + tight deadline = framework speed wins. Add Claude Code's 4-type memory pattern and WHAT_NOT_TO_SAVE filter for quality. Skip the caching optimization — short conversations don't need it.
+</div>
+<div class="info-box">
+<b>Example 2: "I'm building an autonomous coding agent that runs for 100+ turns on large repos."</b><br>
+→ <b>Use Claude Code patterns (or build from scratch).</b> Long sessions NEED 4-tier compaction, prompt caching (saves $0.50+/session), parallel tool execution, and worktree isolation. LangGraph's checkpoint system adds overhead you don't need for single-user agents.
+</div>
+<div class="info-box">
+<b>Example 3: "I'm at a large company. We need an internal AI assistant with audit logging, SSO, and compliance."</b><br>
+→ <b>LangGraph + Claude Code enforcement patterns.</b> LangGraph for the framework (persistence, LangSmith monitoring, team velocity). Add Claude Code's hook system for audit logging, permission pipeline for compliance, and CATASTROPHIC_PATTERNS for safety. The hook system is the key — it lets compliance teams add rules without touching agent code.
+</div>
+
+<h3>What You Should Take From Claude Code for ANY LangGraph Chatbot</h3>
+<table>
+<tr><th>Claude Code Pattern</th><th>Apply to Your LangGraph Chatbot</th><th>How (Specifically)</th></tr>
+<tr><td><b>Tool validation pipeline</b></td><td>Add input validation BEFORE tool execution</td><td>Conditional edge that checks input before tools node. Or Pydantic validators on @tool schemas. Your V4: CATASTROPHIC_PATTERNS + LAYER 0-4.</td></tr>
+<tr><td><b>Enforcement hooks</b></td><td>Block dangerous operations programmatically</td><td>Pre-tool validation node in graph. Not just <code>interrupt_before</code> (that needs a human). Your V4: <code>_classify_bash_ro()</code> auto-blocks.</td></tr>
+<tr><td><b>4-type memory</b></td><td>Curated cross-session memory, not raw transcripts</td><td>Use LangGraph Store API with namespaces matching USER/FEEDBACK/PROJECT/REFERENCE. Filter with WHAT_NOT_TO_SAVE rules.</td></tr>
+<tr><td><b>Context compaction</b></td><td>Prune old messages when context fills</td><td>Custom node that uses <code>trim_messages()</code> or LLM summary. Add as conditional edge before agent node. Your V4: microcompact at 70%, full at 80%.</td></tr>
+<tr><td><b>Coordinator 4-phase</b></td><td>Research -> Synthesize -> Implement -> Verify</td><td>Your V4 supervisor already does phases 1-3. Add verification specialist for quality-critical responses (USE_VERIFICATION flag).</td></tr>
+<tr><td><b>"Never delegate understanding"</b></td><td>Supervisor must synthesize, not just route</td><td>Your V4 supervisor picks specialist + tool. The respond node synthesizes. This matches the Claude Code rule.</td></tr>
+<tr><td><b>Prompt cache boundary</b></td><td>Cache system prompt, not messages</td><td>Your V4: <code># === DYNAMIC ===</code> marker. Bedrock prompt caching with <code>anthropic_beta</code> header. Already working.</td></tr>
+<tr><td><b>Parallel tool execution</b></td><td>Read-only tools run concurrently</td><td>Your V4: ThreadPoolExecutor for consecutive read-only tools. Claude Code: up to 10 concurrent. Your V4: configurable.</td></tr>
+<tr><td><b>Session compaction (R9)</b></td><td>Prune long multi-turn conversations</td><td><code>runnable_patterns.py</code> has SessionCompactor. Wire into Flask app for sessions > 20 messages. Summarize old, keep recent 5.</td></tr>
+</table>
+
+<h3>Real-World Use Case Mapping</h3>
+<table>
+<tr><th>Use Case</th><th>Recommendation</th><th>Why</th></tr>
+<tr><td><b>CLI coding assistant</b> (like Claude Code)</td><td style="color:#58a6ff;"><b>Claude Code</b></td><td>Long sessions, many tools, streaming UX, custom enforcement, byte-level cache optimization</td></tr>
+<tr><td><b>Customer service chatbot</b> (like your V4)</td><td style="color:#3fb950;"><b>LangGraph + Claude Code patterns</b></td><td>Supervisor + specialists is natural fit. Add enforcement, caching, compaction from Claude Code.</td></tr>
+<tr><td><b>Data analysis pipeline</b></td><td style="color:#3fb950;"><b>LangGraph</b></td><td>DAG structure is natural. Checkpoint for crash recovery. Send() for parallel processing.</td></tr>
+<tr><td><b>Autonomous SWE agent</b></td><td style="color:#58a6ff;"><b>Claude Code</b></td><td>Long-running, needs filesystem isolation (worktree), custom tool validation, cost-sensitive.</td></tr>
+<tr><td><b>Multi-agent research system</b></td><td>Hybrid</td><td>LangGraph for orchestration + custom code for tool execution and enforcement.</td></tr>
+<tr><td><b>Enterprise SaaS with AI</b></td><td style="color:#3fb950;"><b>LangGraph</b></td><td>Team velocity, built-in persistence, visual debugging, LangChain ecosystem.</td></tr>
+<tr><td><b>Security-sensitive agent</b></td><td style="color:#58a6ff;"><b>Claude Code</b></td><td>Custom enforcement hooks, per-tool permission pipeline, zero framework dependencies.</td></tr>
+</table>
+
+<div class="info-box warn">
+<b>Common mistakes to avoid:</b><br>
+<ul>
+<li><b>Don't rebuild the car frame:</b> If LangGraph gives you 90% of what you need, don't rewrite it in TypeScript. Add the missing 10% as patterns on top.</li>
+<li><b>Don't skip enforcement:</b> LangGraph's <code>interrupt_before</code> (pauses the graph and waits for human approval before running a node) is for human review. Claude Code's hooks are for AUTOMATED enforcement. You probably need both.</li>
+<li><b>Don't ignore cache invalidation:</b> If you mutate messages after creation (common in Python), you break prompt caching. This can silently 10x your costs.</li>
+<li><b>Don't forget the reducer:</b> In LangGraph, a reducer controls how state updates merge — <code>operator.add</code> means "append to list." If you forget it on your messages field, new messages REPLACE old ones instead of appending. Your conversation history disappears.</li>
+</ul>
+</div>
+
+<div class="info-box takeaway">
+<b>Final takeaway:</b><br>
+<code style="color:#3fb950;">LangGraph</code> = the car frame. Gets you 90% there fast.<br>
+<code style="color:#58a6ff;">Claude Code patterns</code> = the safety features. Enforcement, validation, caching, curated memory.<br><br>
+Use LangGraph to BUILD your chatbot.<br>
+Use Claude Code patterns to make it RELIABLE.<br>
+Don't rebuild the car frame from scratch.<br><br>
+<b>Your V4 already implements these Claude Code patterns:</b><br>
+R4: <code>CacheBreakDetector</code> — detects prompt cache invalidation (in <code>runnable_patterns.py</code>)<br>
+R7: <code>PermissionPipeline</code> — RBAC enforcement via ADMIN_ONLY_TOOLS (in <code>runnable_patterns.py</code>)<br>
+R9: <code>SessionCompactor</code> — prune long multi-turn conversations (in <code>runnable_patterns.py</code>)
+</div>
+
+</div><!-- end tab-choose -->
+
+<!-- Modal overlay (matching PS_FLOWCHART_RUNNABLE.html) -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+ <div class="modal">
+ <button class="modal-close" onclick="closeModal()">x</button>
+ <h3 id="modal-title"></h3>
+ <div class="modal-body" id="modal-body"></div>
+ </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.14.0/dist/mermaid.min.js"></script>
+<script>
+function closeModal() {
+ document.getElementById('modal').classList.remove('active');
+}
+document.addEventListener('keydown', function(e) {
+ if (e.key === 'Escape') closeModal();
+});
+
+function switchTab(tabId) {
+ document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+ document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+ document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+ document.getElementById('tab-' + tabId).classList.add('active');
+}
+
+// Pre-render all tabs (Mermaid cannot render charts in display:none)
+document.addEventListener('DOMContentLoaded', function() {
+ // Show ALL tabs temporarily
+ document.querySelectorAll('.tab-content').forEach(function(t) {
+  t.style.display = 'block';
+ });
+
+ mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  securityLevel: 'loose',
+  flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
+ });
+
+ mermaid.run().then(function() {
+  // After rendering, restore tab visibility
+  document.querySelectorAll('.tab-content').forEach(function(t) {
+   t.style.display = '';
+  });
+ });
+});
+</script>
+
+<hr style="border-color:#30363d;margin-top:40px;">
+<p style="color:#484f58;font-size:12px;margin-top:20px;">
+ Claude Code v2.1.87 (1,438 TypeScript files) vs LangGraph 0.2+ (Python framework) |
+ Source-verified from gg-claude-code-runnable/src/ |
+ PS_Agent_Core V4 examples from real deployed chatbot |
+ Companion to <a href="PS_FLOWCHART_RUNNABLE.html" style="color:#30363d;">PS_FLOWCHART_RUNNABLE.html</a> |
+ Generated 2026-04-04
+</p>
+</body>
+</html>
