@@ -39,12 +39,22 @@ if _AGENT_ROOT not in sys.path:
 def workspace(tmp_path, monkeypatch):
     """Point CONFIG.workspace at a temp dir; clear allowed_paths so the
     boundary check has only one root. Every test that touches the
-    filesystem uses this fixture."""
+    filesystem uses this fixture.
+
+    Phase 5 update: rebuild the security/manager.SECURITY singleton so
+    the validate_path call sees the new workspace (singleton captures
+    CONFIG.workspace at construction)."""
     from runtime.config import CONFIG
     monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
     monkeypatch.setattr(CONFIG, "allowed_paths", [])
-    # Optional: smaller max_file_size for the large-file test.
     monkeypatch.setattr(CONFIG, "max_file_size", 10 * 1024 * 1024)
+    # Rebuild SECURITY singleton against the new workspace.
+    try:
+        from security.manager import rebuild_singleton_for_tests
+        rebuild_singleton_for_tests()
+    except ImportError:
+        # Phase 3 tests may run before Phase 5 lands — ignore.
+        pass
     return tmp_path
 
 
@@ -117,6 +127,12 @@ def test_path_validation_accepts_file_in_allowed_path(workspace, tmp_path_factor
     from runtime.config import CONFIG
     extra = tmp_path_factory.mktemp("extra")
     monkeypatch.setattr(CONFIG, "allowed_paths", [str(extra)])
+    # Rebuild SECURITY so the new allowed_paths take effect.
+    try:
+        from security.manager import rebuild_singleton_for_tests
+        rebuild_singleton_for_tests()
+    except ImportError:
+        pass
     from tools._path_validation import validate_path
     ok, msg = validate_path(str(extra / "x.txt"))
     assert ok is True, f"unexpected reject: {msg}"
@@ -529,6 +545,13 @@ def test_glob_allowed_paths_fallback(workspace, tmp_path_factory, monkeypatch):
     extra = tmp_path_factory.mktemp("parent_repo")
     (extra / "config.yaml").write_text("k: v", encoding="utf-8")
     monkeypatch.setattr(CONFIG, "allowed_paths", [str(extra)])
+    # Rebuild SECURITY so the new allowed_paths take effect for validate_path
+    # boundary checks on the matched files.
+    try:
+        from security.manager import rebuild_singleton_for_tests
+        rebuild_singleton_for_tests()
+    except ImportError:
+        pass
     from tools import find_tool_by_name, all_registered
     tool = find_tool_by_name(all_registered(), "glob")
     # Workspace has no .yaml files; allowed_paths has one.

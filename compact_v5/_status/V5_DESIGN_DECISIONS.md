@@ -493,4 +493,89 @@ N/A (replacement; the cost is dispersed but reviewability improves).
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 011, 012, ...)
+## ADR-011 — Phase 5 security/ + bash + python_exec: REUSE v4 verbatim, retire `_path_validation` stub
+- Date: 2026-04-30
+- Phase ID: 05
+- Status: ACCEPTED
+- Source:
+  - v4 `compact_v4/MAIN/agent/sagemaker_agent.py:1298-2148` (`SecurityManager` class — ~850 LOC, including SECRET_PATTERNS, SENSITIVE_FILES, CATASTROPHIC_PATTERNS, DANGEROUS_PATTERNS (70+ regex), DANGEROUS_PYTHON (~70 regex), ALLOWED_PYTHON_MODULES, BLOCKED_PYTHON_MODULES, BLOCKED_PYTHON_MEMBERS, validate_path, validate_command, validate_python, scan_secrets, truncate_output)
+  - v4 `:756-861` (`Truncation` class — used by `SECURITY.truncate_output`)
+  - v4 `:5239` (`tool_bash`), `:5409` (`tool_python_exec`)
+  - v4 `:4988-5160` (helpers: `_safe_exec_env`, `_run_subprocess`, `_validate_shell_redirections`, `_docker_base_cmd`, `_ensure_docker_image_ready`, `_kill_active_process`)
+  - v4 `:10487` (`HIGH_RISK_TOOLS = {"bash", "python_exec", "task", "web_fetch"}` — used by approval-prompt UX)
+  - v4 `:2107-2138` (`_auto_detect_allowed_paths` — SageMaker root + git repo root auto-detection)
+  - v4 `:4212` (`_resolve_path` helper)
+  - Runnable: `gg-claude-code-runnable/src/tools/BashTool/prompt.ts` (description text only — Runnable's executor is unrelated TypeScript shell logic)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** for the security module + bash + python_exec executors. Replaces the v4 monolith inline definitions.
+- **ADDITION** for the package boundary itself (security/ as its own importable package). v4 had everything inline in `sagemaker_agent.py`.
+
+### Question 2 — Architectural justification (ADDITIONS only)
+**Why a security/ package boundary:** v4's SecurityManager + dangerous-pattern lists + helpers were ~1000 LOC of security-critical code interleaved with everything else in the monolith. The security review requires reading these as a unit, but in v4 they were scattered. v5 isolates them into `security/` so:
+- A future security audit can scan one package, not the whole monolith.
+- Phase 3-4 tools that already use `validate_path` switch from the Phase-3 stub to the production module via a one-line import change (the stub becomes a delegating shim for backwards compatibility).
+- Adding new dangerous patterns is a bounded edit to one file (`dangerous_patterns.py` or `dangerous_python.py`), not a search-and-add across a monolith.
+- Tests can target the security boundary without spinning up the entire agent runtime.
+
+### Question 3 — Cost
+- Token cost (static prompt): 0 (security/ is runtime code, not in the prompt).
+- Token cost (per turn): 0 (bash + python_exec descriptions ship per turn; size is comparable to v4's text).
+- Code complexity: ~1100 LOC across 5 security files + 2 tool modules + 1 retired stub. v4 had ~1000 LOC inline. Net: ~10% more LOC for the package boundary, but every file has a single clear responsibility.
+- Maintenance: regex patterns concentrate in 2 files; SecurityManager class gets the policy logic; helpers get the subprocess + redirection plumbing. Adding a new pattern is grep + edit one file.
+
+### Question 4 — Cost worth it?
+**Yes.** The 134-case destructive-command coverage is the single largest security control v5 inherits from v4. Isolating it improves auditability. The architectural separation also makes the Phase 5 acceptance criterion ("134-case coverage from v4 still passes") mechanically verifiable.
+
+### Decision
+- **ACCEPTED for v5.0** — Phase 5 lands the following files, all REUSE v4 verbatim with v5-compatible imports:
+  - `compact_v5/MAIN/agent/security/__init__.py` — package init exposing `SECURITY` singleton + helper re-exports.
+  - `compact_v5/MAIN/agent/security/manager.py` — `SecurityManager` class verbatim + SECRET_PATTERNS + SENSITIVE_FILES + helper functions (`_resolve_path`, `_safe_exec_env`, `_run_subprocess`, `_validate_shell_redirections`, `_docker_base_cmd`, `_ensure_docker_image_ready`, `_kill_active_process`, `_auto_detect_allowed_paths`).
+  - `compact_v5/MAIN/agent/security/dangerous_patterns.py` — CATASTROPHIC_PATTERNS + DANGEROUS_PATTERNS + NETWORK_COMMANDS + BASE_ALLOWED_COMMANDS + INTERPRETER_COMMANDS + CONTAINER_COMMANDS.
+  - `compact_v5/MAIN/agent/security/dangerous_python.py` — DANGEROUS_PYTHON + ALLOWED_PYTHON_MODULES + BLOCKED_PYTHON_MODULES + BLOCKED_PYTHON_MEMBERS + ALLOWED_AWS_HINT.
+  - `compact_v5/MAIN/agent/security/high_risk.py` — HIGH_RISK_TOOLS frozenset + `is_high_risk(name)` helper.
+  - `compact_v5/MAIN/agent/runtime/truncation.py` — Truncation class verbatim.
+  - `compact_v5/MAIN/agent/tools/bash.py` — verbatim port of v4 `tool_bash` + ADAPT Runnable `BashTool/prompt.ts` description.
+  - `compact_v5/MAIN/agent/tools/python_exec.py` — verbatim port of v4 `tool_python_exec` + v5-native description (no Runnable analog — Runnable uses Bash for Python).
+
+### `_path_validation.py` retirement
+- Phase 3 shipped `tools/_path_validation.py` as an ~80-LOC stub.
+- Phase 5 converts it into a **thin delegating shim**: `validate_path` and `resolve_path` forward to `security.manager.SECURITY.validate_path` and `security.manager._resolve_path`.
+- All 8 existing Phase 3-4 tool modules keep their `from . import _path_validation as path_security` imports unchanged.
+- The shim documents the delegation inline so a future reader knows where the real implementation lives.
+- This avoids touching 8 tool modules in this phase. Phase 13 can decide whether to remove the shim entirely (and update the 8 imports to point at `security.manager` directly) or keep the indirection forever.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraints = `Bedrock` + `python_exec` + `.ipynb`:
+- Bedrock-only mode (`CONFIG.aws_bedrock_only`) blocks all AWS clients except `bedrock-runtime`. Runnable uses Anthropic API directly — no AWS client to block. v5's Bedrock-only check is uniquely v5/v4.
+- `python_exec` is v5/v4-specific: a sandboxed Python execution tool with allowlist-based AST validation, runtime closure-based import hook, and workspace-scoped file IO. Runnable doesn't have this — it tells the model to use Bash for Python. v5/v4 keep `python_exec` because plan-mode forbids bash AND because the closure sandbox is significantly more restrictive than spawning a generic shell.
+- `.ipynb` constraint forces no Ink/JSX in the bash/python_exec UI — text output flows back through the existing approval prompt.
+
+### Affected files
+- compact_v5/MAIN/agent/security/__init__.py (new)
+- compact_v5/MAIN/agent/security/manager.py (new — verbatim port)
+- compact_v5/MAIN/agent/security/dangerous_patterns.py (new — verbatim constants)
+- compact_v5/MAIN/agent/security/dangerous_python.py (new — verbatim constants)
+- compact_v5/MAIN/agent/security/high_risk.py (new)
+- compact_v5/MAIN/agent/runtime/truncation.py (new — verbatim port of Truncation class)
+- compact_v5/MAIN/agent/tools/bash.py (new)
+- compact_v5/MAIN/agent/tools/python_exec.py (new)
+- compact_v5/MAIN/agent/tools/_path_validation.py (modified — converted to delegating shim)
+- compact_v5/MAIN/agent/tools/__init__.py (extended bootstrap_built_ins)
+- compact_v5/MAIN/agent/tests/unit/test_security_manager.py (new)
+- compact_v5/MAIN/agent/tests/tools/test_phase5_bash_python.py (new)
+
+### Intentional deviation from v4 in `python_exec` invocation
+- **v4** (`compact_v4/MAIN/agent/sagemaker_agent.py:5433`): `[sys.executable, temp_path]` — runs Python with the user's site-packages reachable.
+- **v5 Phase 5**: `[sys.executable, "-I", temp_path]` — adds the `-I` (isolated mode) flag. This prevents the user's pip cache, PYTHONPATH, and `~/.pythonrc` from leaking into the sandboxed code. The closure-based runtime sandbox still enforces the import allowlist; `-I` just hardens the boundary so `sys.path` doesn't include `~/.local/lib/...` packages the agent never declared.
+- **Codex Phase-05 review finding 4**: flagged this as a non-verbatim deviation. Documented here as intentional hardening; locked by `test_python_exec_uses_isolated_mode` so a future refactor cannot silently drop the flag.
+- **Why this is "better than v4"**: a malicious package installed in the user's home (e.g., a typo-squatted dep) cannot be imported by the sandbox even if the user's environment has it. The `-I` mode is a small additional defense-in-depth layer.
+
+### Linked port-log rows
+- #010 — Runnable BashTool/prompt.ts → tools/bash.py:_DESCRIPTION (executor body is v4 port; ADAPT for description text only)
+- (No row for python_exec — no Runnable analog. Documented inline in tools/python_exec.py.)
+- (No rows for security/ files — pure v4 reuse, no Runnable adoption.)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 012, 013, ...)

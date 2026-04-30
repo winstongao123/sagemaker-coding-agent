@@ -122,6 +122,24 @@ User reinforced: when learning Runnable, must go DEEP into architecture and inte
 - Phase 04 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-04.
 - Next: tag v5-phase-04, begin Phase 05 (bash + python_exec + security/ verbatim port from v4 — retires tools/_path_validation.py stub).
 
+### Phase 05 close (2026-04-30, ready to tag v5-phase-05)
+- ADR-011 appended (Phase 5 strategy: REUSE v4 verbatim — SecurityManager class + 134-case destructive-command coverage; retire Phase-3 _path_validation stub as 4-line delegating shim; document `python_exec -I` flag as intentional defense-in-depth).
+- security/ package created: __init__.py (with dynamic SECURITY via __getattr__ + get_security helper), manager.py (~510 LOC SecurityManager + helpers), dangerous_patterns.py (CATASTROPHIC + DANGEROUS_PATTERNS + allowlists), dangerous_python.py (DANGEROUS_PYTHON + ALLOWED/BLOCKED + members), high_risk.py (HIGH_RISK_TOOLS frozenset).
+- runtime/truncation.py created (verbatim port of v4 Truncation).
+- tools/bash.py + tools/python_exec.py created. Both use call-time `_security_manager.SECURITY` dereference (Codex finding 1 fix). python_exec uses `[sys.executable, '-I', temp_path]` for defense-in-depth (Codex finding 4: documented in ADR-011 + locked by test_python_exec_uses_isolated_mode).
+- tools/_path_validation.py converted from 80-LOC standalone to 4-line delegating shim (forwards to security.manager). 8 Phase-3-4 tool modules' imports unchanged.
+- PORT_LOG row #010 added (Runnable BashTool/prompt.ts → tools/bash.py, FAITHFUL-WITH-JUSTIFIED-ADAPTATION post-fix). python_exec + security/* documented as v4-native / no Runnable analog.
+- Codex review (gpt-5.5, reasoning=medium, via stdin): APPROVE_WITH_FIXES with 2 majors + 2 minors. All 4 fixed in same Phase 05 commit:
+  - Major #1 (stale singleton): bash + python_exec moved to call-time `_security_manager.SECURITY` lookup. Locked by test_bash_executor_picks_up_rebuilt_singleton.
+  - Major #2 (sampled-not-full coverage): 3 v4-vs-v5 pattern-count parity tests (parses v4 source, counts list literals, asserts equality) + 25-case representative-command matrix.
+  - Minor #3 (docs over-promised): rewrote security/__init__.py comment to accurately distinguish live vs stale patterns; added get_security() helper.
+  - Minor #4 (`-I` flag deviation): documented in ADR-011 as intentional hardening; locked by test_python_exec_uses_isolated_mode.
+- Phase 05 verification: 217 passed + 4 skipped post-fix (4 skips: 1 Windows symlink, 3 v4-source-not-reachable parity tests on portable runs).
+- PS_V5 docs updated: 7 Phase-5 functional-change entries + 6 Phase-5 learnings entries + 7 new "Better than X" tracker rows (closure sandbox, audit boundary, Python 3.11 portability, rebuild_singleton_for_tests, dynamic re-export, focused bash prompt, dedicated python_exec for plan-mode).
+- Per-phase changelog: compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_05.md.
+- Phase 05 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-05.
+- Next: tag v5-phase-05, begin Phase 06 (Sectioned prompt + cache — PS Issue #7 structural fix). AGGREGATE AUDIT GATE fires before Phase 07.
+
 ### Phase 0 follow-ups (after first commit `5259adf`)
 - Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
 - Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.

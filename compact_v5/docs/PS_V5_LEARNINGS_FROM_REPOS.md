@@ -181,10 +181,46 @@
 | **4** | **v4** | **read-tracking module** | **Single-purpose 80-LOC module vs three scattered globals (_FILES_READ + _FILE_READ_TIMES + _FILES_READ_LOCK).** |
 | **4** | **v4** | **stale-check error msg** | **Explicit recovery hint ("Re-read with read_file to refresh, then retry") vs v4's bare error string.** |
 | **4** | **v4** | **atomic-write tested** | **`_atomic_write_json` is now mockable; `test_notebook_edit_atomic_write_preserves_on_failure` locks the contract.** |
+| **5** | **Runnable** | **bash prompt focus** | **Drops Runnable's ~300 lines of undercover/gh/USER_TYPE branches; v5 keeps a focused 90-line description with WHEN/WHEN NOT triage. Smaller per-turn payload + clearer triage.** |
+| **5** | **Runnable** | **python_exec dedicated tool** | **Plan-mode users have a sandboxed Python tool. Runnable plan-mode users have nothing — they must use Bash, which plan-mode forbids.** |
+| **5** | **Runnable** | **closure sandbox** | **`open()` / `os.open()` / `io.open()` / `os.remove` / `os.rmdir` / `os.posix_spawn` all wrapped at runtime via closures the user code cannot see. Runnable just documents which tools to avoid; v5/v4 enforce in-process.** |
+| **5** | **v4** | **security audit boundary** | **5-file `security/` package (auditable in <30 min) vs v4's 1000+ LOC inline in the 12K-line monolith.** |
+| **5** | **v4** | **Python 3.11 portability** | **Closure-sandbox allowlist now includes `_collections_abc`, `keyword`, `reprlib`, `_pyio`, `_compat_pickle`, `_warnings` — observed transitive imports needed for `import json` to work on Python 3.11. v4 hit this gap but never patched.** |
+| **5** | **v4** | **rebuild_singleton_for_tests** | **Tests rebuild SECURITY against monkeypatched CONFIG in <1s; v4 testing pattern required fresh process per scenario.** |
+| **5** | **v4** | **dynamic SECURITY re-export** | **`security/__init__.py` uses module-level `__getattr__` for `SECURITY` — callers that did `from security import SECURITY` always get the CURRENT singleton, even after rebuild. Eliminates stale-reference bugs.** |
 
 ---
 
-## Phases 4-13
+## Phase 5 — bash + python_exec + security verbatim from v4
+
+### From Runnable: BashTool prompt (PORT_LOG #010)
+- **Source**: `gg-claude-code-runnable/src/tools/BashTool/prompt.ts` — 369 lines covering Runnable-specific behaviors (undercover instructions, gh attribution, sandbox manager, USER_TYPE branches, background-task notes).
+- **Adopted (ADAPT)**: `tools/bash.py:_DESCRIPTION` keeps the core (~90 LOC vs Runnable's 369). Drops Runnable-specific content — all inapplicable to Bedrock + .ipynb.
+- **Better than Runnable**: smaller, focused description; lower per-turn token cost.
+
+### From v4: security/ package extracted from monolith
+- **Source**: v4 `compact_v4/MAIN/agent/sagemaker_agent.py:1298-2148` (SecurityManager class) + adjacent regex constants and helpers.
+- **Adopted (verbatim port)**: 5 small files in `compact_v5/MAIN/agent/security/`. Constants split into `dangerous_patterns.py` + `dangerous_python.py`; class + helpers in `manager.py`; HIGH_RISK_TOOLS in `high_risk.py`; package re-exports in `__init__.py` (with dynamic `SECURITY` via module-level `__getattr__`).
+- **Better than v4 (auditability)**: 5 files in 30 minutes vs 1000+ LOC inside a 12K-line monolith.
+- **Better than v4 (testability)**: `rebuild_singleton_for_tests()` lets pytest rebuild SECURITY against monkeypatched CONFIG without spawning a fresh process per scenario.
+
+### From v4: Truncation extracted to runtime/truncation.py
+- **Source**: v4 `:756-861`. Used by SECURITY.truncate_output AND directly by tool_bash, tool_python_exec, tool_read_file.
+- **Adopted (verbatim)**: `runtime/truncation.py`. Lives in `runtime/` to avoid a circular-import path (security uses Truncation, tools use Truncation, security is imported by tools).
+
+### From v4: closure-based python_exec sandbox preamble
+- **Source**: v4 `:5293-5407` — `_build_python_preamble` + `_install_sandbox` closure pattern.
+- **Adopted (verbatim)**: `tools/python_exec.py:_build_python_preamble`. Wraps `__import__`, `open`, `os.open`, `io.open`, `os.remove/unlink/rmdir`, `os.posix_spawn` at runtime via closures the user code cannot reach.
+- **No Runnable analog**: Runnable has no python_exec.
+- **v5 enhancement over v4**: extended import allowlist with Python 3.11 transitive imports (`_collections_abc`, `keyword`, `reprlib`, `_pyio`, `_compat_pickle`, `_warnings`).
+
+### From v4: Bedrock-only mode integrated into validate_command + validate_python
+- **Source**: v4 `:1869, 1987-2014`.
+- **Adopted (verbatim)**: same Layer-0 checks in `security/manager.py`. When `aws_bedrock_only=True`, all `aws CLI` and all `boto3.client('<service>')` (except `'bedrock-runtime'`) are blocked.
+
+---
+
+## Phases 6-13
 
 (Future — entries land per phase.)
 
@@ -201,3 +237,10 @@ This section consolidates every place v5 is better than the source repo, for qui
 | 1 | (n/a) | Bedrock | (PS Issue #4 lock test added — same v4 behavior, now regression-proof.) |
 | 2 | Runnable | Tool registry | Duplicate-name registration loudly fails (Runnable allows silent override). |
 | 2 | Runnable + v4 | Plan-mode | MCP tools filtered at registry-assembly time, not dispatch time. |
+| 5 | Runnable | bash prompt focus | Drops Runnable's ~300 lines of undercover/gh/USER_TYPE branches; v5 keeps a focused 90-line description. |
+| 5 | Runnable | python_exec dedicated tool | Plan-mode users have a sandboxed Python tool. Runnable plan-mode users have nothing. |
+| 5 | Runnable | closure sandbox | open/os.open/io.open/os.remove/os.posix_spawn wrapped at runtime. Runnable just documents which tools to avoid. |
+| 5 | v4 | security audit boundary | 5-file package vs v4's 1000+ LOC inline. |
+| 5 | v4 | Python 3.11 portability | Closure-sandbox allowlist now includes `_collections_abc` etc. — transitive imports needed for `import json` to work on 3.11. |
+| 5 | v4 | rebuild_singleton_for_tests | <1s test rebuilds vs v4's fresh-process-per-scenario. |
+| 5 | v4 | dynamic SECURITY re-export | `from security import SECURITY` always returns the current singleton via module `__getattr__`. |

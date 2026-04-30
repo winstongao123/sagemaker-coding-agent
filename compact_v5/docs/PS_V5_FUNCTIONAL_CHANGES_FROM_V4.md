@@ -175,6 +175,52 @@ Four mutating tools (`write_file`, `edit_file`, `notebook_edit`, `view_image`) +
 
 ---
 
-## Phases 5-13
+## Phase 5 — bash + python_exec + security verbatim from v4
+
+This is the phase where v4's most security-critical code lands in v5. The v4 SecurityManager (~850 LOC), DANGEROUS_PATTERNS (70+ regex), DANGEROUS_PYTHON (~70 regex), and the closure-based python_exec sandbox preamble are all ported VERBATIM. Functional improvements over v4 are limited (the goal here is preservation, not innovation), but several architectural and test-surface improvements land:
+
+### 5.1 Security policies are now in their own files (auditability)
+- **v4**: SecurityManager class + 1000+ LOC of regex constants were inline in the monolith. A security audit had to scan a 12K-line file.
+- **v5**: `security/dangerous_patterns.py` (CATASTROPHIC + DANGEROUS_PATTERNS + allowlists), `security/dangerous_python.py` (DANGEROUS_PYTHON + ALLOWED/BLOCKED + members), `security/high_risk.py` (HIGH_RISK_TOOLS), `security/manager.py` (the class + helpers). A reviewer scans 5 small files.
+- **Behavior delta**: zero. All 134-case destructive-command coverage from v4 preserved verbatim.
+
+### 5.2 Closure-sandbox import allowlist extended for Python 3.11
+- **v4**: closure preamble allowlist was tuned for Python 3.10. Some 3.11 transitive imports (e.g., `_collections_abc` pulled in by `json` → `collections`) fail.
+- **v5 Phase 5**: added `_collections_abc`, `keyword`, `reprlib`, `_pyio`, `_compat_pickle`, `_warnings` to the allowlist (observed during Phase 5 testing; v4 had the same gap but was not running on 3.11 at the time the list was finalised).
+- **Behavior delta**: previously, `import json` inside `python_exec` would fail on Python 3.11 with `ImportError: Security: import '_collections_abc' is not in the allowed modules list`. Now it works.
+- **Better than v4**: yes — Python-version-portability fix that v4 hadn't surfaced.
+
+### 5.3 Singleton rebuilding for tests
+- **v4**: SecurityManager was a global created once at module import time. Tests had no clean way to rebuild it after monkeypatching CONFIG.
+- **v5**: `security.manager.rebuild_singleton_for_tests()` returns a fresh SecurityManager bound to current CONFIG state. `security.__init__.py` exposes `SECURITY` via module-level `__getattr__` so callers always get the current singleton — no stale references.
+- **Behavior delta**: tests that monkeypatch CONFIG.workspace can now rebuild SECURITY in their fixtures and validate against the new workspace.
+- **Better than v4**: the v4 testing pattern required fresh process per scenario; v5 tests run in <2s.
+
+### 5.4 Path-validation shim retains backwards compatibility
+- **Phase 3** shipped `tools/_path_validation.py` as an ~80-LOC standalone (workspace boundary check + symlink escape detection).
+- **Phase 5** converts it into a 4-line delegating shim that forwards to `security.manager.validate_path` / `resolve_path`.
+- **Behavior delta**: the 8 Phase 3-4 tool modules keep their `from . import _path_validation as path_security` imports unchanged; security checks now use the full SecurityManager (including `.env` block, sensitive-file block, allowed_paths boundary).
+- **Better than v4**: Phase-13 cutover can either retire the shim (and update 8 imports to point at `security.manager` directly) or keep the indirection forever. Either choice is one-line edits.
+
+### 5.5 `is_destructive` + HIGH_RISK_TOOLS membership for bash + python_exec
+- **v4**: bash and python_exec were marked high-risk in the approval-prompt UX (`HIGH_RISK_TOOLS = {"bash", "python_exec", "task", "web_fetch"}` at sagemaker_agent.py:10487) but neither tool exposed an `is_destructive` flag — the approval prompt's "always allow" suppression worked for OTHER tools but always asked for these four.
+- **v5**: explicit `is_destructive=True` flag on both tools' ToolRecord, plus `HIGH_RISK_TOOLS` membership locked by a test (`test_phase5_tools_high_risk_flags`). Phase 11's UX wiring will use both signals to decide approval-prompt behavior.
+- **Behavior delta**: tools now self-declare destructiveness in machine-readable form. Locked by tests so any future regression that drops the flag fails CI.
+
+### 5.6 Truncation moved to its own module
+- **v4**: Truncation class was inline in the monolith.
+- **v5**: `runtime/truncation.py` is a standalone module (~115 LOC). Used by both `SECURITY.truncate_output` and individual tool executors (read_file large-file guard, bash head/tail truncate, python_exec output cap).
+- **Behavior delta**: zero. Verbatim port.
+- **Better than v4 (architecturally)**: Truncation tests can target the boundary directly. Phase 6 prompt assembly can also use it without pulling in the whole SecurityManager.
+
+### 5.7 Tool count increase: 8 → 10
+- **v5 Phase 4 end**: 8 tools (read_file, grep, glob, list_dir, write_file, edit_file, notebook_edit, view_image).
+- **v5 Phase 5 end**: 10 tools (+ bash, python_exec).
+- **v4 reference**: 30 tools total. v5 still well under v4's count (we have Phase 7 ToolSearch + Phase 9 task + Phase 10 skills/todo/etc to add).
+- **Behavior delta**: per-turn tool-list payload grows by ~600 tokens (bash + python_exec descriptions). Phase 7 `apply_tool_search_deferral` will defer rare tools, but bash + python_exec are intentionally always-loaded (the model uses them constantly).
+
+---
+
+## Phases 6-13
 
 (Future — entries land per phase.)

@@ -31,13 +31,22 @@ if _AGENT_ROOT not in sys.path:
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
     """Point CONFIG.workspace at a tmpdir; clear allowed_paths; reset
-    read-tracking so each test starts with a clean slate."""
+    read-tracking + rebuild SECURITY singleton so each test starts clean.
+
+    Phase 5 (ADR-011) introduced the security/manager.SECURITY singleton
+    which captures CONFIG.workspace at construction. Tests that monkeypatch
+    CONFIG.workspace must call rebuild_singleton_for_tests() so the
+    singleton picks up the new workspace; otherwise validate_path keeps
+    using the original (real) workspace and rejects tmp_path."""
     from runtime.config import CONFIG
     monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
     monkeypatch.setattr(CONFIG, "allowed_paths", [])
     monkeypatch.setattr(CONFIG, "max_file_size", 10 * 1024 * 1024)
     from tools import _file_read_tracking
     _file_read_tracking.reset_for_tests()
+    # Rebuild SECURITY singleton against the new workspace.
+    from security.manager import rebuild_singleton_for_tests
+    rebuild_singleton_for_tests()
     return tmp_path
 
 

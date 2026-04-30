@@ -19,6 +19,12 @@ Format: one row per Runnable pattern adopted. Never delete rows. Mark superseded
 
 **view_image (Phase 04)** has no Runnable analog — Runnable's FileReadTool handles images natively (Anthropic API multimodal). v5 keeps a dedicated tool for v4 parity + clearer trace/audit; documented inline in tools/view_image.py and ADR-010. No PORT_LOG row.
 
+| 010 | 2026-04-30 | 05 | src/tools/BashTool/prompt.ts (description text only) | compact_v5/MAIN/agent/tools/bash.py:_DESCRIPTION (executor body is v4 port from sagemaker_agent.py:5239) | ADAPT | PASS (post-fix) | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | (pending) | Drops Runnable-specific content (undercover instructions, gh attribution, sandbox manager, USER_TYPE branches, background-task notes) — all inapplicable to Bedrock + .ipynb. Keeps core: shell command rules, denylist guidance, WHEN/WHEN NOT triage. constraint=Bedrock + .ipynb. ADR-011. Codex Phase-05 finding 1 fixed: tools/bash.py now imports `security.manager` module and dereferences `_security_manager.SECURITY` at call time so rebuild_singleton_for_tests is picked up cleanly. |
+
+**python_exec (Phase 05)** has no Runnable analog — Runnable tells the model to use Bash for Python. v5 keeps a dedicated tool because (a) plan-mode forbids bash but should still allow safe Python, (b) the closure-based runtime sandbox (allowlist import hook + workspace-scoped open/os.open/io.open + os.remove block + os.posix_spawn block) is significantly more restrictive than spawning a generic shell, (c) `python -I` (isolated mode) prevents site-packages leaks. Pure v4 reuse — no PORT_LOG row added; documented inline in tools/python_exec.py and ADR-011.
+
+**security/ package (Phase 05)** is pure v4 reuse — Runnable has no equivalent (Anthropic-direct CLI doesn't have the SageMaker IAM-protection layer, Bedrock-only mode, or the python_exec closure sandbox that the SecurityManager backs). 134-case destructive-command coverage from v4 is preserved verbatim across `security/dangerous_patterns.py` (CATASTROPHIC + DANGEROUS_PATTERNS + allowlists) and `security/dangerous_python.py` (DANGEROUS_PYTHON + ALLOWED/BLOCKED module sets + member denylist). No PORT_LOG rows.
+
 Phase 1 had no Runnable rows (pure v4 reuse — see ADR-005 / ADR-006). First Runnable adoption rows are Phase 02 above.
 
 Verdict legend:

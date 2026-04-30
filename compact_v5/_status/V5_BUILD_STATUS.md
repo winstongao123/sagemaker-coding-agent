@@ -1,70 +1,62 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 04 DONE)
-Updated by: Phase 04 close pass
+Last updated: 2026-04-30 (Phase 05 DONE)
+Updated by: Phase 05 close pass
 
 ## Current phase
-- Phase ID: 04 (canonical: 00..13 or 08_5)
-- Phase name: Phase 4 — Core mutating tools (write_file, edit_file, notebook_edit, view_image) + ui/diff_widget.py
+- Phase ID: 05 (canonical: 00..13 or 08_5)
+- Phase name: Phase 5 — bash + python_exec + security verbatim from v4
 - State: DONE
 
-## Aggregate audit (pre-Phase-04, 2026-04-30)
-- ADR-to-PORT_LOG ratio: PASS — 9 PORT_LOG rows post-Phase-04, all reference an ADR.
-- ADRs accepted: 10 (001-010).
-- Tool count: v5 has 8 tools post-Phase-04 (read_file, grep, glob, list_dir, write_file, edit_file, notebook_edit, view_image), v4 has 30 — well under ceiling.
-- Verdict: PASS, Phase 04 unblocked. Phase 05 starts after this close.
-
 ## Previous phase
-- Phase 03 DONE — tagged v5-phase-03 at 3507215. Codex APPROVE_WITH_FIXES, all 4 findings fixed.
+- Phase 04 DONE — tagged v5-phase-04 at 7cf3e47, pushed to sageagent. 128 pass + 1 skip. Codex APPROVE_WITH_FIXES.
 
 ## Done in this phase
-- [x] Read Runnable `src/tools/FileWriteTool/prompt.ts`, `FileEditTool/prompt.ts`, `NotebookEditTool/prompt.ts`, `FileEditTool/UI.tsx` and v4 executors (`tool_write_file:4632`, `tool_edit_file:4729`, `tool_notebook_edit:5921`, `tool_view_image:6419`).
-- [x] Append **ADR-010**: Phase 4 strategy — REUSE v4 executors + ADAPT Runnable prompts + diff_widget UI. FAITHFUL-WITH-JUSTIFIED-ADAPTATION (constraint = .ipynb / Bedrock / python_exec).
-- [x] Add 4 PORT_LOG rows (#006-009) with Codex verdicts: all 4 patterns FAITHFUL-WITH-JUSTIFIED-ADAPTATION post-fix.
-- [x] Write `tools/_file_read_tracking.py` (~80 LOC; Phase-4 stub of v4 _FILES_READ + _FILE_READ_TIMES; Phase 8 retires).
-- [x] Write 4 tool modules: `tools/write_file.py`, `edit_file.py`, `notebook_edit.py`, `view_image.py` (~620 LOC total). Each has idempotent `_register()`.
-- [x] Write `ui/diff_widget.py` (~245 LOC; HTML colored diff with red/green/gray rows, file path header, ±3 lines context, click-to-expand `<details>`, HTML-escape security; stdlib only — no new deps).
-- [x] Update `tools/__init__.py` to bootstrap the 4 new tools.
-- [x] Write 31 mutating-tool tests + 8 diff_widget tests (39 new Phase 04 tests).
-- [x] **Codex review (gpt-5.5, reasoning=medium, via stdin)**: APPROVE_WITH_FIXES with 1 major + 2 minor + 2 nits — all addressed in same commit:
-  - Major #1: notebook_edit broader exception catch.
-  - Minor #2: view_image `_PENDING_IMAGES` side channel + `pop_pending_images()` accessor.
-  - Minor #3: diff_widget EOF-newline visibility.
-  - Nit #4: stale-check directional semantics (current > last + 0.5).
-  - Nit #5: 3 new lock tests for the above.
-- [x] All 4 Runnable patterns verified FAITHFUL-WITH-JUSTIFIED-ADAPTATION post-fix. UNDECLARED_PATTERN check PASS.
-- [x] **NEW user-requested docs updated**: PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md (7 Phase-4 entries) + PS_V5_LEARNINGS_FROM_REPOS.md (Runnable PORT_LOG #006-009 entries + 6 new "Better than X" tracker rows).
-- [x] Write `MAIN/changelogs/CHANGELOG_v5_phase_04.md`.
+- [x] Read v4 SecurityManager class (compact_v4/MAIN/agent/sagemaker_agent.py:1298-2148) + tool_bash (:5239) + tool_python_exec (:5409) + closure-based sandbox preamble (:5293)
+- [x] Append **ADR-011**: Phase 5 strategy = REUSE v4 verbatim, retire `_path_validation` stub, document `python_exec -I` deviation
+- [x] Write `runtime/truncation.py` (verbatim port of v4 Truncation class)
+- [x] Write `security/` package: `__init__.py` (with dynamic SECURITY + get_security helper), `manager.py`, `dangerous_patterns.py`, `dangerous_python.py`, `high_risk.py`
+- [x] Convert `tools/_path_validation.py` to a 4-line delegating shim (forwards to security.manager)
+- [x] Write `tools/bash.py` (v4 tool_bash port + adapted Runnable BashTool prompt) and `tools/python_exec.py` (v4 tool_python_exec port + closure-sandbox preamble + `-I` flag)
+- [x] Update `tools/__init__.py` bootstrap_built_ins to register bash + python_exec
+- [x] Update `tests/tools/test_phase3_*.py` and `test_phase4_*.py` workspace fixtures to call rebuild_singleton_for_tests
+- [x] Write `tests/unit/test_security_manager.py` (49 tests including 134-case parity + representative-command matrix + stale-singleton lock + `-I` flag lock)
+- [x] Write `tests/tools/test_phase5_bash_python.py` (20 tests)
+- [x] `pytest tests/` — **217 passed + 4 skipped** (4 skips: 1 Windows symlink, 3 v4-source-not-reachable parity tests)
+- [x] **Codex review (gpt-5.5, reasoning=medium, via stdin)**: APPROVE_WITH_FIXES with 2 majors + 2 minors. All 4 addressed in same Phase 05 commit:
+  - Major #1: bash + python_exec captured `SECURITY` at module import (stale after rebuild). **Fix**: call-time `_security_manager.SECURITY` dereference.
+  - Major #2: 134-case coverage was sampled, not full parity. **Fix**: 3 v4-vs-v5 pattern-count parity tests + 25-case representative matrix.
+  - Minor #3: `__init__.py` docs over-promised about live binding. **Fix**: clarified live-vs-stale patterns + added `get_security()` helper.
+  - Minor #4: `python_exec -I` flag deviates from v4. **Fix**: ADR-011 documents as intentional hardening + lock test.
+- [x] All 4 Codex findings verified by lock tests.
+- [x] PORT_LOG row #010 updated to FAITHFUL-WITH-JUSTIFIED-ADAPTATION post-fix.
+- [x] **PS_V5 docs updated**: PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md gained 7 Phase-5 entries; PS_V5_LEARNINGS_FROM_REPOS.md gained 6 Phase-5 entries + 7 new "Better than X" tracker rows.
+- [x] Write `MAIN/changelogs/CHANGELOG_v5_phase_05.md`.
 
 ## Tests status
-- Last `pytest` run: 2026-04-30 — **128 passed + 1 skipped** in 1.63s (post-Codex-fix).
-- Phase breakdown: 2 smoke + 11 bedrock + 22 registry + 36 read-only tools + **39 mutating tools / diff_widget + 4 Codex-fix lock tests + 14 view_image/queue/EOF tests** ≈ 128.
+- Last `pytest` run: 2026-04-30 — **217 passed + 4 skipped** in 5.86s.
+- Phase breakdown: 2 smoke + 11 bedrock + 22 registry + 36 read-only + 53 mutating/diff (Phase 4 + locks) + 49 security + 20 bash/python + 24 cross-phase invariants = 217.
 - Failing tests: none.
-- 1 skip = Windows symlink test from Phase 03 (admin elevation needed).
 
 ## Codex review status (current phase)
 - Last review: 2026-04-30 (gpt-5.5, reasoning=medium, via stdin) — **APPROVE_WITH_FIXES**
-- Findings: 1 major + 2 minor + 2 nits — all addressed.
+- Findings: 2 major + 2 minor — all addressed.
 - Open review comments: 0.
-- Saved at: `_status/codex_reviews/phase-04.md`.
+- Saved at: `_status/codex_reviews/phase-05.md`.
 
 ## Git
 - Branch: v5-build
-- Last commit: 7cf3e47 "v5/phase-04: mutating tools + diff_widget + Codex fixes"
-- Last tag: v5-phase-04
+- Last commit: <to-be-filled-after-commit> "v5/phase-05: security verbatim port + bash + python_exec + Codex fixes"
+- Last tag: v5-phase-05
 
 ## Blockers
 - none
 
 ## Next session: pick up at
-- **Phase 05 — bash + python_exec + security verbatim from v4**: this is the security port. Read v4's `SecurityManager` class + `DANGEROUS_PATTERNS` + `DANGEROUS_PYTHON` + `HIGH_RISK_TOOLS` (134-case destructive command coverage). Port verbatim. Land:
-  - `compact_v5/MAIN/agent/security/__init__.py`
-  - `compact_v5/MAIN/agent/security/manager.py`
-  - `compact_v5/MAIN/agent/security/dangerous_patterns.py`
-  - `compact_v5/MAIN/agent/security/dangerous_python.py`
-  - `compact_v5/MAIN/agent/security/high_risk.py`
-  - `compact_v5/MAIN/agent/tools/bash.py`
-  - `compact_v5/MAIN/agent/tools/python_exec.py`
-- **Phase 5 retires `tools/_path_validation.py`** — 4 read-only tool modules switch their import from `tools._path_validation` to `security.manager`. The 4 mutating tool modules already use `tools._path_validation` so they switch too.
-- **Phase 5 acceptance**: 134-case destructive-command coverage from v4 still passes; SECURITY-related tests in v5 pytest. PS Issue #7 structural fix (per V5_PS_ISSUES_MAPPING.md).
-- Resume protocol: see `_status/RESUME.md`.
+- **Phase 06 — Sectioned prompt + cache + audit gate before Phase 7** (per V5_PLAN.md). This is the structural PS Issue #7 fix: replace v4's 914-LOC f-string `SYSTEM_PROMPT` with file-per-section `prompt/*.md` files + `prompt/sections.py` registry + cache-boundary enforcement.
+  - Read Runnable `constants/prompts.ts` (914 LOC) + `constants/systemPromptSections.ts` (registry) + `services/api/promptCacheBreakDetection.ts`.
+  - Land 13-14 prompt/*.md files (identity, tool_classes, tool_efficiency, doing_tasks, critique_handling, answer_preference, data_validation, executing_actions, output_style, subagent_coord, verification_contract, memory_protocol, _CACHE_BOUNDARY).
+  - Land `prompt/__init__.py:build_system_prompt(ctx)`, `prompt/sections.py`, `core/cache.py:detect_cache_break()`.
+  - **Acceptance**: static prompt ≤ 2500 tokens (vs v4's ~5000); cache-boundary test passes.
+- **AGGREGATE AUDIT GATE before Phase 7** (per V5_PLAN.md): static-prompt-tokens + cognitive-load test must pass.
+- Resume protocol: `_status/RESUME.md`.
