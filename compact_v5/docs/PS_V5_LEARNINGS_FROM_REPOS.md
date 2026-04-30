@@ -368,7 +368,35 @@
 
 ---
 
-## Phases 11-13
+## Phase 11 — Notebook UX + entry + thinking/budget UI
+
+### From v4: chat.ipynb + create_chat_ui (minimal MVP port)
+- **Source**: v4 `chat.ipynb` (5 cells) + `create_chat_ui` at sagemaker_agent.py:9735 (~2000 LOC).
+- **Adopted (ADAPT)**: `chat.ipynb` (4 cells, install/configure/launch/quick-ref) + `ui/chat_ui.py` (~150 LOC factory + WidgetChatUI + ConsoleChatUI) + `agent/__init__.py` (Agent wrapper class).
+- **Adaptation**: v4's massive HTML rendering / model-switcher / AWS-scope toggle / session-restore deferred. Phase 11 ships the MVP that the smoke gate validates.
+- **Better than v4**: testable in isolation; ConsoleChatUI fallback so headless environments still load the factory.
+
+### PS Issues SHIPPED in Phase 11
+
+#### PS Issue #2 (visible IterationBudget) — RESOLVED
+- **Source**: v4.9.4 added the IterationBudget but only logs `[Budget exhausted...]` once exhausted.
+- **Adopted**: Phase 8 lifted the data model; Phase 11 wires `IterationBudgetWidget` to `ipywidgets.IntProgress` with color cue. Shared across parent + sub-agents (lock-tested).
+
+#### PS Issue #4 (visible thinking budget) — RESOLVED
+- **Source**: v4.8.0 added thinking-mode (`CONFIG.thinking_enabled` + `CONFIG.thinking_budget`) but no UI.
+- **Adopted**: Phase 11 `ThinkingBudgetWidget` exposes Checkbox + IntSlider with observers routing changes back into `Agent.set_thinking(enabled, budget)`. HTML fallback for headless environments.
+
+### Studied-only from Runnable: tools/UI components
+- Runnable ships rich React/Ink UI components for every tool (e.g. EditTool/UI.tsx, AgentTool/UI.tsx, SkillTool/UI.tsx). v5 .ipynb can't use React; ipywidgets is the closest equivalent. Pattern is documented in ADR-007 + ADR-017.
+- diff_widget.py (Phase 4) ports the EditTool/UI diff renderer concept to ipywidgets HTML. Phase 11 wires it through the approval prompt path that Phase 4 already established.
+
+### From the Codex review process
+- **Codex Phase-11 finding (HIGH)**: forgot to thread `CONFIG.max_turns` + `CONFIG.max_iteration_budget` from notebook config into `Agent` construction. Lesson: every CONFIG field a user might change in cell 2 needs to flow into the runtime — add a lock test for each new field.
+- **Codex Phase-11 finding (MEDIUM)**: returning a raw HTML string from `render()` doesn't actually render in Jupyter — must wrap in `IPython.display.HTML(...)`. Lesson: notebook display surfaces have their own contract.
+
+---
+
+## Phases 12-13
 
 (Future — entries land per phase.)
 
@@ -418,3 +446,8 @@ This section consolidates every place v5 is better than the source repo, for qui
 | **10** | **v4.9.5** | **UUID-suffixed proposal filenames + audit + backup-on-apply** | **Same-second proposals would collide in v4.9.5. v5 adds 6-char UUID suffix. Apply always writes `.skill_backup_<ts>` sibling for local reversibility even before SnapshotManager is wired.** |
 | **10** | **v4** | **SkillManager testable in isolation** | **v4's SkillManager is buried in the 12K-LOC monolith — every test path requires Agent.run integration. v5's `skills/manager.py` is its own module with 21 unit tests + 12 integration tests.** |
 | **10** | **Codex review (Phase 10)** | **runtime integration locked by test, not just by docs** | **Codex first pass caught that the Hermes filter was dead code (no runtime wiring). Post-fix: `test_query_engine_appends_relevant_skill_reminder_to_user_turn` is a BLOCKER lock — any future regression that decouples skill_manager from QueryEngine breaks CI.** |
+| **11** | **v4** | **PS Issue #2 visible IterationBudget RESOLVED** | **v4 only logs `[Budget exhausted...]` at the wall. v5 ships `IterationBudgetWidget` with color cue (info → warning at 70% → danger at 90%) — shared across parent + sub-agents.** |
+| **11** | **v4** | **PS Issue #4 visible thinking budget RESOLVED** | **v4 sends thinking config but never shows the operator the budget. v5 ships Checkbox + IntSlider with live observer routing back into agent state.** |
+| **11** | **v4** | **smaller, testable chat UI** | **~150 LOC vs v4's ~2000 LOC. Each piece (Agent, factory, widgets, notebook) testable in isolation; v4's UI is impossible to test without a real Jupyter.** |
+| **11** | **v4** | **ConsoleChatUI fallback for headless / CI environments** | **v4 requires Jupyter + ipywidgets to import. v5 falls back gracefully — `_IPYWIDGETS_OK` flag + ConsoleChatUI lets tests + SageMaker base images still exercise the factory.** |
+| **11** | **v4** | **lock test for CONFIG → runtime threading** | **Codex Phase-11 caught a regression where `CONFIG.max_turns` + `CONFIG.max_iteration_budget` weren't flowing from the notebook into Agent. `test_lazy_factory_threads_max_turns_and_budget` ensures any future regression breaks CI.** |

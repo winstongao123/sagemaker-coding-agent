@@ -1,5 +1,11 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 11 DONE (Notebook UX, PS Issues #2 + #4 RESOLVED)
+
+Phase 11 closed: 7 new files (`agent/__init__.py`, `entry.py`, `ui/chat_ui.py`, `ui/widgets.py`, `chat.ipynb`, `chat.md`, `tests/integration/test_notebook_smoke.py`) + ui/__init__.py modified. **PS Issue #2 (visible IterationBudget)** RESOLVED via `IterationBudgetWidget` (ipywidgets.IntProgress + color cue + HTML fallback, shared across parent + sub-agents). **PS Issue #4 (visible thinking budget)** RESOLVED via `ThinkingBudgetWidget` (Checkbox + IntSlider with live observers). Codex APPROVE_WITH_FIXES first pass (1 HIGH lazy-factory CONFIG threading + 3 MEDIUM + 1 LOW); all 5 fixed in same commit with 5 lock tests. 412 pass + 4 skip. About to tag `v5-phase-11`.
+
+Next: Phase 12 — Parity tests vs v4 (audit gate before Phase 13).
+
 ## 2026-04-30 — Phase 10 DONE (Skills + auto-trigger + Hermes filter, PS Issue #1 RESOLVED)
 
 Phase 10 closed: 10 v4 production skills copied byte-for-byte (batch / clara / design / html / reflexion / report / review / security-review / simplify / verify), SkillManager ported (`skills/manager.py`), 2 new tools (`skill`, `skill_propose_patch`) deferred via Phase 7. Hermes filter (PS Issue #1) wired into QueryEngine via `skill_manager=...` constructor param. Codex review REJECT first pass with 1 BLOCKER (SkillManager not wired into runtime loop) + 4 HIGH (YAML list parsing, proposal filename collisions, missing safety rails, audit/snapshot stubs) + 2 MEDIUM (singleton reset ordering, enable_skills gate dropped) + 2 UNDECLARED — all 9 fixed in same commit with 9 lock tests. 392 pass + 4 skip. About to tag `v5-phase-10`.

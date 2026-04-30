@@ -1,12 +1,21 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 10 DONE — Codex REJECT first pass, all 9 issues fixed)
-Updated by: Phase 10 close
+Last updated: 2026-04-30 (Phase 11 DONE — Codex APPROVE_WITH_FIXES, all 5 issues fixed; PS Issues #2 and #4 BOTH RESOLVED)
+Updated by: Phase 11 close
 
 ## Current phase
-- Phase ID: 10 (canonical: 00..13 or 08_5)
-- Phase name: Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1)
-- State: DONE — pending tag v5-phase-10
+- Phase ID: 11 (canonical: 00..13 or 08_5)
+- Phase name: Phase 11 — Notebook UX + entry + thinking/budget UI (PS Issue #4)
+- State: DONE — pending tag v5-phase-11
+
+## Phase 11 summary
+- 7 new files: agent/__init__.py (Agent class) + entry.py + ui/chat_ui.py + ui/widgets.py + chat.ipynb + chat.md + tests/integration/test_notebook_smoke.py.
+- 1 modified: ui/__init__.py (re-exports).
+- 20 new tests (15 initial + 5 Codex-fix lock tests).
+- Codex review: APPROVE_WITH_FIXES first pass (1 HIGH + 3 MEDIUM + 1 LOW). All 5 fixed in same commit.
+- Post-fix: AXIS A PASS, AXIS B 5 ADAPTED / 0 DRIFTED.
+- 412 pass + 4 skip (was 392+4 in Phase 10 → +20 net new).
+- **PS Issue #2 (visible budget) RESOLVED** + **PS Issue #4 (visible thinking) RESOLVED**.
 
 ## Phase 10 summary
 - 5 new files: skills/__init__.py + skills/manager.py + 10 skill dirs (PURE COPY) + tools/skill.py + tools/skill_propose_patch.py.
@@ -119,7 +128,8 @@ Updated by: Phase 10 close
 - none
 
 ## Next session: pick up at
-- **Phase 11 — Notebook UX + entry + thinking/budget UI (PS Issue #4)**: port v4 `chat.ipynb` + `chat_ui.py`. Wire IterationBudget progress bar (PS Issue #2 finishes here), thinking budget UI (PS Issue #4), diff-widget into approval UX, skill activate / apply slash commands (Phase 11 UX commitments from Phase 10).
+- **Phase 12 — Parity tests vs v4** (audit gate before Phase 13): run fixed scenarios against v4 and v5; critical scenario suite 100%, non-critical ≥90%, differences logged in PORT_LOG.
+- After Phase 12: Phase 13 — Cutover + ship zip + tag v5.0.0.
 - Resume protocol: see `_status/RESUME.md`.
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):

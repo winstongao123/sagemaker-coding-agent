@@ -967,4 +967,66 @@ After Phase 10 lands:
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 017, 018, ...)
+## ADR-017 — Phase 11: Notebook UX + entry + thinking/budget UI (PS Issue #4)
+
+- Date: 2026-04-30
+- Phase ID: 11
+- Status: ACCEPTED
+- Source: v4 sagemaker_agent.py:create_chat_ui (line 9735, ~2000 LOC) + chat.ipynb (5 cells) + chat.md
+            v4.8.0 thinking-mode UI surface (PS Issue #4)
+            v4.9.4 IterationBudget UI commitment (PS Issue #2 — Phase 8 shipped data model, Phase 11 wires the widget)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** of v4's `create_chat_ui()` + `chat.ipynb` shipping surface. v5 reorganizes into: `agent.py` (public Agent class), `entry.py` (cell-0 import target), `ui/chat_ui.py` (UI orchestration), `ui/widgets.py` (data widgets), `chat.ipynb` (notebook), `chat.md` (companion).
+- ADDITION of explicit PS Issue #4 visibility (thinking budget shown in UI; v4 had thinking-mode toggle but no in-UI surface for budget consumption).
+
+### Question 2 — Architectural justification
+v5 value-add over v4:
+- **agent.py is its own public surface** (~200 LOC) — wraps QueryEngine + SkillManager + Config + BedrockClient. v4's `Agent` is buried in the monolith and exposes everything.
+- **ChatUI is much smaller** (~150 LOC vs v4's ~2000 LOC). Most of v4's complexity is HTML rendering of message history; v5 delegates to ipywidgets and lets the browser handle layout. Phase 11 also intentionally drops v4's complex chat-display HTML rendering for the minimal MVP — operators get text output + widgets, not the v4 full-fidelity chat display.
+- **PS Issue #2 visible IterationBudget**: Phase 8 shipped `IterationBudget` data model. Phase 11 wires `consume() / used() / total()` to an `ipywidgets.IntProgress` so the user sees the budget burning down as parent + sub-agents consume it.
+- **PS Issue #4 visible thinking budget**: Phase 1 already sends thinking config when enabled; Phase 11 surfaces a small label showing the current thinking-budget setting AND a checkbox to toggle it.
+
+### Question 3 — Cost
+- Token cost (static prompt): +0.
+- Token cost (per turn): +0 — UI is post-Bedrock display only.
+- Code complexity: ~600 LOC across 7 files vs v4's ~2000 LOC inline.
+- Maintenance: ipywidgets-dependent code is in `ui/`, isolated from agent loop.
+
+### Question 4 — Cost worth it?
+YES. The notebook is the user's ONLY surface for v5 — without `chat.ipynb` running cleanly, the entire ship pipeline is moot.
+
+### Decision
+- **ACCEPTED** for v5.0.
+- Phase 11 ships:
+  - `agent.py` — `Agent` class. Wraps `BedrockClient` + `IterationBudget` + `QueryEngine` + optional `SkillManager`. Public methods: `run(message)`, `clear()`, `stop()`.
+  - `entry.py` — cell-0 import target. Re-exports `Agent`, `create_chat_ui`, `CONFIG`.
+  - `ui/chat_ui.py` — `create_chat_ui()` factory + `ChatUI` class. ipywidgets-dependent. Falls back to console-mode when ipywidgets is unavailable.
+  - `ui/widgets.py` — `IterationBudgetWidget` (data class wrapping ipywidgets.IntProgress; PS Issue #2) + `ThinkingBudgetWidget` (data class wrapping ipywidgets.HBox with toggle + budget label; PS Issue #4).
+  - `chat.ipynb` — minimal 4 cells: install / config / launch / quick-reminder.
+  - `chat.md` — companion markdown explaining the notebook.
+  - `tests/integration/test_notebook_smoke.py` — hello-world turn vs mock Bedrock; UI factory smoke test (no ipywidgets render assertions, just construction).
+- Phase 11 does NOT ship: full v4 chat-display HTML rendering (defer to Phase 13 polish), v4's compact/clean buttons (microcompact lands as separate phase if at all), parallel sub-agent visualization, model-switcher widget (CONFIG.model_id static), session-history persistence (SessionManager from Phase 1 already exists; Phase 11 doesn't auto-restore).
+
+### Budget reservation
+- Static prompt: +0 tokens.
+- ipywidgets dependency already in install list (v4 cell 1 has it).
+- Phase 11 does not change static prompt or per-turn schemas.
+
+### Reconciliation
+After Phase 11 lands:
+- Notebook smoke test passes against mock Bedrock.
+- IterationBudget widget renders + updates after `consume()`.
+- Thinking-budget label shows current value.
+- chat.ipynb cells 1-3 import cleanly, cell 3 returns a UI object.
+
+### Linked port-log rows
+- #030 — v4 create_chat_ui → ui/chat_ui.py (ADAPT — minimal Phase-11 scope)
+- #031 — v4 Agent class (extracted from monolith) → agent.py (ADAPT — public-surface wrapper around Phase 8-10 modules)
+- #032 — v4 chat.ipynb → compact_v5/MAIN/agent/chat.ipynb (ADAPT — minimal cells)
+- #033 — Phase-8 IterationBudget data model → ui/widgets.py:IterationBudgetWidget (ADDITION — PS Issue #2 fix; ipywidgets progress bar)
+- #034 — v4.8.0 thinking-mode → ui/widgets.py:ThinkingBudgetWidget (ADDITION — PS Issue #4 fix; toggle + budget label)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 018, 019, ...)

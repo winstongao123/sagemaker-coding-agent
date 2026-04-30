@@ -431,6 +431,44 @@ The single highest-leverage token-saving Runnable adoption. v4 ships every tool'
 
 ---
 
-## Phases 11-13
+## Phase 11 — Notebook UX + entry + thinking/budget UI (PS Issue #4)
+
+### 11.1 Notebook UX is now its own package surface
+- **v4**: `create_chat_ui` is ~2000 LOC inline at sagemaker_agent.py:9735. Mixes session state, HTML rendering, model-switcher, mock-mode toggle, AWS-scope toggle, full chat-display rendering, todo list, status bar — all in one function.
+- **v5**: split into `agent/__init__.py` (Agent wrapper class) + `entry.py` (cell-0 imports) + `ui/chat_ui.py` (~150 LOC factory) + `ui/widgets.py` (PS Issue #2/#4 widgets) + `chat.ipynb` (4 cells) + `chat.md` (companion). Each piece independently testable.
+- **Behavior delta**: v5 Phase 11 ships an MVP; full v4 chat-display HTML rendering is deferred to Phase 13 polish. Send / Stop / Clear all work; budget bar + thinking widget all work; skill activation still works through the Phase 10 surface.
+
+### 11.2 PS Issue #2 — IterationBudget is now visible (RESOLVED)
+- **v4**: silent until exhausted. The agent prints `[Budget exhausted: N/M iterations used]` once you hit the ceiling — no warning during the burn-down.
+- **v5 Phase 8**: data model lifted into its own module (`core.budget.IterationBudget`).
+- **v5 Phase 11**: `IterationBudgetWidget` wraps the budget in `ipywidgets.IntProgress`. Color cues — info → warning at 70% → danger at 90%. Shared budget across parent + sub-agents (lock-tested via `test_iteration_budget_widget_reflects_subagent_consumption` — Codex Phase-11 fix).
+
+### 11.3 PS Issue #4 — Thinking budget is now visible (RESOLVED)
+- **v4**: `CONFIG.thinking_enabled` and `CONFIG.thinking_budget` exist; `BedrockClient.chat` sends thinking config when enabled. No UI surface for the operator to see / change them mid-session.
+- **v5 Phase 11**: `ThinkingBudgetWidget` exposes a `Checkbox` (toggle) + `IntSlider` (budget). Observers route changes back into `Agent.set_thinking(enabled, budget)`. Lock test asserts state mirrors agent.
+
+### 11.4 Console fallback so headless environments still load the factory
+- **v4**: requires Jupyter + ipywidgets to even import the UI module.
+- **v5 Phase 11**: `ConsoleChatUI` is a pure-stdout fallback. `_IPYWIDGETS_OK` is a module-level flag that lets tests force either branch (Codex Phase-11 lock test `test_create_chat_ui_returns_console_when_ipywidgets_unavailable`). `ConsoleChatUI.render()` returns `IPython.display.HTML(...)` so notebooks display rendered HTML, not raw markup (Codex Phase-11 fix).
+
+### 11.5 CONFIG threading into runtime (Codex Phase-11 HIGH lock)
+- **v4**: cell 3 reads UI widget values directly into CONFIG, then re-imports.
+- **v5 Phase 11 first pass**: `create_chat_ui()` constructed `Agent(...)` with defaults, ignoring CONFIG.max_turns + CONFIG.max_iteration_budget. Codex caught this — meant notebook config changes never reached runtime.
+- **v5 Phase 11 post-fix**: lazy `create_chat_ui()` reads both fields and threads them into `Agent(max_turns=..., budget=IterationBudget(max_iterations=...))`. Lock test: `test_lazy_factory_threads_max_turns_and_budget`.
+
+### 11.6 Acceptance: hello-world via mock Bedrock
+- **v5 Phase 11**: `tests/integration/test_notebook_smoke.py::test_hello_world_turn_via_console_ui` — the Phase 11 acceptance gate. Builds a mock-mode `BedrockClient`, wraps in `Agent`, drives `ConsoleChatUI.send("hello world")`, asserts non-empty text return + budget consumption ≥ 1.
+
+### 11.7 What's deliberately NOT in Phase 11
+- Full v4 chat-display HTML rendering (deferred to Phase 13 polish).
+- Compact / clean buttons.
+- Model-switcher widget (CONFIG.model_id is static; restart cell 2).
+- Session auto-restore on launch.
+- `/skill apply` slash command (Phase 10 deferred to here; deferred again — Phase 11 lands the skill manager + tools but not the explicit user-click apply UI).
+- Real SnapshotManager + AuditLogger singleton wiring (Phase 10 best-effort backup is sufficient for now).
+
+---
+
+## Phases 12-13
 
 (Future — entries land per phase.)
