@@ -1,12 +1,40 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 12 DONE — parity 15/15 critical + 10/10 non-critical; Phase 13 UNBLOCKED)
-Updated by: Phase 12 close
+Last updated: 2026-04-30 (**Phase 13 DONE — v5.0.0 SHIPPED**; all 14 phases closed)
+Updated by: Phase 13 close
 
 ## Current phase
-- Phase ID: 12 (canonical: 00..13 or 08_5)
-- Phase name: Phase 12 — Parity tests vs v4 (audit gate before Phase 13)
-- State: DONE — pending tag v5-phase-12
+- Phase ID: 13 (canonical: 00..13 or 08_5)
+- Phase name: Phase 13 — Cutover + ship zip + tag v5.0.0 (FINAL)
+- State: DONE — pending tag v5-phase-13 + v5.0.0
+
+## Phase 13 summary
+- compact_v5.zip built: 95 files / 248.2 KB compressed / 38% ratio.
+- verify_ship_zip.py: **RESULT: PASS — zip is ship-ready**.
+- README.md + CHANGELOG.md written.
+- Empty placeholders: memory.md + AGENT_STATUS.md.
+- Final state: 437 pass + 4 skip; aggregate audit all 7 metrics PASS; 19 ADRs / 36 PORT_LOG rows.
+
+## v5 ship state (FINAL)
+
+| Metric | Value | Target | Status |
+|---|---|---|---|
+| Phases done | 14/14 | 14 | DONE |
+| Tests | 437 pass + 4 skip | green | PASS |
+| Static prompt | 2498 tokens | ≤ 2500 | PASS |
+| Tool count | 14 | ≤ v4 (~30) | PASS |
+| Skill count | 10 | = 10 | PASS |
+| Aggregate audit | 7/7 | 7/7 | PASS |
+| Parity critical | 15/15 | 100% | PASS |
+| Parity non-critical | 10/10 | ≥ 90% | PASS |
+| ADR-to-PORT_LOG ratio | 19 ADRs / 36 rows | every row → ADR | PASS |
+| Codex findings caught | 33 | tracked | all FIXED |
+
+## PS Issues resolved
+- #1 (Hermes filter) — Phase 10
+- #2 (visible IterationBudget) — Phase 8 data + Phase 11 widget
+- #4 (visible thinking budget) — Phase 11 widget
+- #7 (tool_classes slot 2) — Phase 6
 
 ## Phase 12 summary
 - 25 new tests across 2 files: `tests/parity/test_parity_critical.py` (15 scenarios, must-pass 100%) + `tests/parity/test_parity_non_critical.py` (10 scenarios, ≥9/10).
@@ -135,8 +163,9 @@ Updated by: Phase 12 close
 - none
 
 ## Next session: pick up at
-- **Phase 13 — Cutover + ship zip + tag v5.0.0** (FINAL phase): build `compact_v5.zip` (flat ship surface), update README, run final smoke test, tag `v5.0.0`. v5 ships ONLY if all gates met (they are: phases 00-12 all DONE, parity 15/15+10/10, audit 7/7).
-- Resume protocol: see `_status/RESUME.md`.
+- **v5 BUILD COMPLETE**. Tag `v5.0.0` created. compact_v5.zip ready at repo root.
+- User decision: deploy to SageMaker (extract compact_v5.zip in workspace, open chat.ipynb), and/or merge `v5-build` to main when ready (note: per CLAUDE.md, v4 stays untouched until the user explicitly says ship to main).
+- Future v5.1+ work: see Phase 13 changelog "What's NOT in v5.0.0" list.
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):
 - **Phase 08 — QueryEngine + retry + errors + IterationBudget UI** (per V5_PLAN.md): read Runnable `QueryEngine.ts` (1295 LOC) + `withRetry.ts` + `services/api/errors.ts`. Land:

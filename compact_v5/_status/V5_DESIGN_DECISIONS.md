@@ -1074,4 +1074,52 @@ After Phase 12 lands:
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 019, 020, ...)
+## ADR-019 — Phase 13: Cutover + ship zip + tag v5.0.0 (FINAL)
+
+- Date: 2026-04-30
+- Phase ID: 13
+- Status: ACCEPTED
+- Source: V5_PLAN.md §Phase 13 + v4 _rebuild_zip.py (181 LOC) + v4 verify_ship_zip.py (161 LOC)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** of the v4 ship pipeline for v5: `compact_v5/_rebuild_zip.py` (adapted to walk the nested package layout) + `compact_v5/verify_ship_zip.py` (REUSED verbatim from v4 with light tweaks for v5 file list).
+
+### Question 2 — Architectural justification
+- v5 ships only when ALL gates met: phases 00-12 DONE, parity 15/15+10/10, audit 7/7. Phase 13 is the ship pipeline.
+- v4's `_rebuild_zip.py` walks `MAIN/agent/` (monolith). v5 walks `compact_v5/MAIN/agent/` AND preserves the nested-package layout (`core/`, `tools/`, `skills/`, etc.) so imports work in the unzipped directory.
+
+### Question 3 — Cost
+- Token cost: +0.
+- Code complexity: ~250 LOC (~200 zip builder + ~50 README).
+
+### Question 4 — Cost worth it?
+YES. v5 doesn't ship without a zip. This is the FINAL phase.
+
+### Decision
+- **ACCEPTED** for v5.0.
+- Phase 13 ships:
+  - `compact_v5/_rebuild_zip.py` — adapted from v4. Walks `MAIN/agent/` in v5 layout. Preserves nested packages. Excludes tests/changelogs/_status/docs/_archive/__pycache__.
+  - `compact_v5/verify_ship_zip.py` — adapts v4's verifier to v5's runtime file list (chat.ipynb, chat.md, entry.py, agent/__init__.py, core/, tools/, skills/, runtime/, prompt/, ui/, subagent/, security/, mcp/, memory.md, AGENT_STATUS.md).
+  - `compact_v5/CHANGELOG.md` — top-level v5 release notes summarizing all phases.
+  - `compact_v5/README.md` — minimal: how to extract + run chat.ipynb.
+  - Final tag: `v5.0.0` after the zip extracts cleanly + verify_ship_zip passes.
+- Phase 13 does NOT: merge to main (v4 stays on main; v5 lives on `v5-build` until user explicitly ships); upload zip to a release; auto-deploy.
+
+### Budget reservation
+- Static prompt: +0.
+- Per-turn: +0.
+
+### Reconciliation
+After Phase 13 lands:
+- `compact_v5.zip` extracts to a flat-ish layout and `chat.ipynb` opens cleanly.
+- `verify_ship_zip.py` reports PASS.
+- Tests still 437/4 (Phase 12 baseline).
+- Final tag `v5.0.0` created.
+
+### Linked port-log rows
+- #036 — v4 _rebuild_zip.py → compact_v5/_rebuild_zip.py (ADAPT — walks v5 nested-package layout).
+- #037 — v4 verify_ship_zip.py → compact_v5/verify_ship_zip.py (ADAPT — v5 runtime file list).
+
+---
+
+## (Append future ADRs below this line — keep numerical order 020, 021, ...)

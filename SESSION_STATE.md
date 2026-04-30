@@ -1,5 +1,20 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 13 DONE — v5.0.0 SHIPPED — ALL 14 PHASES CLOSED
+
+Phase 13 (FINAL) closed: `compact_v5/_rebuild_zip.py` + `verify_ship_zip.py` + README.md + CHANGELOG.md + memory.md/AGENT_STATUS.md placeholders. **compact_v5.zip built (95 files / 248.2 KB / 38% ratio); verify_ship_zip.py reports RESULT: PASS — zip is ship-ready.**
+
+Final v5 state:
+- 14/14 phases DONE (00 → 13 + 8.5)
+- 437 pass + 4 skip
+- Static prompt 2498/2500 tokens (45% reduction vs v4 ~5000)
+- 19 ADRs / 36 PORT_LOG rows / aggregate audit 7/7 PASS
+- Parity 15/15 critical + 10/10 non-critical PASS
+- 33 Codex findings caught + fixed across 14 phases
+- PS Issues resolved: #1 (Hermes filter), #2 (visible budget), #4 (visible thinking), #7 (tool_classes promotion)
+
+About to tag `v5-phase-13` AND `v5.0.0` at the same SHA. v4 untouched on main.
+
 ## 2026-04-30 — Phase 12 DONE (Parity tests vs v4 — 15/15 critical + 10/10 non-critical PASS)
 
 Phase 12 closed: 2 new test files (`tests/parity/test_parity_critical.py`, 15 scenarios; `tests/parity/test_parity_non_critical.py`, 10 scenarios). **Critical: 15/15 PASS (100%). Non-critical: 10/10 PASS (exceeds 90% gate).** v4-vs-v5 divergences (all intentional Codex-driven improvements) documented in PORT_LOG #035 appendix. Phase 13 UNBLOCKED. 437 pass + 4 skip. About to tag `v5-phase-12`.

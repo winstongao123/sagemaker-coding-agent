@@ -88,6 +88,11 @@ Format: one row per Runnable pattern adopted. Never delete rows. Mark superseded
 - v5's `discover_relevant` accepts an `active_tools` parameter for Hermes filter; v4 had no equivalent.
 - v5's `IterationBudget` and `thinking_budget` are visible via widgets; v4 had no UI surface for either.
 
+| 036 | 2026-04-30 | 13 | v4 _rebuild_zip.py (181 LOC) | compact_v5/_rebuild_zip.py | ADAPT | PASS | n/a | (pending) | Walks v5 nested-package layout (`MAIN/agent/{core,tools,skills,runtime,prompt,ui,subagent,security,mcp}`) and flattens the `MAIN/agent/` prefix while preserving package directories. Excludes tests/, changelogs/, _status/, docs/, _archive/, __pycache__, .pytest_cache. constraint=.ipynb (different source layout vs v4 monolith). ADR-019. |
+| 037 | 2026-04-30 | 13 | v4 verify_ship_zip.py (161 LOC) | compact_v5/verify_ship_zip.py | ADAPT | PASS | n/a | (pending) | v5 runtime file list: chat.ipynb + chat.md + entry.py + __init__.py at root; required packages (core, tools, skills, runtime, prompt, ui, subagent, security); 14 required tools; 10 required skills. Same forbidden-pattern surface as v4 + 2 new patterns (changelogs/, _status/). constraint=.ipynb. ADR-019. |
+
+**Phase 13 ship gate**: zip built (95 files / 248.2 KB compressed / 38% ratio). `verify_ship_zip.py` reports **RESULT: PASS — zip is ship-ready**. v5.0.0 tag candidate.
+
 **Phase 10 acceptance** (V5_PLAN.md): "all 10 skills load; auto-trigger respects v4.9.6 default-OFF." Both validated:
 - `test_all_10_v4_production_skills_load` — alias-aware (clara-review→clara, code-review→review).
 - `test_auto_trigger_default_off_returns_empty` + `test_auto_trigger_off_per_skill_default_off` — both gate-tests.
