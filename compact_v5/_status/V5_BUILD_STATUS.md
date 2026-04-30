@@ -43,7 +43,7 @@ Updated by: Phase 07 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit>
+- Last commit: d42c5ba535e3323829b118a90cc7f7831474423c
 - Last tag: v5-phase-07
 
 ## Blockers
