@@ -358,4 +358,73 @@ Auto-reject avoidance: constraint is **`.ipynb`** (not `none`), so this is a leg
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 009, 010, ...)
+## ADR-009 — Phase 3 read-only tools: REUSE v4 executors + ADAPT Runnable prompt text + thin path-validation stub
+- Date: 2026-04-30
+- Phase ID: 03
+- Status: ACCEPTED
+- Source:
+  - v4: `compact_v4/MAIN/agent/sagemaker_agent.py:4258` (`tool_read_file`), `:4846` (`tool_glob`), `:4897` (`tool_grep`), `:4952` (`tool_list_dir`)
+  - Runnable: `gg-claude-code-runnable/src/tools/FileReadTool/prompt.ts`, `GrepTool/prompt.ts`, `GlobTool/prompt.ts`
+  - v4 security: `compact_v4/MAIN/agent/sagemaker_agent.py` `SecurityManager.validate_path` (full port deferred to Phase 5)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT.** Replaces v4's monolithic tool functions (which live inside `sagemaker_agent.py` and are referenced by the v4 `TOOLS` dict 4-tuple at `:7105`) with file-per-tool modules under `compact_v5/MAIN/agent/tools/` (per ADR-001).
+
+### Question 2 — Architectural justification (ADDITIONS only)
+N/A — replacement. Notes on the structural value:
+- Per ADR-001 file-per-tool, each of the 4 tools becomes its own module that calls `register(build_tool(...))` at import time.
+- v4's executor function bodies are battle-tested Python; rewriting from Runnable's TS would lose features Runnable doesn't have (FILE_CACHE, FILE_UNCHANGED_STUB, large-file guard, .ipynb cell parsing, mtime tracking, allowed_paths fallback for glob, binary-file skip for grep).
+- Runnable's prompt text (the description shown to the model) is more directive on WHEN / WHEN NOT — addresses PS Issue #7 (buried-matrix failure). The text gets adapted: tool-name strings change (Runnable `Read` → v5 `read_file`, etc.), and the v5 ipynb constraint means we don't reference Ink/JSX.
+
+### Question 3 — Cost
+- Token cost (per turn — schema + description in initial prompt): each of 4 tools contributes ~120-200 tokens of description + ~50 tokens of schema. Total Phase 3 contribution to per-turn overhead: ~700-1000 tokens. This is BEFORE Phase 7's ToolSearchTool deferral; after Phase 7, low-frequency tools get deferred and the per-turn overhead drops.
+- Static prompt cost: 0 (tools are not in the system prompt; their descriptions are in the per-turn `tools` block).
+- Code complexity: 4 small tool modules (~80-150 LOC each) + 1 thin path-validation helper (~50 LOC). Total ~500 LOC of new code. Compared to v4's ~700 LOC of monolithic tool functions, similar size but split for reviewability.
+- Maintenance: each tool now has a single owner-file. Bug fixes touch one module, not the v4 monolith.
+
+### Question 4 — Cost worth it?
+N/A (replacement; the cost is dispersed but reviewability improves).
+
+### Decision
+- **ACCEPTED for v5.0** — 4 read-only tools land Phase 3:
+  - `tools/read_file.py` — REUSE v4 executor + ADAPT Runnable prompt text (renamed from `Read` to `read_file`).
+  - `tools/grep.py` — REUSE v4 executor + ADAPT Runnable prompt text. **Critical correction**: Runnable's prompt says "built on ripgrep" but v4 uses Python `re`. v5 prompt says "regex search across files" (truthful). PS Issue #6 (wiring-bug pattern) lock — don't claim a backend we don't have.
+  - `tools/glob.py` — REUSE v4 executor + ADAPT Runnable prompt text.
+  - `tools/list_dir.py` — REUSE v4 verbatim. **No Runnable analog** (Runnable tells the model to use `ls` via Bash). v5 keeps the dedicated tool because v4 has it; in plan mode the user can't bash, so list_dir is essential. No Runnable port row — pure v4 reuse.
+- Each tool flagged: `is_read_only=True`, `is_concurrency_safe=True` (Runnable parity — read-only ops are safe in parallel), `requires_approval=False`.
+
+### Path-validation strategy (Phase 3 stub vs Phase 5 full)
+- v4's `SecurityManager.validate_path` does (a) workspace boundary check, (b) allowed_paths fallback, (c) symlink escape detection. The full module also has 134-case destructive command coverage which is irrelevant for read-only tools.
+- **Phase 3 ships a minimal `tools/_path_validation.py`** with just the path-resolution + boundary check (the parts read-only tools need). ~50 LOC.
+- **Phase 5 replaces** this stub with the full `security/` package port from v4 (verbatim). The 4 tool modules will then import from `security.manager` instead of `tools._path_validation`.
+- This split is necessary because Phase 5 is where `security/` lands per the locked phase plan; we can't depend on it from Phase 3.
+- The Phase 5 ADR will note the `_path_validation.py` retirement and verify the same security contract is preserved.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `Bedrock | python_exec | .ipynb`:
+- Bedrock: tool descriptions ship as JSON `description` fields in the `tools` body block; same as Runnable's API call.
+- python_exec: v5 has no Node fs API access; the executor body is pure Python (v4 reuse).
+- .ipynb: no JSX/Ink rendering; ipywidgets handles UI in Phase 11.
+- The `ripgrep` correction is a forced fidelity-improvement: v5's grep tool truthfully describes its backend (`re` module), avoiding a Runnable-text claim that doesn't match implementation. PS Issue #6 (wiring bug) prevention.
+
+### Affected files
+- compact_v5/MAIN/agent/tools/_path_validation.py (new, Phase-3-only stub)
+- compact_v5/MAIN/agent/tools/read_file.py (new)
+- compact_v5/MAIN/agent/tools/grep.py (new)
+- compact_v5/MAIN/agent/tools/glob.py (new)
+- compact_v5/MAIN/agent/tools/list_dir.py (new)
+- compact_v5/MAIN/agent/tools/__init__.py (add 4 import lines so registration fires)
+- compact_v5/MAIN/agent/tests/tools/test_read_file.py (new)
+- compact_v5/MAIN/agent/tests/tools/test_grep.py (new)
+- compact_v5/MAIN/agent/tests/tools/test_glob.py (new)
+- compact_v5/MAIN/agent/tests/tools/test_list_dir.py (new)
+
+### Linked port-log rows
+- #003 — Runnable FileReadTool/prompt.ts → v5 tools/read_file.py
+- #004 — Runnable GrepTool/prompt.ts → v5 tools/grep.py (with ripgrep→regex correction)
+- #005 — Runnable GlobTool/prompt.ts → v5 tools/glob.py
+- (#006 NOT created — list_dir has no Runnable analog; pure v4 reuse documented inline)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 010, 011, ...)
