@@ -161,6 +161,12 @@ User reinforced: when learning Runnable, must go DEEP into architecture and inte
 - **PS Issue #7 STRUCTURALLY FIXED** — the buried-matrix failure mode that motivated v5 is now mechanically prevented by file-per-section + token caps + tool_classes-at-slot-2 + cognitive-load test in the audit gate.
 - Next: tag v5-phase-06; aggregate audit gate fires; if PASS, begin Phase 07 (ToolSearchTool deferred loading; acceptance ≥3000 token reduction in per-turn schema overhead).
 
+### Phase 06.1 — pre-Phase-7 audit gate compression + audit script (2026-04-30)
+- Phase 6 landed at 2739 tokens; pre-Phase-7 audit gate per V5_PLAN.md required ≤2500 absolute. Compressed 13 sections to land at 2498 tokens (50% reduction from v4's ~5000).
+- NEW `tests/aggregate_audit.py` script runs the full V5_PLAN.md audit metric matrix: static prompt tokens, per-section caps, cap sum ≤ budget, section uniqueness, tool_classes-at-slot-2 (PS Issue #7 fix), tool count ≤ v4, ADR-to-PORT_LOG ratio.
+- Pre-Phase-7 audit run: ALL 7 METRICS PASS. Phase 7 UNBLOCKED.
+- Tests: 247 passed + 4 skipped (unchanged — compression didn't break any test).
+
 ### Phase 0 follow-ups (after first commit `5259adf`)
 - Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
 - Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.
