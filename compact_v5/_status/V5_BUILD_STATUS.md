@@ -50,7 +50,7 @@ Updated by: Phase 04 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit> "v5/phase-04: mutating tools + diff_widget + Codex fixes"
+- Last commit: 7cf3e47 "v5/phase-04: mutating tools + diff_widget + Codex fixes"
 - Last tag: v5-phase-04
 
 ## Blockers
