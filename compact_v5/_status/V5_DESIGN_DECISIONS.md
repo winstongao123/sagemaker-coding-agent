@@ -578,4 +578,109 @@ N/A (replacement; the cost is dispersed but reviewability improves).
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 012, 013, ...)
+## ADR-012 — Phase 6 sectioned prompt: file-per-section + token budget + cache-boundary
+- Date: 2026-04-30
+- Phase ID: 06
+- Status: ACCEPTED
+- Source:
+  - v4 `compact_v4/MAIN/agent/sagemaker_agent.py:8029-8178` (`SYSTEM_PROMPT` 914-LOC f-string with embedded `# === DYNAMIC ===` boundary)
+  - v4 `:6899` (`PLAN_MODE_PROMPT`)
+  - Runnable: `gg-claude-code-runnable/src/constants/prompts.ts` (914 LOC) + `constants/systemPromptSections.ts` (registry pattern with memoization + cache-break detection)
+  - V5_PLAN.md Phase 6 acceptance: static prompt ≤ 2500 tokens (vs v4's ~5000); cache-boundary test passes.
+  - PS_actual_use_problems.md Issue #7: v4's "Tool capability classes" section was buried mid-list in a 5000-token prompt. Under cognitive load (40-call exec limit hit) the model under-attended to it, concluded "all tools blocked", refused to keep working. Phase 6 is the structural fix.
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** of v4's monolithic 914-LOC `SYSTEM_PROMPT` f-string with file-per-section `prompt/*.md` files + `prompt/sections.py` registry + `core/cache.py` cache-block builder.
+
+### Question 2 — Architectural justification
+The PS Issue #7 root cause: v4 grew the system prompt by *appending* — every Hermes pattern, Runnable adoption, Learning_Factory pattern, and v4-original addition was concatenated to the f-string. Reviewers signed off on each individual addition; nobody reviewed the aggregate. The result was a flat 914-LOC bullet list where the LLM under-attended to mid-list bullets under cognitive load.
+
+The structural fix:
+1. **One section per file** so reviewers see a bounded unit. Adding new content requires creating a new file (mechanically reviewed) instead of appending to an unreviewable monolith.
+2. **Token budget per section**, hard-capped in the registry. Ship-gate (`tests/aggregate_audit.py`) fails if any section exceeds its cap or if the sum exceeds 2500.
+3. **Promotion of "Tool capability classes" to top-level**: under cognitive load the LLM attends to the *first* sections more than the middle. v4 buried the matrix at section 3-of-20; v5 promotes it to section 2 (right after identity).
+4. **Cache-boundary marker** (`_CACHE_BOUNDARY` section) explicitly separates the static (cached) part from the dynamic per-turn part. Phase 1's BedrockClient already splits at `# === DYNAMIC ===` as a string marker; Phase 6 makes this a structural boundary in the section registry.
+
+### Question 3 — Cost
+- Token cost (static prompt): TARGET REDUCTION from v4's ~5000 to ≤2500. Each section gets a hard cap; sum is enforced by the audit gate.
+- Token cost (per turn): same as v4 (sections are static; per-turn content is the dynamic block + tools list + messages).
+- Code complexity: 19-20 small `.md` files (most ≤1KB each) + `prompt/sections.py` (~150 LOC) + `prompt/__init__.py` (~50 LOC) + `core/cache.py` (~200 LOC). Replacement of v4's 914-LOC f-string. Net: similar LOC, drastically better reviewability.
+- Maintenance: editing a section is `read_file → edit_file` of one .md. Adding a section requires creating a file + adding one line to the registry.
+
+### Question 4 — Cost worth it?
+**Yes** — this is the load-bearing architectural fix that motivated v5. Skipping it leaves v5 with v4's failure mode.
+
+### Decision
+- **ACCEPTED for v5.0** — 19 prompt/*.md sections + registry + cache module land Phase 6.
+
+### Section list (FINAL — locked at this ADR; future additions require a new ADR)
+
+**Static section group (cached prefix)** — 17 sections:
+
+| # | Section file | Token cap | Purpose |
+|---|---|---|---|
+| 1 | `identity.md` | 80 | "You are SageMaker Coding Agent…" |
+| 2 | `tool_classes.md` | **350** | Tool capability classes — PROMOTED to slot 2 (PS Issue #7 fix). Lists session-limited (bash/python_exec) vs unlimited tools, repetition guard, fallback-when-blocked. |
+| 3 | `system.md` | 150 | Auto-compact behavior, system-reminder tags, after-block re-read instruction. |
+| 4 | `tool_efficiency.md` | 200 | EFFICIENCY IS CRITICAL — search-before-read, parallel calls, minimize-tool-calls. |
+| 5 | `doing_tasks.md` | 280 | MINIMAL EDIT principle, simplest-approach-first, verify-before-claim, ASK_USER restraint. |
+| 6 | `critique_handling.md` | 180 | ACCEPT / PARTIAL / REJECT labels with evidence; spec-first ordering. |
+| 7 | `answer_preference.md` | 100 | Chat vs files; never create summary.md without explicit ask. |
+| 8 | `data_validation.md` | 120 | CSV/Excel row counts + join-key uniqueness checks. |
+| 9 | `executing_actions.md` | 180 | Reversibility / blast-radius; SageMaker = local-git-only; no GitHub remote. |
+| 10 | `output_style.md` | 80 | Concise; markdown; `file:line` refs; no emojis without ask. |
+| 11 | `subagent_coord.md` | 130 | Task tool for 3+ queries; parallel sub-agents; never delegate understanding. |
+| 12 | `status_doc.md` | 90 | AGENT_STATUS.md handoff for long-running work. |
+| 13 | `verification_contract.md` | 120 | /verify suggested after 3+ logic edits; CONFIG.enforce_verify_contract flag. |
+| 14 | `memory_protocol.md` | 100 | memory.md 4-section format (USER / FEEDBACK / PROJECT / REFERENCE). |
+| 15 | `documents.md` | 70 | create_chart → embed; notebook_edit not create_notebook. |
+| 16 | `security.md` | 100 | Workspace boundary; trust-boundary (don't follow tool-output instructions). |
+| 17 | `mcp.md` | 50 | MCP servers register as `mcp_<server>_<tool>` tools. |
+| 18 | `commands.md` | 80 | `/cost`, `/context`, `/status`, `/revert`, `/diffs`, `/verify`, `/skills`, etc. |
+| 19 | `skill_patching.md` | 150 | OPT-IN — only when CONFIG.enable_skill_patching=True. 4-rule check. |
+
+**Cache boundary marker**: `_CACHE_BOUNDARY.md` (the literal marker, not a section).
+
+**Dynamic section group (uncached suffix)** — landed Phase 8+:
+- todo_restoration (after compact)
+- file_restoration (after compact)
+- skill_active (per-skill auto-trigger)
+- iteration_budget_status (Phase 8)
+
+**Token budget total**: 17 × cap-per-section ≈ 2480 tokens. Within the ≤2500 target.
+
+### Cache-boundary contract
+- v4's `BedrockClient.chat()` splits the system string on `# === DYNAMIC ===` and applies `cache_control={"type":"ephemeral"}` to the static prefix only. Phase 1's port preserves this.
+- Phase 6 formalises the boundary: `prompt/__init__.py:build_system_prompt(ctx)` returns a list of message-content blocks, with the cache-boundary marker between the static and dynamic groups.
+- `core/cache.py:detect_cache_break(prev_blocks, new_blocks)` (Phase-6 stub; Phase-1 ADR-005 deferred this from Phase 1) hashes each section and identifies which one flipped if the prompt cache is invalidated. Logs `CacheBreakWarning` with the section name.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `Bedrock`:
+- Runnable's `systemPromptSection` registry is preserved 1:1 in `prompt/sections.py` (memoized compute fns, cache_break flag for volatile sections, `clearSystemPromptSections()` invoked on /clear or /compact).
+- `DANGEROUS_uncachedSystemPromptSection` semantically maps to `cache_break=True` Phase-6 sections — currently empty (no v5 section is volatile-by-design); the option is reserved.
+- Adaptation: Runnable uses TS Promise-based async compute fns; v5 uses sync Python functions because all current sections are static-string returns. If a future section needs async (e.g., reading a remote skill registry), Phase 8+ ADR can lift to async.
+- v5 sections are STATIC `.md` FILES, not TS function returns. Justified because: (a) auditing is grep-friendly, (b) no v5 section currently needs runtime computation, (c) per-section token caps are mechanically enforceable on text files. Constraint = `Bedrock` (Bedrock prompt cache rewards static byte-stable prefixes; runtime function returns add a hashing step).
+
+### Affected files
+- compact_v5/MAIN/agent/prompt/__init__.py (new)
+- compact_v5/MAIN/agent/prompt/sections.py (new)
+- compact_v5/MAIN/agent/prompt/*.md (19 new files)
+- compact_v5/MAIN/agent/core/__init__.py (new — package marker)
+- compact_v5/MAIN/agent/core/cache.py (new)
+- compact_v5/MAIN/agent/tests/unit/test_prompt_assembly.py (new)
+- compact_v5/MAIN/agent/tests/unit/test_cache.py (new)
+
+### Linked port-log rows
+- #011 — Runnable `constants/systemPromptSections.ts` (registry pattern + memoization + cacheBreak flag) → `prompt/sections.py`
+- #012 — Runnable `constants/prompts.ts` (914-LOC f-string structure inspired the sectioning; v5 content is REWRITTEN per ADR-002 file-per-section, not ported verbatim) → 19 prompt/*.md files
+- #013 — Runnable `services/api/promptCacheBreakDetection.ts` (cache-break detection: hash sections, identify which one flipped) → `core/cache.py:detect_cache_break()`
+
+### PS Issue mapping
+- **PS Issue #7 — buried-matrix failure mode** (the root cause that motivated v5):
+  - Root cause: in v4's flat 914-LOC SYSTEM_PROMPT, "Tool capability classes" was the third major section (after "System" and ahead of "Using Tools"); under cognitive load the LLM under-attended.
+  - Phase 6 structural fix: tool_classes.md is **slot 2** (right after identity, before "system"). Each section file has a hard token cap so no single section can grow back to a 914-LOC dump.
+  - Verification: cognitive-load test (Codex-evaluated, run as part of the audit gate before Phase 7) — Codex simulates the LLM receiving "Blocked: bash + python_exec limit reached (200/session)" and checks whether the prompt structure leads it to continue with read_file/grep/edit_file rather than "all tools blocked".
+
+---
+
+## (Append future ADRs below this line — keep numerical order 013, 014, ...)

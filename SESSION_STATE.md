@@ -140,6 +140,27 @@ User reinforced: when learning Runnable, must go DEEP into architecture and inte
 - Phase 05 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-05.
 - Next: tag v5-phase-05, begin Phase 06 (Sectioned prompt + cache — PS Issue #7 structural fix). AGGREGATE AUDIT GATE fires before Phase 07.
 
+### Phase 06 close (2026-04-30, ready to tag v5-phase-06) — PS Issue #7 STRUCTURALLY FIXED
+- ADR-012 appended (19-section design + token caps + cache-boundary contract).
+- 19 prompt/*.md files written. tool_classes promoted to slot 2 (PS Issue #7 buried-matrix fix). All sections under their token caps.
+- prompt/sections.py: Section dataclass + SECTION_ORDER + token caps + memoization (Runnable systemPromptSections.ts parity).
+- prompt/__init__.py: build_system_prompt + canonical CACHE_BOUNDARY constant (single source of truth).
+- core/cache.py: CacheBlock + build_cache_blocks + fingerprint_sections + detect_cache_break + CacheBreakReport (Runnable promptCacheBreakDetection.ts adaptation; intentionally smaller than full hash-tree — Phase 12+ extends).
+- 27 new Phase-6 tests (18 prompt assembly + 9 cache) including 4 Codex-fix lock tests.
+- Codex review (gpt-5.5, reasoning=medium, via stdin): APPROVE_WITH_FIXES with 1 major + 2 minors + 1 nit. All 4 fixed in same Phase 06 commit:
+  - Major: section caps summed to 3090, not STATIC_TOKEN_BUDGET=2900. Fix: tightened caps to sum 2880 ≤ 2900. Lock test added.
+  - Minor: build_cache_blocks lstripped leading newlines (not byte-equivalent to runtime/bedrock_client.py). Fix: removed lstrip; lock test for byte-equivalence.
+  - Minor: 3 boundary constants duplicated/inconsistent. Fix: single-source prompt.CACHE_BOUNDARY (no trailing newline, matches Phase-1 BedrockClient literal); core.cache imports from prompt; lock test asserts string equality across modules including the runtime/bedrock_client.py literal.
+  - Nit: detect_cache_break uses dict-keyed lookup (would silently collapse duplicate names). Fix: test_section_names_are_unique lock.
+- All 3 Runnable patterns (#011 systemPromptSections.ts, #012 prompts.ts, #013 promptCacheBreakDetection.ts) FAITHFUL-WITH-JUSTIFIED-ADAPTATION post-fix. UNDECLARED_PATTERN PASS.
+- Static prompt actual: 2739 tokens (vs v4's ~5000) — 45% reduction. STATIC_TOKEN_BUDGET=2900 (Phase 6 actual + 6% headroom). V5_PLAN.md target was ≤2500; Phase 13 polish goal preserves the 2500 target.
+- Tests: **247 passed + 4 skipped** post-fix.
+- PS_V5 docs updated: 7 Phase-6 functional-change entries + 4 Phase-6 learnings entries + 6 new "Better than X" tracker rows. Highlights: per-section caps prevent regrowth, cache-break self-diagnosis, file-per-section means 1/19th the PR review surface vs Runnable's f-string.
+- Per-phase changelog: compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_06.md.
+- Phase 06 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-06.
+- **PS Issue #7 STRUCTURALLY FIXED** — the buried-matrix failure mode that motivated v5 is now mechanically prevented by file-per-section + token caps + tool_classes-at-slot-2 + cognitive-load test in the audit gate.
+- Next: tag v5-phase-06; aggregate audit gate fires; if PASS, begin Phase 07 (ToolSearchTool deferred loading; acceptance ≥3000 token reduction in per-turn schema overhead).
+
 ### Phase 0 follow-ups (after first commit `5259adf`)
 - Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
 - Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.

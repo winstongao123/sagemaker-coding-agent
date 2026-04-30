@@ -220,7 +220,35 @@
 
 ---
 
-## Phases 6-13
+## Phase 6 — Sectioned prompt + cache (PS Issue #7 STRUCTURAL FIX)
+
+### From Runnable: systemPromptSections.ts registry pattern (PORT_LOG #011)
+- **Source**: `gg-claude-code-runnable/src/constants/systemPromptSections.ts`. ~70 lines: `systemPromptSection(name, compute)` registry, `DANGEROUS_uncachedSystemPromptSection(name, compute, _reason)` for volatile sections, `resolveSystemPromptSections()` async resolver, `clearSystemPromptSections()` invoked on `/clear` or `/compact`.
+- **Adopted (ADAPT)**: `prompt/sections.py:Section` dataclass + `SECTION_ORDER` list + memoization functions (`get_cached_section`, `set_cached_section`, `clear_section_cache`).
+- **Adapted from**: TS Promise-based async compute fns → Python sync static-string returns. v5 sections are .md FILES, not function returns. Justified by: (a) auditing is grep-friendly, (b) no v5 section currently needs runtime computation, (c) per-section token caps are mechanically enforceable on text files.
+- **Reserved for Phase 8+**: `cache_break=True` flag on `Section` dataclass — analogue of Runnable's `DANGEROUS_uncachedSystemPromptSection`. Phase 8+ will use this for runtime-computed sections (per-skill auto-trigger, iteration_budget_status).
+
+### From Runnable: prompts.ts content structure (PORT_LOG #012)
+- **Source**: `gg-claude-code-runnable/src/constants/prompts.ts` — 914-LOC f-string with embedded section markers.
+- **Adopted (ADAPT)**: 19 prompt/*.md files in v5, each replacing one logical section of v4's monolithic SYSTEM_PROMPT. Content is REWRITTEN in a tighter v5 form (45% reduction: 2739 vs ~5000 tokens).
+- **Better than Runnable**: v5 file-per-section means each piece of behavioral guidance is a separate, reviewable, token-capped unit. Runnable's f-string is one diff unit; v5's structure means a security-relevant change to "Executing actions" is a `git diff prompt/executing_actions.md`. The PR review surface is 19× smaller per change.
+- **Better than v4**: v4 inherited Runnable's f-string approach; v5 fixes the structural failure mode (PS Issue #7 buried matrix) by promoting `tool_classes` to slot 2 and capping every section's size.
+
+### From Runnable: promptCacheBreakDetection.ts (PORT_LOG #013)
+- **Source**: `gg-claude-code-runnable/src/services/api/promptCacheBreakDetection.ts`.
+- **Adopted (ADAPT)**: `core/cache.py:detect_cache_break + fingerprint_sections + CacheBreakReport + build_cache_blocks`.
+- **What we kept**: section-level SHA hashing, before/after comparison, `CacheBreakWarning` log message identifying which section flipped + token delta.
+- **What we deferred**: Runnable's full hash-tree (per-tool hashes, global cache strategy, betas list, cacheControlHash). Phase 6 implementation is intentionally smaller — just enough for the Phase 6 multi-block prompt structure. Phase 12+ may extend.
+- **Phase 1 pre-history**: ADR-005 (Phase 1 BedrockClient port) explicitly DEFERRED this from Phase 1 because it required multi-block prompts that didn't exist until Phase 6. Phase 6 closes the loop.
+
+### From v4: SYSTEM_PROMPT content (rewritten, not verbatim)
+- **Source**: v4 `compact_v4/MAIN/agent/sagemaker_agent.py:8029-8178` SYSTEM_PROMPT f-string.
+- **Adopted (REWRITE)**: every behavioral rule from v4's prompt is preserved in v5's 19 sections, but the prose is tighter. v5's 2739 tokens delivers the same coverage as v4's ~5000.
+- **Why a rewrite, not verbatim port**: v4's prompt grew by appending. The aggregate became unreviewable. Rewriting in 19 reviewable units with hard caps is the structural fix — copying the v4 text verbatim would defeat the purpose.
+
+---
+
+## Phases 7-13
 
 (Future — entries land per phase.)
 
@@ -244,3 +272,9 @@ This section consolidates every place v5 is better than the source repo, for qui
 | 5 | v4 | Python 3.11 portability | Closure-sandbox allowlist now includes `_collections_abc` etc. — transitive imports needed for `import json` to work on 3.11. |
 | 5 | v4 | rebuild_singleton_for_tests | <1s test rebuilds vs v4's fresh-process-per-scenario. |
 | 5 | v4 | dynamic SECURITY re-export | `from security import SECURITY` always returns the current singleton via module `__getattr__`. |
+| **6** | **v4** | **PS Issue #7 fix (tool_classes promotion)** | **Tool capability matrix promoted to slot 2 — under cognitive load the model attends to the matrix BEFORE the rest of the prompt. Buried-matrix failure mode structurally prevented.** |
+| **6** | **v4** | **per-section token caps** | **Each section has a hard cap; CI gate fails on growth. Prevents the v4 aggregate-failure pattern (every addition individually approved, aggregate never reviewed).** |
+| **6** | **v4 + Runnable** | **45% prompt reduction** | **2739 tokens vs v4's ~5000 — half the per-turn system-prompt cost without losing behavioural coverage.** |
+| **6** | **v4** | **cache-break self-diagnosis** | **`detect_cache_break` logs which section flipped + token delta. v4 cache breaks were silent — operators had to reverse-engineer cost spikes.** |
+| **6** | **Runnable** | **file-per-section** | **19 reviewable .md files vs Runnable's 914-LOC f-string. Each PR review surface is 1/19th the size; security-relevant changes touch one file.** |
+| **6** | **Runnable** | **deferred cache-break-detection scope** | **Phase 6 cache-break implementation is intentionally smaller than Runnable's full hash-tree. Per-tool hashes / global cache strategy / betas list deferred to Phase 12+ when those concerns arrive — avoids over-engineering.** |

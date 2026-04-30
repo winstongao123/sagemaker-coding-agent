@@ -221,6 +221,50 @@ This is the phase where v4's most security-critical code lands in v5. The v4 Sec
 
 ---
 
-## Phases 6-13
+## Phase 6 — Sectioned prompt + cache (PS Issue #7 STRUCTURAL FIX)
+
+This is the load-bearing architectural fix that motivated v5. v4's flat 914-LOC `SYSTEM_PROMPT` f-string made the model under-attend to mid-list bullets under cognitive load — the documented "all tools blocked" failure mode in `PS_actual_use_problems.md`. Phase 6 lands the structural fix.
+
+### 6.1 SYSTEM_PROMPT replaced by 19 file-per-section .md files
+- **v4** (`compact_v4/MAIN/agent/sagemaker_agent.py:8029-8178`): a single 914-LOC f-string with embedded `# === DYNAMIC ===` boundary marker.
+- **v5**: 19 reviewable .md files in `prompt/` + `prompt/sections.py` registry + `prompt/__init__.py:build_system_prompt(ctx)`. Each file has a hard token cap; CI gate fails on growth.
+- **Behavior delta**: identical SEMANTIC content (every behavior rule preserved) but written tighter. Section order is identical EXCEPT for the `tool_classes` promotion (see 6.2).
+
+### 6.2 tool_classes promoted to slot 2 (PS Issue #7 fix)
+- **v4**: "Tool capability classes" section was the THIRD major section, buried after "System" and before "Using Tools — EFFICIENCY IS CRITICAL". Under cognitive load the LLM under-attended to mid-list bullets and concluded "all tools blocked" when bash/python_exec hit their session limit.
+- **v5**: `tool_classes.md` is **slot 2** — right after `identity.md`, BEFORE every other section. Locked by `test_tool_classes_section_at_slot_2`. Reordering fails CI.
+- **Behavior delta**: when the model receives `Blocked: bash + python_exec limit reached` mid-task, the tool-capability matrix is among the FIRST things it re-reads. Read-only tools (`read_file`, `grep`, `glob`, `edit_file`, `write_file`, `notebook_edit`) are explicitly listed as "ALWAYS-AVAILABLE" right at the top of the prompt.
+- **Better than v4 (and Runnable)**: this specific failure mode doesn't exist in Runnable's prompt (Runnable doesn't have a `max_exec_calls_per_session` constraint). v5 inherits the constraint from v4 but fixes the prompt-engineering failure that v4.10.10 patched ineffectually.
+
+### 6.3 Static prompt total: 2739 tokens vs v4's ~5000 (45% reduction)
+- **v4 estimate**: ~5000 tokens for SYSTEM_PROMPT.
+- **v5 actual**: 2739 tokens (V5_PLAN.md target was ≤2500; Phase 13 polish goal is to tighten further).
+- **Behavior delta**: per-turn token cost on the system prompt is roughly halved. With prompt caching, the savings are amortized — but the FIRST turn of each session pays the lower cost too.
+- **Better than v4**: significantly lower per-turn token overhead.
+
+### 6.4 Per-section token caps + audit gate
+- **v4**: no token caps. Each Hermes/Runnable/LF integration appended to the f-string; reviewers signed off individually but nobody reviewed the aggregate. Result: 914 LOC of unreviewable content.
+- **v5**: `prompt/sections.py:SECTION_ORDER` declares a hard cap per section; `check_section_caps()` is called by the audit gate before each phase that adds prompt content; CI fails on cap violation.
+- **Behavior delta**: prompt growth is now mechanically gated. A new section requires creating a new file + adding a registry entry + lifting the budget if needed — none of which can happen silently.
+- **Better than v4**: prevents the same aggregate-failure pattern from recurring.
+
+### 6.5 Cache-break detection — automatic warnings
+- **v4**: when the prompt cache invalidated (a config flag flipped, a section changed), the next turn re-paid for the entire prompt. There was no diagnostic — operators had to compare token counts manually.
+- **v5**: `core/cache.py:detect_cache_break(prev, curr)` compares two `CacheState` snapshots and identifies which section flipped. Logs `[CacheBreakWarning] prompt cache invalidated. changed=[<name>]; token_delta=+N` so the operator sees WHY.
+- **Behavior delta**: the single most-debugged class of cost-spike pattern in v4 is now self-diagnosing.
+- **Better than v4 + Runnable**: Runnable has the equivalent (`promptCacheBreakDetection.ts`) but Phase 6 keeps the v5 implementation focused (just enough for Phase 6's needs); Phase 12+ may extend with per-tool hashes when those concerns arrive.
+
+### 6.6 cache_break flag reserved for Phase-8+ async sections
+- **v4**: every section was static (concatenated into the f-string).
+- **v5 Phase 6**: ALL 19 sections are static (`cache_break=False`). The `cache_break=True` flag is reserved for Phase-8+ runtime-computed sections (e.g., per-skill auto-trigger, current todo state, iteration_budget_status). When Phase 8 lands a `cache_break=True` section, it explicitly opts into invalidating the prompt cache for that section's content — and the `CacheBreakWarning` makes the cost visible.
+
+### 6.7 sections.py memoization
+- **v4**: SYSTEM_PROMPT was an f-string assembled once at module import. No per-section caching.
+- **v5**: `prompt/sections.py:_SECTION_CACHE` memoizes section text reads across turns. `clear_section_cache()` invoked on `/clear` or `/compact` (Phase 8 wires this).
+- **Behavior delta**: section file IO happens once per session instead of once per turn. Negligible cost saving today but supports the `cache_break=True` async-section pattern Phase 8+ will use.
+
+---
+
+## Phases 7-13
 
 (Future — entries land per phase.)

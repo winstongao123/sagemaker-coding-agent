@@ -25,6 +25,16 @@ Format: one row per Runnable pattern adopted. Never delete rows. Mark superseded
 
 **security/ package (Phase 05)** is pure v4 reuse — Runnable has no equivalent (Anthropic-direct CLI doesn't have the SageMaker IAM-protection layer, Bedrock-only mode, or the python_exec closure sandbox that the SecurityManager backs). 134-case destructive-command coverage from v4 is preserved verbatim across `security/dangerous_patterns.py` (CATASTROPHIC + DANGEROUS_PATTERNS + allowlists) and `security/dangerous_python.py` (DANGEROUS_PYTHON + ALLOWED/BLOCKED module sets + member denylist). No PORT_LOG rows.
 
+| 011 | 2026-04-30 | 06 | src/constants/systemPromptSections.ts (registry + memoization + cacheBreak flag + clearSystemPromptSections) | compact_v5/MAIN/agent/prompt/sections.py (`Section` dataclass + `SECTION_ORDER` + `clear_section_cache` + cache_break flag reserved) | ADAPT | PASS (post-fix) | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | (pending) | TS Promise-based async compute fns → Python sync static-string returns. v5 sections are .md FILES (auditable, byte-stable, grep-friendly). `cache_break=True` flag reserved for Phase-8+ async sections. constraint=Bedrock. ADR-012. |
+| 012 | 2026-04-30 | 06 | src/constants/prompts.ts (914-LOC f-string structure inspired the sectioning) | 19 prompt/*.md files (content rewritten per ADR-002) + _CACHE_BOUNDARY.md | ADAPT | PASS (post-fix) | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | (pending) | Content REWRITTEN in tighter v5 form (45% reduction: 2739 vs ~5000 tokens). 19 reviewable units with hard token caps. **PS Issue #7 fix: `tool_classes` promoted to slot 2** (right after identity, before "system"). constraint=Bedrock. ADR-012. |
+| 013 | 2026-04-30 | 06 | src/services/api/promptCacheBreakDetection.ts (cache-break detection: hash sections, identify which one flipped) | compact_v5/MAIN/agent/core/cache.py (`fingerprint_sections` + `detect_cache_break` + `CacheBreakReport` + `build_cache_blocks`) | ADAPT | PASS (post-fix) | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | (pending) | Phase-1 ADR-005 deferred this from Phase 1 (pending multi-block prompts that landed Phase 6). Phase-6 implementation is intentionally smaller than Runnable's full hash-tree (no per-tool hashes / global-cache strategy / betas list yet — those land Phase 12+ when those concerns arrive). Logs `CacheBreakWarning` with section names. constraint=Bedrock. ADR-012. |
+
+**PS Issue #7 STRUCTURAL FIX (Phase 06)**: v4's flat 914-LOC `SYSTEM_PROMPT` made the model under-attend to mid-list bullets under cognitive load → "all tools blocked" failure (PS_actual_use_problems.md). Phase 6's structural fix:
+- 19 file-per-section .md files (each ≤ 420 tokens, all reviewable)
+- `tool_classes` promoted to **slot 2** (right after `identity`, BEFORE `system`)
+- Each section has a hard token cap; CI gate fails on growth
+- Cognitive-load test runs in the aggregate audit before Phase 7
+
 Phase 1 had no Runnable rows (pure v4 reuse — see ADR-005 / ADR-006). First Runnable adoption rows are Phase 02 above.
 
 Verdict legend:
