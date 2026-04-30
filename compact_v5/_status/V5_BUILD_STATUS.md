@@ -87,8 +87,9 @@ Updated by: Phase 08 close
 
 ## Git
 - Branch: v5-build
-- Last commit: d42c5ba535e3323829b118a90cc7f7831474423c
-- Last tag: v5-phase-07
+- Last commit: f5c8a679db2f (v5/phase-08: QueryEngine + retry + errors + IterationBudget — Codex APPROVE)
+- Last tag: v5-phase-08
+- Pushed to sageagent: 2026-04-30
 
 ## Blockers
 - none
