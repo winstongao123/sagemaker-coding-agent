@@ -56,7 +56,7 @@ Updated by: Phase 06 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit> "v5/phase-06: sectioned prompt + cache + Codex fixes (PS Issue #7 fix)"
+- Last commit: e1a7d1a8eecf42a3ed9fb256d3ed618c514c4a71 "v5/phase-06: sectioned prompt + cache + Codex fixes (PS Issue #7 fix)"
 - Last tag: v5-phase-06
 
 ## Blockers
