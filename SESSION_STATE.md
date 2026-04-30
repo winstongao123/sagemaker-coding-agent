@@ -1,5 +1,11 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 10 DONE (Skills + auto-trigger + Hermes filter, PS Issue #1 RESOLVED)
+
+Phase 10 closed: 10 v4 production skills copied byte-for-byte (batch / clara / design / html / reflexion / report / review / security-review / simplify / verify), SkillManager ported (`skills/manager.py`), 2 new tools (`skill`, `skill_propose_patch`) deferred via Phase 7. Hermes filter (PS Issue #1) wired into QueryEngine via `skill_manager=...` constructor param. Codex review REJECT first pass with 1 BLOCKER (SkillManager not wired into runtime loop) + 4 HIGH (YAML list parsing, proposal filename collisions, missing safety rails, audit/snapshot stubs) + 2 MEDIUM (singleton reset ordering, enable_skills gate dropped) + 2 UNDECLARED — all 9 fixed in same commit with 9 lock tests. 392 pass + 4 skip. About to tag `v5-phase-10`.
+
+Next: Phase 11 — Notebook UX + entry + thinking/budget UI (PS Issue #4).
+
 ## 2026-04-30 — Phase 09 DONE (Sub-agent + Task tool with shared IterationBudget)
 
 Phase 09 closed: 4 new files (`subagent/env.py`, `subagent/handoff.py`, `subagent/spawn.py`, `tools/task.py`) + 2 modified (`tools/__init__.py`, `core/query_engine.py`). 44 new tests. Codex review REJECT first pass with 1 BLOCKER (depth not threaded) + 3 substantive + 1 low + 1 DRIFTED + 1 UNDECLARED_PATTERN — all 7 fixed in same commit with 5 lock tests + git timeout restored to 5.0s. 359 pass + 4 skip. Phase 9 acceptance criteria validated end-to-end: parent context unchanged + child.budget is parent.budget. About to tag `v5-phase-09`.

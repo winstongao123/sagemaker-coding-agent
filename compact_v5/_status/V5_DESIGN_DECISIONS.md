@@ -903,4 +903,68 @@ After Phase 9 lands:
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 016, 017, ...)
+## ADR-016 — Phase 10: Skills + auto-trigger + Hermes filter (PS Issue #1)
+
+- Date: 2026-04-30
+- Phase ID: 10
+- Status: ACCEPTED
+- Source: gg-claude-code-runnable/src/tools/SkillTool/ + skills/loadAllSkills.ts
+            v4 sagemaker_agent.py:SkillManager (line 2684) + 10 skills directories under compact_v4/MAIN/agent/skills/
+            hermes-agent (skill-filtering-by-available-tools pattern)
+            v4.9.5 self-patching skills (CONFIG.enable_skill_patching opt-in)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** of v4's `SkillManager` (~470 LOC inline at sagemaker_agent.py:2684) and `tool_skill` / `tool_skill_propose_patch` executors. v5 reorganizes into `skills/manager.py` + `tools/skill.py` + `tools/skill_propose_patch.py`.
+- 10 skills directories (`batch`, `clara`, `design`, `html`, `reflexion`, `report`, `review`, `security-review`, `simplify`, `verify`) ported BYTE-FOR-BYTE under `skills/` (no content edits). User memory + V5_PLAN.md require this verbatim preservation.
+- ADDITION: Hermes-style skill filtering by available tools (PS Issue #1). Optional `requires_tools` frontmatter field; if a skill declares it, the skill is filtered out of auto-trigger when its required tools aren't in the active pool. Backwards-compatible — existing skills don't need the field.
+
+### Question 2 — Architectural justification
+- **All 10 skills must load** (V5_PLAN.md acceptance) — they are battle-tested production behavior shipping with v4.
+- **Auto-trigger respects v4.9.6 default-OFF** (V5_PLAN.md acceptance) — `CONFIG.enable_skill_auto_trigger=False` AND per-skill `auto_trigger: false` default = no auto-loading without explicit opt-in. v4.9.6 made this conservative for cost reasons (avoid silent injection of large skill bodies).
+- **`skill_propose_patch` opt-in** — `CONFIG.enable_skill_patching=False` default; tool returns no-op message unless flipped. v4.9.5 ships the same opt-in semantics (8 safety rails: opt-in, propose-not-apply, diff preview, snapshot, audit log, time-stamped proposal files, per-skill .proposed/, never-touches-live).
+- **Hermes filter (PS Issue #1)**: in scenarios where a tool is blocked or deferred, surfacing a skill that needs that tool just frustrates the model. The filter improves signal-to-noise for the auto-trigger reminder block. Optional + backwards-compatible.
+
+### Question 3 — Cost
+- Token cost (static prompt): +0 — `skill` and `skill_propose_patch` tools marked `should_defer=True`. Auto-trigger reminder added to dynamic tail only when relevant skills found (≤120 chars per skill description × ≤5 skills = ~600 tokens worst case, only when auto-trigger fires).
+- Token cost (per turn): unchanged for non-skill turns. Active skill body injected in the dynamic tail when a skill is active (capped via `read_skill(name, max_chars=12000)`).
+- Code complexity: ~600 LOC across skills/manager.py + 2 tools (vs v4's 470 LOC inline).
+- Maintenance: skills/ directories byte-for-byte from v4; AIPower already syncs from this canonical source. Hermes filter is ~30 LOC of optional filtering logic.
+
+### Question 4 — Cost worth it?
+YES.
+- Skills are core product surface — without them v5 doesn't match v4 functionality, blocking ship.
+- Hermes filter cost is tiny relative to its UX value (avoids "I'd suggest using `verify` skill" when bash is blocked).
+- Self-patching is opt-in so default users don't pay any complexity.
+
+### Decision
+- **ACCEPTED** for v5.0.
+- Phase 10 ships:
+  - `skills/__init__.py` + `skills/manager.py` — `SkillManager` class with `discover()` / `list_skills()` / `read_skill(name, max_chars)` / `get_active_skill_prompt()` / `discover_relevant(user_message, active_tools=None)` / `list_for_prompt(budget_tokens=0)` / `propose_patch()` / `list_proposals()` / `apply_proposal()` / `revert_skill()`. Hermes filter sits inside `discover_relevant` via the new `active_tools` parameter.
+  - `skills/<10 dirs>/` — copied byte-for-byte from compact_v4/MAIN/agent/skills/.
+  - `tools/skill.py` — list, activate, read, deactivate. Marked `should_defer=True`.
+  - `tools/skill_propose_patch.py` — propose-only (never auto-applies). Returns no-op message when `CONFIG.enable_skill_patching=False`. Marked `should_defer=True`.
+- Phase 10 does NOT ship: a `skill_apply` tool (apply is operator-only via `/skill apply` slash command in Phase 11 UX), automatic skill auto-trigger (default-OFF preserved), domain-specific skills (powerbi-dashboard variants stay in AIPower repo).
+
+### Budget reservation
+- Static prompt: +0 tokens (both new tools deferred).
+- Per-turn (when skill active): up to 12000 chars of skill content (~3000 tokens) injected after cache boundary. Same as v4.
+- Dynamic-tail auto-trigger reminder: capped at SKILL_LISTING_DESC_CAP=250 chars × ≤5 skills = ~250 tokens worst case.
+
+### Reconciliation
+After Phase 10 lands:
+- Static prompt token count must remain at 2498 (no change).
+- All 10 skills load via `SkillManager.discover()`.
+- Default config: no skill auto-loads without explicit opt-in.
+- Default config: `skill_propose_patch` returns no-op message.
+- Hermes filter: skills with `requires_tools` not subset of `active_tools` are filtered from `discover_relevant`.
+
+### Linked port-log rows
+- #025 — v4 SkillManager → skills/manager.py (PORT — verbatim port; CONFIG.workspace decoupled to constructor parameter for testability)
+- #026 — v4 tool_skill → tools/skill.py (ADAPT — uses new SkillManager surface; should_defer=True)
+- #027 — v4 tool_skill_propose_patch → tools/skill_propose_patch.py (ADAPT — same opt-in contract; should_defer=True)
+- #028 — Hermes skill-filtering-by-available-tools pattern → SkillManager.discover_relevant(active_tools) (ADAPT — optional `requires_tools` frontmatter field; backwards-compatible)
+- #029 — 10 skills/ directories from v4 → compact_v5/MAIN/agent/skills/ (PURE COPY — content byte-for-byte; no rows for individual skills as they are reused content not Runnable patterns)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 017, 018, ...)

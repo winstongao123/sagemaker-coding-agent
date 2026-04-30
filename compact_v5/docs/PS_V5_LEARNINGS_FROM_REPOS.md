@@ -332,7 +332,43 @@
 
 ---
 
-## Phases 10-13
+## Phase 10 — Skills + auto-trigger + Hermes filter
+
+### From Hermes: skill-filtering-by-available-tools (PS Issue #1)
+- **Source**: Hermes filters skills by tools they require so the model isn't told about a `verify` skill if bash is blocked.
+- **Adopted (ADAPT)**: `skills/manager.py:discover_relevant(active_tools=...)` + `QueryEngine(skill_manager=...)` runtime wiring.
+- **Adaptation**:
+  - Optional `requires_tools` frontmatter field — Hermes typically declares this in code, v5 declares it in skill metadata so authors own the dependency list.
+  - Backwards compatible: skills without the field never filtered. The 10 v4 skills don't declare it; they continue to surface as before.
+  - Both CSV scalar (`requires_tools: bash, python_exec`) and YAML list dash-form supported (post Codex Phase-10 fix).
+- **Better than Hermes**:
+  - Backwards-compatible field — v5 didn't have to retrofit any existing skills.
+  - Wired into the runtime loop with a Phase-10 BLOCKER lock test (`test_query_engine_appends_relevant_skill_reminder_to_user_turn`) so the filter doesn't silently rot into dead code.
+
+### From v4: SkillManager (verbatim port + parameter extraction)
+- **Source**: `compact_v4/MAIN/agent/sagemaker_agent.py:2684` (`SkillManager`).
+- **Adopted (PORT)**: `skills/manager.py` — full v4 surface preserved.
+- **Adaptation**: workspace + skills_dir + enable_auto_trigger become constructor parameters (constraint=.ipynb for testability). Frontmatter parser extended to handle YAML lists (Codex Phase-10 finding).
+- **Better than v4**: testable in isolation; YAML list parsing supports newer skill authors.
+
+### From v4.9.5: self-patching skills (8 safety rails)
+- **Source**: v4.9.5 added `propose_patch` + `apply_proposal` with 8 safety rails: opt-in, propose-not-apply, diff preview, snapshot, audit log, time-stamped filename, per-skill `.proposed/`, required reason + full new_content.
+- **Adopted (ADAPT)**: same 8 rails; v5 Phase 10 first pass weakened a few; Codex Phase-10 caught the gaps; post-fix all 8 are honored:
+  - Rail 1 (opt-in via `CONFIG.enable_skill_patching=False` default) — preserved.
+  - Rail 2 (propose-not-apply) — preserved.
+  - Rail 3 (diff preview) — Phase 11 UX wires the visual diff; Phase 10 just writes the proposal.
+  - Rail 4 (snapshot) — best-effort `.skill_backup_<ts>` sibling when SnapshotManager not wired (Phase 11 UX wires real snapshot).
+  - Rail 5 (audit log) — `logging.info` lines on propose + apply.
+  - Rail 6 (time-stamped) — preserved + UUID suffix added (Codex Phase-10 fix for collisions).
+  - Rail 7 (per-skill `.proposed/`) — preserved.
+  - Rail 8 (required reason + full new_content) — preserved.
+
+### Studied-only from Runnable: SkillTool
+- Runnable has a `SkillTool` for invoking skills via tool dispatch. v5 ports the shape (subcommand-style executor) but uses v4 SkillManager underneath. Runnable's React/Ink UI is replaced by Phase 11's ipywidgets. Pattern is documented inline in tools/skill.py.
+
+---
+
+## Phases 11-13
 
 (Future — entries land per phase.)
 
@@ -377,3 +413,8 @@ This section consolidates every place v5 is better than the source repo, for qui
 | **9** | **v4** | **deep-copy parent immutability guard** | **v5 deep-copies parent.messages before spawn and compares structurally on return. Catches in-place mutations that preserve length. v4 has no equivalent defense.** |
 | **9** | **v4** | **structural cache-boundary sanitization lock test** | **`test_handoff_sanitizes_boundary_marker` counts unsanitized occurrences, not regex. Catches any regression that reintroduces a leak.** |
 | **9** | **v4** | **explicit unknown-subagent_type error contract** | **v4 errors on unknown types. v5 first pass silently fell back; Codex caught it. Post-fix: `tools/task.py` AND `subagent/spawn.py` both reject with explicit error listing valid types.** |
+| **10** | **Hermes** | **PS Issue #1: skill filtering by available tools, backwards-compatible** | **Hermes's filter pattern adopted via optional `requires_tools` frontmatter field. Skills without the field (10 v4 skills) never filtered. Hermes has no fallback. v5 also wires the filter into runtime loop (Codex Phase-10 BLOCKER lock).** |
+| **10** | **v4** | **YAML list dash-form for `triggers`/`requires_tools`** | **v4 frontmatter parser handles only CSV scalar. v5 Phase 10 fix: YAML list dash-form works too. Skill authors can use whichever style fits their content.** |
+| **10** | **v4.9.5** | **UUID-suffixed proposal filenames + audit + backup-on-apply** | **Same-second proposals would collide in v4.9.5. v5 adds 6-char UUID suffix. Apply always writes `.skill_backup_<ts>` sibling for local reversibility even before SnapshotManager is wired.** |
+| **10** | **v4** | **SkillManager testable in isolation** | **v4's SkillManager is buried in the 12K-LOC monolith — every test path requires Agent.run integration. v5's `skills/manager.py` is its own module with 21 unit tests + 12 integration tests.** |
+| **10** | **Codex review (Phase 10)** | **runtime integration locked by test, not just by docs** | **Codex first pass caught that the Hermes filter was dead code (no runtime wiring). Post-fix: `test_query_engine_appends_relevant_skill_reminder_to_user_turn` is a BLOCKER lock — any future regression that decouples skill_manager from QueryEngine breaks CI.** |

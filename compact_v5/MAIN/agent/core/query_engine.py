@@ -136,6 +136,7 @@ class QueryEngine:
         max_turns: int = DEFAULT_MAX_TURNS,
         budget: Optional[IterationBudget] = None,
         on_stop_check: Optional[Callable[[], bool]] = None,
+        skill_manager: Optional[Any] = None,
     ):
         """Construct a QueryEngine.
 
@@ -145,12 +146,20 @@ class QueryEngine:
             budget: shared IterationBudget. If None, a fresh one is created.
             on_stop_check: optional callable returning True if the user has
                 requested a stop (notebook UX). Phase 11 wires this to the
-                Stop button. Phase 8 keeps it None by default.
+                Stop button.
+            skill_manager: optional `skills.manager.SkillManager`. When
+                supplied, the engine (a) injects the active skill body into
+                the dynamic tail of the system prompt, and (b) appends a
+                Hermes-filtered "skills relevant to this task" reminder to
+                the first user turn (Phase 10 wiring contract — Codex
+                Phase-10 BLOCKER fix). When None, no skill machinery runs
+                — preserves Phase 1-8 backwards compatibility for tests.
         """
         self.client = client
         self.max_turns = max(1, int(max_turns))
         self.budget = budget if budget is not None else IterationBudget()
         self.on_stop_check = on_stop_check
+        self.skill_manager = skill_manager
 
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
@@ -209,6 +218,38 @@ class QueryEngine:
         )
         from tools.tool_search import tool_search_discovered_names
 
+        # Phase 10 wiring (Codex BLOCKER fix): if a SkillManager is bound to
+        # this engine, inject (a) the active skill body into the dynamic
+        # tail of the system prompt and (b) a Hermes-filtered "skills
+        # relevant to this task" reminder onto the first user turn so the
+        # model sees the suggestions. The Hermes filter passes the visible
+        # tool names so skills with `requires_tools` are pruned when the
+        # required tools aren't currently available.
+        effective_system_prompt = system_prompt
+        if self.skill_manager is not None:
+            try:
+                active_block = self.skill_manager.get_active_skill_prompt()
+                if active_block:
+                    effective_system_prompt = system_prompt + active_block
+                visible_tool_names = {t.name for t in tools}
+                relevant = self.skill_manager.discover_relevant(
+                    user_message, active_tools=visible_tool_names,
+                )
+                if relevant:
+                    reminder = (
+                        "\n\n# Skills Relevant to This Task\n"
+                        "Consider using: " + ", ".join(relevant) +
+                        "\nUse the `skill` tool to activate one if it matches."
+                    )
+                    last_user = self.messages[-1]
+                    content = last_user.get("content")
+                    if isinstance(content, str):
+                        last_user["content"] = content + reminder
+                    elif isinstance(content, list):
+                        content.append({"type": "text", "text": reminder})
+            except Exception as exc:  # noqa: BLE001 — skill machinery never raises into agent loop
+                logging.warning("[skill-wiring] %s: %s", type(exc).__name__, exc)
+
         last_text = ""
         stop_reason = ""
         turns_used = 0
@@ -255,7 +296,7 @@ class QueryEngine:
             try:
                 response = self.client.chat(
                     messages=turn_messages,
-                    system=system_prompt,
+                    system=effective_system_prompt,
                     tools=_build_tools_api_payload(visible_tools),
                     max_tokens=max_tokens,
                     temperature=temperature,

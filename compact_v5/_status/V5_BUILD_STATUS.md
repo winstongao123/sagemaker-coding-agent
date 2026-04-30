@@ -1,12 +1,21 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 09 DONE — Codex REJECT first pass, all 7 issues fixed)
-Updated by: Phase 09 close
+Last updated: 2026-04-30 (Phase 10 DONE — Codex REJECT first pass, all 9 issues fixed)
+Updated by: Phase 10 close
 
 ## Current phase
-- Phase ID: 09 (canonical: 00..13 or 08_5)
-- Phase name: Phase 9 — Sub-agent + Task tool (forkSubagent budget sharing)
-- State: DONE — pending tag v5-phase-09
+- Phase ID: 10 (canonical: 00..13 or 08_5)
+- Phase name: Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1)
+- State: DONE — pending tag v5-phase-10
+
+## Phase 10 summary
+- 5 new files: skills/__init__.py + skills/manager.py + 10 skill dirs (PURE COPY) + tools/skill.py + tools/skill_propose_patch.py.
+- 2 modified: tools/__init__.py + core/query_engine.py (added skill_manager wiring).
+- 33 new tests (21 unit + 12 integration, including 9 Codex-fix lock tests).
+- Codex review: REJECT first pass (1 BLOCKER + 4 HIGH + 2 MEDIUM + 2 UNDECLARED). All 9 fixed in same commit.
+- Post-fix: AXIS A PASS, AXIS B 3 FAITHFUL / 2 ADAPTED / 0 DRIFTED.
+- 392 pass + 4 skip (was 359+4 in Phase 9 → +33 net new).
+- PS Issue #1 (Hermes filter) RESOLVED.
 
 ## Phase 09 summary
 - 4 new files: subagent/env.py + subagent/handoff.py + subagent/spawn.py + tools/task.py.
@@ -110,7 +119,7 @@ Updated by: Phase 09 close
 - none
 
 ## Next session: pick up at
-- **Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1)**: port v4's `SkillManager` + 10 skills directories byte-for-byte. Add Hermes-style skill filtering by available tools. Aggregate audit gate before Phase 11.
+- **Phase 11 — Notebook UX + entry + thinking/budget UI (PS Issue #4)**: port v4 `chat.ipynb` + `chat_ui.py`. Wire IterationBudget progress bar (PS Issue #2 finishes here), thinking budget UI (PS Issue #4), diff-widget into approval UX, skill activate / apply slash commands (Phase 11 UX commitments from Phase 10).
 - Resume protocol: see `_status/RESUME.md`.
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):

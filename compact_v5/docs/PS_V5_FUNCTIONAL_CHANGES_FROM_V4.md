@@ -389,6 +389,48 @@ The single highest-leverage token-saving Runnable adoption. v4 ships every tool'
 
 ---
 
-## Phases 10-13
+## Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1)
+
+### 10.1 Skills are now their own package
+- **v4**: SkillManager is ~470 LOC inline at sagemaker_agent.py:2684 — discover/list/read/active/auto-trigger/list_for_prompt/propose_patch/apply_proposal/etc all in one class buried in the monolith.
+- **v5**: `skills/` is a proper package — `skills/manager.py` (the class) + `skills/<10 dirs>/SKILL.md` (the content). Each surface independently testable.
+- **All 10 v4 production skills land byte-for-byte**: batch / clara / design / html / reflexion / report / review / security-review / simplify / verify. Codex Phase-10 confirmed all SKILL.md hashes match v4.
+
+### 10.2 Hermes filter is now real (PS Issue #1 fix)
+- **v4**: skill auto-trigger matches by trigger word only. If `verify` skill needs `bash` + `python_exec` and bash is currently blocked, v4 still suggests `verify` — frustrating.
+- **v5 Phase 10 first pass**: optional `requires_tools` frontmatter field; `discover_relevant(active_tools=...)` filters skills whose required tools aren't active. BUT — Codex caught that the filter wasn't WIRED into the runtime loop, so it was dead code.
+- **v5 Phase 10 post-fix**: `QueryEngine(skill_manager=...)` invokes the filter per turn, injecting (a) the active skill body into the system prompt and (b) a "Skills Relevant to This Task" reminder on the user turn. The Hermes pattern actually fires.
+- **Backwards compatible**: skills without `requires_tools` (the 10 v4 skills) are never filtered by this mechanism. Phase 10 ships the mechanism; later phases / skill authors can add the field.
+
+### 10.3 YAML list parsing for frontmatter list-shaped fields
+- **v4**: frontmatter parser is line-split CSV-only. `triggers: a, b, c` works; `triggers:\n  - a\n  - b` silently parses as None.
+- **v5 Phase 10 post-fix**: `_parse_frontmatter` peeks ahead for `  - item` lines after a key with empty scalar value, returning a list-of-strings. `_split_csv_field` now accepts both list and string inputs. Both `triggers` and `requires_tools` work in both forms.
+
+### 10.4 Proposal filenames have UUID suffix
+- **v4.9.5**: proposal filenames are second-granularity — two proposals fired in the same second collide and overwrite each other.
+- **v5 Phase 10 post-fix**: `propose_patch` adds a 6-char `uuid.uuid4().hex` suffix. No collisions even under rapid concurrent calls.
+
+### 10.5 Best-effort safety rails when Phase-11 UX subsystems aren't wired
+- **v4.9.5**: applying a proposal calls a global `SNAPSHOTS.snapshot(...)` if available, otherwise no snapshot. v5 Phase 10 first pass had the same behavior but Codex caught that "8 safety rails preserved" was overclaiming.
+- **v5 Phase 10 post-fix**: when SnapshotManager isn't wired (Phase 10 default), `apply_proposal` writes a `.skill_backup_<ts>` sibling next to the live SKILL.md so the change is locally reversible. Audit log lines (`[skill-audit] propose ...` and `[skill-audit] apply ...`) fire unconditionally. Phase 11 UX wires the real SnapshotManager + AuditLogger.
+
+### 10.6 enable_skills gate restored
+- **v4**: `CONFIG.enable_skills=True` (default). Operator can flip it to False to completely disable skills (e.g. constrained sessions).
+- **v5 Phase 10 first pass**: dropped this gate.
+- **v5 Phase 10 post-fix**: both `tools/skill.py` and `tools/skill_propose_patch.py` honor the gate. When False, both tools return a clear "Skills disabled" message. Lock tests for both.
+
+### 10.7 Singleton lifecycle hardened
+- **v4**: `SKILLS = SkillManager(...)` is a process-global. Tests that change CONFIG.workspace need a fresh-process restart to pick up the new path.
+- **v5 Phase 10**: `tools/skill.py:_get_skill_manager(context)` checks `context['skill_manager']` first (explicit injection — preferred for tests), then falls back to a lazy singleton. `_register()` resets the singleton BEFORE the already-registered short-circuit so re-bootstrap flows pick up the new CONFIG.workspace.
+
+### 10.8 What's deliberately NOT in Phase 10
+- **Active-skill prompt injection in chat.ipynb UI**: deferred to Phase 11 (UI plumbs the active-skill / pending-activation visualization).
+- **/skill apply slash command**: deferred to Phase 11 UX. Phase 10 ships the SkillManager method `apply_proposal()`; Phase 11 wires the user-facing slash command.
+- **Real SnapshotManager + AuditLogger singleton wiring**: deferred to Phase 11 UX. Phase 10 best-efforts via `.skill_backup_<ts>` sibling + `logging.info` lines.
+- **Domain skills** (powerbi-dashboard variants): stay in AIPower repo, not v5 base.
+
+---
+
+## Phases 11-13
 
 (Future — entries land per phase.)

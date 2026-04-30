@@ -1,0 +1,80 @@
+You are reviewing PHASE 10 of v5 — SageMaker-native re-implementation of Runnable Claude Code.
+
+CONTEXT
+- Repo: D:/Github/sagemaker-coding-agent (branch: v5-build)
+- Phase: Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1)
+- Goal (V5_PLAN.md §Phase 10): port v4's SkillManager + 10 skills directories byte-for-byte; add Hermes-style skill filtering by available tools. Acceptance: all 10 skills load; auto-trigger respects v4.9.6 default-OFF.
+- Constraints v5 MUST honor: Bedrock-only, no GitHub network, python_exec sandbox, .ipynb workflow, must coexist with v4 unchanged.
+
+NEW FILES IN THIS PHASE:
+- compact_v5/MAIN/agent/skills/__init__.py            (NEW)
+- compact_v5/MAIN/agent/skills/manager.py             (NEW: SkillManager + Hermes filter, PORT_LOG #025 + #028)
+- compact_v5/MAIN/agent/skills/<10 dirs>/             (PURE COPY from v4, PORT_LOG #029)
+- compact_v5/MAIN/agent/tools/skill.py                (NEW: skill tool, PORT_LOG #026)
+- compact_v5/MAIN/agent/tools/skill_propose_patch.py  (NEW: skill_propose_patch tool, PORT_LOG #027)
+- compact_v5/MAIN/agent/tests/unit/test_skill_manager.py    (15 tests)
+- compact_v5/MAIN/agent/tests/integration/test_skills.py    (7 tests)
+
+MODIFIED FILES:
+- compact_v5/MAIN/agent/tools/__init__.py             (registers skill + skill_propose_patch)
+- compact_v5/MAIN/agent/tests/integration/test_query_engine.py (1 line: skill exclusion in deferred-tools test)
+
+DOCS UPDATED:
+- compact_v5/_status/V5_DESIGN_DECISIONS.md           (ADR-016)
+- compact_v5/_status/V5_RUNNABLE_PORT_LOG.md          (rows #025-#029)
+
+RUNNABLE PATTERNS ADOPTED THIS PHASE:
+| ID  | Source                                          | v5 target                              | Verdict | Justification                                                  |
+|-----|-------------------------------------------------|----------------------------------------|---------|----------------------------------------------------------------|
+| 025 | (v4-only) SkillManager at sagemaker_agent.py:2684 | skills/manager.py                       | PORT    | Verbatim. Workspace + skills_dir + auto_trigger as ctor params. |
+| 026 | (v4-only) tool_skill + Runnable SkillTool shape    | tools/skill.py                          | ADAPT   | Subcommand-style tool. should_defer=True. Singleton lazy-built. |
+| 027 | (v4-only) tool_skill_propose_patch (v4.9.5)        | tools/skill_propose_patch.py            | ADAPT   | 8 safety rails preserved. Opt-in via CONFIG.enable_skill_patching. |
+| 028 | hermes-agent (skill-filtering-by-tools)            | skills/manager.py:discover_relevant     | ADAPT   | Optional `requires_tools` frontmatter. Backwards compatible.    |
+| 029 | (v4 skill content)                                  | compact_v5/MAIN/agent/skills/<10 dirs> | PURE COPY | Byte-for-byte. No edits.                                      |
+
+PRODUCE TWO VERDICTS.
+
+=== AXIS A — Errors / bugs ===
+For each NEW or MODIFIED file:
+- Frontmatter parser correctness (multiline values? quoted strings? YAML edge cases?)
+- Hermes filter: does `discover_relevant(active_tools=None)` correctly skip the filter? Does `active_tools=set()` filter only skills with `requires_tools`?
+- Singleton lifecycle in tools/skill.py: is the singleton properly reset between test runs? Does `_register()` clear it correctly?
+- propose_patch / apply_proposal: idempotency, race risks, snapshot wiring (note: Phase 10 doesn't ship snapshot integration — apply just writes)
+- Default-OFF gates: `enable_skill_auto_trigger` AND per-skill `auto_trigger: false` BOTH default false. Verify both gates fire correctly.
+- Token-budget safety in `list_for_prompt`: when `budget_tokens` is tiny, does it still return a truncated form rather than overflow?
+- Test isolation: do the integration tests properly bind the SkillManager to the right workspace via monkeypatch?
+- Skill content was copied from v4 — do you see any obvious problems with the SKILL.md files? (Don't review their content for quality; only check that they parse.)
+- Anything else suspicious
+
+Output:
+AXIS A VERDICT: PASS | CHANGES_REQUESTED | BLOCKER
+Findings: [severity] file:line — description — fix
+
+=== AXIS B — Runnable-fidelity ===
+For EACH pattern row above (025-029), judge independently. Read the v4 source and (where relevant) Runnable's SkillTool before judging.
+
+PATTERN 025: skills/manager.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 026: tools/skill.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 027: tools/skill_propose_patch.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 028: discover_relevant Hermes filter — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 029: 10 skill directories — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+
+For each:
+- Source intent (1-2 sentences):
+- v5 implementation (1-2 sentences):
+- Constraint forcing adaptation (closed list: Bedrock | no-network | python_exec | .ipynb | none):
+- Drift risk if any:
+- Required change to reach FAITHFUL (if currently DRIFTED):
+
+Auto-reject rule: FAITHFUL-WITH-JUSTIFIED-ADAPTATION + constraint=none → REJECT.
+
+If you find a pattern in the code NOT listed in the table, flag as UNDECLARED_PATTERN.
+
+=== FINAL ===
+PHASE 10 OVERALL: APPROVE | APPROVE_WITH_FIXES | REJECT
+A-axis: <one-line>
+B-axis: <count of FAITHFUL / ADAPTED / DRIFTED>
+Required before next phase (Phase 11 — Notebook UX + entry + thinking/budget UI):
+- <bullet>
+
+Be ruthless. v5 must be better than Runnable + Hermes + LF + v4. PS Issue #1 (skill filtering by available tools) is the primary value-add this phase ships — verify it actually works for the 10 v4 skills, and that the filter has no regressions for skills WITHOUT `requires_tools`.
