@@ -299,7 +299,40 @@
 
 ---
 
-## Phases 9-13
+## Phase 9 — Sub-agent + Task tool
+
+### From Runnable: forkSubagent budget-sharing pattern (sync adaptation)
+- **Source**: `_archive/compare_code/gg-claude-code-runnable/src/tools/AgentTool/forkSubagent.ts` (210 LOC) + `AgentTool.tsx` (1397 LOC).
+- **Adopted (ADAPT)**: `subagent/spawn.py` — sync ADAPT.
+- **Adaptation**:
+  - Sync (no Promise / async generator chain). Constraint=`.ipynb`.
+  - Drops experimental `FORK_SUBAGENT` feature gate (Anthropic-internal A/B).
+  - Drops cache-prefix-identical message replay (Runnable optimizes for prompt-cache continuity across sub-agent boundaries; v5 keeps the simpler "fresh sub-conversation" model).
+  - Drops `<task-notification>` background dispatch model (needs streaming).
+  - Drops coordinator-mode mutual exclusion (v5 has no coordinator).
+- **Better than Runnable**: explicit IN-SCOPE / OUT-OF-SCOPE list in module docstring; shared-budget invariant locked to object-identity (`is`) test.
+
+### From Hermes (via v4): IterationBudget sharing across parent + sub-agents
+- **Source**: Hermes `run_agent.py:170` (originally) → v4.9.4 adopted at `compact_v4/MAIN/agent/sagemaker_agent.py:8190` → v5 Phase 8 lifted it into its own module (`core/budget.py`) → Phase 9 wires it via `spawn_subagent(budget=parent.budget)`.
+- **Adopted (PORT for the budget object; ADAPT for the sharing wiring)**: each spawn shares the SAME budget instance (object identity, not deep copy).
+- **Better than Hermes/v4**: lock-tested at three levels — class-level (`_new_child_engine` direct), spawn-level (after `spawn_subagent` flow), and dispatch-level (across nested `task` chains).
+
+### From v4: env-details + handoff blocks (verbatim port + parameter extraction)
+- **Source**: `_build_subagent_env_details` (sagemaker_agent.py:7695) + `_build_subagent_handoff_block` (line 7771) + `_sanitize_handoff` (line 7763).
+- **Adopted**:
+  - `subagent/env.py` PORT — 5.0s git timeout, ≤6 lines, fail-quiet probes.
+  - `subagent/handoff.py` ADAPT — same 4000/2000/10 caps, same sanitization, but inputs as parameters not globals (Phase 11 callers will wire them).
+- **Better than v4**: separated from the monolith → testable in isolation. Sanitization lock test (`test_handoff_sanitizes_boundary_marker`) is structural (counts unsanitized occurrences) not regex.
+
+### Studied-only from Runnable: agent-color-manager + agentDisplay
+- Runnable assigns colors to sub-agents for terminal display. v5 .ipynb shows sub-agent output via ipywidgets (Phase 11), not terminal colors. Pattern not adopted.
+
+### Studied-only from Runnable: agentMemory + agentMemorySnapshot
+- Runnable persists per-agent memory state across sessions. v5 already has `runtime/session.py` + memory.md from earlier phases; Phase 9 doesn't add agent-specific memory state (deferred).
+
+---
+
+## Phases 10-13
 
 (Future — entries land per phase.)
 
@@ -338,3 +371,9 @@ This section consolidates every place v5 is better than the source repo, for qui
 | **8** | **v4** | **Phase 7 wiring contract end-to-end live** | **Turn 1 `tools=` excludes deferred tools; model calls `tool_search(select:view_image)`; turn 2 `tools=` includes view_image schema. Validated by `test_tool_search_round_trip_promotes_deferred_tool`. v4 has no such mechanism.** |
 | **8** | **v4** | **tool exception trapping** | **v4's tool dispatch leaks raised Python exceptions in some paths. v5 traps every exception and returns a tool_result with `is_error=True` so the model can recover.** |
 | **8** | **v4** | **plan-mode dispatch gate after deferral** | **Even if a mutating tool is in per-turn `tools=` (because tool_search discovered it), v5 dispatch refuses to execute it in plan mode. v4 only filters at registry time, not dispatch.** |
+| **9** | **v4** | **sub-agent dispatch as 4-module surface** | **v4's _run_task_tool is ~600 LOC inline. v5 splits into env / handoff / spawn / task — each ≤200 LOC, independently testable, reviewable.** |
+| **9** | **Runnable** | **focused sync forkSubagent** | **~250 LOC vs Runnable's 210+1397 LOC (forkSubagent + AgentTool.tsx). Drops async wiring, experimental fork branch, coordinator mutex, cache-prefix replay. Same shared-budget invariant.** |
+| **9** | **Hermes + v4** | **lock-tested IterationBudget identity** | **Three lock-test levels: class-level, spawn-level, nested-dispatch-level. Hermes/v4 share the budget but don't lock the contract with object-identity tests.** |
+| **9** | **v4** | **deep-copy parent immutability guard** | **v5 deep-copies parent.messages before spawn and compares structurally on return. Catches in-place mutations that preserve length. v4 has no equivalent defense.** |
+| **9** | **v4** | **structural cache-boundary sanitization lock test** | **`test_handoff_sanitizes_boundary_marker` counts unsanitized occurrences, not regex. Catches any regression that reintroduces a leak.** |
+| **9** | **v4** | **explicit unknown-subagent_type error contract** | **v4 errors on unknown types. v5 first pass silently fell back; Codex caught it. Post-fix: `tools/task.py` AND `subagent/spawn.py` both reject with explicit error listing valid types.** |

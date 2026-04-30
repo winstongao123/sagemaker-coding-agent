@@ -333,10 +333,14 @@ class QueryEngine:
 
                 # Execute. Tool implementations may raise; we trap and surface
                 # the error to the model rather than the human user.
+                # `parent_engine` is passed for Phase 9 task tool — the sub-agent
+                # spawn needs the parent's IterationBudget + BedrockClient (ADR-015).
                 try:
                     raw = tool.execute(call.input, context={
                         "active_tools": tools,
                         "plan_mode": plan_mode,
+                        "parent_engine": self,
+                        "parent_depth": getattr(self, "_subagent_depth", 0),
                     })
                     text = _coerce_tool_result_to_text(raw)
                     text = _truncate_tool_result(text, tool.max_result_size_chars)

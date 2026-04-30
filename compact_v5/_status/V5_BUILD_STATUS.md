@@ -1,12 +1,20 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 08.5 thin-slice gate PASSED — 10/10 scenarios)
-Updated by: Phase 08.5 close
+Last updated: 2026-04-30 (Phase 09 DONE — Codex REJECT first pass, all 7 issues fixed)
+Updated by: Phase 09 close
 
 ## Current phase
-- Phase ID: 08_5 (canonical: 00..13 or 08_5)
-- Phase name: Phase 8.5 — Thin-slice parity gate (HARD BLOCKER)
-- State: DONE — 10/10 scenarios pass, ready for tag v5-phase-08_5
+- Phase ID: 09 (canonical: 00..13 or 08_5)
+- Phase name: Phase 9 — Sub-agent + Task tool (forkSubagent budget sharing)
+- State: DONE — pending tag v5-phase-09
+
+## Phase 09 summary
+- 4 new files: subagent/env.py + subagent/handoff.py + subagent/spawn.py + tools/task.py.
+- 2 modified: tools/__init__.py (registers task tool), core/query_engine.py (passes parent_engine + parent_depth in dispatch context).
+- 44 new tests (5 env + 9 handoff + 30 integration including 5 Codex-fix lock tests + 1 line in test_query_engine.py).
+- Codex review: REJECT first pass (1 BLOCKER + 3 substantive + 1 low + 1 DRIFTED + 1 UNDECLARED_PATTERN). All 7 fixed in same commit.
+- Post-fix: AXIS A PASS, AXIS B 2 FAITHFUL / 2 ADAPTED / 0 DRIFTED.
+- 359 pass + 4 skip (was 329+4 in Phase 8.5 → +30 net new).
 
 ## Phase 08.5 thin-slice gate (HARD BLOCKER before Phase 9)
 - 10 critical cross-phase integration scenarios in `tests/parity/test_thin_slice.py`.
@@ -102,7 +110,7 @@ Updated by: Phase 08.5 close
 - none
 
 ## Next session: pick up at
-- **Phase 09 — Sub-agent + Task tool**: port Runnable `tools/AgentTool/` + `forkSubagent.ts` (budget-sharing). Reuse v4's `_build_subagent_handoff_block` + `_build_subagent_env_details` verbatim. Land `subagent/spawn.py` + `subagent/handoff.py` + `subagent/env.py` + `tools/task.py`. Acceptance: parent context unchanged, child shares IterationBudget.
+- **Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1)**: port v4's `SkillManager` + 10 skills directories byte-for-byte. Add Hermes-style skill filtering by available tools. Aggregate audit gate before Phase 11.
 - Resume protocol: see `_status/RESUME.md`.
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):

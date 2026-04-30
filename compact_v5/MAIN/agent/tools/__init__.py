@@ -57,7 +57,9 @@ from . import python_exec as _python_exec     # noqa: F401  defines _register()
 #
 # Phase 7 — tool_search (per ADR-013; Runnable ToolSearchTool port):
 from . import tool_search as _tool_search     # noqa: F401  defines _register()
-# Phase 9 will add: task (sub-agent dispatch)
+#
+# Phase 9 — task tool (sub-agent dispatch, ADR-015):
+from . import task as _task                   # noqa: F401  defines _register()
 # Phase 10 will add: skill, skill_propose_patch, todo_*, semantic_search,
 #                    create_word/excel/pdf/chart/markdown/notebook,
 #                    web_fetch, ask_user
@@ -88,7 +90,9 @@ def bootstrap_built_ins():
     _python_exec._register()
     # Phase 7 — tool_search
     _tool_search._register()
-    # Phase 8-13 will add their modules here as they land.
+    # Phase 9 — task tool (sub-agent dispatch)
+    _task._register()
+    # Phase 10-13 will add their modules here as they land.
     return all_registered()
 
 

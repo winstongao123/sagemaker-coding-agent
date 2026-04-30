@@ -346,6 +346,49 @@ The single highest-leverage token-saving Runnable adoption. v4 ships every tool'
 
 ---
 
-## Phases 9-13
+## Phase 9 — Sub-agent + Task tool (forkSubagent budget sharing)
+
+### 9.1 Sub-agent dispatch is now a 4-module surface
+- **v4**: `_run_task_tool` ~600 LOC inline at sagemaker_agent.py:8350. Mixes AGENT_TYPES lookup, env-details probing, handoff-block assembly, worktree isolation, parallel dispatch, model override, sub-client construction, child Agent instantiation, and tool dispatch — all in one method.
+- **v5**: `subagent/env.py` (env-details builder), `subagent/handoff.py` (parent-context handoff), `subagent/spawn.py` (forkSubagent-style spawn), `tools/task.py` (user-facing tool). Each module ≤200 LOC, independently testable.
+- **Behavior delta for the IN-SCOPE subset**: identical. `general` agent type only in Phase 9; build/plan/explore/verify ports lands in a later phase as data, not code.
+
+### 9.2 Budget sharing is locked to object identity
+- **v4**: shared via `Agent` constructor's `iteration_budget=parent.iteration_budget` argument. Correct, but the contract is implicit (no test asserts `is`).
+- **v5 Phase 9**: `test_subagent_shares_iteration_budget` asserts `child.budget is parent.budget` — object identity, not just equal values. Plus `test_real_spawn_child_budget_is_parent_budget` validates the same after a full `spawn_subagent` flow (Codex Phase-09 medium-finding lock).
+- **PS Issue #2**: v5's IterationBudget is now exposed as a public attribute on every QueryEngine. Phase 11 wires it to an ipywidgets progress bar so the user can see the budget burning down across parent + sub-agents.
+
+### 9.3 Parent context immutability is enforced at the spawn boundary
+- **v4**: trusts the child Agent constructor not to leak into the parent. No defensive check.
+- **v5 Phase 9**: `spawn_subagent` deep-copies the parent's message buffer before spawning, then compares structurally on return. If a future regression mutates parent state (e.g. through a shared mutable reference), the spawn returns `stop_reason="parent_context_mutated"` rather than silently corrupting state. Codex Phase-09 found my initial length-only check too weak; the post-fix deep-copy version catches in-place mutations that preserve length.
+- **Lock test**: `test_parent_immutability_check_catches_in_place_mutation` — uses a malicious child that mutates `messages[0]["content"]` in place.
+
+### 9.4 Depth-limit threading is correct under nested spawns
+- **v4**: depth is tracked on the Agent instance (`self.subagent_depth`). When a child Agent dispatches `task`, it passes `subagent_depth + 1` to the new sub-agent.
+- **v5 Phase 9 first pass**: didn't thread depth — every nested `task` reset to depth 0. Codex flagged as BLOCKER.
+- **v5 Phase 9 post-fix**: `spawn_subagent` sets `child._subagent_depth = child_depth` after creating each child engine. The QueryEngine dispatch context reads `getattr(self, "_subagent_depth", 0)` so the recursion guard fires correctly under chained `task` calls.
+- **Lock tests**: `test_nested_subagent_recursion_blocked_at_max_depth` (unit) + `test_nested_spawn_depth_propagates_through_child_engine` (end-to-end via real spawn flow).
+
+### 9.5 Unknown agent_type rejected with explicit error
+- **v4**: validates against `AGENT_TYPES` dict and returns "Error: Unknown agent type 'X'. Available: ..." (sagemaker_agent.py:8366).
+- **v5 Phase 9 first pass**: silently fell back to `general` for unknown types. Codex flagged as medium.
+- **v5 Phase 9 post-fix**: both `tools/task.py` and `subagent/spawn.py` reject unknown types with explicit errors listing valid types. Models can self-correct via `tool_search` if they got the type wrong.
+- **Lock test**: `test_task_tool_rejects_unknown_subagent_type`.
+
+### 9.6 Cache-boundary marker sanitization in handoff content
+- **v4**: `_sanitize_handoff` replaces in-content `# === DYNAMIC ===` so a user-supplied AGENT_STATUS can't corrupt cache-block splitting (sagemaker_agent.py:7754).
+- **v5 Phase 9**: identical behavior, with a count-based lock test that catches any regression that reintroduces an unsanitized occurrence.
+- **Lock test**: `test_handoff_sanitizes_boundary_marker`.
+
+### 9.7 What's deliberately NOT in Phase 9
+- **AGENT_TYPES configuration** (build/plan/explore/verify): deferred. Their large prompts are reviewable as data later (similar shape to skills).
+- **Worktree isolation** (build agent type's git-worktree dance): deferred to Phase 11 alongside notebook UX.
+- **Parallel sub-agent dispatch**: deferred. Runnable does it via async generators; v5 .ipynb is sync.
+- **Model override per agent type**: deferred. v5 currently inherits parent's BedrockClient.
+- **Sub-agent memory extraction**: deferred to Phase 11 (memory_extract.py is in the planned subagent/ surface but not yet shipped).
+
+---
+
+## Phases 10-13
 
 (Future — entries land per phase.)

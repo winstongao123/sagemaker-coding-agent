@@ -149,6 +149,8 @@ def test_engine_excludes_deferred_tools_from_first_turn_payload():
     assert "view_image" not in sent_names
     assert "list_dir" not in sent_names
     assert "notebook_edit" not in sent_names
+    # Phase 9 added `task` tool with should_defer=True — must also be excluded.
+    assert "task" not in sent_names
     # high-frequency tools must remain visible
     assert "read_file" in sent_names
     assert "edit_file" in sent_names

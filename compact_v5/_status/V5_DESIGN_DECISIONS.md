@@ -846,4 +846,61 @@ User-visible improvement: faster turns, lower per-turn cost, higher effective co
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 015, 016, ...)
+## ADR-015 — Phase 9: Sub-agent + Task tool (forkSubagent budget sharing)
+
+- Date: 2026-04-30
+- Phase ID: 09
+- Status: ACCEPTED
+- Source: gg-claude-code-runnable/src/tools/AgentTool/forkSubagent.ts (210 LOC) + AgentTool.tsx (1397 LOC) + runAgent.ts (973 LOC)
+            v4 sagemaker_agent.py:_run_task_tool (line 8350) + _build_subagent_env_details + _build_subagent_handoff_block + AGENT_TYPES (line 6914)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** of v4's `_run_task_tool` (~600 LOC inline in `Agent` class) + `AGENT_TYPES` dict + handoff/env helpers, all currently inline in `sagemaker_agent.py`.
+- v5 reorganizes into: `subagent/env.py` (env-details builder), `subagent/handoff.py` (AGENT_STATUS slice + todos + recent files), `subagent/spawn.py` (fork-style spawn that shares IterationBudget), `tools/task.py` (the user-facing tool).
+- Cite v4: sagemaker_agent.py:8350 (_run_task_tool), 7695 (_build_subagent_env_details), 7771 (_build_subagent_handoff_block), 6914 (AGENT_TYPES).
+
+### Question 2 — Architectural justification
+v5's value-add over v4:
+- **Shared IterationBudget** (ADR-014 PS Issue #2 wiring): child QueryEngine constructed with `budget=parent.budget`. v4 inlines a similar pattern but the budget object is buried in the monolith; v5 makes it a public constructor parameter.
+- **Module surface for testing**: each piece (env probing, handoff slicing, spawn) testable independently. v4's _run_task_tool can only be tested via Agent.run integration.
+- **Fail-quiet contracts**: env/handoff probes never raise — sub-agent spawn must not fail because git timed out. v4 has the same contract; v5 documents it explicitly via tests.
+- **AGENT_TYPES staying minimal**: Phase 9 ships `general` only. The `build`/`plan`/`explore`/`verify` agent types from v4 can land later; their prompts are large and reviewable as data, not code.
+
+### Question 3 — Cost
+- Token cost (static prompt): +0 — task tool description goes via deferred-loading (Phase 7) in plan-mode caller.
+- Token cost (per turn): unchanged for parent. Child gets fresh prompt assembly + handoff block (bounded ≤ ~1500 chars after _SUBAGENT_STATUS_MAX_CHARS + _SUBAGENT_TODOS_MAX_CHARS sanitization).
+- Code complexity: ~500 LOC across 4 files (compared to v4's ~600 LOC inline).
+- Maintenance: subagent/ owners can iterate without touching agent loop; Phase 11 UI plumbs sub-agent progress separately.
+
+### Question 4 — Cost worth it?
+YES. Sub-agents are the primary mechanism for parallel/specialized work; without them v5 cannot match v4 functionality, blocking ship. forkSubagent budget-sharing is the precise mechanism Hermes contributed in v4.9.4 — without it, a parent + N sub-agents could collectively blow the cost ceiling.
+
+### Decision
+- **ACCEPTED** for v5.0.
+- Phase 9 ships:
+  - `subagent/env.py` — `build_env_details(agent_type, depth, workspace=None)` returning a 6-line block. Fail-quiet on git probes. Verbatim port of `_build_subagent_env_details`.
+  - `subagent/handoff.py` — `build_handoff_block(status_path=None, todos_text=None, recent_files=None)` returning AGENT_STATUS slice + active todos + recent file paths. Each section optional + bounded. Verbatim port of `_build_subagent_handoff_block` minus the status_doc / RECENT_DIFFS globals coupling (v5 takes inputs as parameters so callers in Phase 11 can wire them).
+  - `subagent/spawn.py` — `spawn_subagent(parent_engine, prompt, agent_type, max_turns=None)` that creates a child `QueryEngine(budget=parent_engine.budget, ...)` with a fresh message buffer and runs the prompt. Returns `(text, child_engine)`. Includes depth-limit enforcement.
+  - `tools/task.py` — task tool registered via `tools/__init__.py:bootstrap_built_ins`. Description: "Launch a sub-agent for a specific task." Schema: `{description, prompt, subagent_type}`. Executes via `spawn_subagent(...)`. Marked `should_defer=True` (low-frequency).
+- Phase 9 does NOT ship: AGENT_TYPES configuration (build/plan/explore/verify prompts), worktree isolation (build agent type only — defer to Phase 11), parallel sub-agent dispatch.
+
+### Budget reservation
+- Static prompt: +0 tokens (task tool description not in static prompt; deferred via Phase 7).
+- Per-turn (when task tool invoked): child agent's per-turn cost = parent's per-turn cost (same budget). Parent's per-turn cost: +1 task-tool schema if not deferred, 0 if deferred. v5 marks task as `should_defer=True` → 0 added per-turn for non-task-using turns.
+
+### Reconciliation
+After Phase 9 lands:
+- Static prompt token count must remain at 2498 (no change).
+- task tool registered with `should_defer=True` (parity with Phase 7 deferred set).
+- Test `test_subagent_shares_iteration_budget` proves the budget is shared.
+- Test `test_subagent_parent_context_unchanged` proves the parent's message buffer is not mutated by sub-agent dispatch.
+
+### Linked port-log rows
+- #021 — forkSubagent.ts (budget sharing pattern) → subagent/spawn.py (ADAPT — drops experimental fork branch, drops cache-prefix-identical message replay)
+- #022 — _build_subagent_env_details (v4) → subagent/env.py (PORT — verbatim with parameterized workspace)
+- #023 — _build_subagent_handoff_block (v4) → subagent/handoff.py (ADAPT — accepts inputs as parameters instead of pulling from globals)
+- #024 — _run_task_tool (v4) → tools/task.py (ADAPT — minimal Phase-9 scope; AGENT_TYPES + worktree deferred)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 016, 017, ...)

@@ -1,5 +1,11 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 09 DONE (Sub-agent + Task tool with shared IterationBudget)
+
+Phase 09 closed: 4 new files (`subagent/env.py`, `subagent/handoff.py`, `subagent/spawn.py`, `tools/task.py`) + 2 modified (`tools/__init__.py`, `core/query_engine.py`). 44 new tests. Codex review REJECT first pass with 1 BLOCKER (depth not threaded) + 3 substantive + 1 low + 1 DRIFTED + 1 UNDECLARED_PATTERN — all 7 fixed in same commit with 5 lock tests + git timeout restored to 5.0s. 359 pass + 4 skip. Phase 9 acceptance criteria validated end-to-end: parent context unchanged + child.budget is parent.budget. About to tag `v5-phase-09`.
+
+Next: Phase 10 — Skills + auto-trigger + Hermes filter (PS Issue #1).
+
 ## 2026-04-30 — Phase 08.5 DONE (Thin-slice parity gate, 10/10 scenarios pass)
 
 Phase 08.5 thin-slice gate PASSED. 10 cross-phase integration scenarios in `tests/parity/test_thin_slice.py` covering Phase 1 BedrockClient, Phase 2 registry, Phase 3 read_file, Phase 5 bash+python_exec security, Phase 6 prompt budget + cache boundary, Phase 7 deferral round-trip, Phase 8 QueryEngine end-to-end, and Phase 7↔8 wiring contract. 329 pass + 4 skip total. Phase 9 unblocked. About to tag `v5-phase-08_5`.

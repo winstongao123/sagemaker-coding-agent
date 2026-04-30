@@ -1,0 +1,270 @@
+"""V5 subagent/spawn.py — fork-style sub-agent spawn (Phase 9, ADR-015).
+
+ADAPT port of Runnable's `forkSubagent.ts` (210 LOC). v5 adaptation:
+- Synchronous (no Promise / async generator chain). Constraint=.ipynb.
+- Drops Runnable's experimental fork branch (FORK_SUBAGENT feature gate),
+  cache-prefix-identical message replay, and `<task-notification>`
+  background dispatch model — those need streaming/async to be useful.
+- Drops Runnable's coordinator-mode mutual exclusion (v5 has no coordinator).
+- v5's spawn ALWAYS shares the parent's IterationBudget instance — that is
+  Hermes's PS Issue #2 contract and the Phase-9 acceptance criterion.
+- Drops AGENT_TYPES configuration registry — Phase 9 supports `general` only;
+  build/plan/explore/verify agent types are deferred (their large prompts
+  are reviewable as data later).
+- Includes depth-limit enforcement (v4 sagemaker_agent.py:8354 parity).
+
+PORT_LOG: #021.
+
+Acceptance criteria (V5_PLAN.md §Phase 9):
+- Parent context unchanged after sub-agent run.
+- Child shares IterationBudget instance.
+
+Usage:
+    parent = QueryEngine(client=..., budget=IterationBudget())
+    text, child = spawn_subagent(parent, "summarize this codebase", "general")
+    # parent.messages is unchanged; child.budget is parent.budget.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable, List, Optional, Tuple
+
+from .env import build_env_details
+from .handoff import build_handoff_block
+
+
+# Default cap on sub-agent depth. Matches v4 CONFIG.subagent_max_depth=2.
+DEFAULT_MAX_DEPTH: int = 2
+
+# Per-agent-type prompt suffix table. Phase 9 ships `general` only; richer
+# types (build/plan/explore/verify) land in later phases as their prompts
+# become part of the deferred-loading content review surface.
+_AGENT_TYPE_SUFFIXES = {
+    "general": (
+        "You are a sub-agent working on a focused task. Always use ABSOLUTE "
+        "file paths (cwd may reset between bash calls). In your final "
+        "response, share relevant file paths and key findings. Be concise — "
+        "the parent will read your full reply."
+    ),
+}
+
+
+@dataclass
+class SubagentResult:
+    """Outcome of `spawn_subagent`. Returned alongside the child engine so
+    callers can inspect message buffer / budget / stop reason / turns_used.
+
+    `text`            — final assistant text (the sub-agent's answer).
+    `stop_reason`     — same as QueryResult.stop_reason.
+    `turns_used`      — turns the child consumed.
+    `child_messages`  — the child's full conversation buffer (for audit).
+    `error`           — short message when stop_reason indicates failure.
+    `agent_type`      — what type was requested.
+    `depth`           — depth the child ran at.
+    """
+    text: str = ""
+    stop_reason: str = ""
+    turns_used: int = 0
+    child_messages: List[Any] = field(default_factory=list)
+    error: Optional[str] = None
+    agent_type: str = "general"
+    depth: int = 1
+
+
+def _new_child_engine(parent_engine: Any, max_turns: int) -> Any:
+    """Construct a fresh QueryEngine that shares the parent's IterationBudget.
+
+    Lazy-imports to avoid a circular load at module-import time
+    (core.query_engine imports tools/registry which may import
+    tools/task.py which imports this module).
+    """
+    from core.query_engine import QueryEngine
+    return QueryEngine(
+        client=parent_engine.client,
+        max_turns=max_turns,
+        budget=parent_engine.budget,            # SHARED — the Phase-9 contract
+        on_stop_check=parent_engine.on_stop_check,
+    )
+
+
+def _resolve_agent_suffix(agent_type: str) -> Optional[str]:
+    """Look up the prompt suffix for a known agent type.
+
+    Returns None for unknown types so the caller (spawn_subagent / task tool)
+    can surface an explicit error instead of silently falling back. Phase-9
+    Codex finding: silent fallback masks contract bugs.
+    """
+    return _AGENT_TYPE_SUFFIXES.get(agent_type)
+
+
+def spawn_subagent(
+    parent_engine: Any,
+    prompt: str,
+    agent_type: str = "general",
+    parent_depth: int = 0,
+    max_turns: int = 25,
+    max_depth: int = DEFAULT_MAX_DEPTH,
+    base_system_prompt: Optional[str] = None,
+    workspace: Optional[str] = None,
+    status_path: Optional[str] = None,
+    todos_text: Optional[str] = None,
+    recent_files: Optional[List[str]] = None,
+    plan_mode: bool = False,
+    output_fn: Callable[[str], None] = print,
+) -> SubagentResult:
+    """Spawn a sub-agent with the parent's shared IterationBudget.
+
+    The child gets:
+      - A FRESH message buffer (no parent conversation leakage).
+      - The parent's BedrockClient, IterationBudget, on_stop_check (shared).
+      - A system prompt = base_system_prompt + env_details + handoff_block
+        + agent-type suffix, with the cache boundary preserved.
+
+    Returns a `SubagentResult` with the child's final answer + audit info.
+
+    Phase 9 contract (V5_PLAN.md §Phase 9):
+      - Parent's `messages` buffer is NOT mutated.
+      - Child's `budget is parent_engine.budget` (object identity).
+      - Depth-limit enforcement: depth >= max_depth → blocked with error
+        result, no Bedrock call made.
+    """
+    child_depth = parent_depth + 1
+
+    # Depth-limit gate (v4 sagemaker_agent.py:8354 parity).
+    if child_depth > max_depth:
+        return SubagentResult(
+            text="",
+            stop_reason="depth_exceeded",
+            error=(
+                f"Blocked: sub-agent depth limit reached "
+                f"({child_depth} > max {max_depth})"
+            ),
+            agent_type=agent_type,
+            depth=child_depth,
+        )
+
+    # Validate prompt — empty prompt is a programming error in the caller.
+    p = (prompt or "").strip()
+    if not p:
+        return SubagentResult(
+            text="",
+            stop_reason="invalid_args",
+            error="Error: prompt is required",
+            agent_type=agent_type,
+            depth=child_depth,
+        )
+
+    # Validate agent type. The task tool already gates on this at the
+    # dispatch layer, but spawn_subagent is also called directly by Phase
+    # 11 UX wiring, so guard here too. Codex Phase-09 finding: don't
+    # silently fall back to `general`.
+    suffix = _resolve_agent_suffix(agent_type)
+    if suffix is None:
+        available = ", ".join(sorted(_AGENT_TYPE_SUFFIXES.keys()))
+        return SubagentResult(
+            text="",
+            stop_reason="invalid_args",
+            error=(
+                f"Error: unknown agent_type '{agent_type}'. "
+                f"Phase-9 supports: {available}."
+            ),
+            agent_type=agent_type,
+            depth=child_depth,
+        )
+
+    # Assemble the child's system prompt:
+    #   <static> [+ env_details + handoff_block + agent_type_suffix in dynamic tail]
+    # If base_system_prompt has the boundary marker, inject our extras after it.
+    # Otherwise append at the end.
+    from prompt import build_system_prompt, CACHE_BOUNDARY
+
+    base = base_system_prompt or build_system_prompt(ctx={})
+    env_details = build_env_details(
+        agent_type=agent_type,
+        depth=child_depth,
+        workspace=workspace,
+        max_depth=max_depth,
+    )
+    handoff = build_handoff_block(
+        status_path=status_path,
+        todos_text=todos_text,
+        recent_files=recent_files,
+    )
+
+    dynamic_extras = [env_details, handoff, suffix]
+    dynamic_extras = [x for x in dynamic_extras if x]
+
+    if dynamic_extras:
+        addendum = "\n\n" + "\n\n".join(dynamic_extras)
+        if CACHE_BOUNDARY in base:
+            # Append after the existing dynamic tail (preserve cached prefix).
+            child_prompt = base + addendum
+        else:
+            # No boundary — append at the end with our own boundary so future
+            # cache-block builders see the static/dynamic split.
+            child_prompt = base + CACHE_BOUNDARY + addendum
+    else:
+        child_prompt = base
+
+    # Construct child engine. The shared-budget invariant is enforced by
+    # _new_child_engine — verified by test_subagent_shares_iteration_budget.
+    child = _new_child_engine(parent_engine, max_turns=max_turns)
+
+    # Codex Phase-09 finding (BLOCKER): thread the child's depth so that
+    # IF the child itself dispatches `task`, the QueryEngine's tool-dispatch
+    # context picks up the correct `parent_depth` via
+    # `getattr(self, "_subagent_depth", 0)`. Without this line, nested
+    # `task` chains all see parent_depth=0 and the recursion guard never
+    # fires. Lock test: test_nested_subagent_recursion_blocked_at_max_depth.
+    child._subagent_depth = child_depth
+
+    # Snapshot the parent's full message buffer for a defense-in-depth
+    # mutation check. Codex Phase-09 finding (medium): the prior version
+    # checked only length, so an in-place mutation that preserves length
+    # (e.g. modifying messages[i]["content"] of an existing entry) would
+    # evade detection. We deep-copy so post-hoc comparison is structural.
+    import copy
+    parent_msgs_snapshot = copy.deepcopy(parent_engine.messages)
+
+    # Resolve the child's tool pool. Phase 9 keeps it simple: the child
+    # gets the full registry (subject to plan-mode if requested). Future
+    # phases may filter by AGENT_TYPES["tools"].
+    from tools import all_registered
+    child_tools = all_registered()
+
+    # The child runs synchronously to completion or budget exhaustion.
+    result = child.run(
+        user_message=p,
+        system_prompt=child_prompt,
+        tools=child_tools,
+        plan_mode=plan_mode,
+        output_fn=output_fn,
+    )
+
+    # Defense-in-depth: confirm the parent buffer wasn't mutated. Structural
+    # comparison via the deep snapshot — catches in-place edits that preserve
+    # length as well as length-changing mutations.
+    if parent_engine.messages != parent_msgs_snapshot:
+        # This should never happen if the contract holds. Surface a clear
+        # error rather than silently corrupt parent state.
+        return SubagentResult(
+            text=result.text,
+            stop_reason="parent_context_mutated",
+            error=(
+                "Internal error: parent_engine.messages was mutated by "
+                "sub-agent dispatch. Phase-9 contract violated."
+            ),
+            child_messages=result.messages,
+            agent_type=agent_type,
+            depth=child_depth,
+        )
+
+    return SubagentResult(
+        text=result.text,
+        stop_reason=result.stop_reason,
+        turns_used=result.turns_used,
+        child_messages=result.messages,
+        error=result.error,
+        agent_type=agent_type,
+        depth=child_depth,
+    )
