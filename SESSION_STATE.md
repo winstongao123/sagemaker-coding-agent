@@ -43,6 +43,31 @@ User enabled auto mode (continuous execution); each phase has natural pause poin
 ### Architectural-integration emphasis (added 2026-04-30 per user)
 User reinforced: when learning Runnable, must go DEEP into architecture and integration, not just local file functionality. Updated CODEX_REVIEW_TEMPLATE.md AXIS B to require integration-semantic verification (not just file-level mimicry) for every adopted pattern.
 
+### Phase 0 close (2026-04-30, ready to tag v5-phase-00)
+- Codex (gpt-5.5) review on commits 5259adf + cd5f00e + 03abf29: VERDICT APPROVE_WITH_FIXES with 3 minor findings.
+- All 3 findings addressed in close commit:
+  1. V5_BUILD_STATUS.md State=DONE + Last commit field + Next session pointer to Phase 01.
+  2. tests/test_smoke.py made recursive across all sub-packages (was only checking top of agent root); allowlist for __init__.py + test_smoke.py + lint_phase_id.py. Caught regression where parent .gitignore line 41 had `test_*.py` rule that silently dropped test_smoke.py from the prior 3 commits — now force-added (+101 lines) with negation rule `!MAIN/agent/tests/test_*.py` in compact_v5/.gitignore.
+  3. V5_DESIGN_DECISIONS.md ADR ordering reordered to canonical 001, 002, 003, 004 (was 001, 003, 004, 002 due to insertion-order edits).
+- Per-phase changelog created: compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_00.md (documents goal, commits, deliverables, tests, Codex review, ADRs accepted, Runnable patterns adopted (none for Phase 0), and next-phase pointer). Per-phase changelog file is required going forward (one per phase).
+- Phase 0 verification: 2/2 smoke tests pass + 5/5 lint_phase_id checks pass.
+- Phase 0 OVERALL: APPROVE.
+- Next: tag v5-phase-00, update todos to Phase 01 = in-progress, begin Phase 01 (BedrockClient + Config port).
+
+### Phase 01 close (2026-04-30, ready to tag v5-phase-01)
+- ADR-005 (BedrockClient: REUSE v4 verbatim, defer Runnable cache-break detection to Phase 6) and ADR-006 (Config + JSONC loader: REUSE v4 verbatim) appended to V5_DESIGN_DECISIONS.md.
+- Files created: compact_v5/MAIN/agent/runtime/bedrock_client.py (~340 LOC), runtime/config.py (~290 LOC), tests/unit/test_bedrock.py (11 tests). PS Issue #4 (thinking config sent on every call) locked by `test_thinking_config_sent_on_every_call_when_enabled` (3-call assertion). Cache-fallback retry path locked by `test_cache_validation_error_strips_cache_and_retries_once`.
+- tests/test_smoke.py: Phase-0 emptiness guard relaxed to positive Phase-01 file-presence check (per its own original comment).
+- Codex review (gpt-5.5, reasoning=medium): APPROVE_WITH_FIXES. 3 findings: 1 major (tests required real boto3), 2 minor (missing cache-fallback test, stale V5_BUILD_STATUS.md). All 3 addressed in this same phase BEFORE tagging.
+  - Major fix: BedrockClient.__init__ now accepts `client=` kwarg so unit tests inject a fake client without importing boto3.
+  - Minor fix 1: added `test_cache_validation_error_strips_cache_and_retries_once` covering ValidationException → strip cache_control → retry once → prompt_cache_supported=False.
+  - Minor fix 2: V5_BUILD_STATUS.md fully rewritten to match actual Phase 01 state and the no-Runnable-port decision.
+- AXIS B verdict: N/A (pure-v4-reuse phase, no Runnable patterns adopted; Codex confirmed no `claude.ts` / OAuth / subscriber / global-cache detector code was secretly ported).
+- Phase 01 verification: 13/13 pytest pass, 4/5 lint_phase_id pre-commit (commit-subject check expected to pass post-commit).
+- Per-phase changelog: compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_01.md.
+- Phase 01 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-01.
+- Next: tag v5-phase-01, begin Phase 02 (Tool Protocol + registry — read Runnable tools.ts + Tool.ts before coding).
+
 ### Phase 0 follow-ups (after first commit `5259adf`)
 - Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
 - Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.

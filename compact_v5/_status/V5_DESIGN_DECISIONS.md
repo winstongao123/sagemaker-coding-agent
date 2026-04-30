@@ -172,4 +172,80 @@ None.
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 005, 006, ...)
+## ADR-005 — BedrockClient: REUSE v4 verbatim (Bedrock-native), defer Runnable cache-break detection to Phase 6
+- Date: 2026-04-30
+- Phase ID: 01
+- Status: ACCEPTED
+- Source: V5_PLAN.md Phase 1 row + `compact_v4/MAIN/agent/sagemaker_agent.py:2378-2560` (v4 BedrockClient) + `gg-claude-code-runnable/src/services/api/claude.ts` + `services/api/promptCacheBreakDetection.ts`
+
+### Question 1 — Replacement or addition?
+- Does this REPLACE something v4 already has? **YES** — moves v4's `BedrockClient` class from `sagemaker_agent.py:2378` into the dedicated module `compact_v5/MAIN/agent/runtime/bedrock_client.py`. Behavior preserved verbatim.
+
+### Question 2 — Architectural justification
+N/A — replacement, not addition. v4's BedrockClient is already Bedrock-native, has prompt cache fallback, retry classifier, mock mode, thinking mode. Runnable's `claude.ts` is Anthropic-direct (subscriber/OAuth flows), not applicable to Bedrock.
+
+### Question 3 — Cost
+- Token cost: 0 (runtime client, not in prompt).
+- Code complexity: extracts ~180 LOC from v4 monolith into a clean module. No behavior change.
+- Maintenance: one place to update Bedrock-specific code.
+
+### Question 4 — Cost worth it?
+N/A (replacement).
+
+### Decision
+- **ACCEPTED for v5.0** — verbatim move of v4's `BedrockClient` to `runtime/bedrock_client.py` + minor import adjustments.
+
+### Why NOT port Runnable's `promptCacheBreakDetection.ts` here
+Runnable's detection is sophisticated (systemHash + toolsHash + perToolHashes + cacheControlHash + globalCacheStrategy + betas list etc.) and depends on having multi-block system prompt + cache-control state. v5 doesn't have multi-block prompts until Phase 6 lands. Porting now would build a detector against a structure that doesn't exist yet, causing rework.
+
+**DEFER to Phase 6** when `prompt/sections.py` produces multi-block system prompts; the cache-break detector then has real state to compare against.
+
+### Runnable-fidelity impact
+N/A for ADR-005 itself (no Runnable code adopted yet). Phase 6 ADR will track the cache-break-detection port.
+
+### Affected files
+- compact_v5/MAIN/agent/runtime/bedrock_client.py (new — verbatim move from v4)
+- compact_v5/MAIN/agent/tests/unit/test_bedrock.py (new — mock-mode + thinking-config-on-every-call regression for PS Issue #4)
+
+### Linked port-log rows
+None for Phase 1 (no Runnable port in this phase; pure v4 reuse).
+
+---
+
+## ADR-006 — Config + JSONC loader: REUSE v4 verbatim
+- Date: 2026-04-30
+- Phase ID: 01
+- Status: ACCEPTED
+- Source: `compact_v4/MAIN/agent/sagemaker_agent.py` `Config` class + `_strip_jsonc_comments` helper
+
+### Question 1 — Replacement or addition?
+- Does this REPLACE something v4 already has? **YES** — moves v4 Config to `compact_v5/MAIN/agent/runtime/config.py`.
+
+### Question 2 — Architectural justification
+N/A — verbatim move.
+
+### Question 3 — Cost
+- Token cost: 0.
+- Code complexity: ~300 LOC moves to its own module. Cleaner imports.
+
+### Question 4 — Cost worth it?
+N/A (replacement).
+
+### Decision
+- **ACCEPTED for v5.0** — verbatim move with v5-relative path adjustments only.
+
+### Critical fields preserved (sanity check)
+- `model_id`, `region`, `workspace`, `temperature`, `max_turns`, `max_iteration_budget=600`, `max_exec_calls_per_session=200`, `aws_bedrock_only`, `enable_prompt_cache=True`, `thinking_enabled`, `thinking_budget`, `session_cost_limit`, `enable_skill_auto_trigger=False` (v4.9.6 default), `enable_skill_patching=False`, `enforce_verify_contract=False`.
+
+### Runnable-fidelity impact
+N/A — pure v4 reuse.
+
+### Affected files
+- compact_v5/MAIN/agent/runtime/config.py (new — verbatim move from v4)
+
+### Linked port-log rows
+None for Phase 1.
+
+---
+
+## (Append future ADRs below this line — keep numerical order 007, 008, ...)

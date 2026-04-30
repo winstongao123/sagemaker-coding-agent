@@ -52,37 +52,27 @@ def test_every_package_imports_cleanly():
     assert not failures, "\n".join(["Packages failed to import:"] + failures)
 
 
-def test_no_v4_imports_at_phase_0():
-    """Phase 0 is pure scaffolding — no v4 code should be ported yet.
+def test_phase_01_runtime_files_present():
+    """Phase 01 acceptance: runtime/bedrock_client.py + runtime/config.py exist.
 
-    This guard catches accidental Phase 1+ work landing in Phase 0.
-    Recursive scan across ALL subdirectories (Codex Phase-0 review
-    flagged the prior shallow check). Allowlist:
-        - any __init__.py (empty package markers)
-        - tests/test_smoke.py + tests/lint_phase_id.py
-    Anything else is a Phase 1+ leak into Phase 0.
-
-    Once Phase 1 lands, this test gets removed / relaxed.
+    Phase 0's emptiness guard was relaxed once Phase 1 landed
+    (per the original comment: "Once Phase 1 lands, this test gets
+    removed / relaxed"). Replaced with a positive presence check
+    so Phase 1's ports cannot silently regress.
     """
-    allowed = {"__init__.py", "test_smoke.py", "lint_phase_id.py"}
-    leaked = []
-    for root, _dirs, files in os.walk(_AGENT_ROOT):
-        # Skip __pycache__ etc.
-        if "__pycache__" in root or ".pytest_cache" in root:
-            continue
-        for f in files:
-            if f.endswith(".py") and f not in allowed:
-                leaked.append(os.path.relpath(os.path.join(root, f), _AGENT_ROOT))
-    assert not leaked, (
-        f"Phase 0 scaffold should contain no .py files except __init__.py + smoke/lint tests. "
-        f"Found leaks: {leaked}. Phase 1+ work has landed into Phase 0."
-    )
+    expected = [
+        os.path.join(_AGENT_ROOT, "runtime", "bedrock_client.py"),
+        os.path.join(_AGENT_ROOT, "runtime", "config.py"),
+        os.path.join(_AGENT_ROOT, "tests", "unit", "test_bedrock.py"),
+    ]
+    missing = [p for p in expected if not os.path.isfile(p)]
+    assert not missing, f"Phase 01 expected files missing: {missing}"
 
 
 if __name__ == "__main__":
     tests = [
         ("every_package_imports_cleanly", test_every_package_imports_cleanly),
-        ("no_v4_imports_at_phase_0", test_no_v4_imports_at_phase_0),
+        ("phase_01_runtime_files_present", test_phase_01_runtime_files_present),
     ]
     failed = 0
     for name, fn in tests:
