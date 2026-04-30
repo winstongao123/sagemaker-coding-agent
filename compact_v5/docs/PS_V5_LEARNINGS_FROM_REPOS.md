@@ -267,7 +267,39 @@
 
 ---
 
-## Phases 8-13
+## Phase 8 — QueryEngine + retry + errors + IterationBudget
+
+### From Hermes (via v4): IterationBudget shared counter
+- **Source**: `D:/Github/hermes-agent/run_agent.py:170` (Hermes adopted in v4.9.4 at `compact_v4/MAIN/agent/sagemaker_agent.py:8190`).
+- **Adopted (PORT)**: `core/budget.py` — verbatim port. Default 600 (v4.10.10 in-place bump from Hermes default 90 because dev work blew through 90 fast).
+- **Adaptation**: `consume() → bool` shape kept. Thread-safe via `threading.Lock`. Sub-agents (Phase 9) will inherit the same instance via constructor injection.
+- **Better than Hermes**: Phase 11 will surface remaining/used/total in an ipywidgets progress bar (PS Issue #2). Hermes only logs at exhaustion. v4 logs a single line. v5 makes the budget visible while it burns down.
+
+### From Runnable + v4 inline: ErrorClassifier + RetryPolicy extraction
+- **Source**: v4 `sagemaker_agent.py` had inline classifier + retry; Phase 1 inlined them inside `runtime/bedrock_client.py` to avoid Phase-1/Phase-8 circular dep.
+- **Adopted (PORT)**: `core/errors.py` (`BedrockErrorCategory` + `ErrorClassifier`) + `core/retry.py` (`RetryPolicy`). `runtime/bedrock_client.py` re-imports both names so existing call-sites work unchanged.
+- **Lock test**: `test_runtime_bedrock_client_re_exports_match` in test_errors.py and test_retry.py — asserts class identity (`is` check) so any future drift fails CI.
+- **Better than v4**: classifier is now testable without boto3, and other modules (QueryEngine) can import it without pulling the Bedrock client. v4 forced you to instantiate a BedrockClient (or monkey-patch boto3) just to test classification.
+
+### From Runnable: QueryEngine.ts main loop, adapted to .ipynb scope
+- **Source**: `_archive/compare_code/gg-claude-code-runnable/src/QueryEngine.ts` (1295 LOC).
+- **Adopted (ADAPT)**: `core/query_engine.py` — ~400 LOC.
+- **Adaptation**:
+  - Sync (no Promise / async generator chain). Constraint=`.ipynb` (synchronous tool execute()).
+  - Drops Runnable's complex permission-context graph. v5 collapses to `(plan_mode, deny_rules)` per ADR-008.
+  - Drops Runnable's compaction state machine — Phase 11 lands compaction in its own module (microcompact / context_collapse / 2-stage smart compaction).
+  - Drops Runnable's transcript / canUseTool wrappers / appState updaters — v5 runs in .ipynb without those surfaces.
+  - Drops Runnable's structured-output JSON schema / json_schema retry counter — v5 doesn't ship structured-output mode in Phase 8.
+- **Better than Runnable**: explicit IN-SCOPE / OUT-OF-SCOPE list in module docstring with each deferral justified. Reviewable.
+- **Phase 7 wiring contract** (the critical adoption): per-turn `apply_tool_search_deferral(enabled=True)` + `_discovered_tool_names` set + `<system-reminder>` injection. Bridges Phase 7 (QUERY mechanism) to Phase 8 (API wiring) — without Phase 8 the Phase 7 deferred-loading would be dead code.
+
+### Studied-only from Hermes: skill filtering by available tools
+- **Source**: Hermes filters skills by which tools are currently available so the model isn't told about a "verify" skill if `python_exec` is blocked.
+- **Decision**: deferred to Phase 10 where the SKILLS subsystem ships. Phase 8 doesn't include skill auto-trigger because skills don't exist yet.
+
+---
+
+## Phases 9-13
 
 (Future — entries land per phase.)
 
@@ -299,3 +331,10 @@ This section consolidates every place v5 is better than the source repo, for qui
 | **6** | **Runnable** | **deferred cache-break-detection scope** | **Phase 6 cache-break implementation is intentionally smaller than Runnable's full hash-tree. Per-tool hashes / global cache strategy / betas list deferred to Phase 12+ when those concerns arrive — avoids over-engineering.** |
 | **7** | **v4** | **deferred-loading exists at all** | **v4 ships every tool's schema every turn — pure overhead. v5 ports Runnable's deferred-loading. Even with 3 tools deferred (Phase 7 initial) we save ~770 tokens/turn. Phase 13 target ≥3000.** |
 | **7** | **Runnable** | **focused tool_search.py** | **~250 LOC vs Runnable's 471 LOC. Drops feature-gate branches (FORK_SUBAGENT / KAIROS / GrowthBook), async wrapping, lodash memoize. Same query-parsing algorithm, less surface.** |
+| **8** | **Runnable** | **focused QueryEngine** | **~400 LOC vs Runnable's 1295 LOC. Sync (no Promise chain — constraint=.ipynb). Strict IN-SCOPE / OUT-OF-SCOPE list in docstring. Each deferral (compaction, skills, sub-agent) justified inline.** |
+| **8** | **v4** | **agent loop is its own module** | **v4's `Agent.run` is ~1500 LOC inline in the 12K-LOC monolith. v5 isolates it in `core/query_engine.py` — reviewable PR diffs, easy to test, easy to swap.** |
+| **8** | **Hermes + v4** | **visible IterationBudget data model** | **Phase 11 will wire `consume/remaining/used/total` to an ipywidgets progress bar. Hermes/v4 only log at exhaustion. PS Issue #2 fix is structural, not just a clearer log.** |
+| **8** | **Phase 1** | **byte-equivalent extraction with class-identity locks** | **`test_runtime_bedrock_client_re_exports_match` asserts `core.errors.ErrorClassifier is runtime.bedrock_client.ErrorClassifier`. Any future drift fails CI.** |
+| **8** | **v4** | **Phase 7 wiring contract end-to-end live** | **Turn 1 `tools=` excludes deferred tools; model calls `tool_search(select:view_image)`; turn 2 `tools=` includes view_image schema. Validated by `test_tool_search_round_trip_promotes_deferred_tool`. v4 has no such mechanism.** |
+| **8** | **v4** | **tool exception trapping** | **v4's tool dispatch leaks raised Python exceptions in some paths. v5 traps every exception and returns a tool_result with `is_error=True` so the model can recover.** |
+| **8** | **v4** | **plan-mode dispatch gate after deferral** | **Even if a mutating tool is in per-turn `tools=` (because tool_search discovered it), v5 dispatch refuses to execute it in plan mode. v4 only filters at registry time, not dispatch.** |

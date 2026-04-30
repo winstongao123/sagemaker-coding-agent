@@ -301,6 +301,51 @@ The single highest-leverage token-saving Runnable adoption. v4 ships every tool'
 
 ---
 
-## Phases 8-13
+## Phase 8 — QueryEngine + retry + errors + IterationBudget
+
+### 8.1 Main agent loop is now its own module
+- **v4**: `Agent.run` was inline in the 12K-LOC `sagemaker_agent.py` monolith starting at line 8650; ~1500 LOC mixing budget gate, microcompact, context_collapse, 2-stage compaction, skill auto-trigger, sub-agent dispatch, file-read state, retry, error classification, tool dispatch, output_fn callback contract.
+- **v5**: `core/query_engine.py` is ~400 LOC with a strict IN-SCOPE / OUT-OF-SCOPE contract. Each deferred concern lands in its own module at its own phase (microcompact → Phase 11; skills → Phase 10; sub-agent → Phase 9). The module's docstring lists every deferral with justification — no hidden complexity.
+- **Behavior delta**: identical agent-loop semantics for the IN-SCOPE subset; OUT-OF-SCOPE features are explicitly absent in Phase 8 and tracked for later phases. Reviewable and testable.
+
+### 8.2 Phase 7 wiring contract is now end-to-end live
+- **v4**: no deferred-loading mechanism. Every tool schema ships in every turn's `tools=` API param.
+- **Phase 6**: prompt sectioning lands but tools= still loads every schema.
+- **Phase 7**: `apply_tool_search_deferral(tools, enabled=True)` returns `(visible_tools, deferred_names)`. tool_search executor emits `<functions>...</functions>` plus a hidden `<!-- v5_discovered:NAME -->` marker. `tool_search_discovered_names()` extracts those names.
+- **Phase 8**: `core/query_engine.py` wires the contract end-to-end:
+  - Calls `apply_tool_search_deferral(enabled=True)` per turn.
+  - Maintains `_discovered_tool_names` set across turns within one `run()` call.
+  - After each tool_search invocation, extracts discovered names from the result text and adds those tools' schemas to the next turn's `tools=` payload.
+  - Injects a transient `<system-reminder>` text block listing still-deferred tool names so the model knows what's available via tool_search.
+- **Acceptance test** (`test_tool_search_round_trip_promotes_deferred_tool`): turn 1 `tools=` excludes view_image; model calls `tool_search(select:view_image)`; turn 2 `tools=` includes view_image schema. End-to-end Phase 7 contract validated.
+
+### 8.3 Error classification + retry policy now live in core/
+- **Phase 1**: `BedrockErrorCategory` + `ErrorClassifier` + `RetryPolicy` were inlined inside `runtime/bedrock_client.py` to avoid a circular Phase-1/Phase-8 dependency.
+- **Phase 8**: extracted to `core/errors.py` and `core/retry.py`. `runtime/bedrock_client.py` re-imports both names so existing call-sites and tests work unchanged. Lock test `test_runtime_bedrock_client_re_exports_match` (in test_errors.py and test_retry.py) asserts class identity — guarantees zero behavior drift.
+- **Behavior delta**: none. Pure refactor for testability — `core.errors.ErrorClassifier` can be tested without importing boto3, and `QueryEngine` can use them without pulling the Bedrock client.
+
+### 8.4 IterationBudget now first-class
+- **v4**: `IterationBudget` was inline in the monolith at `sagemaker_agent.py:8190`. Adopted from Hermes (`run_agent.py:170`) in v4.9.4. Default 90 → bumped in-place to 600 in v4.10.10 because Hermes's 90 was too tight for SageMaker dev work.
+- **v5**: `core/budget.py` is its own module. Same DEFAULT_MAX=600. Same thread-safe consume/remaining/used/total/reset surface. Sub-agents (Phase 9) will share the same instance.
+- **PS Issue #2 visible-budget UX**: Phase-11 will wire `consume()/remaining()/used()/total()` into an ipywidgets progress bar so the user can SEE the budget burning down. Phase 8 ships the data model; Phase 11 ships the widget.
+- **Better than v4**: v4 surfaces budget exhaustion only via a `[Budget exhausted...]` log line — invisible until you hit the wall. PS Issue #2 fix is structural (Phase 11 progress bar), not just a clearer log.
+
+### 8.5 Tool dispatch hardening
+- **v4**: some tool exceptions in dispatch paths surface as raised Python exceptions in the notebook output rather than as recoverable model context.
+- **v5 Phase 8**: `QueryEngine` traps every tool execute() exception and converts it into a tool_result with `is_error=True` and `RuntimeError: kaboom`-style content. Model can recover. Lock test: `test_engine_traps_tool_exception`.
+- **Plan-mode dispatch gate**: even if a mutating tool is in the per-turn `tools=` payload (e.g. discovered via tool_search), Phase 8 dispatch refuses to execute it in plan mode and returns an error tool_result. Lock test: `test_engine_blocks_mutating_tool_in_plan_mode`.
+- **Per-tool result truncation**: tool_result is truncated to each tool's `max_result_size_chars` (Runnable parity). v4 used a single global cap.
+
+### 8.6 What's deliberately NOT in Phase 8 (and why)
+- **microcompact**, **context_collapse**, **2-stage smart compaction**: deferred to Phase 11 (notebook UX) where the user-visible "compacted" indicator widget will land alongside.
+- **Skill auto-trigger** (`SKILLS.discover_relevant`): deferred to Phase 10 where the SKILLS subsystem ships.
+- **forkSubagent** sub-agent dispatch: deferred to Phase 9.
+- **File-read state tracking**: deferred — Phase 4 introduced `_files_read` lock; Phase 8 doesn't reset it on compact because Phase 8 doesn't compact.
+- **Diminishing-returns / repetition guard**: deferred — has the highest false-positive rate in v4 logs.
+- Each deferral keeps `core/query_engine.py` reviewable. The OUT-OF-SCOPE list in the module docstring is the canonical source of truth.
+
+---
+
+## Phases 9-13
 
 (Future — entries land per phase.)

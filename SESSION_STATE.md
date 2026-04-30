@@ -1,5 +1,13 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 08 DONE (QueryEngine + retry + errors + IterationBudget)
+
+Phase 08 closed: 4 new core/ modules (`budget.py`, `errors.py`, `retry.py`, `query_engine.py`); `runtime/bedrock_client.py` re-imports core/errors + core/retry instead of inlining. 39 new tests (319 pass + 4 skip). Codex review APPROVE_WITH_FIXES first pass; both substantive findings (`_discovered_tool_names` cross-run leak + plan-mode `always_load=True` bypass) fixed in same commit with lock tests. Phase 7 wiring contract live end-to-end. PORT_LOG #016-#019 added. PS_V5 docs + changelog updated. ADR-014 written. About to tag `v5-phase-08`.
+
+Next: Phase 08.5 — thin-slice parity gate (10 critical v4-vs-v5 scenarios; HARD blocks Phase 9).
+
+---
+
 ## 2026-04-30 — v5 build started (Phase 00 scaffold)
 
 ### Context

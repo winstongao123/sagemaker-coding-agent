@@ -755,4 +755,95 @@ User-visible improvement: faster turns, lower per-turn cost, higher effective co
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 014, 015, ...)
+## ADR-014 — Phase 8 QueryEngine + retry + errors + IterationBudget
+- Date: 2026-04-30
+- Phase ID: 08
+- Status: ACCEPTED
+- Source:
+  - Runnable: `gg-claude-code-runnable/src/QueryEngine.ts` (1295 LOC) — main agent loop
+  - Runnable: `gg-claude-code-runnable/src/services/api/withRetry.ts` (822 LOC) — retry + jittered backoff
+  - Runnable: `gg-claude-code-runnable/src/services/api/errors.ts` (1207 LOC) — error message generators + retryability classification
+  - v4: `compact_v4/MAIN/agent/sagemaker_agent.py:8190` (`IterationBudget` — Hermes pattern adopted by v4 in v4.9.4)
+  - v4: `:8278` (`Agent` class) + `:8650` (`Agent.run`) — main agent loop
+  - v4: ErrorClassifier + RetryPolicy already inline in Phase-1 `runtime/bedrock_client.py`
+  - V5_PLAN.md Phase 8 acceptance: end-to-end mock test (tool_use → tool runs → final answer) AND tool_search deferred-loading round-trip works.
+  - Phase 7 contract (ADR-013, blocker #3 fix): query_engine MUST call `apply_tool_search_deferral(enabled=True)` per turn AND extract discovered tool names via `tool_search_discovered_names()` to wire deferred tools into the next turn's API call.
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** of v4's monolithic `Agent.run` loop (lines 8650-9450+, ~800 LOC) with a clean `core/query_engine.py` (target ~400 LOC).
+- **EXTRACTION** of Phase-1 inlined `ErrorClassifier` + `RetryPolicy` from `runtime/bedrock_client.py` into dedicated `core/errors.py` + `core/retry.py` modules (Phase-1 ADR-005 noted this would happen in Phase 8).
+- **ADDITION** of `core/budget.py` — `IterationBudget` class (Hermes pattern; PS Issue #2: visible budget that prevents runaway sub-agent costs).
+
+### Question 2 — Architectural justification
+**Why core/ package boundary**:
+- v4's `Agent` class is 1500+ LOC of mixed concerns (loop + retry + errors + budget + compaction + skill auto-trigger + UI hooks). Reviewing the loop logic requires reading the whole class.
+- v5 splits into 4 focused modules with clear single responsibilities. Each is independently testable.
+- Phase 8 deliberately ships a **MINIMAL** QueryEngine. Compaction (microcompact / context_collapse / LLM summary), skill auto-trigger, repetition guard, and other v4-Agent features are explicitly **out of scope** for Phase 8 — they land in Phase 10 (skills) and Phase 13 (polish). This keeps Phase 8 reviewable and the test surface bounded.
+
+### Phase 8 SCOPE (what's in)
+1. `core/budget.py` — `IterationBudget` class (Hermes pattern; thread-safe consume/remaining/used). Verbatim port of v4's `IterationBudget` at `sagemaker_agent.py:8190`.
+2. `core/errors.py` — extract `BedrockErrorCategory` + `ErrorClassifier` from Phase-1 `runtime/bedrock_client.py`. Same classifier semantics; cleaner imports for testing.
+3. `core/retry.py` — extract `RetryPolicy` from Phase-1 `runtime/bedrock_client.py`. Jittered exponential backoff (~1s, 2s, 4s, 8s with up-to-30% jitter; MAX_RETRIES=4). Verbatim.
+4. `core/query_engine.py` — the main loop. **Single responsibility**: take a user message, call BedrockClient, handle tool_use, execute tools, feed tool_result back, loop until end_turn / budget exhaustion / max_turns. Plus Phase-7 wiring per ADR-013 blocker #3 contract.
+
+### Phase 8 OUT OF SCOPE (deferred)
+- Compaction logic (microcompact / context_collapse / LLM summary) — Phase 13 polish OR Phase 10 if needed for skills.
+- Skill auto-trigger — Phase 10.
+- Repetition guard — defer; not in V5_PLAN Phase 8 acceptance.
+- Cost tracking + budget UI — Phase 11 (notebook UX).
+- AGENT_STATUS.md auto-update — Phase 13 polish.
+- Auto-checkpoint (`_maybe_auto_checkpoint`) — Phase 13 polish.
+- _PENDING_IMAGES queue consumption (Phase 4 view_image side channel) — query_engine drains it before each chat() call. THIS IS IN SCOPE.
+- _RECENT_DIFFS recording — defer.
+- File-read tracking population (Phase 4 contract) — query_engine marks files as read after each successful read_file call. IN SCOPE.
+
+### Phase 7 wiring contract (in-scope, ADR-013 blocker #3)
+1. Per-turn: call `apply_tool_search_deferral(tools, enabled=True)` → `(visible_tools, deferred_names)`.
+2. If `deferred_names` is non-empty, prepend a `<system-reminder>` block to the user message announcing them.
+3. Pass `context={"active_tools": <full_pool>}` when executing tool_search so it filters correctly.
+4. After each model turn, scan tool_use blocks for `tool_search` calls in the just-completed turn. After their tool_result fires, call `tool_search_discovered_names(tool_result_text)` and add those tools' schemas to the NEXT turn's `tools=` API param (via the `discovered_tools` set on the QueryEngine).
+
+### Question 3 — Cost
+- Token cost (static prompt): 0 (core/ is runtime code).
+- Token cost (per turn): ~30 tokens for the optional system-reminder block announcing deferred names. Negligible vs the savings (~770 tokens/turn from Phase 7 deferral).
+- Code complexity: ~800 LOC across 4 core/ modules + ~300 LOC tests. Replaces ~1500 LOC of v4 monolith.
+- Maintenance: each concern in its own file; tests target each.
+
+### Question 4 — Cost worth it?
+**Yes**. Phase 8 is the integration phase that makes v5 actually run. Without it, none of the prior phases are exercisable.
+
+### Decision
+- **ACCEPTED for v5.0** — 4 core/ modules + tests + integration test demonstrating end-to-end loop with tool_search deferred-loading round-trip.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `Bedrock` + `.ipynb`:
+- QueryEngine adapts Runnable's main loop to Bedrock (no streaming differences, no Anthropic-specific OAuth flows, no GrowthBook feature flags).
+- Drops Runnable-specific UI hooks (Ink JSX) — v5 uses simple `output_fn` callback for printing per turn.
+- Drops Runnable's complex retryability classifier in favor of v4's already-tested simpler version (Phase 1 verbatim).
+- IterationBudget is Hermes pattern, not Runnable-original; v4 adopted it; v5 inherits via verbatim port.
+
+### PS Issue mapping
+- **PS Issue #2 (iteration budget visible)**: `core/budget.py` exposes `consume() / remaining() / used() / total()` for the Phase-11 ipywidgets UI to display a live progress bar. Phase 11 will land the UI; Phase 8 lands the data plumbing.
+
+### Affected files
+- compact_v5/MAIN/agent/core/__init__.py (new)
+- compact_v5/MAIN/agent/core/budget.py (new — IterationBudget)
+- compact_v5/MAIN/agent/core/errors.py (new — extract from runtime/bedrock_client.py)
+- compact_v5/MAIN/agent/core/retry.py (new — extract from runtime/bedrock_client.py)
+- compact_v5/MAIN/agent/core/query_engine.py (new — main loop)
+- compact_v5/MAIN/agent/tests/unit/test_budget.py (new)
+- compact_v5/MAIN/agent/tests/unit/test_errors.py (new)
+- compact_v5/MAIN/agent/tests/unit/test_retry.py (new)
+- compact_v5/MAIN/agent/tests/integration/test_query_engine.py (new — end-to-end mock test + tool_search round-trip)
+
+### Linked port-log rows
+- #016 — Hermes IterationBudget (via v4) → core/budget.py (verbatim)
+- #017 — Phase-1 ErrorClassifier extraction → core/errors.py (verbatim)
+- #018 — Phase-1 RetryPolicy extraction → core/retry.py (verbatim)
+- #019 — Runnable QueryEngine.ts (main agent loop) → core/query_engine.py (ADAPT — minimal v5 scope)
+- #020 — Runnable services/api/withRetry.ts (retry + jittered backoff) → core/retry.py (already covered by #018; this row records the parity claim)
+- (No row for services/api/errors.ts — v5 uses v4's simpler ErrorClassifier; Phase 12+ may extend.)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 015, 016, ...)

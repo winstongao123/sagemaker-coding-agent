@@ -60,90 +60,13 @@ class Response:
 
 # ============================================================
 # Error categories + classifier + retry policy
-# (Verbatim port from v4. Phase 8 will extract to core/errors.py + core/retry.py.)
+# Phase 8: extracted to core/errors.py + core/retry.py (ADR-014).
+# Re-imported here so existing call-sites (and tests) continue to work
+# byte-equivalent with Phase 1.
 # ============================================================
 
-class BedrockErrorCategory:
-    """Categories of Bedrock invoke errors. Used by ErrorClassifier + RetryPolicy."""
-    THROTTLE = "throttle"  # ThrottlingException, rate-limited
-    SERVICE_UNAVAILABLE = "service_unavailable"
-    MODEL_NOT_READY = "model_not_ready"
-    NETWORK = "network"
-    VALIDATION_CACHE = "validation_cache"  # cache_control rejected — strip and retry once
-    VALIDATION_OTHER = "validation_other"
-    CONTEXT_OVERFLOW = "context_overflow"  # prompt-too-long
-    ACCESS_DENIED = "access_denied"
-    UNKNOWN = "unknown"
-
-
-class ErrorClassifier:
-    """Classifies Bedrock exceptions into a (category, recovery, debug_msg) triple.
-
-    Verbatim port of v4's classifier — Phase 8 may refactor for cleaner
-    separation but Phase 1 keeps it bundled with BedrockClient to minimize
-    cross-module dependencies.
-    """
-
-    @staticmethod
-    def classify(exc: Exception):
-        msg_lower = str(exc).lower()
-        cls_name = type(exc).__name__.lower()
-
-        if "validationexception" in msg_lower and (
-            "cache_control" in msg_lower
-            or "prompt-caching" in msg_lower
-            or "cache" in msg_lower
-        ):
-            return BedrockErrorCategory.VALIDATION_CACHE, "strip_cache_retry", str(exc)[:200]
-        if "validationexception" in msg_lower and (
-            "prompt is too long" in msg_lower
-            or "too many tokens" in msg_lower
-            or "input length" in msg_lower
-        ):
-            return BedrockErrorCategory.CONTEXT_OVERFLOW, "compact_retry", str(exc)[:200]
-        if "validationexception" in msg_lower:
-            return BedrockErrorCategory.VALIDATION_OTHER, "no_retry", str(exc)[:200]
-        if "throttlingexception" in msg_lower or "rate" in msg_lower:
-            return BedrockErrorCategory.THROTTLE, "backoff", str(exc)[:200]
-        if "serviceunavailable" in msg_lower or "503" in msg_lower:
-            return BedrockErrorCategory.SERVICE_UNAVAILABLE, "backoff", str(exc)[:200]
-        if "modelnotready" in msg_lower or "not ready" in msg_lower:
-            return BedrockErrorCategory.MODEL_NOT_READY, "backoff", str(exc)[:200]
-        if "accessdenied" in msg_lower or "403" in msg_lower or "unauthorized" in msg_lower:
-            return BedrockErrorCategory.ACCESS_DENIED, "no_retry", str(exc)[:200]
-        if (
-            "endpointconnectionerror" in cls_name
-            or "connecttimeout" in cls_name
-            or "readtimeout" in cls_name
-            or "connectionerror" in cls_name
-        ):
-            return BedrockErrorCategory.NETWORK, "backoff", str(exc)[:200]
-        return BedrockErrorCategory.UNKNOWN, "no_retry", str(exc)[:200]
-
-
-class RetryPolicy:
-    """Jittered exponential backoff (v4 verbatim).
-
-    MAX_RETRIES=4 means up to 5 total attempts (initial + 4 retries).
-    Sleep curve: ~1s, 2s, 4s, 8s with up-to-30% jitter.
-    """
-    MAX_RETRIES = 4
-    BASE_SECONDS = 1.0
-    JITTER_FRACTION = 0.30
-    BACKOFF_RECOVERY = {"backoff"}
-
-    @staticmethod
-    def should_retry(attempt: int, recovery: str) -> bool:
-        if attempt >= RetryPolicy.MAX_RETRIES:
-            return False
-        return recovery in RetryPolicy.BACKOFF_RECOVERY
-
-    @staticmethod
-    def backoff_seconds(attempt: int) -> float:
-        import random
-        base = RetryPolicy.BASE_SECONDS * (2 ** attempt)
-        jitter = base * RetryPolicy.JITTER_FRACTION * (2 * random.random() - 1)
-        return max(0.1, base + jitter)
+from core.errors import BedrockErrorCategory, ErrorClassifier  # noqa: F401
+from core.retry import RetryPolicy  # noqa: F401
 
 
 # ============================================================

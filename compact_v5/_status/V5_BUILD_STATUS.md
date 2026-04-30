@@ -1,14 +1,58 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 07 DONE)
-Updated by: Phase 07 close pass
+Last updated: 2026-04-30 (Phase 08 done — Codex APPROVE_WITH_FIXES, all 4 findings fixed)
+Updated by: Phase 08 close
 
 ## Current phase
-- Phase ID: 07 (canonical: 00..13 or 08_5)
-- Phase name: Phase 7 — ToolSearchTool deferred loading (highest-leverage Runnable port)
-- State: DONE
+- Phase ID: 08 (canonical: 00..13 or 08_5)
+- Phase name: Phase 8 — QueryEngine + retry + errors + IterationBudget
+- State: DONE — pending tag v5-phase-08
 
-## Done in this phase
+## Codex review status (current phase)
+- First pass: APPROVE_WITH_FIXES (2 substantive + 2 test gaps).
+- Findings:
+  - [high] `_discovered_tool_names` leaks across runs → reset at run() entry. Lock test: test_discovered_tools_reset_between_runs.
+  - [medium] plan-mode bypass via always_load=True → strict v4 allowlist (PLAN_MODE_ALLOWED_TOOLS). Lock test: test_engine_plan_mode_blocks_always_load_mutating_tool.
+  - [medium] cross-run reset test gap → covered by lock test 1.
+  - [low] plan-mode bypass test gap → covered by lock test 2.
+- Post-fix: AXIS A PASS, AXIS B 2 FAITHFUL / 2 ADAPTED / 0 DRIFTED.
+- Saved at: `_status/codex_reviews/phase-08.md`.
+
+## Done in this phase (Phase 08)
+- [x] ADR-014 appended (Phase 8 strategy: REPLACEMENT of v4 Agent.run, EXTRACTION of Phase-1 inline classes, ADDITION of IterationBudget; explicit IN-SCOPE / OUT-OF-SCOPE).
+- [x] Wrote `core/__init__.py` (re-exports IterationBudget / BedrockErrorCategory / ErrorClassifier / RetryPolicy / QueryEngine / run_one_turn).
+- [x] Wrote `core/budget.py` (PORT_LOG #016 — verbatim Hermes-via-v4 IterationBudget).
+- [x] Wrote `core/errors.py` (PORT_LOG #017 — extracted Phase-1 BedrockErrorCategory + ErrorClassifier).
+- [x] Wrote `core/retry.py` (PORT_LOG #018 — extracted Phase-1 RetryPolicy).
+- [x] Updated `runtime/bedrock_client.py` to re-import errors + retry from core/ (byte-equivalent, lock-tested).
+- [x] Wrote `core/query_engine.py` (PORT_LOG #019 — ~400 LOC adapt of Runnable QueryEngine.ts; Phase 7 wiring contract end-to-end).
+- [x] 37 new tests across `tests/unit/test_budget.py` (7) + `tests/unit/test_errors.py` (10) + `tests/unit/test_retry.py` (7) + `tests/integration/test_query_engine.py` (12 — including the **Phase 8 acceptance test** `test_tool_search_round_trip_promotes_deferred_tool`).
+- [x] PORT_LOG #016-019 added with verdicts pending Codex review.
+- [x] PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md: 6 Phase-8 entries (8.1-8.6).
+- [x] PS_V5_LEARNINGS_FROM_REPOS.md: 4 Phase-8 source entries + 7 new "Better than X" tracker rows.
+- [x] Wrote `MAIN/changelogs/CHANGELOG_v5_phase_08.md`.
+
+## Tests status (post Phase 08 + Codex fixes)
+- Last `pytest` run: 2026-04-30 — **319 passed + 4 skipped** in 5.81s.
+- Phase 8 contributes 39 new tests (37 initial + 2 Codex-fix lock tests).
+
+## Aggregate audit (post Phase 08)
+- Static prompt tokens: 2498 ≤ 2500 ✓
+- Per-section caps: all respected ✓
+- Cap sum: 2880 ≤ 2900 ✓
+- Section names unique ✓
+- tool_classes at slot 2 (PS Issue #7 fix) ✓
+- Tool count: 11 (v4 ~30) ✓
+- ADR-to-PORT_LOG ratio: 19 PORT_LOG rows / 14 ADRs — all rows reference an ADR ✓
+
+## Codex review status (current phase)
+- Status: NOT_RUN — pending review of Phase 8 implementation.
+- Will save at `_status/codex_reviews/phase-08.md`.
+
+## Previous phase
+- Phase 07 DONE — tagged v5-phase-07 at d42c5ba, pushed. 280 pass + 4 skips. Codex REJECT first pass, all 4 blockers fixed.
+
+## Done in Phase 07
 - [x] ADR-013 written (Phase 7 strategy + 3-mode query parser + isDeferredTool rule + Phase-8 wiring contract).
 - [x] Wrote `tools/tool_search.py` (~330 LOC; bare-name fast path + select / +required / keyword query modes + name parsing + `<functions>` wire format + Phase-8 `tool_search_discovered_names()` extraction helper).
 - [x] Replaced Phase-2 stub `apply_tool_search_deferral` with real partition logic. Codex-fix #1 changed signature to `(visible_with_tool_search, deferred_names_list)` to eliminate duplicate-tool_search bug.
@@ -50,6 +94,10 @@ Updated by: Phase 07 close pass
 - none
 
 ## Next session: pick up at
+- **Phase 08.5 — Thin-slice parity gate** (HARD GATE before Phase 9): land `tests/parity/test_thin_slice.py` running 10 critical v4-vs-v5 scenarios (tool block recovery, security deny, retry, prompt assembly, resume after compaction, Phase 7 round-trip, etc.). 10/10 must pass — blocks Phase 9 from starting.
+- After Phase 08.5: Phase 09 (sub-agent + Task tool — forkSubagent budget sharing).
+
+(Historical Phase 08 plan reference, kept for resume-after-compact context):
 - **Phase 08 — QueryEngine + retry + errors + IterationBudget UI** (per V5_PLAN.md): read Runnable `QueryEngine.ts` (1295 LOC) + `withRetry.ts` + `services/api/errors.ts`. Land:
   - `core/query_engine.py` — main agent loop. **MUST call `apply_tool_search_deferral(enabled=True)` and `tool_search_discovered_names()` to wire deferred tools** (Phase 7's blocker #3 contract).
   - `core/retry.py` — withRetry adaptation.

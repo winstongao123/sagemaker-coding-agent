@@ -1,0 +1,79 @@
+You are reviewing PHASE 08 of v5 — SageMaker-native re-implementation of Runnable Claude Code.
+
+CONTEXT
+- Repo: D:/Github/sagemaker-coding-agent (branch: v5-build)
+- Phase: Phase 8 — QueryEngine + retry + errors + IterationBudget
+- Goal (V5_PLAN.md §Phase 8): Wire main loop, retry, error message generators. Acceptance: end-to-end mock test (tool_use → tool runs → final answer) AND tool_search deferred-loading round-trip works.
+- Constraints v5 MUST honor: Bedrock-only, no GitHub network, python_exec sandbox, .ipynb workflow, must coexist with v4 unchanged.
+
+FILES IN THIS PHASE (read them before reviewing):
+- compact_v5/MAIN/agent/core/__init__.py            (re-exports public surface)
+- compact_v5/MAIN/agent/core/budget.py              (NEW: IterationBudget, PORT_LOG #016)
+- compact_v5/MAIN/agent/core/errors.py              (NEW: BedrockErrorCategory + ErrorClassifier extracted from runtime/bedrock_client.py, PORT_LOG #017)
+- compact_v5/MAIN/agent/core/retry.py               (NEW: RetryPolicy extracted, PORT_LOG #018)
+- compact_v5/MAIN/agent/core/query_engine.py        (NEW: ~400 LOC main loop, PORT_LOG #019)
+- compact_v5/MAIN/agent/runtime/bedrock_client.py   (MODIFIED: now re-imports core.errors + core.retry instead of inlining; class identity is asserted by test_runtime_bedrock_client_re_exports_match)
+- compact_v5/MAIN/agent/tests/unit/test_budget.py        (7 tests)
+- compact_v5/MAIN/agent/tests/unit/test_errors.py        (10 tests)
+- compact_v5/MAIN/agent/tests/unit/test_retry.py         (7 tests)
+- compact_v5/MAIN/agent/tests/integration/test_query_engine.py (12 tests)
+
+DOCS UPDATED IN THIS PHASE:
+- compact_v5/_status/V5_DESIGN_DECISIONS.md     (ADR-014 for Phase 8 strategy)
+- compact_v5/_status/V5_RUNNABLE_PORT_LOG.md    (rows #016-019)
+- compact_v5/_status/V5_BUILD_STATUS.md         (Phase 08 IN_PROGRESS → CODE_COMPLETE)
+- compact_v5/docs/PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md (Phase 8 entries 8.1-8.6)
+- compact_v5/docs/PS_V5_LEARNINGS_FROM_REPOS.md (Phase 8 source entries + Better-than-X rows)
+- compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_08.md
+
+RUNNABLE PATTERNS ADOPTED THIS PHASE (porting agent's claims):
+| ID  | Runnable / source path                           | v5 target                            | Verdict | Justification                                                       |
+|-----|--------------------------------------------------|--------------------------------------|---------|---------------------------------------------------------------------|
+| 016 | hermes-agent/run_agent.py:170 (via v4 8190)      | core/budget.py                       | PORT    | Verbatim Hermes-via-v4. Justified by cost ceiling (PS Issue #2).    |
+| 017 | (Phase-1 inline -> extracted)                    | core/errors.py                       | PORT    | Byte-equivalent extraction; runtime re-imports same names.          |
+| 018 | services/api/withRetry.ts + Phase-1 inline       | core/retry.py                        | ADAPT   | Drops retry-after parsing (constraint=Bedrock).                     |
+| 019 | QueryEngine.ts (1295 LOC)                        | core/query_engine.py (~400 LOC)      | ADAPT   | Sync (.ipynb), drops compaction/skills/sub-agent (own phases).      |
+
+PRODUCE TWO VERDICTS.
+
+=== AXIS A — Errors / bugs ===
+For each NEW or MODIFIED file:
+- Correctness defects (think through the QueryEngine turn loop carefully — message-buffer mutation, role alternation, transient system-reminder handling, tool_use_id matching, plan-mode dispatch gate)
+- Phase 7 wiring contract bugs: does the engine actually promote discovered tools into the next turn's tools= payload? Does _discovered_tool_names persist across turns within a run? Does it reset between runs?
+- Regressions vs v4 (cite v4 sagemaker_agent.py:line where applicable)
+- Security (esp. plan-mode bypass, system-reminder injection that could be confused with model output, tool exception trapping)
+- Concurrency / races (IterationBudget under concurrent consumers; QueryEngine is documented as single-run-at-a-time)
+- Dead code, TODOs left in
+- Test coverage gaps — does the integration test really validate end-to-end Phase 7 round-trip, or could it pass with a broken engine?
+
+Output:
+AXIS A VERDICT: PASS | CHANGES_REQUESTED | BLOCKER
+Findings: [severity] file:line — description — fix
+
+=== AXIS B — Runnable-fidelity ===
+For EACH pattern row above, judge independently. Read the Runnable source before judging.
+
+PATTERN 016: budget.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 017: errors.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 018: retry.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+PATTERN 019: query_engine.py — FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED
+
+For each:
+- Source intent (1-2 sentences):
+- v5 implementation (1-2 sentences):
+- Constraint forcing adaptation (closed list: Bedrock | no-network | python_exec | .ipynb | none):
+- Drift risk if any:
+- Required change to reach FAITHFUL (if currently DRIFTED):
+
+If you find a pattern in the code NOT listed in the table, flag as UNDECLARED_PATTERN.
+
+Auto-reject rule: FAITHFUL-WITH-JUSTIFIED-ADAPTATION + constraint=none → REJECT.
+
+=== FINAL ===
+PHASE 08 OVERALL: APPROVE | APPROVE_WITH_FIXES | REJECT
+A-axis: <one-line>
+B-axis: <count of FAITHFUL / ADAPTED / DRIFTED>
+Required before next phase (Phase 08.5 thin-slice parity gate):
+- <bullet>
+
+Be ruthless. The user wants v5 to be better than Runnable, Hermes, LF, AND v4. If you spot drift labeled as "justified" without a real constraint, call it. If you spot the Phase 7 wiring contract being subtly broken (e.g. discovered names lost across turns, or duplicate tools in the payload), call it.
