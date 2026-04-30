@@ -45,7 +45,12 @@ from . import grep as _grep             # noqa: F401  defines _register()
 from . import glob as _glob             # noqa: F401  defines _register()
 from . import list_dir as _list_dir     # noqa: F401  defines _register()
 #
-# Phase 4 will add: write_file, edit_file, notebook_edit, view_image
+# Phase 4 — core mutating tools + view_image (per ADR-010):
+from . import write_file as _write_file       # noqa: F401  defines _register()
+from . import edit_file as _edit_file         # noqa: F401  defines _register()
+from . import notebook_edit as _notebook_edit # noqa: F401  defines _register()
+from . import view_image as _view_image       # noqa: F401  defines _register()
+#
 # Phase 5 will add: bash, python_exec
 # Phase 7 will add: tool_search
 # Phase 9 will add: task (sub-agent dispatch)
@@ -69,7 +74,12 @@ def bootstrap_built_ins():
     _grep._register()
     _glob._register()
     _list_dir._register()
-    # Phase 4-13 will add their modules here as they land.
+    # Phase 4 — mutating tools + view_image
+    _write_file._register()
+    _edit_file._register()
+    _notebook_edit._register()
+    _view_image._register()
+    # Phase 5-13 will add their modules here as they land.
     return all_registered()
 
 

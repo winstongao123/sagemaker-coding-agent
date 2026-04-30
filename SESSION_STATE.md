@@ -103,6 +103,25 @@ User reinforced: when learning Runnable, must go DEEP into architecture and inte
 - Phase 03 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-03.
 - Next: tag v5-phase-03, **aggregate audit gate fires before Phase 04**, begin Phase 04 (Core mutating tools + diff_widget.py).
 
+### Phase 04 close (2026-04-30, ready to tag v5-phase-04)
+- Aggregate audit pre-Phase-04: PASS (5 PORT_LOG rows all reference an ADR; 9 ADRs accepted; v5 has 4 tools < v4's 30; static-prompt + per-turn-overhead audits deferred to Phase 6/7).
+- ADR-010 appended (Phase 4 mutating tools strategy: REUSE v4 executors + ADAPT Runnable prompts + ui/diff_widget.py for inline-+-expandable colored approval-prompt diff. FAITHFUL-WITH-JUSTIFIED-ADAPTATION, constraint=.ipynb/Bedrock/python_exec).
+- 5 new files in tools/: write_file.py, edit_file.py, notebook_edit.py, view_image.py, _file_read_tracking.py (Phase-4 stub of v4 _FILES_READ + _FILE_READ_TIMES; Phase 8 retires).
+- ui/diff_widget.py (~245 LOC): HTML colored diff (red/green/gray rows, file path header, ±3 lines context, click-to-expand `<details>`, HTML-escape security via html.escape). Stdlib only — no React/Ink/JSX.
+- 4 PORT_LOG rows added (#006 FileWriteTool/prompt.ts → write_file.py; #007 FileEditTool/prompt.ts → edit_file.py; #008 NotebookEditTool/prompt.ts → notebook_edit.py; #009 FileEditTool/UI.tsx → ui/diff_widget.py). All FAITHFUL-WITH-JUSTIFIED-ADAPTATION post-fix.
+- view_image has no Runnable analog (Runnable handles images via FileReadTool); v5 keeps the dedicated tool for v4 parity + clearer audit trail.
+- **PS_V5 docs updated**: PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md gains 7 Phase-4 entries (diff-in-approval, deferred-features inline, stale-check error msg, atomic-write tested, view_image rationale, HTML escape security, explicit destructive flags). PS_V5_LEARNINGS_FROM_REPOS.md gains 6 Phase-4 entries (FileWriteTool prompt, FileEditTool prompt, NotebookEditTool prompt, UI.tsx → diff_widget, read-tracking module extraction, atomic-write helper) + 6 new rows in the "Better than X" cross-phase tracker.
+- Codex review (gpt-5.5, reasoning=medium, via stdin): APPROVE_WITH_FIXES with 1 major + 2 minor + 2 nits. All 5 fixed in same Phase 04 commit:
+  - Major #1: notebook_edit was catching only OSError; non-OSError write/serialization failures escaped. Fix: catch `Exception` (v4 parity at sagemaker_agent.py:6024). Locked by `test_notebook_edit_handles_non_oserror_write_failure`.
+  - Minor #2: view_image had no side channel for Phase 8 to inject the base64 payload. Fix: added `_PENDING_IMAGES` queue + `pop_pending_images()` accessor (matches v4 _PENDING_IMAGES at sagemaker_agent.py:6456). Locked by `test_view_image_queues_payload_for_phase_8`.
+  - Minor #3: diff_widget `splitlines()` swallowed EOF-newline-only differences. Fix: explicit before/after `endswith("\n")` check surfaces "No content changes — only the final newline differs". Locked by `test_inline_diff_shows_eof_newline_difference`.
+  - Nit #4: stale-check used bidirectional `abs(diff) > 0.5`; v4 only flags forward jumps (sagemaker_agent.py:4189). Fix: directional `current > last + 0.5`.
+  - Nit #5: 3 new tests added (covered by the major + 2 minor fix tests above).
+- Phase 04 verification: **128 passed + 1 skipped** post-fix. lint pre-tag will pass after commit.
+- Per-phase changelog: compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_04.md.
+- Phase 04 OVERALL: APPROVE_WITH_FIXES → all fixes landed → ready to tag v5-phase-04.
+- Next: tag v5-phase-04, begin Phase 05 (bash + python_exec + security/ verbatim port from v4 — retires tools/_path_validation.py stub).
+
 ### Phase 0 follow-ups (after first commit `5259adf`)
 - Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
 - Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.

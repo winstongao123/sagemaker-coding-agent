@@ -427,4 +427,70 @@ N/A (replacement; the cost is dispersed but reviewability improves).
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 010, 011, ...)
+## ADR-010 — Phase 4 mutating tools: REUSE v4 executors + ADAPT Runnable prompts + diff_widget UI
+- Date: 2026-04-30
+- Phase ID: 04
+- Status: ACCEPTED
+- Source:
+  - v4: `compact_v4/MAIN/agent/sagemaker_agent.py:4632` (`tool_write_file`), `:4729` (`tool_edit_file`), `:5921` (`tool_notebook_edit`), `:6419` (`tool_view_image`)
+  - Runnable: `gg-claude-code-runnable/src/tools/FileWriteTool/prompt.ts`, `FileEditTool/prompt.ts`, `NotebookEditTool/prompt.ts`, `FileEditTool/UI.tsx` (diff-preview React component pattern)
+  - V5_PLAN.md Phase 4 acceptance criterion: edit_file, write_file, AND notebook_edit approval prompts each show colored before/after diff inline (red removed, green added, gray context) with file path header + line numbers + ±3 lines context + click-to-expand-full-file using `ui/diff_widget.py` BEFORE user clicks Approve.
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT** for the 4 tool executors (v4 monolith → file-per-tool modules per ADR-001).
+- **ADDITION** for `ui/diff_widget.py` — the UX pattern is novel to v5 (v4 didn't show colored inline diffs in the approval prompt; user only saw a text summary). Adopted from Runnable's `EditTool/UI.tsx` Ink renderer pattern.
+
+### Question 2 — Architectural justification (ADDITIONS only)
+**Why diff_widget.py:** PS_actual_use_problems.md captures a real pattern where v4 users approved edits without seeing the actual change content, then discovered later that the model had edited the wrong region or stripped useful code. Showing the colored diff inline (with ±3 lines context) lets the user catch misplaced edits BEFORE clicking Approve. Runnable solved this with `EditTool/UI.tsx` (Ink JSX). v5 ipywidgets equivalent: an HTML widget with `+` green / `-` red / context gray + a `<details>` block for click-to-expand-full-file.
+- **User-visible improvement**: misplaced-edit prevention. A model that does `edit_file(file_path="auth.py", old_string="def login():\n    return user", new_string="def login():\n    return user.is_admin")` shows the change in context, so the user spots `is_admin` permissions creep before approving.
+- **Not acceptable as ADDITION justification**: "matches Runnable" / "completes the parity". Both are insufficient.
+- **Acceptable**: catches a documented v4 failure mode (silent misplaced edits).
+
+### Question 3 — Cost
+- Token cost (static prompt): 0 (the diff widget is a Python class that returns HTML; not in the system prompt).
+- Token cost (per turn): 0 (UI rendering happens client-side in ipywidgets; no model interaction).
+- Code complexity: ~150 LOC `ui/diff_widget.py` (uses stdlib `difflib.unified_diff` + simple HTML escape + `<details>` markup). No new dependencies (`ipywidgets` already used by v4 chat.ipynb; only HTML strings emitted in Phase 4).
+- Maintenance: one file to update if Runnable changes diff conventions or if user complains about the rendering.
+
+### Question 4 — Cost worth it?
+**Yes**. Misplaced-edit prevention is exactly the kind of user-visible improvement V5_PLAN.md's "addition gate" requires. The cost (~150 LOC + 0 tokens) is negligible vs the value (catches a documented v4 failure mode at approval time, before the bad edit lands).
+
+### Decision
+- **ACCEPTED for v5.0** — 4 mutating tools + 1 ui module land Phase 4:
+  - `tools/write_file.py` — REUSE v4 executor + ADAPT Runnable prompt text. Requires `read_before_overwrite` (matches v4 contract). `requires_approval=True`.
+  - `tools/edit_file.py` — REUSE v4 executor + ADAPT Runnable prompt text. Requires `read_first` (matches v4 contract). Exact match + `replace_all` flag. `requires_approval=True`.
+  - `tools/notebook_edit.py` — REUSE v4 executor (insert/replace/delete cells). Atomic write (tmp file + rename) preserved. `requires_approval=True`.
+  - `tools/view_image.py` — REUSE v4 executor; Phase 4 returns metadata, the pending-images queue is Phase-8 concern.
+  - `ui/diff_widget.py` — generates HTML diff strings (red removed, green added, gray context, file path header, ±3 lines context, `<details>`-wrapped full-file expansion). Phase 11 wires into the ipywidgets approval flow.
+
+### Phase-3-stub dependencies and Phase-5 retirement
+- Like Phase 3, mutating tools depend on `tools/_path_validation.py` (Phase-3 stub) and a new `tools/_file_read_tracking.py` (replaces v4's `_FILES_READ` set + `_FILE_READ_TIMES` map). Both stubs are retired in Phase 5 when the full security/ + a Phase-8-friendly read-tracking module land.
+- v4-specific deferred features (snapshot-before-edit / auto-lint-python / auto-commit-checkpoint / secrets-scan) are NOT ported in Phase 4 — they belong to Phase 5 (security) + Phase 8 (query_engine session machinery). Documented inline in each tool module.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `.ipynb` + Bedrock + python_exec:
+- Drops React/Ink rendering methods (renderToolUseMessage etc.) — same as Phase 2 ToolDef Protocol decision.
+- `ui/diff_widget.py` renders HTML for ipywidgets, not Ink JSX. Same UX semantics: colored diff, file header, click-to-expand. Constraint = `.ipynb`.
+- Tool naming: Runnable `Edit`/`Write`/`NotebookEdit` → v5 `edit_file`/`write_file`/`notebook_edit` (v4 parity).
+
+### Affected files
+- compact_v5/MAIN/agent/tools/_file_read_tracking.py (new, Phase-4-only stub)
+- compact_v5/MAIN/agent/tools/write_file.py (new)
+- compact_v5/MAIN/agent/tools/edit_file.py (new)
+- compact_v5/MAIN/agent/tools/notebook_edit.py (new)
+- compact_v5/MAIN/agent/tools/view_image.py (new)
+- compact_v5/MAIN/agent/ui/diff_widget.py (new)
+- compact_v5/MAIN/agent/tools/__init__.py (extend bootstrap_built_ins)
+- compact_v5/MAIN/agent/tests/tools/test_phase4_mutating_tools.py (new)
+- compact_v5/MAIN/agent/tests/unit/test_diff_widget.py (new)
+
+### Linked port-log rows
+- #006 — Runnable FileWriteTool/prompt.ts → tools/write_file.py
+- #007 — Runnable FileEditTool/prompt.ts → tools/edit_file.py
+- #008 — Runnable NotebookEditTool/prompt.ts → tools/notebook_edit.py
+- #009 — Runnable FileEditTool/UI.tsx (diff-preview pattern) → ui/diff_widget.py
+- (No row for view_image — Runnable's FileReadTool handles images inline; v5 keeps the dedicated tool for v4 parity. Documented inline in tools/view_image.py.)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 011, 012, ...)

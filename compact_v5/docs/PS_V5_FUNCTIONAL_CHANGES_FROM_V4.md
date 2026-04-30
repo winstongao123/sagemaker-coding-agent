@@ -133,6 +133,48 @@ Four read-only tools land per ADR-001 (file-per-tool) + ADR-009 (REUSE v4 execut
 
 ---
 
-## Phases 4-13
+## Phase 4 — Core mutating tools + diff_widget
+
+Four mutating tools (`write_file`, `edit_file`, `notebook_edit`, `view_image`) + `ui/diff_widget.py` land per ADR-010. Multiple functional improvements vs v4:
+
+### 4.1 Approval prompt now shows colored diff inline + click-to-expand
+- **v4**: approval prompt showed a text summary like `Edited foo.py (line 42)\n  -3 lines / +5 lines\n  Old: 'def...'\n  New: 'def...'`. Users approved without seeing the actual change content; misplaced edits were caught only after the fact.
+- **v5**: `ui/diff_widget.py` emits an HTML colored diff with file path header, `+` green / `-` red / context gray rows, line numbers in both BEFORE and AFTER coordinate systems, ±3 lines context by default, plus a `<details>`-wrapped full-file view for click-to-expand. Phase 11 wires this into the ipywidgets approval prompt.
+- **Behavior delta**: misplaced edits are catchable at approval time. **Better than v4 AND Runnable**: Runnable's UI.tsx Ink renderer was the inspiration; v5 brings the same UX to ipynb where v4 had only a text summary. (Runnable is not "better" here — they had this; v4 didn't; v5 catches up + integrates with .ipynb.)
+
+### 4.2 Phase-3 + Phase-4 deferred features documented inline (no silent regressions)
+- **v4**: write_file invoked `SECURITY.scan_secrets`, `SNAPSHOTS.save`, `_auto_lint_python`, `_maybe_auto_checkpoint` inline.
+- **v5 Phase 4**: writes the file but does NOT run those features (they belong to Phase 5 security + Phase 8 query_engine session machinery).
+- **Behavior delta**: temporary regression vs v4.10.10 — Phase 4 doesn't snapshot before edit, doesn't lint Python, doesn't auto-commit. Each is documented inline (`# Phase-N deferred: ...`) so reviewers and future-me know the gap. The Phase 5 + Phase 8 ADRs explicitly reconcile.
+- **Why this is a defensible regression**: v5 has no QueryEngine yet (Phase 8). The deferred features depend on session state (`_RECENT_DIFFS` queue, `auto_commit_every` counter) that Phase 8 builds. Adding them in Phase 4 would mean re-implementing Phase-8 state machinery twice. Better to land them once when query_engine arrives.
+
+### 4.3 edit_file now rejects edits to externally-modified files (stale-check, was implicit in v4)
+- **v4**: `_check_file_staleness` was called inside `tool_edit_file` but the threshold (`abs(mtime_diff) < 0.5s`) was magic-numbered and the failure path returned an error string with no recovery hint.
+- **v5**: `tools/_file_read_tracking.is_stale(path) -> (bool, msg)` exposes the same logic with explicit hint: `"File modified externally since last read (read mtime X vs now Y). Re-read with read_file to refresh, then retry the edit."`
+- **Behavior delta**: same threshold + check, better error message. Locked by `test_edit_file_stale_file_rejected`.
+
+### 4.4 notebook_edit's atomic write contract is now testable
+- **v4**: notebook_edit wrote via `tempfile.mkstemp` + `os.replace`; if the rename failed, the live notebook was preserved. Not tested because v4's monolith made the failure path hard to mock.
+- **v5**: same atomic-write logic, now in a small `_atomic_write_json` helper that's directly testable. `test_notebook_edit_atomic_write_preserves_on_failure` mocks `os.replace` to raise OSError and asserts the original notebook is unchanged.
+- **Behavior delta**: zero. New test prevents future regression.
+
+### 4.5 view_image is read-only with no Runnable analog
+- **Runnable** integrates image reading into FileReadTool — model just calls `read_file("img.png")` and the tool detects the format and returns base64 inline.
+- **v4 + v5** keep a dedicated `view_image` tool. Reasons: (a) v4 has it, (b) the SageMaker chat.ipynb workflow surfaces image loading as an explicit user-driven action, (c) the dedicated tool makes audit log entries clearer (auditing `view_image(file_path=...)` is more meaningful than `read_file(file_path=...)` for binary content).
+- **Better than Runnable**: clearer audit trail. Not "better" technically — it's a stylistic v4-parity choice that makes audits easier.
+
+### 4.6 HTML escaping in diff_widget — security control
+- **v4**: no inline diff in approval prompt → no HTML rendering → no XSS surface.
+- **v5**: diff_widget renders HTML for ipywidgets. **Untrusted content** (the model's `old_string`/`new_string`) is HTML-escaped via `html.escape` so a model can't inject `<script>alert(1)</script>` into the approval prompt. Locked by `test_inline_diff_html_escapes_special_chars`.
+- **Behavior delta**: new attack surface introduced + new defense. Net: defended.
+
+### 4.7 Mutating tools have explicit `is_destructive=True` + `is_concurrency_safe=False`
+- **v4**: tools didn't expose these flags; Phase 8 sub-agent dispatch heuristically guessed.
+- **v5**: write_file / edit_file / notebook_edit declare `is_destructive=True` (surfaces in approval prompts), `is_concurrency_safe=False` (Phase 9 Task tool will not parallel-batch them). view_image declares `is_read_only=True` + `is_concurrency_safe=True`.
+- **Behavior delta**: zero today (Phase 8/9 not landed). Lock test ensures no future regression.
+
+---
+
+## Phases 5-13
 
 (Future — entries land per phase.)

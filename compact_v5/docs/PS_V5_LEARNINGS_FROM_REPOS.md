@@ -118,6 +118,48 @@
 
 ---
 
+## Phase 4 — Core mutating tools + diff_widget
+
+### From Runnable: FileWriteTool prompt (PORT_LOG #006)
+- **Source**: `gg-claude-code-runnable/src/tools/FileWriteTool/prompt.ts:getWriteToolDescription`.
+- **Adopted (ADAPT)**: `tools/write_file.py:_DESCRIPTION` keeps Runnable's "MUST read first before overwriting" rule and the "prefer Edit for modifying existing files" steering.
+- **What we dropped**: Runnable's "NEVER create *.md / README files unless explicitly requested" + "no emojis" rules. These are policy rules that belong in the v5 main system prompt at Phase 6 (per ADR-002 file-per-section), not in the per-tool description. Per-tool descriptions should describe MECHANICS, not POLICY — duplicating policy across every tool would bloat the per-turn token cost.
+- **What we adapted**: tool naming Runnable `Write` → v5 `write_file` (v4 parity). Added v4-specific `mode='append'` parameter.
+
+### From Runnable: FileEditTool prompt (PORT_LOG #007)
+- **Source**: `gg-claude-code-runnable/src/tools/FileEditTool/prompt.ts:getEditToolDescription`.
+- **Adopted (ADAPT)**: keeps Runnable's "MUST read first / exact match / replace_all / smallest old_string" guidance.
+- **What we adapted**: line-prefix instruction. Runnable says either "line number + tab" or "spaces + line number + arrow" depending on `isCompactLinePrefixEnabled()`. v5 `read_file` uses a fixed `"line number + | + space"` format; the prompt explicitly mentions that exact format so the model knows to strip the prefix.
+- **What we kept from v4**: the stale-check (file modified externally since last read → reject the edit). This is a v4-only feature; Runnable doesn't have it.
+
+### From Runnable: NotebookEditTool prompt (PORT_LOG #008)
+- **Source**: `gg-claude-code-runnable/src/tools/NotebookEditTool/prompt.ts:DESCRIPTION + PROMPT`.
+- **Adopted (ADAPT)**: cell-index 0-based, action-vs-mode parameter naming.
+- **Naming difference**: Runnable uses `edit_mode=insert|replace|delete`; v5 uses `action=` (v4 parity — v4's `_NOTEBOOK_EDIT_ACTIONS` set used `action`, and our chat.ipynb users have muscle-memory for it).
+- **What we kept from v4**: atomic write (tmp file + rename). Runnable's TS uses Node fs's `writeFileSync` which has different atomicity guarantees on Windows; v5 explicit `tempfile.mkstemp` + `os.replace` matches v4's POSIX-semantic guarantee.
+
+### From Runnable: FileEditTool/UI.tsx → ui/diff_widget.py (PORT_LOG #009)
+- **Source**: `gg-claude-code-runnable/src/tools/FileEditTool/UI.tsx`. ~288 LOC of React/Ink JSX that renders the colored diff in the approval prompt.
+- **Adopted (ADAPT)**: same UX semantics, different runtime:
+  - Runnable emits Ink JSX (terminal renderer); v5 emits HTML strings (ipywidgets renderer).
+  - Both use red/green/gray color cues with `+`/`-`/space markers.
+  - Both show file path header.
+  - Both show ±3 lines context (default) around hunks.
+  - Both offer click-to-expand-full-file (Runnable: separate component, v5: native HTML `<details>`).
+- **Constraint forcing adaptation**: `.ipynb` (no JSX/Ink runtime). Genuine — Runnable's TSX output is unrenderable in a Jupyter notebook.
+- **Better than Runnable**: v5 uses **stdlib only** (`difflib` + `html.escape`) — no React, no Ink, no third-party deps. Runnable's UI.tsx pulls Ink + React + custom diff utilities. v5 ships ~225 LOC vs Runnable's combined ~600 LOC across UI.tsx + dependencies. Plus v5 escapes untrusted content (HTML-injection safety) — Runnable's TSX runs in a terminal where HTML injection isn't a concern; if Runnable ever ports to a web UI, they'd need to add what we have.
+
+### From v4: read-tracking extracted into a tiny module
+- **Source**: v4 `_FILES_READ` set + `_FILE_READ_TIMES` dict + `_FILES_READ_LOCK` threading.Lock at `compact_v4/MAIN/agent/sagemaker_agent.py` (around line 4200).
+- **Adopted (subset)**: extracted into `tools/_file_read_tracking.py` (~80 LOC). Same contract — `mark_read(path)`, `was_read(path)`, `is_stale(path)`. Phase-4-only stub: Phase 8 query_engine retires it by bringing the same data into session state.
+- **Better than v4 (architecturally)**: read-tracking is a single-purpose module with clear ownership instead of three globals scattered through the v4 monolith.
+
+### From v4: notebook atomic-write helper
+- **Source**: v4's notebook_edit at `sagemaker_agent.py:5921` used `tempfile.mkstemp` + `os.replace` inline.
+- **Adopted (verbatim, refactored)**: extracted into `_atomic_write_json(path, data)` helper inside `tools/notebook_edit.py`. Same logic; cleaner test surface (`test_notebook_edit_atomic_write_preserves_on_failure` mocks `os.replace` to fail and verifies the original notebook is intact).
+
+---
+
 ## Cross-phase: "Better than X" Tracker (updated)
 
 | Phase | Better than | Where | What |
@@ -127,12 +169,18 @@
 | 1 | (n/a) | Bedrock | (PS Issue #4 lock test added — same v4 behavior, now regression-proof.) |
 | 2 | Runnable | Tool registry | Duplicate-name registration loudly fails (Runnable allows silent override). |
 | 2 | Runnable + v4 | Plan-mode | MCP tools filtered at registry-assembly time, not dispatch time. |
-| **3** | **Runnable** | **grep prompt** | **Truthful backend claim — Runnable says "ripgrep", v5 says "Python re" (matching what's actually implemented). PS Issue #6 prevention.** |
-| **3** | **Runnable** | **list_dir** | **Plan-mode users can inspect directories. Runnable plan-mode users cannot (no list_dir, bash forbidden).** |
-| **3** | **Runnable** | **glob prompt** | **Documents v4-specific allowed_paths fallback so the model understands the search scope.** |
-| **3** | **v4** | **path validation** | **Scoped extraction (~80 LOC) from v4's 600-LOC SecurityManager — read-only tools don't pull in the whole security class.** |
-| **3** | **v4** | **tool ordering** | **Cache-stable alphabetical ordering means future tool additions don't bust the prompt cache for every existing tool.** |
-| **3** | **v4** | **concurrency flags** | **Each tool explicitly declares is_concurrency_safe — Phase 9's Task tool can batch parallel read-only calls without heuristics.** |
+| 3 | Runnable | grep prompt | Truthful backend claim — Runnable says "ripgrep", v5 says "Python re". PS Issue #6 prevention. |
+| 3 | Runnable | list_dir | Plan-mode users can inspect directories. Runnable plan-mode users cannot. |
+| 3 | Runnable | glob prompt | Documents v4-specific allowed_paths fallback. |
+| 3 | v4 | path validation | Scoped 80-LOC extraction vs v4's 600-LOC SecurityManager. |
+| 3 | v4 | tool ordering | Cache-stable alphabetical ordering across tool list. |
+| 3 | v4 | concurrency flags | Each tool explicitly declares is_concurrency_safe. |
+| **4** | **Runnable** | **diff_widget zero-deps** | **Pure stdlib (difflib + html.escape) vs Runnable's React/Ink stack. ~225 LOC vs combined ~600 LOC.** |
+| **4** | **Runnable** | **diff_widget HTML escape** | **Untrusted model content escaped — Runnable's terminal renderer doesn't have this concern, but v5's HTML output would be a web-XSS surface without it. Lock test prevents regression.** |
+| **4** | **v4** | **diff in approval prompt** | **Inline colored diff at approval time vs v4's text-only summary. Catches misplaced edits BEFORE the user clicks Approve.** |
+| **4** | **v4** | **read-tracking module** | **Single-purpose 80-LOC module vs three scattered globals (_FILES_READ + _FILE_READ_TIMES + _FILES_READ_LOCK).** |
+| **4** | **v4** | **stale-check error msg** | **Explicit recovery hint ("Re-read with read_file to refresh, then retry") vs v4's bare error string.** |
+| **4** | **v4** | **atomic-write tested** | **`_atomic_write_json` is now mockable; `test_notebook_edit_atomic_write_preserves_on_failure` locks the contract.** |
 
 ---
 
