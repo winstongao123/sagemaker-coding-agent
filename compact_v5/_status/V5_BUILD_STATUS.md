@@ -45,7 +45,7 @@ Updated by: Phase 01 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit> "v5/phase-01: port v4 BedrockClient + Config to runtime/ + Codex fixes"
+- Last commit: f0c2c3c "v5/phase-01: port v4 BedrockClient + Config to runtime/ + Codex fixes"
 - Last tag: v5-phase-01
 
 ## Blockers
