@@ -100,5 +100,9 @@ def _register():
         is_read_only=True,
         is_concurrency_safe=True,
         requires_approval=False,
+        # Phase 7 ADR-013: deferred. `glob "**/*"` is the more common
+        # exploration tool; list_dir is for single-directory inspection
+        # which the model needs less often.
+        should_defer=True,
         search_hint="list directory contents",
     ))

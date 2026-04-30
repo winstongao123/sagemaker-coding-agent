@@ -313,30 +313,61 @@ def assemble_tool_pool(
 def apply_tool_search_deferral(
     tools: List[ToolRecord],
     enabled: bool = False,
-) -> Tuple[List[ToolRecord], Optional[ToolRecord]]:
-    """Apply Runnable's deferred-tool-schema pattern. Returns
-    `(visible_tools, tool_search_tool_or_none)`.
+) -> Tuple[List[ToolRecord], List[str]]:
+    """Runnable parity (Phase 7 ADR-013): defer `should_defer=True` tools behind
+    tool_search.
 
-    **Phase 2: STUB.** When `enabled=False` (default), returns
-    `(tools, None)` unchanged — every tool's full schema ships in the
-    initial prompt, just like v4.
+    Codex Phase-07 review fix #1 (BLOCKER): the v1 signature returned
+    `(visible_tools, tool_search_tool_or_None)` and tool_search appeared in
+    BOTH `visible` AND as the second return — Phase 8 callers appending the
+    second one would send duplicate schemas. The new signature returns
+    `(visible_tools, deferred_tool_names)`:
 
-    **Phase 7** will populate this:
-    - When `enabled=True`, tools whose `should_defer=True` (and whose
-      `always_load=False`) are removed from the visible list.
-    - The `tool_search` tool itself is appended so the model can
-      retrieve deferred schemas on demand.
-    - Token saving target: ≥3000 tokens/turn vs Phase 6 baseline.
+    - `visible_tools`: the per-turn tools list to send to Bedrock as `tools=`.
+                      INCLUDES tool_search (always_load=True). NO duplication.
+    - `deferred_tool_names`: list of tool names that were filtered out. Phase 8
+                      query_engine emits these as a `<system-reminder>` block
+                      so the model knows what's available via tool_search.
 
-    The stub is published now so callers (Phase 8 `core/query_engine.py`)
-    can wire to it without churn when Phase 7 lands.
+    A tool is deferred IFF `should_defer=True` AND `always_load=False` AND
+    name != "tool_search".
+
+    When `enabled=False`, returns `(tools, [])` — backwards compatible with the
+    Phase-2 stub for Phases 2-6 (no deferral active).
     """
     if not enabled:
-        return list(tools), None
-    # Phase-7 implementation will go here. For now, behave as no-op even
-    # when enabled=True so callers don't accidentally break before
-    # tools/tool_search.py exists.
-    return list(tools), None
+        return list(tools), []
+
+    # Find tool_search in the input list. If absent, deferral cannot
+    # work (model has no way to load deferred tools), so return full list
+    # unchanged with a logged warning.
+    has_tool_search = any(t.name == "tool_search" for t in tools)
+    if not has_tool_search:
+        import logging
+        logging.warning(
+            "[apply_tool_search_deferral] tool_search not in input list -- "
+            "deferral disabled for this call. Ensure tools.bootstrap_built_ins() "
+            "ran before calling."
+        )
+        return list(tools), []
+
+    # Partition: visible (always-loaded + non-deferrable + tool_search itself)
+    # vs deferred names.
+    visible: List[ToolRecord] = []
+    deferred_names: List[str] = []
+    for t in tools:
+        if t.name == "tool_search":
+            visible.append(t)  # tool_search ALWAYS in visible (single source)
+            continue
+        if t.always_load:
+            visible.append(t)
+            continue
+        if t.should_defer:
+            deferred_names.append(t.name)
+            continue  # schema NOT in the per-turn prompt; name announced via system-reminder
+        visible.append(t)
+
+    return visible, deferred_names
 
 
 # ============================================================

@@ -35,6 +35,13 @@ Format: one row per Runnable pattern adopted. Never delete rows. Mark superseded
 - Each section has a hard token cap; CI gate fails on growth
 - Cognitive-load test runs in the aggregate audit before Phase 7
 
+| 014 | 2026-04-30 | 07 | src/tools/ToolSearchTool/ToolSearchTool.ts (471 LOC; query parser + searchToolsWithKeywords + buildSearchResult + parseToolName) | compact_v5/MAIN/agent/tools/tool_search.py (`_tool_search_executor` + `_select_query` + `_required_term_query` + `_keyword_query` + `_parse_tool_name` + `_format_functions_block`) | ADAPT | PASS (post-fix) | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | (pending) | Drops Runnable-specific feature gates (FORK_SUBAGENT, KAIROS, KAIROS_BRIEF, GrowthBook flags) — Anthropic-internal experiments. Drops async/Promise compute (v5 sync because tool descriptions are static module-level strings). Drops lodash-es memoize (overkill for static descriptions). constraint=Bedrock. ADR-013. |
+| 015 | 2026-04-30 | 07 | src/tools/ToolSearchTool/prompt.ts (`isDeferredTool` + `getPrompt`) | tools/tool_search.py:`is_deferred_tool` + tools/registry.py:`apply_tool_search_deferral` | ADAPT | PASS (post-fix) | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | (pending) | `isDeferredTool` simplified to `should_defer AND NOT always_load AND name != "tool_search"` (drops feature-gate branches). `getPrompt` becomes static `_DESCRIPTION` (Runnable's location-hint feature flag is N/A). Drops MCP-tool default-defer (no MCP integration in Phase 7). constraint=Bedrock. ADR-013. |
+
+**Phase 7 deferred set (initial pass)**: `view_image` + `list_dir` + `notebook_edit`. Phases 9-10 will add `task` / `todo_*` / `create_*` / `web_fetch` / `ask_user` / `skill_*` / MCP tools. **Phase 7 acceptance** (V5_PLAN.md): per-turn schema overhead drops ≥3000 tokens vs Phase 6 baseline — cumulative target lands by Phase 13 final state.
+
+**Phase 7 always-load set**: `tool_search` itself (`always_load=True`; never deferred — model needs it to load others). Other Phase 3-5 tools default to `should_defer=False` → loaded every turn.
+
 Phase 1 had no Runnable rows (pure v4 reuse — see ADR-005 / ADR-006). First Runnable adoption rows are Phase 02 above.
 
 Verdict legend:

@@ -168,5 +168,8 @@ def _register():
         is_destructive=False,
         is_concurrency_safe=True,
         requires_approval=False,    # Read-only image load
+        # Phase 7 ADR-013: deferred. Image-loading is rare; tool_search
+        # loads the schema on demand when the model needs it.
+        should_defer=True,
         search_hint="load image for visual analysis",
     ))

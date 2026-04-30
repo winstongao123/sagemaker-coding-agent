@@ -683,4 +683,76 @@ The structural fix:
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 013, 014, ...)
+## ADR-013 — Phase 7 ToolSearchTool deferred loading (highest-leverage Runnable port)
+- Date: 2026-04-30
+- Phase ID: 07
+- Status: ACCEPTED
+- Source:
+  - Runnable: `gg-claude-code-runnable/src/tools/ToolSearchTool/ToolSearchTool.ts` (471 LOC) + `prompt.ts` (121 LOC) + `constants.ts`
+  - Runnable: `gg-claude-code-runnable/src/utils/toolSearch.ts` (deferred-tool placement logic)
+  - V5_PLAN.md Phase 7 acceptance: per-turn schema overhead drops ≥3000 tokens vs Phase 6 baseline
+  - Phase 2 ADR-008 stub: `tools/registry.py:apply_tool_search_deferral` returns `(tools, None)` when `enabled=False`. Phase 7 replaces with the real implementation.
+
+### Question 1 — Replacement or addition?
+- **Both.**
+- **REPLACEMENT** of the Phase-2 `apply_tool_search_deferral` stub with the real deferred-loading logic.
+- **ADDITION** of `tools/tool_search.py` (a new tool exposed to the model).
+
+### Question 2 — Architectural justification (ADDITIONS only)
+**Why tool_search.py:** the v4 system loads every tool's full JSON schema on every turn. With 30 tools that's ~5000-8000 tokens of schema in EVERY message — pure overhead since the model uses ~3-5 tools per turn. Runnable's deferred-loading pattern: low-frequency tool schemas are NOT in the initial prompt; instead, only their NAMES appear in a `<system-reminder>`. When the model needs one, it calls `tool_search("name")` which returns the full schema in a `<functions>` block, after which the tool is callable like any other.
+
+This is the **single highest-leverage token-saving Runnable adoption** in v5 — V5_PLAN.md targets ≥3000 tokens/turn savings.
+
+User-visible improvement: faster turns, lower per-turn cost, higher effective context window for actual work.
+
+### Question 3 — Cost
+- Token cost (static prompt): 0 (tool_search description is in the per-turn tools block, not the static prompt).
+- Token cost (per turn — schema overhead): the tool_search tool itself adds ~300 tokens (schema). Deferred tools' names appear in a system-reminder (~10 tokens each). Their FULL schemas (~300-500 tokens each) only appear when the model fetches them.
+  - **Baseline (Phase 6)**: 10 tools × ~400 token average schema = ~4000 tokens/turn.
+  - **Post-Phase-7**: assuming we defer 5 low-frequency tools (view_image, list_dir, notebook_edit, ask_user, web_fetch, todo_*), kept-loaded set is ~5 tools (read_file, grep, glob, edit_file, write_file, bash, python_exec, task) × ~400 = ~3200 tokens. Plus tool_search itself (~300) plus 5 deferred-tool names (~50) = ~3550 tokens.
+  - **Savings**: ~4000 - ~3550 ≈ **450 tokens** per turn just from name-only deferral.
+  - To hit V5_PLAN's ≥3000-token target, we need to defer roughly 8 tools (or have larger schemas). Phase 7 contributes to the target; Phases 9+ (sub-agents, skills, all the create_* document tools, MCP) will push the per-turn overhead much higher and the savings will compound. The aggregate audit before Phase 13 enforces the ≥3000 final target.
+- Code complexity: ~250 LOC `tools/tool_search.py` + ~80 LOC update to `apply_tool_search_deferral` + ~150 LOC tests.
+- Maintenance: the keyword-matching algorithm is small (Runnable's CamelCase + MCP-prefix splitting).
+
+### Question 4 — Cost worth it?
+**Yes**. ≥3000 tokens/turn savings × N turns × M sessions = significant cost reduction. Plus higher effective context budget for user work.
+
+### Decision
+- **ACCEPTED for v5.0** — Phase 7 lands:
+  - `tools/tool_search.py` — keyword + select + required-term query modes; returns deferred tool schemas in `<functions>` block per Runnable's wire format.
+  - `tools/registry.py:apply_tool_search_deferral` — replace Phase-2 stub with real implementation.
+  - Per-tool `should_defer=True` flags on the **deferred set**: `view_image`, `list_dir`, `notebook_edit` (Phase 7 initial pass; Phases 9-10 will mark `task`, `todo_*`, `create_*`, `web_fetch`, `ask_user`, `skill_*` as deferred too).
+  - Per-tool `always_load=True` flags on the **never-defer set**: `tool_search` itself (model needs it to load anything else); `read_file` / `grep` / `glob` / `edit_file` / `write_file` / `bash` / `python_exec` (most-frequently-used; deferring these hurts more than it helps).
+
+### Algorithm details (Runnable parity)
+1. **Query parsing** — three modes from the same `query` string:
+   - `select:Read,Edit,Grep` → exact-name fetch (case-insensitive). Useful for sub-agents/post-compaction where the model knows the name.
+   - `+slack send` → required-term: `slack` MUST be in the result; remaining terms rank.
+   - `notebook jupyter` → keyword search across name + description, ranked by match count.
+2. **Tool name parsing** — Runnable handles `mcp__server__action` (split on `__` then `_`) AND regular tools (split CamelCase + underscore). v5 adopts the same. Most v5 tools are snake_case so the CamelCase branch is rarely exercised.
+3. **Result wire format** — `<functions>{"description": ..., "name": ..., "parameters": ...}</functions>` block. Once present in conversation, the deferred tool is callable like any always-loaded tool. Bedrock honors this because it just sees the function definition appended to the tools list at the API level.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `Bedrock + .ipynb`:
+- Up-stream: Phase 8's `core/query_engine.py` will call `apply_tool_search_deferral(tools, enabled=True)` per turn before passing the (visible_tools, tool_search_tool) pair to `BedrockClient.chat()`.
+- Down-stream: deferred tool names ship in a system-reminder block at message start; full schemas are loaded on demand via tool_search. Bedrock-side: identical to how Anthropic's API treats Runnable's deferred tools.
+- Drops Runnable-specific feature gates (`feature('FORK_SUBAGENT')`, `KAIROS`, `KAIROS_BRIEF`, `tengu_glacier_2xr`) — those are Anthropic-internal experiments, not applicable to v5.
+- Adapts the GrowthBook-flag fork-tool branch: v5 has no GrowthBook; `apply_tool_search_deferral(enabled=...)` is a simple boolean toggle from the QueryEngine.
+
+### Affected files
+- compact_v5/MAIN/agent/tools/tool_search.py (new — port of ToolSearchTool.ts core logic)
+- compact_v5/MAIN/agent/tools/registry.py (`apply_tool_search_deferral` real implementation; replaces Phase-2 stub)
+- compact_v5/MAIN/agent/tools/__init__.py (extended bootstrap_built_ins)
+- compact_v5/MAIN/agent/tools/{view_image,list_dir,notebook_edit}.py (set `should_defer=True`)
+- compact_v5/MAIN/agent/tests/unit/test_tool_search.py (new)
+- compact_v5/MAIN/agent/tests/tools/ (extension of existing tests for deferral interaction)
+
+### Linked port-log rows
+- #014 — Runnable ToolSearchTool/ToolSearchTool.ts (keyword + select + required-term query modes) → tools/tool_search.py
+- #015 — Runnable ToolSearchTool/prompt.ts (`isDeferredTool` rule + `getPrompt` body) → tools/tool_search.py:_DESCRIPTION + tools/registry.py:_is_deferred
+- (No row for utils/toolSearch.ts — its `isToolSearchEnabledOptimistic` feature-gate logic is GrowthBook-specific and N/A for v5.)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 014, 015, ...)

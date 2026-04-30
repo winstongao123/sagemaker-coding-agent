@@ -248,7 +248,26 @@
 
 ---
 
-## Phases 7-13
+## Phase 7 — ToolSearchTool deferred loading
+
+### From Runnable: ToolSearchTool.ts core algorithm (PORT_LOG #014)
+- **Source**: `gg-claude-code-runnable/src/tools/ToolSearchTool/ToolSearchTool.ts` — 471 LOC of TS implementing 3 query modes (select / +required / keyword), CamelCase + MCP-prefix name parsing, lodash memoize for description caching, async Promise-based search.
+- **Adopted (ADAPT)**: `tools/tool_search.py:_tool_search_executor` — sync Python port preserving the 3 query modes + name parsing + `<functions>` wire format. Drops async/Promise compute (v5 descriptions are static module-level strings; no async needed). Drops lodash-es memoize (overkill for static descriptions). Drops feature-gate branches (FORK_SUBAGENT / KAIROS / KAIROS_BRIEF / GrowthBook flags) — Anthropic-internal experiments.
+- **Better than Runnable**: ~250 LOC vs Runnable's 471 LOC. Same functionality, less surface area to maintain.
+- **What we preserved verbatim (algorithm-level)**:
+  - 3 query modes with the exact same parsing rules
+  - CamelCase + `mcp__server__action` name splitting for keyword matching
+  - `<functions>{"description":..., "name":..., "parameters":...}</functions>` wire format
+
+### From Runnable: prompt.ts isDeferredTool rule (PORT_LOG #015)
+- **Source**: `gg-claude-code-runnable/src/tools/ToolSearchTool/prompt.ts:isDeferredTool` (35 LOC of branching logic).
+- **Adopted (ADAPT)**: `tools/tool_search.py:is_deferred_tool` — simplified to `should_defer AND NOT always_load AND name != "tool_search"`. Drops feature-gate branches.
+- **Adopted (ADAPT)**: `tools/registry.py:apply_tool_search_deferral` — replaces Phase-2 stub with real partition logic.
+- **Better than Runnable**: clearer rule (single 1-line decision instead of 5 branches), same behavior for our use case. Phase 11 may add the MCP-tool default-defer branch when MCP tools land in v5.
+
+---
+
+## Phases 8-13
 
 (Future — entries land per phase.)
 
@@ -278,3 +297,5 @@ This section consolidates every place v5 is better than the source repo, for qui
 | **6** | **v4** | **cache-break self-diagnosis** | **`detect_cache_break` logs which section flipped + token delta. v4 cache breaks were silent — operators had to reverse-engineer cost spikes.** |
 | **6** | **Runnable** | **file-per-section** | **19 reviewable .md files vs Runnable's 914-LOC f-string. Each PR review surface is 1/19th the size; security-relevant changes touch one file.** |
 | **6** | **Runnable** | **deferred cache-break-detection scope** | **Phase 6 cache-break implementation is intentionally smaller than Runnable's full hash-tree. Per-tool hashes / global cache strategy / betas list deferred to Phase 12+ when those concerns arrive — avoids over-engineering.** |
+| **7** | **v4** | **deferred-loading exists at all** | **v4 ships every tool's schema every turn — pure overhead. v5 ports Runnable's deferred-loading. Even with 3 tools deferred (Phase 7 initial) we save ~770 tokens/turn. Phase 13 target ≥3000.** |
+| **7** | **Runnable** | **focused tool_search.py** | **~250 LOC vs Runnable's 471 LOC. Drops feature-gate branches (FORK_SUBAGENT / KAIROS / GrowthBook), async wrapping, lodash memoize. Same query-parsing algorithm, less surface.** |

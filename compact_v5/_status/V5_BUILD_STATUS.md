@@ -1,12 +1,75 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 06 DONE — PS Issue #7 STRUCTURALLY FIXED)
-Updated by: Phase 06 close pass
+Last updated: 2026-04-30 (Phase 07 DONE)
+Updated by: Phase 07 close pass
 
 ## Current phase
-- Phase ID: 06 (canonical: 00..13 or 08_5)
-- Phase name: Phase 6 — Sectioned prompt + cache (PS Issue #7 STRUCTURAL FIX)
+- Phase ID: 07 (canonical: 00..13 or 08_5)
+- Phase name: Phase 7 — ToolSearchTool deferred loading (highest-leverage Runnable port)
 - State: DONE
+
+## Done in this phase
+- [x] ADR-013 written (Phase 7 strategy + 3-mode query parser + isDeferredTool rule + Phase-8 wiring contract).
+- [x] Wrote `tools/tool_search.py` (~330 LOC; bare-name fast path + select / +required / keyword query modes + name parsing + `<functions>` wire format + Phase-8 `tool_search_discovered_names()` extraction helper).
+- [x] Replaced Phase-2 stub `apply_tool_search_deferral` with real partition logic. Codex-fix #1 changed signature to `(visible_with_tool_search, deferred_names_list)` to eliminate duplicate-tool_search bug.
+- [x] Marked `view_image`, `list_dir`, `notebook_edit` as `should_defer=True`. tool_search itself has `always_load=True` (never deferred).
+- [x] Updated `tools/__init__.py` bootstrap_built_ins to register tool_search.
+- [x] Updated 2 Phase-2 stub tests in test_registry.py + added 1 new partition test.
+- [x] Wrote 32 Phase-7 tests in test_tool_search.py.
+- [x] Codex review (gpt-5.5, reasoning=medium, via stdin): **REJECT first pass with 4 BLOCKERS**. All 4 fixed in same Phase 07 commit:
+  - Blocker #1: signature change (no duplicate tool_search). Lock tests: test_deferral_no_duplicate_tool_search + 2 in test_registry.
+  - Blocker #2: per-turn active_tools via context. Lock test: test_active_tools_context_filters_search.
+  - Blocker #3: documented Phase-7=QUERY / Phase-8=WIRING split + added `tool_search_discovered_names()` extraction helper. Lock tests (3): extraction + empty + missing-marker.
+  - Blocker #4: name + description + search_hint search. Lock tests: required-against-description + keyword-hits-description.
+- [x] Plus added bare-exact-name fast path + plan-mode interaction lock test (Runnable parity finding from Codex's PATTERN 014).
+- [x] Pre-Phase-8 audit (re-run): all 7 metrics PASS.
+- [x] PORT_LOG rows #014 + #015 added with verdicts.
+- [x] **PS_V5 docs updated**: 5 Phase-7 functional-change entries + 2 Phase-7 learnings + 2 new "Better than X" tracker rows.
+- [x] Wrote `MAIN/changelogs/CHANGELOG_v5_phase_07.md`.
+
+## Tests status
+- Last `pytest` run: 2026-04-30 — **280 passed + 4 skipped** in 5.90s.
+- Phase 7 contributes 32 new tests in test_tool_search.py + updates in test_registry.py.
+
+## Codex review status (current phase)
+- First pass: REJECT (4 blockers + PATTERN 014 DRIFTED).
+- Post-fix: ALL 4 blockers addressed with lock tests; PATTERN 014 expected to upgrade to FAITHFUL-WITH-JUSTIFIED-ADAPTATION.
+- Saved at: `_status/codex_reviews/phase-07.md`.
+
+## Token-saving measurement
+- Phase 6 baseline: ~4000 tokens/turn for tools block.
+- Phase 7 (3 deferred): ~3230 tokens/turn — **~770 tokens saved per turn**.
+- Phase 13 cumulative target: ≥3000 tokens (lands as Phases 9-10 add task / todo_* / create_* / web_fetch / ask_user / skill_* to deferred set).
+
+## Git
+- Branch: v5-build
+- Last commit: <to-be-filled-after-commit>
+- Last tag: v5-phase-07
+
+## Blockers
+- none
+
+## Next session: pick up at
+- **Phase 08 — QueryEngine + retry + errors + IterationBudget UI** (per V5_PLAN.md): read Runnable `QueryEngine.ts` (1295 LOC) + `withRetry.ts` + `services/api/errors.ts`. Land:
+  - `core/query_engine.py` — main agent loop. **MUST call `apply_tool_search_deferral(enabled=True)` and `tool_search_discovered_names()` to wire deferred tools** (Phase 7's blocker #3 contract).
+  - `core/retry.py` — withRetry adaptation.
+  - `core/errors.py` — error message generators.
+  - `core/budget.py` — IterationBudget (Hermes-style; PS Issue #2 visible-budget UI).
+- **Phase 8 acceptance**: end-to-end mock test (tool_use → tool runs → final answer) AND tool_search deferred-loading round-trip works.
+- Resume protocol: see `_status/RESUME.md`.
+
+## Pre-Phase-7 aggregate audit
+- Static prompt tokens: 2498 ≤ 2500 ✓
+- Per-section caps: all respected ✓
+- Cap sum 2880 ≤ budget 2900 ✓
+- Section names unique ✓
+- tool_classes at slot 2 (PS Issue #7 fix) ✓
+- Tool count: v5 has 10 tools, v4 has ~30 ✓
+- ADR-to-PORT_LOG ratio: 13 rows / 12 ADRs, all referenced ✓
+- Verdict: ALL PASS, Phase 7 UNBLOCKED.
+
+## Previous phase
+- Phase 06 DONE — tagged v5-phase-06 at e1a7d1a, pushed. Plus Phase 06.1 tightening (0a57152). 247 pass + 4 skips.
 
 ## Previous phase
 - Phase 05 DONE — tagged v5-phase-05 at 603cb76, pushed. 217 pass + 4 skips.

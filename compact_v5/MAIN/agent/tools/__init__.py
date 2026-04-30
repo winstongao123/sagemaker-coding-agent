@@ -55,7 +55,8 @@ from . import view_image as _view_image       # noqa: F401  defines _register()
 from . import bash as _bash                   # noqa: F401  defines _register()
 from . import python_exec as _python_exec     # noqa: F401  defines _register()
 #
-# Phase 7 will add: tool_search
+# Phase 7 — tool_search (per ADR-013; Runnable ToolSearchTool port):
+from . import tool_search as _tool_search     # noqa: F401  defines _register()
 # Phase 9 will add: task (sub-agent dispatch)
 # Phase 10 will add: skill, skill_propose_patch, todo_*, semantic_search,
 #                    create_word/excel/pdf/chart/markdown/notebook,
@@ -85,7 +86,9 @@ def bootstrap_built_ins():
     # Phase 5 — bash + python_exec
     _bash._register()
     _python_exec._register()
-    # Phase 6-13 will add their modules here as they land.
+    # Phase 7 — tool_search
+    _tool_search._register()
+    # Phase 8-13 will add their modules here as they land.
     return all_registered()
 
 

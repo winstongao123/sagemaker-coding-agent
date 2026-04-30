@@ -265,6 +265,42 @@ This is the load-bearing architectural fix that motivated v5. v4's flat 914-LOC 
 
 ---
 
-## Phases 7-13
+## Phase 7 — ToolSearchTool deferred loading
+
+The single highest-leverage token-saving Runnable adoption. v4 ships every tool's full schema on every turn — pure overhead, since the model uses ~3-5 tools per turn out of ~10-30. Phase 7 ports Runnable's deferred-loading pattern: low-frequency tool schemas are NOT in the per-turn prompt; only their names appear in a `<system-reminder>`. When the model needs one, it calls `tool_search("<query>")` which returns the full schema in a `<functions>` block.
+
+### 7.1 New `tool_search` tool with 3 query modes
+- **v4**: no equivalent. Every tool's schema ships every turn.
+- **v5**: `tools/tool_search.py` — three query modes:
+  - `select:Read,Edit,Grep` — exact-name fetch (case-insensitive).
+  - `+slack send` — required-term + ranking.
+  - `notebook jupyter` — keyword search across name + description.
+- **Behavior delta**: model can load tool schemas on demand.
+- **Runnable parity**: drops feature-gate branches (FORK_SUBAGENT / KAIROS / GrowthBook) that are Anthropic-internal. Drops async/Promise compute (v5 sync, static descriptions). Drops lodash memoize (overkill for static).
+
+### 7.2 Phase-7 deferred set (initial pass)
+- **Initial deferred** (`should_defer=True`): `view_image`, `list_dir`, `notebook_edit`.
+- Rationale: image-loading is rare; `glob "**/*"` is more common than `list_dir`; notebook editing is rare relative to file editing.
+- **Always-load** (`always_load=True`): `tool_search` itself (must be available so the model can load others).
+- **Default** (`should_defer=False`): everything else (read_file, grep, glob, write_file, edit_file, bash, python_exec) — high-frequency, deferring would hurt more than help.
+
+### 7.3 Phase-2 stub replaced with real implementation
+- **Phase 2** (ADR-008): `apply_tool_search_deferral(tools, enabled=False)` returned `(tools, None)` unchanged — the stub.
+- **Phase 7** (ADR-013): real implementation. When `enabled=True`, partitions tools into visible (always_load OR not should_defer) vs deferred (should_defer AND not always_load). Returns `(visible, tool_search_tool)`. Safety fallback: if tool_search isn't in the input list, no-op + log warning.
+- **Behavior delta**: callers (Phase 8 query_engine) flip `enabled=True` to activate the savings. Phases 2-6 used `enabled=False` (no deferral).
+
+### 7.4 Token-saving measurement
+- **Phase 6 baseline**: 10 tools × ~400 token average schema = ~4000 tokens/turn for the tools block.
+- **Phase 7 with 3 deferred**: visible 8 tools (read_file, grep, glob, edit_file, write_file, bash, python_exec, tool_search) × ~400 ≈ 3200 tokens. Plus 3 deferred-tool names (~10 each = 30 tokens). Net per-turn schema overhead: ~3230 tokens. **Saving: ~770 tokens/turn**.
+- **Phase 13 target**: ≥3000 tokens saved when Phases 9-10 add task / todo_* / create_* / web_fetch / ask_user / skill_* to the deferred set. Each adds ~300-500 tokens of avoided schema.
+- **Better than v4**: v4 has no deferred-loading mechanism. Every tool's schema ships every turn. Phase 7 fixes this fundamentally.
+
+### 7.5 `<functions>` wire format preserved
+- Runnable's wire format: each matched tool appears as one `<function>{"description":..., "name":..., "parameters":...}</function>` line inside a `<functions>` block. Bedrock and Anthropic API both treat anything inside `<functions>` as additional callable tools.
+- v5 preserves this exactly so the deferred-tool loading Just Works at the Bedrock layer — once the response contains `<functions>{...}</functions>`, the model can call the named tools as if they were always loaded.
+
+---
+
+## Phases 8-13
 
 (Future — entries land per phase.)

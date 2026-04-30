@@ -217,5 +217,8 @@ def _register():
         is_destructive=True,
         is_concurrency_safe=False,
         requires_approval=True,
+        # Phase 7 ADR-013: deferred. Notebook editing is rare relative
+        # to file editing — tool_search loads the schema on demand.
+        should_defer=True,
         search_hint="edit jupyter notebook cell",
     ))

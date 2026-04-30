@@ -336,30 +336,50 @@ def test_plan_mode_allows_mcp_tool_only_if_name_in_allowlist():
 # ============================================================
 
 def test_apply_tool_search_deferral_disabled_returns_unchanged():
-    """Phase 2 stub: when enabled=False, returns (tools, None) unchanged."""
+    """Phase 7 signature: (visible, deferred_names_list).
+    When enabled=False, returns (tools, []) unchanged."""
     _reset()
     from tools import build_tool, register, get_tools, apply_tool_search_deferral
     register(build_tool("a", "x", {"type": "object"}, _noop_execute))
     register(build_tool("b", "x", {"type": "object"}, _noop_execute, should_defer=True))
     tools = get_tools()
-    visible, search_tool = apply_tool_search_deferral(tools, enabled=False)
+    visible, deferred_names = apply_tool_search_deferral(tools, enabled=False)
     assert [t.name for t in visible] == ["a", "b"]
-    assert search_tool is None
+    assert deferred_names == []
 
 
-def test_apply_tool_search_deferral_enabled_phase_2_stub_is_safe():
-    """Phase 2 stub: even when enabled=True, the stub must not break —
-    returns (tools, None). Phase 7 will replace this with real deferred-
-    loading logic (saves ≥3000 tokens/turn vs Phase 6 baseline)."""
+def test_apply_tool_search_deferral_enabled_without_tool_search_safe():
+    """When enabled=True but the input list lacks tool_search, deferral
+    must safely no-op + log a warning (Codex Phase-07 fix)."""
     _reset()
     from tools import build_tool, register, get_tools, apply_tool_search_deferral
     register(build_tool("a", "x", {"type": "object"}, _noop_execute))
     register(build_tool("b", "x", {"type": "object"}, _noop_execute, should_defer=True))
     tools = get_tools()
-    visible, search_tool = apply_tool_search_deferral(tools, enabled=True)
-    # Phase 2 stub keeps everything visible — Phase 7 will defer `b`.
+    # No tool_search in this minimal pool → safety fallback fires
+    visible, deferred_names = apply_tool_search_deferral(tools, enabled=True)
     assert [t.name for t in visible] == ["a", "b"]
-    assert search_tool is None  # Phase 7 will return the ToolSearchTool here
+    assert deferred_names == []  # safety fallback returns empty
+
+
+def test_apply_tool_search_deferral_enabled_with_tool_search_partitions():
+    """Phase 7 real impl (Codex fix #1): with tool_search in the input,
+    deferred tools are filtered out + their names returned separately."""
+    _reset()
+    from tools import build_tool, register, get_tools, apply_tool_search_deferral
+    register(build_tool("a", "x", {"type": "object"}, _noop_execute))
+    register(build_tool("b", "x", {"type": "object"}, _noop_execute, should_defer=True))
+    register(build_tool("tool_search", "x", {"type": "object"}, _noop_execute, always_load=True))
+    tools = get_tools()
+    visible, deferred_names = apply_tool_search_deferral(tools, enabled=True)
+    visible_names = [t.name for t in visible]
+    # `b` is deferred → name in deferred_names, not in visible
+    assert "b" not in visible_names
+    assert "b" in deferred_names
+    # `a` is normal → in visible
+    assert "a" in visible_names
+    # `tool_search` always_load → in visible (exactly once, no duplication)
+    assert visible_names.count("tool_search") == 1
 
 
 # ============================================================
@@ -398,7 +418,8 @@ if __name__ == "__main__":
         ("assemble_tool_pool_sorts_alphabetically",          test_assemble_tool_pool_sorts_alphabetically_for_cache_stability),
         ("assemble_tool_pool_dedup_built_in_wins",           test_assemble_tool_pool_dedup_built_in_wins),
         ("apply_tool_search_deferral_disabled",              test_apply_tool_search_deferral_disabled_returns_unchanged),
-        ("apply_tool_search_deferral_enabled_stub",          test_apply_tool_search_deferral_enabled_phase_2_stub_is_safe),
+        ("apply_tool_search_deferral_enabled_without_tool_search", test_apply_tool_search_deferral_enabled_without_tool_search_safe),
+        ("apply_tool_search_deferral_enabled_partitions",    test_apply_tool_search_deferral_enabled_with_tool_search_partitions),
         ("tool_record_satisfies_tooldef_protocol",           test_tool_record_satisfies_tooldef_protocol),
         ("deny_rule_mcp_server_blanket",                     test_deny_rule_mcp_server_blanket_strips_all_tools_from_that_server),
         ("deny_rule_mcp_server_wildcard",                    test_deny_rule_mcp_server_wildcard_form_matches_too),

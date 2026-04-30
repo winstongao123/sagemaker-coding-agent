@@ -167,6 +167,28 @@ User reinforced: when learning Runnable, must go DEEP into architecture and inte
 - Pre-Phase-7 audit run: ALL 7 METRICS PASS. Phase 7 UNBLOCKED.
 - Tests: 247 passed + 4 skipped (unchanged — compression didn't break any test).
 
+### Phase 07 close (2026-04-30, ready to tag v5-phase-07)
+- ADR-013 appended (highest-leverage Runnable port: ToolSearchTool deferred loading).
+- tools/tool_search.py written: 3 query modes (bare-name fast path + select / +required / keyword) + `<functions>` wire format + Phase-8 `tool_search_discovered_names()` extraction helper.
+- apply_tool_search_deferral Phase-2 stub replaced with real partition logic.
+- view_image / list_dir / notebook_edit marked should_defer=True. tool_search itself always_load=True.
+- 2 PORT_LOG rows added (#014 ToolSearchTool.ts → tool_search.py; #015 prompt.ts → is_deferred_tool + apply_tool_search_deferral).
+- Codex review (gpt-5.5, reasoning=medium, via stdin): **REJECT first pass with 4 BLOCKERS**:
+  - Blocker #1: apply_tool_search_deferral returned tool_search in BOTH visible AND as separate return (would duplicate in Phase 8 calls). Fix: signature changed to `(visible_with_tool_search, deferred_names_list)` — single source of truth for tool_search; second return is `List[str]` of names for Phase-8's system-reminder block.
+  - Blocker #2: tool_search executor used all_registered() not the per-turn filtered pool. Could expose deny-listed / plan-mode-hidden tools. Fix: `_resolve_active_tools(context)` reads `context["active_tools"]`; Phase 8 query_engine MUST pass this. Fallback to all_registered() with logged warning.
+  - Blocker #3: raw `<functions>` text not a complete Runnable runtime contract; v5 had no Bedrock loading flow proven. Fix: documented Phase 7 = QUERY mechanism / Phase 8 = WIRING. Added `tool_search_discovered_names()` helper that parses a hidden v5-marker `<!-- v5_discovered:NAME1,NAME2 -->` for Phase 8 query_engine to extract.
+  - Blocker #4: +required and keyword search only checked tool name; Runnable also checks description + searchHint. Fix: `_haystack_for_tool()` builds search text from name + description + search_hint.
+- Plus added bare-exact-name fast path (Codex PATTERN 014 finding) + plan-mode-interaction lock test.
+- All 4 blockers fixed in same Phase 07 commit. 8 new lock tests added.
+- AXIS B post-fix: PATTERN 014 expected upgrade DRIFTED→FAITHFUL-WITH-JUSTIFIED-ADAPTATION; PATTERN 015 unchanged at FAITHFUL-WITH-JUSTIFIED-ADAPTATION. UNDECLARED_PATTERN PASS.
+- Pre-Phase-8 aggregate audit (re-run): ALL 7 metrics PASS.
+- Tests: 280 passed + 4 skipped (Phase 7 contributes 32 new tool_search tests + updates in test_registry).
+- Token saving measured: Phase 6 baseline ~4000 tokens/turn → Phase 7 with 3 deferred tools ~3230 tokens/turn → ~770 saved. Phase 13 cumulative target ≥3000 tokens (Phases 9-10 add task / todo_* / create_* / web_fetch / ask_user / skill_* to deferred set).
+- PS_V5 docs updated: 5 Phase-7 functional-change entries + 2 learnings + 2 new "Better than X" tracker rows.
+- Per-phase changelog: compact_v5/MAIN/changelogs/CHANGELOG_v5_phase_07.md.
+- Phase 07 OVERALL: REJECT → all blockers fixed → ready to tag v5-phase-07.
+- Next: tag v5-phase-07; begin Phase 08 (QueryEngine + retry + errors + IterationBudget UI; the Phase-8 query_engine MUST wire `apply_tool_search_deferral(enabled=True)` + `tool_search_discovered_names()` per Phase 7's blocker #3 contract).
+
 ### Phase 0 follow-ups (after first commit `5259adf`)
 - Codex CLI upgraded 0.116.0 → 0.125.0 (`npm install -g @openai/codex@latest`); gpt-5.5 reachable.
 - Codex usage memory at `C:/Users/winst/.claude/projects/d--Github/memory/reference_codex_usage.md` updated: default `gpt-5.5`, fallbacks `gpt-5.4` and `gpt-5.3-codex`.
