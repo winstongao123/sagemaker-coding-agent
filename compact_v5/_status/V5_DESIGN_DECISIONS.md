@@ -248,4 +248,114 @@ None for Phase 1.
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 007, 008, ...)
+## ADR-007 — `ToolDef` Python Protocol replaces v4's 4-tuple `TOOLS` dict
+- Date: 2026-04-30
+- Phase ID: 02
+- Status: ACCEPTED
+- Source: Runnable `src/Tool.ts` (`Tool` interface + `buildTool` defaults) + v4 `compact_v4/MAIN/agent/sagemaker_agent.py:7105` (`TOOLS = {name: (callable, requires_approval, description, schema)}`)
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT.** Replaces v4's monolithic `TOOLS = {...}` 4-tuple dict (`(callable, requires_approval, description, schema)` per entry) with a typed `ToolDef` Protocol. Each tool becomes a small object with named attributes instead of a positional 4-tuple, which silently grew confusing as fields were added.
+
+### Question 2 — Architectural justification (ADDITIONS only)
+N/A — replacement.
+
+### Question 3 — Cost
+- Token cost (static prompt): **0**. The Protocol is a runtime/type construct, not in the system prompt. The per-tool description text is unchanged from v4.
+- Token cost (per turn): **0**. Same as v4.
+- Code complexity: ~120 LOC for `tools/registry.py` (Protocol + `build_tool` + `tool_matches_name` + `find_tool_by_name` + `get_tools` + `apply_tool_search_deferral` stub). v4's TOOLS dict is ~600 LOC of 4-tuple entries embedded in the monolith; v5 splits each tool into its own file (ADR-001) so the registry itself stays tiny.
+- Maintenance: adding a new tool now requires creating one file + adding one `register()` call. Schemas/descriptions live next to their executors.
+
+### Question 4 — Cost worth it?
+N/A (replacement; the cost IS reduced complexity).
+
+### Decision
+- **ACCEPTED for v5.0** — `ToolDef` Protocol with these fields (Runnable parity columns shown):
+  - `name` (Runnable: `name`)
+  - `aliases` (Runnable: `aliases`) — backwards-compat lookup
+  - `description` (Runnable: `prompt()`) — appears in system prompt block for this tool
+  - `input_schema` (Runnable: `inputSchema`) — JSON-Schema dict (Python doesn't need Zod; v4 already uses dict-based schemas which Bedrock accepts)
+  - `search_hint` (Runnable: `searchHint`) — 3-10 word phrase for ToolSearch keyword matching (used in Phase 7)
+  - `should_defer` (Runnable: `shouldDefer`) — Phase-7 deferred-loading marker
+  - `always_load` (Runnable: `alwaysLoad`) — never-defer marker
+  - `is_read_only` (Runnable: `isReadOnly()`) — used for Plan-Mode allowlist + denial classification
+  - `is_destructive` (Runnable: `isDestructive()`) — surfaced in approval prompt
+  - `is_concurrency_safe` (Runnable: `isConcurrencySafe()`) — for parallel tool batching
+  - `requires_approval` (v4-native; Runnable splits this into `checkPermissions()`) — kept v4-style for Bedrock/SageMaker constraint where approval flow is ipywidgets-driven, not a TS permission context
+  - `enabled` (Runnable: `isEnabled()`) — feature gate
+  - `max_result_size_chars` (Runnable: `maxResultSizeChars`) — output cap; default 50_000 to match v4 `max_output_chars`
+  - `execute(args, context) -> dict` (Runnable: `call(args, context, ...)`) — the executor
+
+- Methods that Runnable exposes but v5 OMITS (with reason):
+  - All `render*` methods (`renderToolUseMessage`, `renderToolResultMessage`, etc.) → no JSX/Ink in v5; rendering happens in `ui/chat_ui.py` via ipywidgets (Phase 11). Constraint: `.ipynb`.
+  - `inputJSONSchema` (MCP-only) → folded into the single `input_schema` field; v5 has no Zod-vs-JSON-Schema split.
+  - `interruptBehavior`, `setToolJSX`, `addNotification`, `sendOSNotification` → no REPL/Ink runtime. Constraint: `.ipynb`.
+  - `getActivityDescription`, `getToolUseSummary` → ipywidgets shows simpler progress; deferred to Phase 11 if needed.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `.ipynb` (no JSX/Ink/React; rendering moved to ipywidgets in Phase 11).
+- Up-stream caller: `runtime/bedrock_client.py::chat()` accepts `tools` per-call; same as Runnable `claude.ts` consuming `getTools()`.
+- Down-stream wiring: Phase 3-5 tools ship as one file each (ADR-001) and are registered via `register(tool)` calls in `tools/__init__.py`.
+- State/cache contract: tool list is sorted by name in `assemble_tool_pool()` to match Runnable's prompt-cache stability requirement (alphabetical ordering, MCP tools as a contiguous suffix).
+
+### Affected files
+- compact_v5/MAIN/agent/tools/__init__.py
+- compact_v5/MAIN/agent/tools/registry.py
+- compact_v5/MAIN/agent/tests/unit/test_registry.py
+
+### Linked port-log rows
+- #001 (will be added in this phase): `Runnable Tool.ts → v5 ToolDef Protocol`
+
+---
+
+## ADR-008 — Tool registry: `get_tools()` + `apply_tool_search_deferral()` stub + plan-mode subset
+- Date: 2026-04-30
+- Phase ID: 02
+- Status: ACCEPTED
+- Source: Runnable `src/tools.ts` (`getAllBaseTools`, `getTools`, `filterToolsByDenyRules`, `assembleToolPool`) + v4 `PLAN_MODE_ALLOWED_TOOLS` set at `compact_v4/MAIN/agent/sagemaker_agent.py:6905`
+
+### Question 1 — Replacement or addition?
+- **REPLACEMENT.** Replaces v4's inline tool-allowlist filtering logic (which lived inside `Agent.run()` at `compact_v4/MAIN/agent/sagemaker_agent.py:8876` and again at `:9390`) with a single `get_tools(plan_mode=False, deny_rules=None)` entry point. Caller no longer reaches into a global TOOLS dict + global PLAN_MODE_ALLOWED_TOOLS set — it asks the registry.
+
+### Question 2 — Architectural justification
+N/A — replacement.
+
+### Question 3 — Cost
+- Token cost: 0.
+- Code complexity: small. `get_tools()` + `assemble_tool_pool()` + `apply_tool_search_deferral()` stub = ~80 LOC.
+
+### Question 4 — Cost worth it?
+N/A.
+
+### Decision
+- **ACCEPTED for v5.0** — registry exposes:
+  - `register(tool: ToolDef)` — Phase 3-5 tools register themselves at module import time.
+  - `get_tools(plan_mode=False, deny_rules=None) -> list[ToolDef]` — returns the active tool list for the current call. Filters: (1) `enabled` flag, (2) deny rules (Runnable `filterToolsByDenyRules` parity), (3) plan-mode read-only subset (v4 `PLAN_MODE_ALLOWED_TOOLS` parity).
+  - `assemble_tool_pool(plan_mode, deny_rules, mcp_tools=None)` — Runnable `assembleToolPool` parity; sorts built-ins alphabetically then MCP tools alphabetically (cache-stability invariant from Runnable).
+  - `apply_tool_search_deferral(tools, enabled=False) -> tuple[list[ToolDef], ToolDef | None]` — **Phase 2 STUB**: when `enabled=False`, returns `(tools, None)`; full deferred-loading logic lands in Phase 7 with `tools/tool_search.py`. Stub exists now so callers can wire to it without churn later.
+  - `tool_matches_name(tool, name) -> bool` (Runnable parity)
+  - `find_tool_by_name(tools, name) -> ToolDef | None` (Runnable parity)
+- **Plan-mode subset** is hardcoded to v4's `PLAN_MODE_ALLOWED_TOOLS` set (`{read_file, glob, grep, list_dir, semantic_search, todo_write, todo_read, view_image, skill, web_fetch, ask_user}`). When a tool with that name is registered, plan mode lets it through; otherwise it's filtered out.
+
+### Runnable-fidelity impact
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION** — constraint = `none` for the registry shape itself, BUT:
+- Runnable's `permissionContext` (a complex `DeepImmutable` of allow/deny/ask rules + plan-mode + bypass mode + MCP server-prefix rules) is REPLACED with a simpler `(plan_mode: bool, deny_rules: set[str] | None)` pair.
+- Justification: Runnable's permission context exists because the Anthropic-direct CLI has multi-source rules (user config, project config, settings, MCP server scopes). v5's Bedrock-only `.ipynb` has none of those sources — approval is a single ipywidgets prompt per call. Constraint = **`.ipynb`** (single approval source).
+- Up-stream caller: Phase 8's `core/query_engine.py` calls `get_tools(plan_mode=ctx.plan_mode)` per turn (mirrors Runnable's `claude.ts` calling `getTools(permissionContext)` per request).
+- Down-stream wiring: tools' `requires_approval` flag drives the ipywidgets approval prompt; v5 does NOT call Runnable's `checkPermissions()` (which returns a structured `PermissionResult`) because there's no permission context to check against. Instead, `requires_approval=True` triggers the user prompt directly. Documented as a v4-native ADAPT, not drift.
+- Error contract: tool execution errors propagate as raised exceptions; `core/query_engine.py` (Phase 8) maps to `tool_result` blocks. Runnable's pattern is identical.
+
+Auto-reject avoidance: constraint is **`.ipynb`** (not `none`), so this is a legitimate `FAITHFUL-WITH-JUSTIFIED-ADAPTATION` — the simpler permission-context tuple is forced by the .ipynb single-source approval flow.
+
+### Affected files
+- compact_v5/MAIN/agent/tools/registry.py (the registry implementation)
+- compact_v5/MAIN/agent/tools/__init__.py (re-exports + future tool registrations)
+- compact_v5/MAIN/agent/tests/unit/test_registry.py
+
+### Linked port-log rows
+- #001 (this phase): `Runnable Tool.ts → v5 ToolDef Protocol`
+- #002 (this phase): `Runnable tools.ts (getAllBaseTools, getTools, filterToolsByDenyRules, assembleToolPool) → v5 tools/registry.py`
+
+---
+
+## (Append future ADRs below this line — keep numerical order 009, 010, ...)

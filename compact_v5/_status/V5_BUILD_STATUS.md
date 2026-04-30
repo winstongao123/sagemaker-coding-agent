@@ -1,56 +1,59 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 01 DONE)
-Updated by: Phase 01 close pass
+Last updated: 2026-04-30 (Phase 02 DONE)
+Updated by: Phase 02 close pass
 
 ## Current phase
-- Phase ID: 01 (canonical: 00..13 or 08_5)
-- Phase name: Phase 1 — Bedrock client + Config
+- Phase ID: 02 (canonical: 00..13 or 08_5)
+- Phase name: Phase 2 — Tool Protocol + registry
 - State: DONE
 - Started: 2026-04-30
-- Target completion: 2026-04-30
+- Target completion: 2026-04-30 (achieved)
 
 ## Done in this phase so far
-- [x] Read v4 BedrockClient (`compact_v4/MAIN/agent/sagemaker_agent.py:2378-2560`) — verbatim source for the port
-- [x] Append **ADR-005**: "BedrockClient: REUSE v4 verbatim (Bedrock-native), defer Runnable cache-break detection to Phase 6"
-- [x] Append **ADR-006**: "Config + JSONC loader: REUSE v4 verbatim"
-- [x] Both ADRs are pure-v4-reuse → **no Runnable port row added** to `V5_RUNNABLE_PORT_LOG.md` (correct: Runnable's `claude.ts` is Anthropic-direct, not applicable to Bedrock; `promptCacheBreakDetection.ts` deferred to Phase 6 per ADR-005)
-- [x] Write `runtime/bedrock_client.py` (~340 LOC; verbatim port from v4 + lazy CONFIG import + injectable client param)
-- [x] Write `runtime/config.py` (~290 LOC; verbatim port from v4)
-- [x] Write `tests/unit/test_bedrock.py` (13 tests covering: Config singleton, v4 critical defaults, JSONC stripper, BedrockClient mock mode, mock response shapes, mock heuristics, **PS Issue #4 — thinking config sent on EVERY call when enabled (3-call assertion)**, thinking NOT sent when disabled, cache boundary split marker, cache disabled when CONFIG off, **cache-validation fallback strips cache + retries once + preserves thinking config (Codex finding 2)**)
-- [x] Relax `tests/test_smoke.py` Phase-0-only emptiness guard → positive Phase-01 presence check
-- [x] `pytest tests/` — 13/13 PASS
-- [x] Codex review (gpt-5.5, reasoning=medium) saved to `_status/codex_reviews/phase-01.md` → **APPROVE_WITH_FIXES**, B-axis N/A
-- [x] Address all 3 Codex findings:
-  - [x] **Major** — `BedrockClient.__init__` now accepts injectable `client=` param so unit tests no longer require boto3 to be installed
-  - [x] **Minor** — Added `test_cache_validation_error_strips_cache_and_retries_once` covering the cache-fallback retry path
-  - [x] **Minor** — This `V5_BUILD_STATUS.md` rewritten to match actual Phase 01 state and the no-Runnable-port decision
+- [x] Read Runnable `src/Tool.ts` (`Tool` interface + `buildTool` defaults) and `src/tools.ts` (`getAllBaseTools`, `getTools`, `filterToolsByDenyRules`, `assembleToolPool`, `toolMatchesName`, `findToolByName`)
+- [x] Read v4 monolithic `TOOLS` dict at `compact_v4/MAIN/agent/sagemaker_agent.py:7105` and `PLAN_MODE_ALLOWED_TOOLS` set at `:6905`
+- [x] Append **ADR-007**: `ToolDef` Python Protocol replaces v4's 4-tuple TOOLS dict (FAITHFUL-WITH-JUSTIFIED-ADAPTATION, constraint=.ipynb)
+- [x] Append **ADR-008**: Tool registry exposes `get_tools()` + `assemble_tool_pool()` + `apply_tool_search_deferral()` stub + plan-mode subset (FAITHFUL-WITH-JUSTIFIED-ADAPTATION, constraint=.ipynb)
+- [x] Add 2 PORT_LOG rows: #001 (Tool.ts → ToolDef) and #002 (tools.ts → registry.py)
+- [x] Write `compact_v5/MAIN/agent/tools/__init__.py` (re-exports)
+- [x] Write `compact_v5/MAIN/agent/tools/registry.py` (~290 LOC: ToolDef Protocol + ToolRecord + build_tool + register/unregister/all_registered + tool_matches_name + find_tool_by_name + get_tools + assemble_tool_pool + apply_tool_search_deferral stub + PLAN_MODE_ALLOWED_TOOLS frozenset)
+- [x] Write `compact_v5/MAIN/agent/tests/unit/test_registry.py` (22 tests)
+- [x] `pytest tests/` — 35/35 PASS (2 smoke + 11 bedrock + 22 registry)
+- [x] **Codex review (gpt-5.5, reasoning=medium)** — APPROVE_WITH_FIXES, all 4 findings addressed in same phase before tagging:
+  - Major: `assemble_tool_pool(plan_mode=True)` was leaving MCP tools visible — FIXED (now applies PLAN_MODE_ALLOWED_TOOLS to MCP tools too, locked by `test_plan_mode_filters_mcp_tools_too`)
+  - Major: deny-rules didn't support Runnable's MCP server-prefix form (`mcp__server` and `mcp__server__*`) — FIXED (locked by 3 new tests including no-partial-match guard)
+  - Minor: V5_BUILD_STATUS.md was stale — FIXED in this rewrite
+  - Nit: unused `field` import — FIXED
+- [x] AXIS B verdicts after fixes: PATTERN 001 FAITHFUL-WITH-JUSTIFIED-ADAPTATION; PATTERN 002 FAITHFUL-WITH-JUSTIFIED-ADAPTATION (initial verdict was DRIFTED, fixed in same commit). UNDECLARED_PATTERN check PASS.
+- [x] PORT_LOG verdicts updated from `(pending Codex)` to actual values
+- [x] `python tests/lint_phase_id.py 02` — pre-commit 4/5 (commit-subject check the only fail, expected pre-commit)
+- [x] Investigated and resolved Codex hang: long prompt (~5000 chars) exceeded Windows CMD argument limit, codex silently fell back to "Reading additional input from stdin..." and waited forever. Fix: pipe prompt via stdin instead of `"$(cat ...)"` argument.
+- [x] Write `MAIN/changelogs/CHANGELOG_v5_phase_02.md`
+- [x] git commit (subject: `v5/phase-02: tool protocol + registry + Codex fixes`)
+- [x] git tag `v5-phase-02`
 
 ## Remaining for this phase
-- [x] `MAIN/changelogs/CHANGELOG_v5_phase_01.md` written
-- [x] `python tests/lint_phase_id.py 01` — 4/5 pre-commit (commit-subject check is the only fail, expected pre-commit; will pass post-commit)
-- [x] git commit (subject: `v5/phase-01: port v4 BedrockClient + Config to runtime/`)
-- [x] git tag `v5-phase-01`
-- [x] Update this file: State=DONE, "Next session: pick up at" → Phase 02
+- [ ] (none — Phase 02 done)
 
 ## Tests status
-- Last `pytest` run: 2026-04-30 — **PASS — 13/13** (`tests/test_smoke.py` 2/2 + `tests/unit/test_bedrock.py` 11/11 including the 2 new Codex-finding tests)
-- Failing tests (if any): none
+- Last `pytest` run: 2026-04-30 — **PASS — 35/35** (`tests/test_smoke.py` 2/2 + `tests/unit/test_bedrock.py` 11/11 + `tests/unit/test_registry.py` 22/22)
+- Failing tests: none
 
 ## Codex review status (current phase)
 - Last review: 2026-04-30 (gpt-5.5, reasoning=medium) — **APPROVE_WITH_FIXES**
-- Findings: 1 major + 2 minor — all addressed (see "Done in this phase so far" above)
+- Findings: 2 major + 1 minor + 1 nit — all addressed
 - Open review comments: 0
-- Saved at: `_status/codex_reviews/phase-01.md`
+- Saved at: `_status/codex_reviews/phase-02.md`
 
 ## Git
 - Branch: v5-build
-- Last commit: f0c2c3c "v5/phase-01: port v4 BedrockClient + Config to runtime/ + Codex fixes"
-- Last tag: v5-phase-01
+- Last commit: <to-be-filled-after-commit> "v5/phase-02: tool protocol + registry + Codex fixes"
+- Last tag: v5-phase-02
 
 ## Blockers
 - none
 
 ## Next session: pick up at
-- **Start Phase 02 — Tool Protocol + registry.** Read Runnable `tools.ts` + `Tool.ts` BEFORE writing code. Port to `compact_v5/MAIN/agent/tools/registry.py` (replaces v4's monolithic `TOOLS = {}` dict at `compact_v4/MAIN/agent/sagemaker_agent.py:7105`). Include the deferred-tool-search hook `apply_tool_search_deferral()` as a stub (full deferred loading lands in Phase 7). Append ADR-007 + ADR-008 documenting the Tool Protocol shape and the registry pattern. Add `tests/unit/test_registry.py` covering: registry lists tools without loading schemas, deferred tools annotated, plan-mode subset filter, feature gates.
+- **Start Phase 03 — Core read-only tools.** Read Runnable `src/tools/FileReadTool/` + `GrepTool/` + `GlobTool/` + (no v5 list_dir analog in Runnable; reuse v4 directly). Per ADR-001 (file-per-tool layout) write each tool as its own module: `tools/read_file.py`, `tools/grep.py`, `tools/glob.py`, `tools/list_dir.py`. Each calls `register(build_tool(...))` at import time. Update `tools/__init__.py` to import the new modules. Add `tests/tools/test_*.py` per tool. **AGGREGATE AUDIT GATE BEFORE PHASE 4** — run audit checks (token budget, ADR-to-port-log ratio, cognitive load) before starting Phase 4.
 - Resume protocol: see `_status/RESUME.md`.
