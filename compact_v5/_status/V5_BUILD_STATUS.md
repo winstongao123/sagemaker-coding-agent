@@ -1,12 +1,19 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 11 DONE — Codex APPROVE_WITH_FIXES, all 5 issues fixed; PS Issues #2 and #4 BOTH RESOLVED)
-Updated by: Phase 11 close
+Last updated: 2026-04-30 (Phase 12 DONE — parity 15/15 critical + 10/10 non-critical; Phase 13 UNBLOCKED)
+Updated by: Phase 12 close
 
 ## Current phase
-- Phase ID: 11 (canonical: 00..13 or 08_5)
-- Phase name: Phase 11 — Notebook UX + entry + thinking/budget UI (PS Issue #4)
-- State: DONE — pending tag v5-phase-11
+- Phase ID: 12 (canonical: 00..13 or 08_5)
+- Phase name: Phase 12 — Parity tests vs v4 (audit gate before Phase 13)
+- State: DONE — pending tag v5-phase-12
+
+## Phase 12 summary
+- 25 new tests across 2 files: `tests/parity/test_parity_critical.py` (15 scenarios, must-pass 100%) + `tests/parity/test_parity_non_critical.py` (10 scenarios, ≥9/10).
+- **Result: 15/15 critical PASS + 10/10 non-critical PASS (100% on both gates)**.
+- Documented v4-vs-v5 divergences (all intentional improvements) in PORT_LOG #035 appendix.
+- 437 pass + 4 skip (was 412+4 in Phase 11 → +25 net new).
+- Phase 12 ships ZERO new production code; gate semantics only.
 
 ## Phase 11 summary
 - 7 new files: agent/__init__.py (Agent class) + entry.py + ui/chat_ui.py + ui/widgets.py + chat.ipynb + chat.md + tests/integration/test_notebook_smoke.py.
@@ -128,8 +135,7 @@ Updated by: Phase 11 close
 - none
 
 ## Next session: pick up at
-- **Phase 12 — Parity tests vs v4** (audit gate before Phase 13): run fixed scenarios against v4 and v5; critical scenario suite 100%, non-critical ≥90%, differences logged in PORT_LOG.
-- After Phase 12: Phase 13 — Cutover + ship zip + tag v5.0.0.
+- **Phase 13 — Cutover + ship zip + tag v5.0.0** (FINAL phase): build `compact_v5.zip` (flat ship surface), update README, run final smoke test, tag `v5.0.0`. v5 ships ONLY if all gates met (they are: phases 00-12 all DONE, parity 15/15+10/10, audit 7/7).
 - Resume protocol: see `_status/RESUME.md`.
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):

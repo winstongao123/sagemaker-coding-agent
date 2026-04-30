@@ -74,6 +74,20 @@ Format: one row per Runnable pattern adopted. Never delete rows. Mark superseded
 - `test_hello_world_turn_via_console_ui` — the gate test.
 - 14 supporting tests covering entry imports, Agent surface, create_chat_ui factory (eager + lazy paths), IterationBudgetWidget consumption tracking, ThinkingBudgetWidget state, and chat.ipynb / chat.md presence.
 
+| 035 | 2026-04-30 | 12 | (V5_PLAN.md §Phase 12 + risk register #8) | compact_v5/MAIN/agent/tests/parity/test_parity_critical.py + test_parity_non_critical.py | ADD | PASS | n/a | (pending) | Parity verification surface. 15 critical scenarios (must-pass 100%) + 10 non-critical (≥9/10 must pass). Encodes "this is what v4 does" as assertion targets without running v4. Includes acceptance gates for: security deny, plan-mode dispatch, retry policy, error classifier, prompt invariants (slot-2 + budget + boundary), Phase 7 wiring, sub-agent budget sharing, skill auto-trigger default-OFF, 10 production skills load, context-overflow, tool exception trap, PS Issues #2/#4 widget visibility. Result: **15/15 critical PASS**, **10/10 non-critical PASS** — exceeds the 90% gate. ADR-018. |
+
+**Phase 12 acceptance** (V5_PLAN.md): "critical scenario suite 100%; non-critical ≥90%; differences logged in PORT_LOG." All gates met:
+- Critical: 15/15 PASS (100%).
+- Non-critical: 10/10 PASS (100%, exceeds 90% gate).
+- Documented divergences from v4: per-tool `max_result_size_chars` cap (vs v4's global cap) — see `test_noncritical_01_tool_result_truncation_respects_per_tool_cap`. This is an INTENTIONAL improvement, not a regression.
+
+**Phase 12 parity differences appendix** (kept here for ship-gate audit):
+- v5 uses per-tool `max_result_size_chars` cap (50_000 default) vs v4's single global cap. Each tool's truncation behavior matches its declared cap.
+- v5's plan-mode dispatch uses strict `PLAN_MODE_ALLOWED_TOOLS` allowlist; v4 used `is_read_only` heuristic. Codex Phase-08 finding (v5 strict is correct).
+- v5's skill `propose_patch` uses UUID-suffixed timestamp; v4 used second-only. v5 prevents collisions.
+- v5's `discover_relevant` accepts an `active_tools` parameter for Hermes filter; v4 had no equivalent.
+- v5's `IterationBudget` and `thinking_budget` are visible via widgets; v4 had no UI surface for either.
+
 **Phase 10 acceptance** (V5_PLAN.md): "all 10 skills load; auto-trigger respects v4.9.6 default-OFF." Both validated:
 - `test_all_10_v4_production_skills_load` — alias-aware (clara-review→clara, code-review→review).
 - `test_auto_trigger_default_off_returns_empty` + `test_auto_trigger_off_per_skill_default_off` — both gate-tests.

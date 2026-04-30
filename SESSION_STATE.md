@@ -1,5 +1,11 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 12 DONE (Parity tests vs v4 — 15/15 critical + 10/10 non-critical PASS)
+
+Phase 12 closed: 2 new test files (`tests/parity/test_parity_critical.py`, 15 scenarios; `tests/parity/test_parity_non_critical.py`, 10 scenarios). **Critical: 15/15 PASS (100%). Non-critical: 10/10 PASS (exceeds 90% gate).** v4-vs-v5 divergences (all intentional Codex-driven improvements) documented in PORT_LOG #035 appendix. Phase 13 UNBLOCKED. 437 pass + 4 skip. About to tag `v5-phase-12`.
+
+Next: Phase 13 — Cutover + ship zip + tag v5.0.0 (FINAL phase).
+
 ## 2026-04-30 — Phase 11 DONE (Notebook UX, PS Issues #2 + #4 RESOLVED)
 
 Phase 11 closed: 7 new files (`agent/__init__.py`, `entry.py`, `ui/chat_ui.py`, `ui/widgets.py`, `chat.ipynb`, `chat.md`, `tests/integration/test_notebook_smoke.py`) + ui/__init__.py modified. **PS Issue #2 (visible IterationBudget)** RESOLVED via `IterationBudgetWidget` (ipywidgets.IntProgress + color cue + HTML fallback, shared across parent + sub-agents). **PS Issue #4 (visible thinking budget)** RESOLVED via `ThinkingBudgetWidget` (Checkbox + IntSlider with live observers). Codex APPROVE_WITH_FIXES first pass (1 HIGH lazy-factory CONFIG threading + 3 MEDIUM + 1 LOW); all 5 fixed in same commit with 5 lock tests. 412 pass + 4 skip. About to tag `v5-phase-11`.

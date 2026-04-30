@@ -1029,4 +1029,49 @@ After Phase 11 lands:
 
 ---
 
-## (Append future ADRs below this line — keep numerical order 018, 019, ...)
+## ADR-018 — Phase 12: Parity tests vs v4 (audit gate before Phase 13)
+
+- Date: 2026-04-30
+- Phase ID: 12
+- Status: ACCEPTED
+- Source: V5_PLAN.md §Phase 12 + risk register #8 (critical-scenario must-pass suite)
+
+### Question 1 — Replacement or addition?
+- **ADDITION** of two parity test files plus an in-PORT_LOG appendix tracking documented v4-vs-v5 differences.
+
+### Question 2 — Architectural justification
+- V5_PLAN.md success metric #1: "Functional parity with v4.10.10 (same skills work, same security holds, same notebook UX)." Phase 12 is the verification gate.
+- Risk #8 (parity blind spots): "Add must-pass critical-scenario suite (security deny, blocked-tool continuation, retry, prompt assembly, resume after compaction) requiring 100% pass; the ≥90% threshold applies only to non-critical scenarios."
+- Phase 8.5 thin-slice already covers cross-phase integration; Phase 12 expands to specific v4 behavioral parity.
+
+### Question 3 — Cost
+- Token cost (static prompt): +0.
+- Code complexity: ~600 LOC of test fixtures.
+- Maintenance: parity suite is the verification spec — changes when v4 behavior changes (which is never; v4 is frozen).
+
+### Question 4 — Cost worth it?
+YES. Without Phase 12, ship-gate is unverifiable. v5 ships only if both critical (100%) AND non-critical (≥90%) parity gates pass.
+
+### Decision
+- **ACCEPTED** for v5.0.
+- Phase 12 ships:
+  - `tests/parity/test_parity_critical.py` — 15 critical scenarios (must all pass). Covers: security deny, plan-mode dispatch gate, retry policy semantics, prompt assembly invariants (slot-2 + budget + boundary), resume-after-compaction equivalence (Phase 11 clear+rerun), Phase 7 wiring contract end-to-end, sub-agent budget sharing end-to-end, skill auto-trigger default-OFF, 10 production skills load, PS Issue #2/#4 widget visibility, context-overflow clean exit, tool exception trap, deferred-loading payload exclusion, BedrockClient cache-fallback semantics, mock-mode response shape parity.
+  - `tests/parity/test_parity_non_critical.py` — 10 non-critical scenarios (≥9/10 must pass). Covers: tool result truncation length, error message exact wording, skill CSO format advisory, audit log line format, widget HTML exact markup, depth-exceeded message wording, plan-mode error message wording, tool-search wire format details, frontmatter parser edge cases, env-details line count.
+- Phase 12 does NOT actually run v4 — v4 is frozen at sha9bf0...e1c2 (compact_v4/). Fixtures encode "this is what v4 does for this input" and assert v5 matches. Differences are documented in PORT_LOG row #035 (parity appendix).
+
+### Budget reservation
+- Static prompt: +0.
+- Per-turn: +0.
+
+### Reconciliation
+After Phase 12 lands:
+- 15/15 critical scenarios pass.
+- ≥9/10 non-critical scenarios pass (allowed slip: 1).
+- Any non-critical FAIL is documented in PORT_LOG #035 (parity differences appendix) with rationale.
+
+### Linked port-log rows
+- #035 — V5_PLAN.md §Phase 12 → tests/parity/test_parity_critical.py + test_parity_non_critical.py + PORT_LOG parity appendix (ADD — parity verification surface)
+
+---
+
+## (Append future ADRs below this line — keep numerical order 019, 020, ...)
