@@ -102,8 +102,8 @@ Updated by: Phase 09 close
 
 ## Git
 - Branch: v5-build
-- Last commit: f5c8a679db2f (v5/phase-08: QueryEngine + retry + errors + IterationBudget — Codex APPROVE)
-- Last tag: v5-phase-08
+- Last commit: 572e07dd93dc (v5/phase-09: sub-agent + Task tool with shared IterationBudget — Codex APPROVE post-fix)
+- Last tag: v5-phase-09
 - Pushed to sageagent: 2026-04-30
 
 ## Blockers
