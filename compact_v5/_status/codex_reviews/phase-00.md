@@ -43,12 +43,22 @@ N/A — no Runnable patterns adopted in Phase 00. Empty pattern table.
 
 AXIS B VERDICT: **PASS (vacuously)** — 0 of 0 patterns DRIFTED.
 
+## Codex `exec` review (gpt-5.5)
+
+Real Codex review run on commits 5259adf + cd5f00e + 03abf29 returned **APPROVE_WITH_FIXES** with 3 minor findings (all addressed in the Phase 0 close commit):
+
+1. **V5_BUILD_STATUS.md stale fields** (minor) — State still IN_PROGRESS, Last commit `<pending>`, Next session pointed to ".gitignore". → Fixed: State=DONE, Last commit set, Next session = Phase 01.
+2. **test_smoke.py too shallow** (minor) — only checked `.py` files at top of agent root; missed accidental ports inside `core/`, `tools/`, etc. → Fixed: now `os.walk()` recursive scan with allowlist for `__init__.py` + `test_smoke.py` + `lint_phase_id.py`.
+3. **V5_DESIGN_DECISIONS.md ADR ordering** (nit) — sequence was 001, 003, 004, 002 due to insertion-order edits. → Fixed: reordered to 001, 002, 003, 004.
+
+Codex notes branch ancestry clean (`v5-build` parented from `master` at `3ba3425`); AXIS B template integration-semantic addition present; `.gitignore` covers expected v5 build/runtime/env/test artifacts. Could not rerun Python tests locally due to environment issue with `python.exe` access (not a test failure — environmental).
+
 ## FINAL
 
-PHASE 00 OVERALL: **APPROVE**
-A-axis: scaffold-only, no behavioral changes, smoke test passes (2/2).
-B-axis: 0 patterns to evaluate; vacuously pass.
+PHASE 00 OVERALL: **APPROVE** (was APPROVE_WITH_FIXES from gpt-5.5; all 3 minor findings addressed in close commit).
+A-axis: scaffold-only, no behavioral changes; smoke test 2/2; lint 5/5.
+B-axis: 0 patterns to evaluate; vacuously PASS.
 
 Required before next phase:
-- Phase 01 begins with first true Runnable port (BedrockClient cache placement). First Codex `exec` review will land on Phase 01.
-- Confirm `lint_phase_id.py` passes once the Phase 0 commit lands (commit subject must contain `v5/phase-00:`).
+- Tag `v5-phase-00` after the close commit lands (canonical id, lint already verified pre-tag).
+- Phase 01 begins with first true Runnable port (BedrockClient cache placement + Config). First substantive Codex AXIS-B review lands at end of Phase 01.

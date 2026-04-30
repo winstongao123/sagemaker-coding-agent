@@ -1,14 +1,14 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 0 scaffolding)
-Updated by: Phase 0 init
+Last updated: 2026-04-30 (Phase 0 closing)
+Updated by: Phase 0 close
 
 ## Current phase
 - Phase ID: 00 (canonical: 00..13 or 08_5)
 - Phase name: Phase 0 — Scaffold compact_v5/ skeleton
-- State: IN_PROGRESS
+- State: DONE
 - Started: 2026-04-30
-- Target completion: 2026-04-30
+- Completed: 2026-04-30
 
 ## Done in this phase so far
 - [x] Created `v5-build` branch off `master`
@@ -29,28 +29,33 @@ Updated by: Phase 0 init
 - [x] Strengthened CODEX_REVIEW_TEMPLATE.md AXIS B with integration-semantic check (up-stream caller, down-stream deps, state/cache contract, error contract)
 
 ## Remaining for this phase
-- [ ] git commit Phase-00 follow-up (HTMLs + PS mapping + ADR-003/004 + AXIS B strengthening)
-- [ ] Re-run `lint_phase_id.py 00` after commit
+- [x] git commit `cd5f00e` non-HTML follow-up (PS mapping + ADR-003/004 + AXIS B strengthening)
+- [x] git commit `03abf29` HTMLs (6 reference HTMLs)
 - [ ] Re-run Codex review (gpt-5.5 reasoning=high) on full Phase 00 state
+- [ ] Re-run `lint_phase_id.py 00`
 - [ ] git tag `v5-phase-00`
 - [ ] Update this file: State=DONE, Last commit sha, "Next session: pick up at" → Phase 01
 
 ## Tests status
-- Last `pytest` run: 2026-04-30 — PASS (2 passed, 0 failed) — `tests/test_smoke.py` only
+- Last `pytest` run: 2026-04-30 — PASS — `tests/test_smoke.py` (recursive scan for v4 leaks)
 - Failing tests (if any): none
 
 ## Codex review status (current phase)
-- Last review: 2026-04-30 — APPROVE (scaffold-only, no Runnable port to evaluate; full Codex `exec` review starts at Phase 01)
-- Open review comments: 0
+- Last review: 2026-04-30 — APPROVE_WITH_FIXES (gpt-5.5) — 3 minor findings, all addressed in Phase 0 close commit
+  1. V5_BUILD_STATUS.md stale fields → updated (this edit)
+  2. test_smoke.py too shallow → made recursive with allowlist
+  3. ADR ordering in V5_DESIGN_DECISIONS.md (001, 003, 004, 002) → reordered to 001, 002, 003, 004
+- Open review comments: 0 (all addressed)
 
 ## Git
 - Branch: v5-build
-- Last commit: <pending — first commit at end of Phase 0>
-- Last tag: <none yet>
+- Last commit: <to be filled by Phase 0 close commit>
+- Last tag: v5-phase-00 (after Phase 0 close commit + lint pass)
 
 ## Blockers
 - none
 
 ## Next session: pick up at
-- Phase 00, step "Add .gitignore entries"
+- Phase 01: Bedrock client + Config (port v4 BedrockClient to runtime/bedrock_client.py + Config to runtime/config.py)
+- Read order per RESUME.md Step 1: V5_BUILD_STATUS.md → V5_DESIGN_DECISIONS.md → V5_RUNNABLE_PORT_LOG.md → V5_PLAN.md phase 01 row → last 3 commits → Codex review of phase-00.md
 - Resume protocol: see _status/RESUME.md

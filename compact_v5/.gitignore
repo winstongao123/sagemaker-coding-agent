@@ -34,3 +34,10 @@ MAIN/agent/.exec_budget.json
 .ruff_cache/
 htmlcov/
 .coverage
+
+# Negate parent .gitignore's `test_*.py` rule for v5 (parent excludes test files;
+# v5 needs them committed for regression coverage). Parent .gitignore line 41
+# silently dropped compact_v5/MAIN/agent/tests/test_smoke.py from the initial
+# Phase 0 commit; this `!` re-includes them.
+!MAIN/agent/tests/test_*.py
+!MAIN/agent/tests/**/test_*.py
