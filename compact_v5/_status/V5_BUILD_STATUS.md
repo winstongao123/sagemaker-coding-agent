@@ -46,7 +46,7 @@ Updated by: Phase 05 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit> "v5/phase-05: security verbatim port + bash + python_exec + Codex fixes"
+- Last commit: 603cb76a792d296b7395cd07f808595d8402c8d7 "v5/phase-05: security verbatim port + bash + python_exec + Codex fixes"
 - Last tag: v5-phase-05
 
 ## Blockers
