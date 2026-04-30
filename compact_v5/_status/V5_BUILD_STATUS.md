@@ -57,7 +57,7 @@ Updated by: Phase 03 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit> "v5/phase-03: read-only tools + Codex fixes + PS_V5 docs framework"
+- Last commit: 3507215 "v5/phase-03: read-only tools + Codex fixes + PS_V5 docs framework"
 - Last tag: v5-phase-03
 
 ## Blockers
