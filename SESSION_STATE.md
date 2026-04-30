@@ -1,10 +1,14 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-04-30 — Phase 08.5 DONE (Thin-slice parity gate, 10/10 scenarios pass)
+
+Phase 08.5 thin-slice gate PASSED. 10 cross-phase integration scenarios in `tests/parity/test_thin_slice.py` covering Phase 1 BedrockClient, Phase 2 registry, Phase 3 read_file, Phase 5 bash+python_exec security, Phase 6 prompt budget + cache boundary, Phase 7 deferral round-trip, Phase 8 QueryEngine end-to-end, and Phase 7↔8 wiring contract. 329 pass + 4 skip total. Phase 9 unblocked. About to tag `v5-phase-08_5`.
+
 ## 2026-04-30 — Phase 08 DONE (QueryEngine + retry + errors + IterationBudget)
 
-Phase 08 closed: 4 new core/ modules (`budget.py`, `errors.py`, `retry.py`, `query_engine.py`); `runtime/bedrock_client.py` re-imports core/errors + core/retry instead of inlining. 39 new tests (319 pass + 4 skip). Codex review APPROVE_WITH_FIXES first pass; both substantive findings (`_discovered_tool_names` cross-run leak + plan-mode `always_load=True` bypass) fixed in same commit with lock tests. Phase 7 wiring contract live end-to-end. PORT_LOG #016-#019 added. PS_V5 docs + changelog updated. ADR-014 written. About to tag `v5-phase-08`.
+Phase 08 closed: 4 new core/ modules (`budget.py`, `errors.py`, `retry.py`, `query_engine.py`); `runtime/bedrock_client.py` re-imports core/errors + core/retry instead of inlining. 39 new tests (319 pass + 4 skip). Codex review APPROVE_WITH_FIXES first pass; both substantive findings (`_discovered_tool_names` cross-run leak + plan-mode `always_load=True` bypass) fixed in same commit with lock tests. Phase 7 wiring contract live end-to-end. PORT_LOG #016-#019 added. PS_V5 docs + changelog updated. ADR-014 written. Tagged v5-phase-08 at f5c8a67.
 
-Next: Phase 08.5 — thin-slice parity gate (10 critical v4-vs-v5 scenarios; HARD blocks Phase 9).
+Next: Phase 09 — sub-agent + Task tool (forkSubagent budget sharing).
 
 ---
 

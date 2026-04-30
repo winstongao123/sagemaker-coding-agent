@@ -1,12 +1,19 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (Phase 08 done — Codex APPROVE_WITH_FIXES, all 4 findings fixed)
-Updated by: Phase 08 close
+Last updated: 2026-04-30 (Phase 08.5 thin-slice gate PASSED — 10/10 scenarios)
+Updated by: Phase 08.5 close
 
 ## Current phase
-- Phase ID: 08 (canonical: 00..13 or 08_5)
-- Phase name: Phase 8 — QueryEngine + retry + errors + IterationBudget
-- State: DONE — pending tag v5-phase-08
+- Phase ID: 08_5 (canonical: 00..13 or 08_5)
+- Phase name: Phase 8.5 — Thin-slice parity gate (HARD BLOCKER)
+- State: DONE — 10/10 scenarios pass, ready for tag v5-phase-08_5
+
+## Phase 08.5 thin-slice gate (HARD BLOCKER before Phase 9)
+- 10 critical cross-phase integration scenarios in `tests/parity/test_thin_slice.py`.
+- 10/10 PASS — Phase 9 unblocked.
+- Scenarios span: Phase 1 BedrockClient, Phase 2 registry, Phase 3 read_file dispatch, Phase 5 bash + python_exec security, Phase 6 prompt budget + cache boundary, Phase 7 deferral round-trip, Phase 8 QueryEngine end-to-end, Phase 8 wiring contract.
+- 329 pass + 4 skip total.
+- Codex review: NOT_RUN (Phase 8.5 is mechanical / scenario-driven; Codex review for cross-phase architectural drift was already done at Phase 8).
 
 ## Codex review status (current phase)
 - First pass: APPROVE_WITH_FIXES (2 substantive + 2 test gaps).
@@ -95,8 +102,8 @@ Updated by: Phase 08 close
 - none
 
 ## Next session: pick up at
-- **Phase 08.5 — Thin-slice parity gate** (HARD GATE before Phase 9): land `tests/parity/test_thin_slice.py` running 10 critical v4-vs-v5 scenarios (tool block recovery, security deny, retry, prompt assembly, resume after compaction, Phase 7 round-trip, etc.). 10/10 must pass — blocks Phase 9 from starting.
-- After Phase 08.5: Phase 09 (sub-agent + Task tool — forkSubagent budget sharing).
+- **Phase 09 — Sub-agent + Task tool**: port Runnable `tools/AgentTool/` + `forkSubagent.ts` (budget-sharing). Reuse v4's `_build_subagent_handoff_block` + `_build_subagent_env_details` verbatim. Land `subagent/spawn.py` + `subagent/handoff.py` + `subagent/env.py` + `tools/task.py`. Acceptance: parent context unchanged, child shares IterationBudget.
+- Resume protocol: see `_status/RESUME.md`.
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):
 - **Phase 08 — QueryEngine + retry + errors + IterationBudget UI** (per V5_PLAN.md): read Runnable `QueryEngine.ts` (1295 LOC) + `withRetry.ts` + `services/api/errors.ts`. Land:
