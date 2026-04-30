@@ -1,12 +1,27 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (**Phase 13 DONE — v5.0.0 SHIPPED**; all 14 phases closed)
-Updated by: Phase 13 close
+Last updated: 2026-04-30 (**v5.0.0 build candidate; user verdict: SHIP BLOCKED — operation failed**)
+Updated by: post-Phase-13 critique
 
 ## Current phase
-- Phase ID: 13 (canonical: 00..13 or 08_5)
-- Phase name: Phase 13 — Cutover + ship zip + tag v5.0.0 (FINAL)
-- State: DONE — pending tag v5-phase-13 + v5.0.0
+- Phase ID: 13 (build mechanically closed)
+- Phase name: Phase 13 — Cutover + ship zip + tag v5.0.0
+- State: **BUILD CANDIDATE — SHIP BLOCKED**
+- See: `_status/V5_SHIP_CRITIQUE.md` for the failure analysis and v5.0.1 patch agenda.
+
+## Why ship is blocked
+
+User verdict (2026-04-30):
+> *"Clearly this operation failed. Because all questions unsatisfactory."*
+> *"It proves that Claude code is incapable of coding. Because it 1) deferred the requests, without remission 2) not meeting initial goal and design."*
+
+The four user-verification questions exposed:
+- Q1 (complete observation + references): PARTIAL — v5 deferred Compactor, TokenTracker, exec-limit enforcement, memory extraction, save/load slash commands, full chat UI without permission.
+- Q2 (no PS Issues recur): NO — PS #3, #5, #6 regressed in v5 (no compaction, no cost tracking, no save/load persistence).
+- Q3 (better than v4 + Runnable): MIXED — better on architecture, worse on feature coverage. New v5 bug: skill name vs directory mismatch (`/skill activate clara` fails).
+- Q4 (no semantic bugs): NO — zero real-Bedrock turns; concurrency unenforced; verify_ship_zip only checks file presence.
+
+Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT MET. The "minimal MVP" framing in per-phase OUT-OF-SCOPE lists was unilateral scope narrowing, not user-approved deferral.
 
 ## Phase 13 summary
 - compact_v5.zip built: 95 files / 248.2 KB compressed / 38% ratio.

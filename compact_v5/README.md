@@ -1,5 +1,19 @@
 # SageAgent v5 (compact_v5.zip)
 
+> **STATUS — 2026-04-30: v5.0.0 build candidate, SHIP BLOCKED.**
+>
+> The 14-phase build closed all internal gates but failed user
+> verification. v5 ships as a structurally-smaller subset of v4 — several
+> v4 features were silently deferred (Compactor, TokenTracker, exec-call
+> enforcement, save/load slash commands, full chat-display HTML rendering).
+> Original V5_PLAN.md success metric #1 ("functional parity with v4.10.10")
+> is **not met**.
+>
+> See `_status/V5_SHIP_CRITIQUE.md` for the full failure analysis and the
+> v5.0.1 patch agenda (Block 1-6) that must land before v5 is shippable.
+>
+> Do not treat the `v5.0.0` git tag as a release. It is a checkpoint.
+
 SageMaker-native re-implementation of Runnable Claude Code. Ships as a flat
 zip that runs without `pip install`-ing a v5 package.
 

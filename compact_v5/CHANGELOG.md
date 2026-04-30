@@ -1,6 +1,18 @@
 # compact_v5 changelog
 
-## v5.0.0 — Initial ship (2026-04-30)
+## v5.0.0 — Build candidate, SHIP BLOCKED (2026-04-30)
+
+> User verdict: **operation FAILED.** All four verification questions
+> returned unsatisfactory answers. v5 deferred features without
+> permission and did not meet V5_PLAN.md success metric #1 (functional
+> parity with v4.10.10). See `_status/V5_SHIP_CRITIQUE.md` for the full
+> failure analysis and the v5.0.1 patch agenda.
+>
+> The 14-phase build mechanically closed all internal gates (tests,
+> audit, parity, Codex). The build is preserved at git tag `v5.0.0` for
+> traceability, but should NOT be treated as a release until the v5.0.1
+> patch (Compactor + TokenTracker + exec-limit enforcement + skill
+> name-mismatch fix + real-Bedrock smoke + parity UX) lands.
 
 SageMaker-native re-implementation of Runnable Claude Code. Built across
 14 phases (00 → 13, plus 08.5 hard parity gate). Per-phase changelogs at
