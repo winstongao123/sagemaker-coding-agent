@@ -48,7 +48,7 @@ Updated by: Phase 02 close pass
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-filled-after-commit> "v5/phase-02: tool protocol + registry + Codex fixes"
+- Last commit: 6c7468f "v5/phase-02: tool protocol + registry + Codex fixes"
 - Last tag: v5-phase-02
 
 ## Blockers
