@@ -95,6 +95,9 @@ quality-reports/
 *_compact_v4.zip
 *compact_v4.zip
 
+# Archived old ship zips (binary, large, regeneratable from v4 history)
+_archive/old_ship_zips/
+
 # npm lockfiles (not a Node project)
 package-lock.json
 package.json

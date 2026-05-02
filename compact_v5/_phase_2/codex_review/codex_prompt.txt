@@ -1,0 +1,63 @@
+You are reviewing the v5.0.1 corrective patch plan for sagemaker-coding-agent.
+
+CONTEXT
+- The v5.0.0 build (14 phases) shipped as a feature-narrowed subset of v4.10.10. User verdict: operation FAILED. All four user-verification questions returned unsatisfactory.
+- Phase 2 ran 20 investigation agents (9 high-level + 11 line-by-line) to map every gap.
+- This is the SYNTHESIS plan that drives v5.0.1 — must be approved before any coding begins.
+
+USER HARD CONSTRAINTS (non-negotiable):
+1. v4.10.10 is BASELINE — functional capability is the floor.
+2. v4 chat.ipynb is CANONICAL UI — must run UNCHANGED in v5.
+3. Cover ALL of v4 + Runnable + Hermes + Learning Factory.
+4. Line-by-line investigation of important sections, no skipping.
+5. Minimum file structures.
+6. Architecture-first thinking before any pattern adoption.
+7. PS_problems addressed STRUCTURALLY.
+8. v5 > Runnable > v4 > others, axis-by-axis with evidence.
+9. Drop MCP entirely (single-user SageMaker).
+10. Drop streaming (SageMaker UI cannot stream).
+11. Clear plan with code-chunk references BEFORE coding.
+
+DOCUMENTS TO READ
+- The plan: `D:/Github/sagemaker-coding-agent/compact_v5/_phase_2/synthesis/V5_PHASE_2_PLAN.md`
+- 9 Wave 1 reports: `compact_v5/_phase_2/team_*/AGENT_*_REPORT.md`
+- 11 Wave 2 reports: `compact_v5/_phase_2/wave_2/*/REPORT.md`
+- Critique that drove this: `compact_v5/_status/V5_SHIP_CRITIQUE.md`
+- Original V5_PLAN.md (success metrics): `compact_v5/docs/V5_PLAN.md` (or `C:/Users/winst/.claude/plans/vectorized-wandering-swan.md`)
+- v4 source: `compact_v4/MAIN/agent/sagemaker_agent.py`
+- Runnable source: `_archive/compare_code/gg-claude-code-runnable/src/`
+
+PRODUCE THREE VERDICTS.
+
+=== AXIS A — Plan correctness ===
+- Are all v4 baseline features mapped? (Compactor, TokenTracker, AuditLogger, SnapshotManager, exec-limit, save/load/cost/status/compact/clean slash commands, full chat HTML rendering, AGENT_TYPES (7 types), worktree, cold-cache, memory extraction, skill name resolution, rate limits, _FILES_READ tracking, file restoration, todo restoration.)
+- Are the code-chunk references in section 11 accurate? Spot-check 3 of them by opening the cited file:line.
+- Are the LOC estimates realistic?
+- Are Block sequencing dependencies correct? (e.g. Block E depends on Block 0 sagemaker_agent.py shim being ready first.)
+- Did the plan miss anything important the 20 reports identified?
+
+Output: AXIS A VERDICT: PASS | CHANGES_REQUESTED | BLOCKER + findings list.
+
+=== AXIS B — Runnable + Hermes + LF fidelity ===
+- For each Runnable adoption proposed (Blocks A/G/H/L/N): is it FAITHFUL or DRIFTED?
+- Are the dropped Runnable subsystems (mcp, streaming, oauth, voice, vim, keybindings, ssh, coordinator, teamMemorySync, policyLimits, remoteManagedSettings) genuinely justified by the single-user-SageMaker constraint?
+- Are the Hermes 6 net-new patterns correctly identified? Anything missing?
+- Is the Learning Factory analysis correct (the AXIS C plan-fidelity gap is the root cause of v5.0.0 silent scope narrowing)?
+
+Output: AXIS B VERDICT + findings.
+
+=== AXIS C — Plan-fidelity (NEW from this plan) ===
+- Does this plan deliver the original V5_PLAN.md success metric #1 ("functional parity with v4.10.10")?
+- Does this plan deliver the user's 11 hard constraints listed above?
+- If executed faithfully, would this plan pass the user's 4 verification questions (Q1 observation completeness, Q2 PS Issues recurrence, Q3 v5>Runnable+v4 evidence, Q4 semantic-bug certainty)?
+
+Output: AXIS C VERDICT + findings.
+
+=== FINAL ===
+PHASE 2 PLAN OVERALL: APPROVE | APPROVE_WITH_FIXES | REJECT
+- Blocker count
+- Required changes before user-approval and coding can start
+- Suggested Block ordering refinements
+- One-paragraph summary of the plan's strengths and weaknesses
+
+Be ruthless. The user explicitly said v5.0.0 was a failed operation; the plan must not repeat the same scope-narrowing failure mode.

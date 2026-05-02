@@ -1,7 +1,90 @@
 # V5 Build Status
 
-Last updated: 2026-04-30 (**v5.0.0 build candidate; user verdict: SHIP BLOCKED — operation failed**)
-Updated by: post-Phase-13 critique
+Last updated: 2026-05-01 (**Phase 2 COMPLETE — Wave 5-DEEP synthesis applied 2026-05-01**; pending Codex re-APPROVE on post-DEEP plan + CONFIDENCE_REPORT before Block 0)
+Updated by: post-Wave-4 synthesis + Codex v4 review cycle (4 rounds → APPROVE) + Wave 5-DEEP exhaustive scan (20 agents → SYNTHESIS_MASTER.md)
+
+## Wave 6 entry (2026-05-01)
+- 5 parallel agents brainstormed 25 user-perspective scenarios each (125 raw, 111 unique post-dedup) covering: long sessions / tool failures / multi-file tasks / sub-agents / notebook UX.
+- Synthesis: `compact_v5/_phase_2/wave_6/PS_Plan_Edge_Cases_Thinking.md`.
+- **Verdict**: 74 HANDLED / 42 NEEDS-LOCK-TEST / 9 POSSIBLE-GAP.
+- **All 9 POSSIBLE-GAPs close within existing 21 Blocks** (~45 LOC code + 5 doc rows + 1 ADR; +0.23% plan size).
+- 42 NEEDS-LOCK-TEST items distributed across existing per-Block Q4 sections (lock test count 95 → 135, +44%).
+- **No new Blocks needed**. Plan v5.0.1 confirmed comprehensive for realistic SageMaker user scenarios.
+- Block 0 ready to start.
+
+## Wave 5-DEEP entry (2026-05-01)
+- 20 parallel agents read every file in v4 (12,088 LOC) + Runnable (~2010 .ts files) + Hermes (12,880 LOC) + LF tree.
+- ~150 net-new findings consolidated in `compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md`.
+- 233 new PORT_LOG rows (Q1 215 → 448).
+- 3 new Blocks: G3 (Coordinator System Prompt), F2 (Auto-Continuation under iteration budget), H+ (Auto-Dream daemon).
+- 8 NOT-OPTIONAL correctness fixes flagged (R4 ×5 + H2 stub-injection + H5 A28 cache-invariant + R7 N8 token-accounting).
+- 3 Hermes critical policies adopted (A28 cache-invariant, A36 dynamic ref, A44 no-change-detector tests).
+- ~80 categorical drops (no v5.0.2 punt; per constraint citation).
+- LOC: 11,330 → ~16,200 (1.43x).
+- Updated build sequence: `0 → smoke → B → B+ → C → C+ → D → A → E+F → F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K`.
+- Reading order for builder: SYNTHESIS_MASTER.md → V5_PHASE_2_PLAN_v3.md (renamed conceptually to v5) → Q1_EVIDENCE_MATRIX.md.
+- DONE 2026-05-02: Codex APPROVE_WITH_FIXES on post-DEEP plan → 5 fixes applied (block count, LOC math, Q1 PASS reframing, no-streaming filter EF-6/7 + N-7/8/9 retag, plan body stale tables) → CONFIDENCE_REPORT.md generated. Pre-Block-0 gate MET.
+
+## Phase 2 final state (Q1-Q4 all evidenced)
+
+- **Wave 1 (9 reports)**: high-level v4/Runnable/Hermes/LF audit. ✓ on disk.
+- **Wave 2 (11 reports)**: line-by-line, no-skip. ✓ on disk.
+- **Wave 3 (3 reports)**: COMBINED_ARCHITECTURE + COMPLETENESS_VERIFY + RISK_SURFACE. ✓ on disk.
+- **Wave 4 (4 evidence matrices)**: Q1 (159 rows, 0 missing refs) + Q2 (CERTAIN-NO-RECUR all 7 PS) + Q3 (v5 ≥ Runnable post-no-deferrals; v5 > v4 decisive) + Q4 (26 bug classes locked). ✓ on disk.
+- **Codex APPROVE** (gpt-5.5) on plan v3. v3c review final.
+- **User APPROVED** plan via ExitPlanMode.
+- **INDEX.md**: organized materials reference for builders.
+
+## Plan v4 final state (2026-05-01, Codex APPROVE)
+
+After 4 rounds of Codex (gpt-5.5) review, plan v4 reached APPROVE on all 3 axes (errors / v5 fit / reference-repo coverage). Major changes from v3:
+1. **No deferrals**: 5 prior DEFERRED items flipped to PORTED (auto-compact circuit breaker → A; Runnable cache_edits → A; Runnable extractMemories + sessionMemory → H; Hermes AGENTS.md:627-628 → N; Runnable commands dispatcher pattern → D).
+2. **Block D expansion (Codex AXIS C)**: 7 → 19 advertised v4 commands + 1 `/auth` auth-gate = 20 inputs (constraint #1 v4.10.10 baseline). Verified line refs at sagemaker_agent.py:8164 + :10789-:11341.
+3. **Block T NEW (Codex AXIS C)**: 11 missing v4 tools added (create_word/excel/markdown/notebook/chart/pdf, todo_write/read, semantic_search, web_fetch, ask_user). Both schema + impl line refs verified by grep against v4 source.
+4. **Block B+ FileCache class**: now correctly references sagemaker_agent.py:893-1017 with verified APIs save_and_clear_context / restore_context / enter_thread_local_context / exit_thread_local_context.
+5. **Sub-agent token attribution acceptance test** added to Block B+.
+6. **Total**: ~11,330 LOC across **18 Blocks**: 0 → smoke → B → B+ → C → C+ → D → A → E+F → I → M → G → G2 → H → L → N → T → J → K.
+
+## Sequence (final, 18 blocks)
+
+`Block 0 → notebook smoke gate → B → B+ → C → C+ → D → A → E+F (together) → I → M → G → G2 → H → L → N → T → J → K`
+
+Each block: separate commit + Codex 3-axis review (errors / v5 fit / reference-repo coverage) + per-block user approval gate (Block K discipline) + STATE/RESUME anchor.
+
+**Awaiting user signal to start Block 0** (sagemaker_agent.py shim + notebook smoke gate). Per Block K, each block requires user approval before next starts.
+
+## Where things stand
+
+**v5.0.0 (Phase 1, 14 phases)**: BUILD CANDIDATE — SHIP BLOCKED. Tagged at `30735e1` for traceability only. Failed user verification because of silent scope narrowing across 14 phases. See `_status/V5_SHIP_CRITIQUE.md`.
+
+**Phase 2 (corrective investigation)**: IN PROGRESS.
+- **Wave 1 (high-level inventory)**: COMPLETE. 9 agents covered v5-vs-v4 (UI + non-UI parity, including a 2nd cross-checker), v5-vs-Runnable (PORT_LOG honesty + leftover + cross-check + code-experience), Hermes patterns, Learning Factory patterns. All reports in `_phase_2/team_*/AGENT_*_REPORT.md`.
+- **Wave 2 (line-by-line, no-skip coverage)**: STARTING. User directive: every important section of every reference repo must be scanned line-by-line. Wave 1 was high-level; Wave 2 is exhaustive.
+
+## Hard constraints from user (consolidated 2026-04-30)
+
+1. **v4.10.10 = baseline.** Functional capability of v4 is the floor. Don't drop v4 features in name of architectural cleanliness.
+2. **v4 chat.ipynb = canonical UI.** v5 provides `sagemaker_agent` shim so v4's notebook works unchanged.
+3. **Cover ALL repos**: v4 + Runnable + Hermes + Learning Factory. Not subsets.
+4. **Line-by-line investigation, no skip.** This is the MUST gate.
+5. **Minimum file structures.** Maximum coverage in minimum file count.
+6. **Architecture-first.** Pattern adoption from any reference must pass architecture-fit check.
+7. **Structurally address PS_problems** (not patch).
+8. **v5 > Runnable > v4 > others.** Axis-by-axis evidence required.
+
+## Current acceptance bar (revised)
+
+v5 ships when:
+1. **v4 functional parity** (every v4 feature mapped + ported OR explicitly user-approved drop)
+2. v4 chat.ipynb works unchanged via `sagemaker_agent` shim
+3. Static prompt ≤ 2500 tokens (preserved from original V5_PLAN.md)
+4. Per-turn schema overhead ≥ 3000 lower than v4 (preserved)
+5. All Runnable patterns FAITHFUL or FAITHFUL-WITH-JUSTIFIED-ADAPTATION
+6. **Coverage proof**: every line-by-line agent report has a "what would be missed if not investigated" section
+7. **Minimum file count**: justify each file's existence vs alternative consolidation
+8. `pytest -q` green
+9. Real Bedrock smoke test passes (not just mock)
+10. User-verification questions return YES with evidence (the 4-question gate)
 
 ## Current phase
 - Phase ID: 13 (build mechanically closed)
@@ -170,17 +253,33 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 572e07dd93dc (v5/phase-09: sub-agent + Task tool with shared IterationBudget — Codex APPROVE post-fix)
-- Last tag: v5-phase-09
-- Pushed to sageagent: 2026-04-30
+- Last commit: <to-be-set-after-housekeeping-commit> (v5/housekeeping: Phase 2 investigation + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
+- Last tag: v5.0.0 (post-Phase-13 v5.0.0 ship-blocked tag, retained for traceability)
+- Pushed to sageagent: 2026-05-02 (housekeeping commit)
+- HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
 ## Blockers
 - none
 
 ## Next session: pick up at
-- **v5 BUILD COMPLETE**. Tag `v5.0.0` created. compact_v5.zip ready at repo root.
-- User decision: deploy to SageMaker (extract compact_v5.zip in workspace, open chat.ipynb), and/or merge `v5-build` to main when ready (note: per CLAUDE.md, v4 stays untouched until the user explicitly says ship to main).
-- Future v5.1+ work: see Phase 13 changelog "What's NOT in v5.0.0" list.
+
+**Block 0 — sagemaker_agent.py shim + notebook smoke gate** (post-Wave-6 v5.0.1 build).
+
+- Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
+- Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
+- Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
+  - ✓ Plan v4 Codex APPROVE: `_status/codex_reviews/plan-v4-final-APPROVE.md`
+  - ✓ Wave 5-DEEP synthesis: `_phase_2/wave_5_deep/SYNTHESIS_MASTER.md` (21 Blocks, ~19,300 LOC, 448 PORT_LOG rows)
+  - ✓ CONFIDENCE_REPORT: `_phase_2/wave_5_deep/CONFIDENCE_REPORT.md` (9-axis verdict)
+  - ✓ Wave 6 PS_Plan_Edge_Cases: `_phase_2/wave_6/PS_Plan_Edge_Cases_Thinking.md` (111 user scenarios, 9 GAPs closed)
+  - ✓ TEST_DESIGN: `_phase_2/wave_6/TEST_DESIGN.md` (T1-T5 + R1-R12)
+  - ✓ Auto-Dream decision: manual `/dream` only (no daemon)
+  - ✓ Codex stale-text fixes (5 of 5) applied to SYNTHESIS_MASTER + plan v3
+- After Block 0: smoke gate → B → B+ → C → C+ → D → A → E+F → F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K. Each Block: Codex AXIS A/B/C → APPROVE → tag → push → next.
+- After Block K: R1-R12 real-AWS scenarios (~$3-7).
+- After R-tier: STOP, present final product to user.
+
+(Historical Phase-13 entry: v5.0.0 tagged at `469b390` for traceability, SHIP-BLOCKED per V5_SHIP_CRITIQUE. v5.0.1 builds on top — does not delete v5.0.0 code, adds 21 Blocks worth of fixes + extensions.)
 
 (Historical Phase 08 plan reference, kept for resume-after-compact context):
 - **Phase 08 — QueryEngine + retry + errors + IterationBudget UI** (per V5_PLAN.md): read Runnable `QueryEngine.ts` (1295 LOC) + `withRetry.ts` + `services/api/errors.ts`. Land:
@@ -258,7 +357,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 ## Blockers
 - none
 
-## Next session: pick up at
-- **AGGREGATE AUDIT GATE before Phase 07**: runs full audit matrix (ADR-PORT_LOG ratio, static prompt tokens, tool count, cognitive-load test). Phase 7 starts only on PASS.
-- **Phase 07 — ToolSearchTool deferred loading**: read Runnable `tools/ToolSearchTool/`. Land `tools/tool_search.py` + `apply_tool_search_deferral()` real implementation (Phase 2 stub gets replaced). Mark low-frequency tools as `should_defer=True`. **Acceptance**: per-turn schema overhead drops ≥3000 tokens vs Phase 6 baseline. PS Issue addressed: lower per-turn token cost generally.
-- Resume protocol: see `_status/RESUME.md`.
+## (Historical) Phase 06 close (kept for traceability)
+- **Phase 07 (HISTORICAL — already shipped in v5.0.0)**: ToolSearchTool deferred loading. Acceptance: per-turn schema overhead dropped ≥3000 tokens vs Phase 6 baseline. PASSED.
+- v5.0.0 Phases 08-13 also shipped (see compact_v5/MAIN/changelogs/).
+- **CURRENT pickup is Block 0** (post-Wave-6 v5.0.1 build) — see "Next session: pick up at" section above.
