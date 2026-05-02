@@ -261,8 +261,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: cbf8d2a (v5/housekeeping: Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT) — pushed to sageagent 2026-05-02
-- Last tag: v5.0.0 (post-Phase-13 v5.0.0 ship-blocked tag, retained for traceability)
+- Last commit: 19e7823 (v5/block-0: sagemaker_agent.py shim + notebook smoke gate) — pushed to sageagent 2026-05-03
+- Last tag: v5.0.1-block-0 (Block 0 done, Codex APPROVE iter 2; v5.0.0 retained as ship-blocked baseline)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
