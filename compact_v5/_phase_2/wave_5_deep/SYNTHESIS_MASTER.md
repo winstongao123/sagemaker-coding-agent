@@ -31,6 +31,8 @@ Every NEW finding (excludes ALREADY-IN-PLAN and OUT-OF-SCOPE rows). Per row: `# 
 
 ### Block 0 (bootstrap / shim / system prompt)
 
+> **Build-time remap** (added 2026-05-02 per ADR-020): only item 0-1 (shim) lands inside Block 0. Items 0-2 through 0-10 keep their PORT_LOG origin here but are *implemented* in the Block that owns the touched module. Per-item landing Block + lock test in `_status/V5_DESIGN_DECISIONS.md` §ADR-020 → "Notes / known scope remaps". Constraint #3 (no deferrals) is honored by an explicit per-item landing Block + test gate, not by silent push-out.
+
 | # | Capability | Repo | file:line | LOC | Pri | Fit | Graft |
 |---|---|---|---|---|---|---|---|
 | 0-1 | SYSTEM_PROMPT verbatim re-export (V1 gap #6) | v4 | sagemaker_agent.py:8029-8189 | 0 (ref) | MUST | CLEAN | Add doc-only PORT_LOG row + ensure shim re-exports. v5 already has `prompt/*.md` (Phase 6) which covers this; FALSE-POSITIVE-AT-CODE-LEVEL but DOC-GAP — add row to plan. |

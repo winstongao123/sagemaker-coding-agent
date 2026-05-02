@@ -1,5 +1,27 @@
 # compact_v5 changelog
 
+## v5.0.1-block-0 — `sagemaker_agent.py` shim + notebook smoke gate (2026-05-02)
+
+First Block of the v5.0.1 21-Block build (Mode B autonomous; Codex-only-gate).
+
+- NEW `compact_v5/MAIN/agent/sagemaker_agent.py` (39 LOC): re-exports v5's
+  public surface (`Agent`, `BEDROCK_MODELS`, `CONFIG`, `IterationBudget`,
+  `SkillManager`, `create_chat_ui`) at the v4-canonical import path.
+  Hard-constraint #2 (v4 chat.ipynb works on v5 unchanged) satisfied.
+- NEW `tests/integration/test_block0_shim.py` (5 lock tests per
+  TEST_DESIGN §Block 0): T1 imports / T1 PS#1 CSO-quiet at WARNING / T3
+  notebook smoke gate (cells 1-3 parse + exec under mock_mode) / T2
+  widget/console renders / T1 v4 import compat.
+- PORT_LOG #038 + ADR-020 added; SYNTHESIS_MASTER §Block 0 head note +
+  ADR-020 remap table declare landing Block + lock test for each of
+  items 0-1..0-10 (constraint #3 — no deferrals).
+- TEST_DESIGN §Block 0 implementation notes added explaining T3 manual
+  exec vs papermill choice + T2 ConsoleChatUI fallback contract.
+- Tests: 442 pass + 4 skip (was 437 + 4 at v5.0.0; +5 net new).
+- verify_ship_zip.py: PASS (96 files / 249.0 KB / 38%).
+- Codex AXIS A/B/C: APPROVE (iter 2 after 3 fixes from iter 1 —
+  UNDECLARED_PATTERN, test-design drift, PORT_LOG #036 typo all closed).
+
 ## v5.0.0 — Build candidate, SHIP BLOCKED (2026-04-30)
 
 > User verdict: **operation FAILED.** All four verification questions

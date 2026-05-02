@@ -1,7 +1,15 @@
 # V5 Build Status
 
-Last updated: 2026-05-01 (**Phase 2 COMPLETE — Wave 5-DEEP synthesis applied 2026-05-01**; pending Codex re-APPROVE on post-DEEP plan + CONFIDENCE_REPORT before Block 0)
-Updated by: post-Wave-4 synthesis + Codex v4 review cycle (4 rounds → APPROVE) + Wave 5-DEEP exhaustive scan (20 agents → SYNTHESIS_MASTER.md)
+Last updated: 2026-05-02 (**v5.0.1 Block 0 IN_PROGRESS** — shim + 5 lock tests green; pending Codex AXIS A/B/C + tag)
+Updated by: Mode B autonomous build (Codex-only-gate; user reviews FINAL product after Block K + R-tier)
+
+## v5.0.1 Block 0 entry (2026-05-02)
+- `compact_v5/MAIN/agent/sagemaker_agent.py` (NEW, 31 LOC): re-exports v5's public surface at the v4-canonical import path.
+- 5 lock tests in `tests/integration/test_block0_shim.py` per TEST_DESIGN §Block 0 — 5/5 green.
+- Notebook smoke gate: `test_chat_ipynb_cells_1_3` parses + execs cells 1-3 against mock Bedrock — green.
+- PORT_LOG row #038 + ADR-020 added.
+- `verify_ship_zip.py`: PASS (96 files / 249.0 KB compressed / 38% ratio).
+- Pytest: **442 passed + 4 skipped** (was 437 + 4 at v5.0.0; +5 net).
 
 ## Wave 6 entry (2026-05-01)
 - 5 parallel agents brainstormed 25 user-perspective scenarios each (125 raw, 111 unique post-dedup) covering: long sessions / tool failures / multi-file tasks / sub-agents / notebook UX.
@@ -253,7 +261,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: <to-be-set-after-housekeeping-commit> (v5/housekeeping: Phase 2 investigation + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
+- Last commit: cbf8d2a (v5/housekeeping: Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT) — pushed to sageagent 2026-05-02
 - Last tag: v5.0.0 (post-Phase-13 v5.0.0 ship-blocked tag, retained for traceability)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
@@ -263,8 +271,9 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block 0 — sagemaker_agent.py shim + notebook smoke gate** (post-Wave-6 v5.0.1 build).
+**Block B — TokenTracker + AuditLogger + SnapshotManager + Runnable tokenEstimation** (after Block 0 tag + post-Block-0 smoke gate).
 
+- Block 0 status: code + tests done (5/5 green); pending Codex AXIS A/B/C → tag `v5.0.1-block-0` → push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
@@ -275,7 +284,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
   - ✓ TEST_DESIGN: `_phase_2/wave_6/TEST_DESIGN.md` (T1-T5 + R1-R12)
   - ✓ Auto-Dream decision: manual `/dream` only (no daemon)
   - ✓ Codex stale-text fixes (5 of 5) applied to SYNTHESIS_MASTER + plan v3
-- After Block 0: smoke gate → B → B+ → C → C+ → D → A → E+F → F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K. Each Block: Codex AXIS A/B/C → APPROVE → tag → push → next.
+- Sequence: 0 → smoke → B → B+ → C → C+ → D → A → E+F → F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K. Each Block: Codex AXIS A/B/C → APPROVE → tag → push → next.
 - After Block K: R1-R12 real-AWS scenarios (~$3-7).
 - After R-tier: STOP, present final product to user.
 

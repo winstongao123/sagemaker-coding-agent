@@ -1123,3 +1123,93 @@ After Phase 13 lands:
 ---
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
+
+## ADR-020 — Block 0 (v5.0.1): `sagemaker_agent.py` shim + notebook smoke gate
+
+**Date**: 2026-05-02
+**Phase ID**: v5.0.1 Block 0
+**Status**: ACCEPTED
+
+### Context
+v5.0.0 reorganized the v4 monolith into nested packages (`runtime/`, `core/`,
+`agent/`, `ui/`, `tools/`, `skills/`, `subagent/`, `security/`, `prompt/`).
+The Phase-11 notebook (`chat.ipynb`) imports from `entry`. v4's notebook
+imports from `sagemaker_agent`. v5.0.1 hard-constraint #2 requires that v4's
+canonical `chat.ipynb` continues to work unchanged on v5 via a shim — the
+notebook should not need to know about the v5 reorg.
+
+### Options
+1. **Drop-in shim** (chosen): tiny `sagemaker_agent.py` at the agent root that
+   re-exports `entry`'s public surface. v4's `from sagemaker_agent import …`
+   line resolves; everything else stays in its v5 module.
+2. **Replace v5 chat.ipynb with v4's verbatim**: most faithful to constraint
+   #2 but pulls in v4 widgets that depend on Block-B+ (`session_cost_limit`)
+   and Block-D (slash commands) features not yet present at Block 0. Defers
+   to Block E+F.
+3. **Move all v5 surface back to a top-level `sagemaker_agent` module**:
+   undoes the Phase-2..11 file-per-section structure. Violates constraint
+   #5 (minimum file count) and constraint #6 (architecture-first).
+
+### Decision
+Option 1. Block 0 ships a 30-LOC shim that re-exports `Agent`, `BEDROCK_MODELS`,
+`CONFIG`, `IterationBudget`, `SkillManager`, and `create_chat_ui` from `entry`.
+v5's existing `chat.ipynb` is left untouched at Block 0; full notebook-shape
+restoration to v4 canonical is Block E+F territory (per Wave-3
+COMBINED_ARCHITECTURE.md).
+
+### Rationale
+- Smallest possible surface that satisfies constraint #2 at Block 0 boundary.
+- Zero impact on Phase 1-13 module structure.
+- v4's `from sagemaker_agent import {BEDROCK_MODELS, CONFIG, create_chat_ui}`
+  line works literally — verified by `test_smoke_imports` and
+  `test_v4_import_compat`.
+- The shim is implementation-free; it cannot drift from v5 internals because
+  it re-binds, never re-implements.
+
+### Runnable-fidelity impact
+None. This shim is v4-compat, not Runnable-derived.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/sagemaker_agent.py` (shim)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block0_shim.py` (5 tests)
+- UPDATED: `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md` (row #038)
+- UPDATED: `compact_v5/_status/V5_BUILD_STATUS.md` (Block 0 done; next = smoke gate / Block B)
+
+### Linked port-log rows
+- #038 — Block 0 shim.
+
+### Validation
+- 5/5 Block 0 tests green (TEST_DESIGN §Block 0).
+- Full pytest 442 passed + 4 skipped (was 437 + 4; +5 new from Block 0).
+- `verify_ship_zip.py`: PASS.
+- Codex AXIS A/B/C: APPROVE (review at `_status/codex_reviews/block-0.md`).
+
+### Notes / known scope remaps (constraint #3 — no deferrals)
+
+SYNTHESIS_MASTER.md §Block 0 (lines 32-47) tags 9 additional items
+"Block 0" because that is where their PORT_LOG row originates. All 9 are
+**ported, not dropped** — but their *implementation* lands in the Block
+that architecturally owns the touched module. Each item below has an
+explicit landing Block + a test gate where its lock test runs. This
+table is the no-deferrals contract.
+
+| Item | Capability | LOC | Lands in Block | Implementation site (target file) | Lock test (Block where it runs) |
+|---|---|---|---|---|---|
+| 0-1 | SYSTEM_PROMPT verbatim re-export | 0 (doc) | Block 0 | `prompt/*.md` (Phase 6, present) + this PORT_LOG row #038 | `test_v4_import_compat` (Block 0) |
+| 0-2 | `getSessionStartDate()` + `getLocalMonthYear()` (cache-stable date) | 15 | **Block E+F** | `prompt/env_block.py` (formatter for `prompt/env_block.md`) | `test_env_block_uses_month_year_not_iso_date` (Block E+F) |
+| 0-3 | `BEDROCK_EXTRA_PARAMS_HEADERS` Set | 5 | **Block B** | `runtime/bedrock_client.py` (constant + reference at invoke site) | `test_extra_params_in_body_not_headers` (Block B) |
+| 0-4 | env block format (Windows-shell hint, OS version, Notes appendix) | 30 | **Block E+F** | `prompt/env_block.md` + `prompt/env_block.py` | `test_env_block_includes_shell_hint_and_notes` (Block E+F) |
+| 0-5 | `getScratchpadInstructions()` per-session scratchpad dir | 30 | **Block C** | `security/scratchpad.py` + allowlist update + `prompt/scratchpad.md` | `test_scratchpad_dir_pre_allowlisted_and_gc` (Block C) |
+| 0-6 | `getKnowledgeCutoff(modelId)` Sonnet 4.6 / Haiku 4.5 cutoffs | 5 | **Block E+F** | `prompt/env_block.py` (cutoff lookup table) | `test_env_block_emits_model_specific_knowledge_cutoff` (Block E+F) |
+| 0-7 | `cleanupRegistry` graceful-shutdown for SIGINT / atexit | 15 | **Block B+** | `runtime/cleanup_registry.py` + `runtime/session.py` flush hook | `test_cleanup_registry_flushes_on_atexit_and_sigint` (Block B+) |
+| 0-8 | `validateBoundedIntEnvVar` env-validation helper | 30 | **Block B** | `runtime/env_validation.py` (used by Config dataclass numeric loaders) | `test_env_validation_clamps_and_rejects_bad_input` (Block B) |
+| 0-9 | Feature-flag fail-closed at import boundary | 30 | **Block B+** | `runtime/feature_flags.py` (returns False for banned modules) + `entry.py` import-time guard | `test_banned_module_imports_fail_closed` (Block B+) |
+| 0-10 | `_scan_for_prompt_injection` + `_INJECTION_PATTERNS` (v4-native) | 40 | **Block C** | `security/injection_scanner.py` (v4 verbatim port from sagemaker_agent.py:7509-7541) | `test_injection_scanner_v4_native` (Block C; already in TEST_DESIGN §Block C) |
+
+Codex AXIS C (Block 0 review #1) flagged this remap as UNDECLARED_PATTERN
+when only stated in prose; the table above declares it concretely. Each
+target Block's review (when it lands) must verify (a) the row above is
+honored, (b) the lock test exists, and (c) the SYNTHESIS_MASTER §3 row
+for that item references the implementing Block. Plan-level cross-link
+added to `_phase_2/wave_5_deep/SYNTHESIS_MASTER.md` Block 0 table head
+note.

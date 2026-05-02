@@ -42,11 +42,15 @@ Any single failure = stop, fix, re-test, re-Codex, re-approve.
 |---|---|---|---|
 | `test_smoke_imports` | T1 | `from sagemaker_agent import CONFIG, BEDROCK_MODELS, create_chat_ui` succeeds | $0 |
 | `test_smoke_no_cso_warnings` | T1 | running shim with default LOG_LEVEL emits 0 WARNING-level CSO-CHECK lines (closes PS#1) | $0 |
-| `test_chat_ipynb_cells_1_3` | T3 | `papermill chat.ipynb out.ipynb` runs cells 1-3 without exception | $0 |
-| `test_widget_chat_ui_renders` | T2 | `create_chat_ui()` returns a `WidgetChatUI` object with non-empty `_panel` | $0 |
-| `test_v4_import_compat` | T1 | every name v4 chat.ipynb references (`CONFIG.session_cost_limit`, `BEDROCK_MODELS`, etc.) is re-exported | $0 |
+| `test_chat_ipynb_cells_1_3` | T3 | chat.ipynb cells 1-3 parse + execute against mock Bedrock without exception (cell 1 = pip install, parse-only; cells 2-3 = exec under mock_mode=True). Equivalent to `papermill` for the smoke surface; chosen because papermill is not in the v5 ship-zip dep set and Bedrock smoke does not need a real kernel. | $0 |
+| `test_widget_chat_ui_renders` | T2 | `create_chat_ui()` returns a chat-UI handle wired to a real Agent. Accepts `WidgetChatUI` (with non-empty `_panel`) when ipywidgets is installed; falls back to `ConsoleChatUI` (with non-empty `render()`) when ipywidgets is unavailable — matches Phase 11 ADR-017 fallback contract. | $0 |
+| `test_v4_import_compat` | T1 | every name v4 chat.ipynb references (`CONFIG`, `BEDROCK_MODELS`, `create_chat_ui` per `compact_v4/MAIN/agent/chat.ipynb` cells 2+3) is re-exported through `sagemaker_agent` AND listed in `__all__` | $0 |
 
 **Block 0 ships when**: 5/5 green. **Total AWS cost: $0.**
+
+**Implementation notes (post-Block-0 — Codex AXIS A finding #2 lock)**:
+- T3 is implemented with manual `exec()` of cell sources rather than papermill. Reason: papermill pulls in jupyter_client + ipykernel + nbclient as install-time deps (~50 MB), which the v5 ship zip does not carry, and the smoke surface (parse + exec under mock_mode) does not require a live kernel. The implementation pre-snapshots every CONFIG field via `monkeypatch` so cell 2's CONFIG mutations don't leak into other tests (this caught a real test-isolation bug at Block 0 build time).
+- T2 accepts ConsoleChatUI fallback because the Phase 11 factory branches on ipywidgets availability (`_IPYWIDGETS_OK`). On a CI runner without ipywidgets, the WidgetChatUI branch is unreachable; the fallback is the production behavior and is what users with no widget host will see.
 
 ---
 
