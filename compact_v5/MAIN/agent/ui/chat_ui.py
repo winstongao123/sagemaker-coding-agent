@@ -23,6 +23,66 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+
+def _invoke_dream(agent: Any) -> str:
+    """Block H+ — actually invoke the /dream consolidation engine when
+    cmd_dream's side-effect fires.
+
+    Builds a real-LLM consolidator from the parent's BedrockClient,
+    dispatches runtime.dream.run_dream(...), and returns a one-line
+    status for the chat surface to show the user. Best-effort: errors
+    are caught and reported as text.
+    """
+    try:
+        from runtime.config import CONFIG
+        from runtime.dream import run_dream, get_dream_prompt
+    except Exception as exc:  # noqa: BLE001
+        return f"[/dream] could not load consolidation engine: {exc}"
+
+    def _llm_consolidator(existing: str, manifest: str) -> str:
+        prompt = get_dream_prompt(existing, manifest)
+        try:
+            client = getattr(agent, "client", None)
+            if client is None:
+                return ""
+            resp = client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                system="You are a memory consolidator.",
+                tools=[],
+                max_tokens=4096,
+                temperature=0.0,
+                thinking_enabled=False,
+                thinking_budget=4096,
+            )
+            text = getattr(resp, "text", "") or ""
+            return text
+        except Exception as inner:  # noqa: BLE001
+            logging.warning(f"[/dream] consolidator raised: {inner}")
+            return ""
+
+    try:
+        result = run_dream(
+            workspace=CONFIG.workspace,
+            consolidator=_llm_consolidator,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return f"[/dream] failed: {type(exc).__name__}: {exc}"
+
+    if result.success:
+        if result.new_content:
+            return (
+                f"[/dream] completed phases: "
+                f"{', '.join(result.phases_executed)}. "
+                f"Backup at {result.backup_path or '(none)'}."
+            )
+        # Dry-run / empty consolidator path.
+        return (
+            f"[/dream] dry-run: phases recorded "
+            f"({', '.join(result.phases_executed)}). "
+            "No content change."
+        )
+    return f"[/dream] failed: {result.error}"
+
 from .widgets import IterationBudgetWidget, ThinkingBudgetWidget, _IPYWIDGETS_OK
 
 
@@ -53,6 +113,12 @@ class ConsoleChatUI:
                 if is_command(message):
                     cr = dispatch_command(message)
                     if cr.consumed:
+                        # Block H+ — /dream side-effect: actually invoke
+                        # the consolidation engine. Chat UI is the user-
+                        # facing trigger surface; the engine lives in
+                        # runtime/dream.py.
+                        if cr.side_effect == "dream_invoked":
+                            return cr.text + "\n" + _invoke_dream(self.agent)
                         return cr.text
             except Exception as _cmd_exc:
                 # Best-effort: fall through to agent.run() if dispatch fails.
@@ -166,6 +232,10 @@ class WidgetChatUI:
                             cr = dispatch_command(msg)
                             if cr.consumed:
                                 print(cr.text)
+                                # Block H+ — /dream side-effect actually
+                                # invokes the consolidation engine.
+                                if cr.side_effect == "dream_invoked":
+                                    print(_invoke_dream(self.agent))
                                 return
                     except Exception as _cmd_exc:
                         logging.warning(

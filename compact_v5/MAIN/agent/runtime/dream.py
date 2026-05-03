@@ -98,12 +98,19 @@ class DreamLock:
     by atomic creation (open with O_CREAT | O_EXCL); released by
     delete. If the lock file exists but is older than `stale_after_s`
     seconds, it's considered stale and reclaimed.
+
+    Codex iter-1 secondary-risk hardening: per-lock nonce. Each
+    acquire() generates a unique nonce stored in the lock file body.
+    release() reads the file body and only unlinks if the nonce still
+    matches OURS — prevents a stale-recovery race where worker A's
+    `release()` could clobber worker B's freshly-acquired lock.
     """
 
     def __init__(self, workspace: str, stale_after_s: float = 600.0):
         self.lock_path = os.path.join(workspace, LOCK_FILENAME)
         self.stale_after_s = stale_after_s
         self._held = False
+        self._nonce: Optional[str] = None  # set on acquire, checked on release
 
     def acquire(self) -> bool:
         """Try to acquire the lock. Returns True iff acquired."""
@@ -111,10 +118,17 @@ class DreamLock:
         # assume the previous run crashed and reclaim.
         if os.path.exists(self.lock_path):
             try:
+                # Re-stat immediately before unlink so we don't race a
+                # fresh acquire that just happened between our age check
+                # and unlink. If the file's mtime has been bumped, abort
+                # the reclaim.
                 age = time.time() - os.path.getmtime(self.lock_path)
                 if age < self.stale_after_s:
                     return False  # active lock held by another run
-                # Stale — try to reclaim.
+                # Stale — verify still stale, then reclaim.
+                age2 = time.time() - os.path.getmtime(self.lock_path)
+                if age2 < self.stale_after_s:
+                    return False  # someone refreshed between our checks
                 os.unlink(self.lock_path)
             except OSError:
                 return False
@@ -124,8 +138,14 @@ class DreamLock:
                 os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                 0o644,
             )
+            # Generate a per-acquire nonce so release() can verify ownership.
+            import uuid
+            self._nonce = uuid.uuid4().hex
             with os.fdopen(fd, "w") as f:
-                json.dump({"pid": os.getpid(), "ts": time.time()}, f)
+                json.dump(
+                    {"pid": os.getpid(), "ts": time.time(), "nonce": self._nonce},
+                    f,
+                )
             self._held = True
             return True
         except FileExistsError:
@@ -134,14 +154,29 @@ class DreamLock:
             return False
 
     def release(self) -> None:
-        """Release the lock if held."""
+        """Release the lock if held — only if the file still carries OUR
+        nonce. Otherwise, someone else now owns the lock and we must NOT
+        unlink it. Codex iter-1 hardening.
+        """
         if not self._held:
             return
         try:
-            os.unlink(self.lock_path)
+            # Check file content still has our nonce before unlinking.
+            owner_match = False
+            try:
+                with open(self.lock_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("nonce") == self._nonce:
+                    owner_match = True
+            except (OSError, json.JSONDecodeError):
+                # Lock file gone or corrupt; treat as not-our-lock.
+                owner_match = False
+            if owner_match:
+                os.unlink(self.lock_path)
         except OSError:
             pass
         self._held = False
+        self._nonce = None
 
     def __enter__(self):
         if not self.acquire():

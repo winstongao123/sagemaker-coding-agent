@@ -252,6 +252,118 @@ def test_dream_no_memory_md_handled(tmp_path):
     assert result.backup_path == ""
 
 
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_dream_invoked_via_console_chat_ui(tmp_path, monkeypatch):
+    """Codex iter-1 main finding lock: ConsoleChatUI consumes the
+    "dream_invoked" side-effect and actually invokes runtime.dream.run_dream
+    end-to-end. Was previously a doc claim with no code consumer.
+    """
+    from runtime.config import CONFIG
+    from ui.chat_ui import ConsoleChatUI
+
+    # Set workspace to tmp_path so the test exercises a real /dream run.
+    _saved_ws = CONFIG.workspace
+    CONFIG.workspace = str(tmp_path)
+    (tmp_path / "memory.md").write_text(
+        "## Existing\n- entry 1", encoding="utf-8",
+    )
+
+    # Build a fake agent + a fake client whose chat() returns canned text
+    # (the consolidated body). The ConsoleChatUI._invoke_dream helper
+    # uses agent.client.chat(...).text as the consolidator output.
+    class _FakeResponse:
+        text = "## Consolidated by Haiku\n- entry 1 (deduped)"
+
+    class _FakeClient:
+        model_id = "anthropic.claude-haiku-4-5-20251001-v1:0"
+        mock_mode = True
+
+        def chat(self, **kwargs):
+            return _FakeResponse()
+
+    class _FakeAgent:
+        client = _FakeClient()
+
+        def run(self, *a, **kw):
+            from core import QueryEngine
+            class _Result:
+                stop_reason = "end_turn"
+                text = ""
+            return _Result()
+
+        def stop(self):
+            pass
+
+        def clear(self, **kw):
+            pass
+
+    fake_agent = _FakeAgent()
+
+    # Need iteration_budget_widget on ConsoleChatUI since send() calls
+    # render_html on it. Build a minimal stub.
+    class _StubWidget:
+        def render_html(self) -> str:
+            return ""
+
+    ui = ConsoleChatUI.__new__(ConsoleChatUI)
+    ui.agent = fake_agent
+    ui.budget_widget = _StubWidget()
+    ui.thinking_widget = _StubWidget()
+
+    try:
+        out = ui.send("/dream")
+        # cmd_dream's text + dream invocation status concatenated.
+        assert "/dream" in out.lower() or "dream" in out.lower()
+        # The ENGINE actually wrote new memory.md content.
+        assert (tmp_path / "memory.md").read_text(encoding="utf-8") == \
+            "## Consolidated by Haiku\n- entry 1 (deduped)"
+        # And the backup was created.
+        assert (tmp_path / "memory.md.bak").exists()
+        # Output mentions the phases.
+        assert "Orient" in out or "phases" in out.lower()
+    finally:
+        CONFIG.workspace = _saved_ws
+
+
+def test_dream_lock_release_only_unlinks_own_nonce(tmp_path):
+    """Codex iter-1 secondary-risk lock: release() must NOT unlink a lock
+    file whose nonce no longer matches ours.
+
+    Setup:
+    - Worker A acquires the lock (nonce_A).
+    - Worker B simulates a stale-recovery: overwrites the lock file with
+      a fresh nonce_B (mimicking what B would do after deciding A's lock
+      is stale).
+    - Worker A calls release(). Lock file MUST still exist with nonce_B.
+    """
+    import json
+    from runtime.dream import DreamLock, LOCK_FILENAME
+
+    workspace = str(tmp_path)
+    a = DreamLock(workspace)
+    assert a.acquire() is True
+    nonce_a = a._nonce
+
+    # Simulate B reclaiming by rewriting the lock file with a fresh nonce.
+    nonce_b = "B" * 32
+    with open(tmp_path / LOCK_FILENAME, "w", encoding="utf-8") as f:
+        json.dump({"pid": 99999, "ts": 0, "nonce": nonce_b}, f)
+
+    # A's release must NOT remove the file (nonce no longer matches A's).
+    a.release()
+    assert (tmp_path / LOCK_FILENAME).exists(), (
+        "release() with nonce mismatch must NOT unlink — would clobber "
+        "another worker's freshly acquired lock (Codex iter-1 secondary)"
+    )
+    # Verify the file still has B's nonce.
+    with open(tmp_path / LOCK_FILENAME, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["nonce"] == nonce_b
+
+
 def test_dream_lock_contextmanager_pattern(tmp_path):
     """DreamLock supports `with` context-manager pattern."""
     from runtime.dream import DreamLock, LOCK_FILENAME

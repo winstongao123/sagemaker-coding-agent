@@ -37,7 +37,13 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block H+ (code commit; Codex pending)
+### Block H+ iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
+- ui/chat_ui.py: NEW _invoke_dream() helper + ConsoleChatUI.send + WidgetChatUI._on_send now consume cr.side_effect=="dream_invoked" and actually call runtime.dream.run_dream() with a real-LLM consolidator built from agent.client.chat() (Codex iter-1 main finding — was a doc claim with no code consumer).
+- runtime/dream.py: per-acquire nonce on DreamLock; release() only unlinks if file still carries our nonce — prevents stale-recovery race where worker A's release() could clobber worker B's freshly acquired lock (Codex iter-1 secondary risk).
+- 2 new lock tests (dream-invoked-via-console-chat-ui end-to-end / lock-release-only-unlinks-own-nonce).
+- 719 pass + 9 skip; verify_ship_zip PASS.
+
+### Block H+ (code commit; Codex iter-1 = APPROVE_WITH_FIXES)
 - runtime/dream.py NEW (~250 LOC): MANUAL-only /dream consolidation engine + 4-phase prompt + DreamLock + rollback safety.
 - 11 new tests + 1 T5 skip; 717 pass + 9 skip; verify_ship_zip PASS.
 - PORT_LOG #099 + ADR-035.
