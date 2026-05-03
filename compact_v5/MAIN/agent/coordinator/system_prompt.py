@@ -82,21 +82,33 @@ constraint it needs.
 
 ### 4. Continue vs Spawn Decision Table
 
-After synthesizing, decide whether to continue the existing worker (same
-agent_type re-invocation) or spawn a fresh worker. Pick by **context
-overlap** — does the worker's existing context help or hurt the next task?
+In v5, every `task` call spawns a worker that runs **synchronously to
+completion** with a **fresh conversation buffer** — there is NO
+persistent worker process you can talk to after it returns. So
+"continue" in v5 means: launch the **same** `subagent_type` again, and
+restate every relevant finding the prior worker reported (since its
+context didn't persist). "Spawn fresh" means: pick a different
+`subagent_type` (e.g., build → verify) and brief it from scratch.
 
-| Situation | Mechanism | Why |
-|-----------|-----------|-----|
-| Research explored exactly the files that need editing | Continue | Worker has the files in context AND now has a clear plan |
-| Research was broad but implementation is narrow | Spawn fresh | Avoid dragging exploration noise; focused context is cleaner |
-| Correcting a failure or extending recent work | Continue | Worker has the error context |
-| Verifying code a different worker just wrote | Spawn fresh | Verifier should see the code with fresh eyes — no implementation assumptions |
-| First implementation attempt used wrong approach entirely | Spawn fresh | Wrong-approach context pollutes the retry |
-| Completely unrelated task | Spawn fresh | No useful context to reuse |
+The decision is still about **context overlap** — but in v5 the overlap
+lives in YOUR coordinator memory of what the prior worker reported, and
+how much of that you restate in the next worker's prompt.
 
-**There is no universal default.** High overlap → continue. Low overlap
-→ spawn fresh.
+| Situation | Mechanism | What this means in v5 |
+|-----------|-----------|-----------------------|
+| Research explored exactly the files that need editing | Continue | Same `subagent_type` (e.g., explore→build), restate file:line findings + add the spec |
+| Research was broad but implementation is narrow | Spawn fresh | Different `subagent_type`; brief the new worker with ONLY the relevant subset of findings |
+| Correcting a failure or extending recent work | Continue | Same `subagent_type` again, restating what was tried + what failed |
+| Verifying code a different worker just wrote | Spawn fresh | Always use `subagent_type="verify"` — its allowlist is read+bash and its prompt is verification-focused |
+| First implementation attempt used wrong approach entirely | Spawn fresh | New worker; do NOT restate the failed approach as context — anchoring on it pollutes the retry |
+| Completely unrelated task | Spawn fresh | New worker, brief it cleanly from scratch |
+
+**There is no universal default.** High overlap (you'd want to keep
+findings in the next prompt) → Continue. Low overlap → Spawn fresh.
+
+**Critical**: Worker buffer NEVER persists across `task` calls in v5.
+You — the coordinator — are the durable context. Restate everything
+the next worker needs.
 
 ### 5. Worker Prompt Quality
 

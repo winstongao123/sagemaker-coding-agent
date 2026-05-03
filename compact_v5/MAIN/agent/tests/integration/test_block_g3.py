@@ -61,12 +61,16 @@ def test_coordinator_prompt_continue_vs_spawn_table():
     from coordinator import get_coordinator_system_prompt
 
     prompt = get_coordinator_system_prompt()
-    # The table header has "Situation | Mechanism | Why" and 6 rows.
+    # The table header.
     assert "Continue vs Spawn" in prompt or "continue vs spawn" in prompt.lower()
-    # Each major decision row.
+    # Major decision rows must be present (covers all 6 scenarios).
     assert "research explored exactly the files" in prompt.lower()
     assert "spawn fresh" in prompt.lower()
-    assert "verifier should see the code with fresh eyes" in prompt.lower()
+    # The verification scenario uses verify-specific wording in v5.
+    assert "verify" in prompt.lower()
+    assert "subagent_type" in prompt
+    # The wrong-approach anti-anchoring rule.
+    assert "anchoring" in prompt.lower() or "pollutes" in prompt.lower()
 
 
 # ============================================================
@@ -213,6 +217,215 @@ def test_coordinator_prompt_NOT_appended_when_flag_off():
         sys_prompt = seen["system"]
         assert "Coordinator Mode" not in sys_prompt
         assert "NEVER delegate understanding" not in sys_prompt
+    finally:
+        CONFIG.coordinator_mode_enabled = _prev
+
+
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_coordinator_block_preserved_when_skill_active(tmp_path):
+    """Codex iter-1 finding #1 HIGH lock: when an active skill exists,
+    the coordinator block must NOT be silently overwritten by the skill
+    body assignment. Both the coordinator + skill bodies should appear
+    in the final effective_system_prompt.
+    """
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from runtime.config import CONFIG
+    from skills.manager import SkillManager
+    from tools import all_registered
+
+    # Set up an isolated SkillManager with one active skill.
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    sk = skills_dir / "myskill"
+    sk.mkdir()
+    (sk / "SKILL.md").write_text(
+        "---\nname: myskill\ndescription: Test skill body marker.\n---\n"
+        "SKILL_BODY_MARKER_XYZ",
+        encoding="utf-8",
+    )
+    sm = SkillManager(workspace=str(tmp_path), skills_dir=str(skills_dir))
+    sm.discover()
+    sm.active_skill = "myskill"
+
+    seen = {}
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen["system"] = system
+            return Response(text="ok", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    _prev = CONFIG.coordinator_mode_enabled
+    CONFIG.coordinator_mode_enabled = True
+    try:
+        parent = QueryEngine(
+            client=_SnoopClient(), max_turns=2,
+            budget=IterationBudget(max_iterations=10),
+            skill_manager=sm,
+        )
+        parent.run(user_message="x", system_prompt="base", tools=all_registered())
+        sys_prompt = seen["system"]
+        # BOTH must appear — coordinator block + skill body.
+        assert "Coordinator Mode" in sys_prompt or "NEVER delegate understanding" in sys_prompt, (
+            "Coordinator block must be preserved when skill is active "
+            "(Codex iter-1 #1)"
+        )
+        assert "SKILL_BODY_MARKER_XYZ" in sys_prompt, (
+            "Skill body must still be present"
+        )
+    finally:
+        CONFIG.coordinator_mode_enabled = _prev
+
+
+def test_coordinator_prompt_v5_continue_semantics_no_persistent_worker():
+    """Codex iter-1 finding #2 HIGH lock: the Continue vs Spawn matrix
+    must reflect v5's sync/fresh-buffer reality, NOT Runnable's
+    persistent-worker semantics. Verify the prompt explicitly says:
+    - Worker buffer never persists
+    - Coordinator is the durable context
+    - Continue = same agent_type + restate findings
+    """
+    from coordinator import get_coordinator_system_prompt
+
+    prompt = get_coordinator_system_prompt()
+    # The v5 reality must be stated. Tolerate markdown bold splitting
+    # words across newlines: just verify both keywords appear close-by.
+    norm = prompt.replace("\n", " ").replace("**", "")
+    assert "synchronously to completion" in norm
+    assert "fresh conversation buffer" in norm or "fresh buffer" in norm
+    # No SendMessage-style persistent-worker claim.
+    assert "SendMessage" not in prompt
+    # The coordinator-as-durable-context guidance.
+    assert (
+        "Worker buffer NEVER persists" in prompt
+        or "coordinator is the durable" in prompt.lower()
+    )
+    # Continue semantics in v5 explicitly: same subagent_type + restate.
+    assert "subagent_type" in prompt
+    assert "restate" in prompt.lower()
+
+
+def test_coordinator_user_context_injected_into_first_user_message():
+    """Codex iter-1 finding #3 MEDIUM lock: when coordinator_mode is on,
+    the parent's first user message must be augmented with the worker-
+    tools-context block (via get_coordinator_user_context). PORT_LOG
+    #093 promises this — Runnable wires it the same way at QueryEngine.ts:302-307.
+    """
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    captured_messages = []
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            captured_messages.extend(list(messages))
+            return Response(text="ok", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    _prev = CONFIG.coordinator_mode_enabled
+    CONFIG.coordinator_mode_enabled = True
+    try:
+        parent = QueryEngine(
+            client=_SnoopClient(), max_turns=2,
+            budget=IterationBudget(max_iterations=10),
+        )
+        parent.run(
+            user_message="initial query",
+            system_prompt="base", tools=all_registered(),
+        )
+        # The first turn's messages must include the original user query
+        # AND the worker-tools-context block.
+        joined_user_text = ""
+        for m in captured_messages:
+            if m.get("role") != "user":
+                continue
+            content = m.get("content")
+            if isinstance(content, str):
+                joined_user_text += content
+            elif isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "text":
+                        joined_user_text += b.get("text", "")
+        assert "initial query" in joined_user_text
+        # Worker-tools-context block markers.
+        assert "worker types" in joined_user_text.lower() or (
+            "agent_type" in joined_user_text.lower()
+        ), (
+            "G3-2 user context must be injected into the first user message "
+            "when coordinator_mode is on (Codex iter-1 #3)"
+        )
+        # Per get_coordinator_user_context: lists explore/plan/verify/build.
+        for at in ("explore", "build", "verify"):
+            assert at in joined_user_text, f"Worker type {at!r} missing from user context"
+    finally:
+        CONFIG.coordinator_mode_enabled = _prev
+
+
+def test_coordinator_user_context_NOT_injected_for_subagent():
+    """Sub-agents must NOT get the coordinator user context block (they
+    are workers, not coordinators)."""
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    captured = []
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            captured.extend(list(messages))
+            return Response(text="ok", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    _prev = CONFIG.coordinator_mode_enabled
+    CONFIG.coordinator_mode_enabled = True
+    try:
+        # agent_kind="explore" simulates a sub-agent.
+        child = QueryEngine(
+            client=_SnoopClient(), max_turns=2,
+            budget=IterationBudget(max_iterations=10),
+            agent_kind="explore",
+        )
+        child.run(user_message="explore x", system_prompt="base",
+                  tools=all_registered())
+        joined = ""
+        for m in captured:
+            if m.get("role") != "user":
+                continue
+            content = m.get("content")
+            if isinstance(content, str):
+                joined += content
+            elif isinstance(content, list):
+                for b in content:
+                    if isinstance(b, dict) and b.get("type") == "text":
+                        joined += b.get("text", "")
+        assert "explore x" in joined
+        # No worker-tools-context block leaked to the sub-agent.
+        assert "without permission prompts" not in joined  # scratchpad marker
     finally:
         CONFIG.coordinator_mode_enabled = _prev
 

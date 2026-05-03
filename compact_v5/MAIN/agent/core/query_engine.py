@@ -355,9 +355,27 @@ class QueryEngine:
                 and self.agent_kind == "parent"
             ):
                 from coordinator.system_prompt import get_coordinator_system_prompt
+                from coordinator.user_context import get_coordinator_user_context
                 effective_system_prompt = (
                     effective_system_prompt + "\n\n" + get_coordinator_system_prompt()
                 )
+                # Block G3 iter-2 (Codex iter-1 finding #3 MEDIUM lock):
+                # PORT_LOG #093 promises G3-2 user context is INJECTED into
+                # the coordinator's first user message. Append it to the
+                # trailing user turn (the user_message we just appended).
+                # This mirrors Runnable's QueryEngine.ts:302-307 behavior.
+                _ws = getattr(_CFG_G3, "workspace", None)
+                _ctx_block = get_coordinator_user_context(workspace=_ws)
+                if _ctx_block and self.messages and self.messages[-1].get("role") == "user":
+                    _last = self.messages[-1]
+                    _existing = _last.get("content")
+                    _injection = "\n\n" + _ctx_block
+                    if isinstance(_existing, str):
+                        _last["content"] = _existing + _injection
+                    elif isinstance(_existing, list):
+                        _last["content"] = list(_existing) + [
+                            {"type": "text", "text": _ctx_block}
+                        ]
         except Exception as _g3_exc:
             logging.warning(
                 "[coordinator-prompt] %s: %s",
@@ -370,7 +388,12 @@ class QueryEngine:
                     session_id=self.session_id,
                 )
                 if active_block:
-                    effective_system_prompt = system_prompt + active_block
+                    # Block G3 iter-2 (Codex iter-1 finding #1 HIGH lock):
+                    # append to the existing effective_system_prompt (which
+                    # already carries the coordinator block when that's on);
+                    # don't reset to bare `system_prompt + active_block` —
+                    # that would silently discard the coordinator block.
+                    effective_system_prompt = effective_system_prompt + active_block
                 visible_tool_names = {t.name for t in tools}
                 relevant = self.skill_manager.discover_relevant(
                     user_message, active_tools=visible_tool_names,

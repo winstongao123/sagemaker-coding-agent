@@ -37,7 +37,14 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block G3 (code commit; Codex pending)
+### Block G3 iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
+- core/query_engine.py: skill-active branch now appends to effective_system_prompt (preserves coordinator block) instead of resetting to bare system_prompt + active_block (Codex iter-1 #1 HIGH).
+- coordinator/system_prompt.py: Continue-vs-Spawn matrix rewritten to v5's sync/fresh-buffer reality — "Continue = same subagent_type + restate findings"; explicit "Worker buffer NEVER persists" + "coordinator is the durable context" (Codex iter-1 #2 HIGH).
+- core/query_engine.py: get_coordinator_user_context() now actually wired — appended to the trailing user message in messages[-1] when coordinator_mode is on (Codex iter-1 #3 MEDIUM).
+- 4 new lock tests (block-preserved-with-skill / v5-continue-semantics-no-persistent-worker / user-context-injected-into-first-msg / user-context-not-injected-for-subagent).
+- 679 pass + 7 skip; verify_ship_zip PASS.
+
+### Block G3 (code commit; Codex iter-1 = APPROVE_WITH_FIXES)
 - coordinator/ module NEW (~250 LOC: system_prompt + user_context + __init__).
 - runtime/config.py: coordinator_mode_enabled flag (default OFF).
 - core/query_engine.py: append coordinator block to effective_system_prompt for parent agents when flag on.
