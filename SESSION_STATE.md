@@ -37,7 +37,13 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block N (code commit; Codex pending)
+### Block N iter-2 fixes (Codex iter-1 = REJECT)
+- parallel_dispatch.py: NEW _extract_target_path helper that maps tool name → actual path arg (notebook_edit → notebook_path; write_file/edit_file → file_path/filepath) — Codex iter-1 #1 HIGH.
+- parallel_dispatch.py: canonicalize via os.path.normpath(os.path.abspath(raw)) before grouping (collapses x.py / ./x.py / absolute path) — Codex iter-1 #2 MEDIUM.
+- 2 new lock tests + 1 updated test (compare against canonicalized expected paths).
+- 745 pass + 14 skip.
+
+### Block N (code commit; Codex iter-1 = REJECT)
 - core/parallel_dispatch.py NEW (~150 LOC): parallel + dedup + fuzzy + ephemeral + dynamic-ref helpers.
 - 11 tests + 3 deferred; 743 pass + 14 skip; ship-zip PASS.
 - PORT_LOG #102 + ADR-037.

@@ -81,17 +81,49 @@ def dedup_tool_calls(calls: List[Any]) -> Tuple[List[Any], List[Any]]:
     return kept, dropped
 
 
+def _extract_target_path(call_name: str, args: Dict[str, Any]) -> Optional[str]:
+    """Extract the canonical target path from a tool call's args.
+
+    Codex iter-1 finding #1: different mutator tools use different arg
+    names — write_file/edit_file use `file_path`, notebook_edit uses
+    `notebook_path`. Map each tool to its actual path arg.
+
+    Codex iter-1 finding #2: canonicalize via os.path.normpath +
+    os.path.abspath so calls like `x.py`, `./x.py`, `/abs/path/x.py`
+    that resolve to the same file are detected as conflicting.
+    """
+    import os
+    if not isinstance(args, dict):
+        return None
+    # Per-tool path arg name.
+    raw: Optional[str]
+    if call_name == "notebook_edit":
+        raw = args.get("notebook_path")
+    else:
+        # write_file / edit_file / future mutators
+        raw = args.get("file_path") or args.get("filepath")
+    if not isinstance(raw, str) or not raw:
+        return None
+    # Canonicalize: absolute + normalized so x.py vs ./x.py vs /abs/x.py
+    # collapse to the same key.
+    try:
+        return os.path.normpath(os.path.abspath(raw))
+    except Exception:
+        return raw
+
+
 def detect_path_conflicts(calls: List[Any]) -> Dict[str, List[Any]]:
     """Block N: detect path conflicts within a parallel batch.
 
-    Returns dict mapping conflicting path → list of calls touching that
-    path. Caller serializes these calls instead of dispatching in
-    parallel.
+    Returns dict mapping conflicting CANONICAL path → list of calls
+    touching that path. Caller serializes these calls instead of
+    dispatching in parallel.
 
-    Currently checks file_path arg of file-mutator tools (write_file /
-    edit_file / notebook_edit). Read-only tools (read_file / grep /
-    glob) don't conflict — they can read in parallel even on the same
-    path.
+    Codex iter-1 fix: per-tool path arg + canonicalized comparison
+    (see _extract_target_path).
+
+    Read-only tools (read_file / grep / glob) don't conflict — they
+    can read in parallel even on the same path.
     """
     by_path: Dict[str, List[Any]] = {}
     for call in calls:
@@ -101,10 +133,8 @@ def detect_path_conflicts(calls: List[Any]) -> Dict[str, List[Any]]:
         if name not in _FILE_MUTATOR_TOOLS:
             continue
         args = getattr(call, "input", None) if not isinstance(call, dict) else call.get("input")
-        if not isinstance(args, dict):
-            continue
-        path = args.get("file_path") or args.get("filepath")
-        if not isinstance(path, str) or not path:
+        path = _extract_target_path(name or "", args or {})
+        if not path:
             continue
         by_path.setdefault(path, []).append(call)
     return {p: cs for p, cs in by_path.items() if len(cs) > 1}

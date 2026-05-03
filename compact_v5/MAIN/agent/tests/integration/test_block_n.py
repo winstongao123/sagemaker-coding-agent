@@ -223,8 +223,11 @@ def test_partial_warning_no_op_when_empty():
 # ============================================================
 
 def test_detect_path_conflicts_finds_write_conflicts():
-    """detect_path_conflicts returns dict of path → calls when 2+ writes
-    target the same path."""
+    """detect_path_conflicts returns dict of canonical path → calls when
+    2+ writes target the same path. Keys are normpath+abspath (Codex
+    iter-1 #2 — handles relative-vs-absolute). Test compares
+    canonicalized expected paths."""
+    import os
     from core import detect_path_conflicts
 
     calls = [
@@ -235,10 +238,13 @@ def test_detect_path_conflicts_finds_write_conflicts():
         {"name": "write_file", "input": {"file_path": "/y.py"}, "id": "5"},  # different path
     ]
     conflicts = detect_path_conflicts(calls)
-    # /x.py has 3 conflicting mutators (2 writes + 1 edit). /y.py only 1 — not a conflict.
-    assert "/x.py" in conflicts
-    assert len(conflicts["/x.py"]) == 3
-    assert "/y.py" not in conflicts
+    # Canonicalize the expected paths the same way the helper does.
+    canonical_x = os.path.normpath(os.path.abspath("/x.py"))
+    canonical_y = os.path.normpath(os.path.abspath("/y.py"))
+    # /x.py has 3 conflicting mutators (2 writes + 1 edit). /y.py only 1.
+    assert canonical_x in conflicts
+    assert len(conflicts[canonical_x]) == 3
+    assert canonical_y not in conflicts
 
 
 def test_synthetic_tool_result_stub_shape():
@@ -250,6 +256,50 @@ def test_synthetic_tool_result_stub_shape():
     assert stub["tool_use_id"] == "call_42"
     assert "deduped" in stub["content"]
     assert stub["is_error"] is False
+
+
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_detect_path_conflicts_handles_notebook_edit_arg():
+    """Codex iter-1 finding #1 lock: notebook_edit uses `notebook_path`,
+    not `file_path`. Two notebook_edit calls on the same notebook must
+    be detected as conflicting.
+    """
+    from core import detect_path_conflicts
+
+    calls = [
+        {"name": "notebook_edit", "input": {"notebook_path": "/x.ipynb", "cell": 1}},
+        {"name": "notebook_edit", "input": {"notebook_path": "/x.ipynb", "cell": 2}},
+    ]
+    conflicts = detect_path_conflicts(calls)
+    # The conflict key is canonicalized; just verify exactly one entry exists
+    # with 2 calls.
+    assert len(conflicts) == 1
+    only_path, only_calls = next(iter(conflicts.items()))
+    assert only_path.replace("\\", "/").endswith("/x.ipynb")
+    assert len(only_calls) == 2
+
+
+def test_detect_path_conflicts_canonicalizes_relative_paths():
+    """Codex iter-1 finding #2 lock: relative-path variants of the same
+    file are grouped. `x.py` and `./x.py` and absolute path that resolves
+    to same file all collide.
+    """
+    import os
+    from core import detect_path_conflicts
+
+    abs_path = os.path.abspath("x.py")
+    calls = [
+        {"name": "write_file", "input": {"file_path": "x.py", "content": "a"}},
+        {"name": "write_file", "input": {"file_path": "./x.py", "content": "b"}},
+        {"name": "edit_file", "input": {"file_path": abs_path}},
+    ]
+    conflicts = detect_path_conflicts(calls)
+    assert len(conflicts) == 1, f"all 3 calls should collapse to one path; got {conflicts}"
+    only_path, only_calls = next(iter(conflicts.items()))
+    assert len(only_calls) == 3
 
 
 # ============================================================
