@@ -135,6 +135,22 @@ def _glob_any(base: Path, patterns: Iterable[str]) -> bool:
     return any(any(base.glob(p)) for p in patterns)
 
 
+def _glob_paths(base: Path, patterns: Iterable[str]) -> List[Path]:
+    paths: List[Path] = []
+    for pattern in patterns:
+        paths.extend(base.glob(pattern))
+    return sorted(paths, key=lambda p: p.name)
+
+
+def _latest_text(base: Path, patterns: Iterable[str]) -> str:
+    paths = _glob_paths(base, patterns)
+    return _read_text(paths[-1]) if paths else ""
+
+
+def _contains_any(text: str, needles: Iterable[str]) -> bool:
+    return any(needle in text for needle in needles)
+
+
 def check_suite_materialized(repo_root: Path) -> List[str]:
     """Verify the executable R-tier test suite exists for the expected IDs."""
     errors: List[str] = []
@@ -198,33 +214,71 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
     review_log = status / "r_tier_review_log.md"
     metrics = status / "r_tier_metrics.jsonl"
 
+    escalation = reviews / f"ESCALATION-{test_id}.md"
+    escalated = escalation.is_file()
+
     required_patterns = {
         "phase A prompt": [f"r-tier-{test_id}-phaseA-iter*-prompt.txt"],
         "phase A review": [f"r-tier-{test_id}-phaseA-iter*.md"],
         "AWS/raw call log": [f"r-tier-{test_id}-aws-call*.log"],
-        "phase C post-pass review": [f"r-tier-{test_id}-phaseC-iter*.md"],
     }
+    if not escalated:
+        required_patterns["phase C post-pass review"] = [f"r-tier-{test_id}-phaseC-iter*.md"]
     for label, patterns in required_patterns.items():
         if not _glob_any(reviews, patterns):
             errors.append(f"{test_id}: missing {label} in {reviews}")
+
+    phase_a_text = _latest_text(reviews, [f"r-tier-{test_id}-phaseA-iter*.md"])
+    if phase_a_text and "APPROVE_FOR_AWS_CALL" not in phase_a_text:
+        errors.append(f"{test_id}: latest phase A review lacks APPROVE_FOR_AWS_CALL")
+
+    if not escalated:
+        phase_c_text = _latest_text(reviews, [f"r-tier-{test_id}-phaseC-iter*.md"])
+        if phase_c_text and "GENUINE_PASS" not in phase_c_text:
+            errors.append(f"{test_id}: phase C review lacks GENUINE_PASS")
 
     if not _glob_any(status, [f"r-tier-{test_id}-aws-call*-telemetry.json"]):
         errors.append(f"{test_id}: missing telemetry.json in {status}")
     if not _glob_any(status, [f"r-tier-{test_id}-aws-call*-quality.md"]):
         errors.append(f"{test_id}: missing quality.md in {status}")
+    quality_text = _latest_text(status, [f"r-tier-{test_id}-aws-call*-quality.md"])
+    if quality_text:
+        if "SEMANTIC_BUG_DETECTED" in quality_text:
+            errors.append(f"{test_id}: quality review contains SEMANTIC_BUG_DETECTED")
+        if not _contains_any(
+            quality_text,
+            ("NEAR_IDEAL", "WORKING_BUT_SUBOPTIMAL", "INEFFICIENT"),
+        ):
+            errors.append(f"{test_id}: quality review lacks an accepted composite verdict")
 
-    if not review_log.is_file() or test_id not in _read_text(review_log):
+    review_log_text = _read_text(review_log)
+    if not review_log.is_file() or test_id not in review_log_text:
         errors.append(f"{test_id}: missing row in {review_log}")
+    elif not escalated and "READY" not in review_log_text:
+        errors.append(f"{test_id}: review log row lacks READY")
 
     metric_rows = _load_metrics(metrics)
-    if not any(str(r.get("test")) == test_id for r in metric_rows if "_malformed" not in r):
+    rows_for_test = [r for r in metric_rows if str(r.get("test")) == test_id and "_malformed" not in r]
+    if not rows_for_test:
         errors.append(f"{test_id}: missing JSONL metrics row in {metrics}")
+    else:
+        required_metric_keys = {
+            "test", "call", "date", "model", "tokens_in", "tokens_out",
+            "cache_hit_pct", "wallclock_s", "tool_calls", "completed",
+            "cost_usd", "verdict",
+        }
+        for row in rows_for_test:
+            missing = required_metric_keys - set(row.keys())
+            if missing:
+                errors.append(f"{test_id}: metrics row missing keys {sorted(missing)}")
+            if not escalated and row.get("completed") is not True:
+                errors.append(f"{test_id}: metrics row completed is not true")
+            if not escalated and row.get("verdict") not in {"GENUINE_PASS", "READY"}:
+                errors.append(f"{test_id}: metrics verdict is not pass/ready")
 
     # If an escalation exists, it must be reflected in the review log.
-    escalation = reviews / f"ESCALATION-{test_id}.md"
-    if escalation.is_file():
-        log_text = _read_text(review_log)
-        if test_id not in log_text or "ESCALATED" not in log_text:
+    if escalated:
+        if test_id not in review_log_text or "ESCALATED" not in review_log_text:
             errors.append(f"{test_id}: escalation file exists but review log lacks ESCALATED row")
 
     # Basic telemetry sanity for every telemetry file.
@@ -243,6 +297,11 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
                 errors.append(f"{test_id}: telemetry {fp.name} missing key {key}")
         if data.get("per_turn") == []:
             errors.append(f"{test_id}: telemetry {fp.name} has empty per_turn")
+        if not escalated and isinstance(data.get("outcome"), dict):
+            if data["outcome"].get("completed") is not True:
+                errors.append(f"{test_id}: telemetry {fp.name} outcome.completed is not true")
+            if data["outcome"].get("cost_cap_hit") is True:
+                errors.append(f"{test_id}: telemetry {fp.name} reports cost_cap_hit")
     return errors
 
 

@@ -40,12 +40,14 @@ Read these before editing:
 1. `compact_v5/_status/R_TIER_GATE_STATUS.md`
 2. `compact_v5/_status/r_tier_test_matrix.json`
 3. `compact_v5/_status/R_TIER_PENDING_TESTS.md`
-4. `compact_v5/docs/CODEX_CONTEXT_v5_R_TIER.md`
-5. `compact_v5/docs/PS_V5_TEST_PLAYBOOK.md`
-6. `compact_v5/docs/PS_V5_TEST_SET.md`
-7. `compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md`
-8. `compact_v5/_status/V5_BUILD_STATUS.md`
-9. `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md`
+4. `compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md`
+5. `compact_v5/_status/R_TIER_WORKER_BEHAVIOR_CONTRACT.md`
+6. `compact_v5/docs/CODEX_CONTEXT_v5_R_TIER.md`
+7. `compact_v5/docs/PS_V5_TEST_PLAYBOOK.md`
+8. `compact_v5/docs/PS_V5_TEST_SET.md`
+9. `compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md`
+10. `compact_v5/_status/V5_BUILD_STATUS.md`
+11. `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md`
 
 ## Current truth at prompt creation
 
@@ -61,6 +63,8 @@ Read these before editing:
 - `r_tier_gate.py` is the local fail-closed guard.
 - `r_tier_test_matrix.json` is the canonical list of all 42 required scenarios,
   cost caps, benefits, and ready criteria. Do not silently add/drop tests.
+- `R_TIER_EVIDENCE_CONTRACT.md` defines the required files and content.
+- `R_TIER_WORKER_BEHAVIOR_CONTRACT.md` defines status, git, cost, and stop rules.
 
 ## Autonomy contract
 

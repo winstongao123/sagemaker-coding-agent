@@ -61,6 +61,11 @@ Canonical test queue:
 - machine-readable: `compact_v5/_status/r_tier_test_matrix.json`
 - human-readable: `compact_v5/_status/R_TIER_PENDING_TESTS.md`
 
+Operating contracts:
+
+- evidence: `compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md`
+- worker behavior: `compact_v5/_status/R_TIER_WORKER_BEHAVIOR_CONTRACT.md`
+
 ## Current status
 
 The gate currently fails, intentionally:
