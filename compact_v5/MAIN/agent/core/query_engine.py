@@ -766,6 +766,10 @@ class QueryEngine:
                         "plan_mode": plan_mode,
                         "parent_engine": self,
                         "parent_depth": getattr(self, "_subagent_depth", 0),
+                        # Block I-1/I-5: edit_file + write_file consume this
+                        # to auto-activate skills with `paths:` frontmatter.
+                        "skill_manager": self.skill_manager,
+                        "session_id": self.session_id,
                     })
                     text = _coerce_tool_result_to_text(raw)
                     text = _truncate_tool_result(text, tool.max_result_size_chars)

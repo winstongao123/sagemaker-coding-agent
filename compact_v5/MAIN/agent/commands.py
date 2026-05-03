@@ -157,17 +157,20 @@ def cmd_skill_use(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandRes
     if not name:
         return CommandResult(text="Usage: /skill use <name>")
     sm = _get_skill_manager()
-    discovered = sm.discover()
-    if name not in discovered:
-        suggestions = [n for n in discovered if n.lower().startswith(name.lower()[:3])]
-        msg = f"Unknown skill '{name}'."
-        if suggestions:
-            msg += f" Did you mean: {', '.join(suggestions[:5])}?"
-        return CommandResult(text=msg)
-    sm.active_skill = name
+    sm.discover()
+    # Block I — Hermes fuzzy resolution: directory-name → metadata-name →
+    # case-insensitive → fuzzy (difflib cutoff=0.7).
+    canonical = sm.resolve_name(name)
+    if canonical is None:
+        available = ", ".join(sorted(sm._cache.keys())) if sm._cache else "none"
+        return CommandResult(
+            text=f"Unknown skill '{name}'. Available: {available}"
+        )
+    sm.active_skill = canonical
+    suffix = "" if canonical == name else f" (resolved from '{name}')"
     return CommandResult(
-        text=f"Activated skill '{name}'. Active for this session.",
-        side_effect=f"skill_activated:{name}",
+        text=f"Activated skill '{canonical}'{suffix}. Active for this session.",
+        side_effect=f"skill_activated:{canonical}",
     )
 
 

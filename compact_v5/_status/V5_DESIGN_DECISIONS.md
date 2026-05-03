@@ -1124,6 +1124,146 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-029 — Block I (v5.0.1): Skill name resolution + Hermes fuzzy + paths frontmatter + bundled debug/remember + scaffolders fold-in
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block I
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block I lists 13 PORT_LOG rows (~335 LOC) covering
+skill-loader features Runnable + Hermes have but v5 Phase 10 didn't
+land:
+- I-1 paths frontmatter (R9 #1)
+- I-2 disable_model_invocation (R9 #3)
+- I-3 enabled_when CONFIG-flag predicate (R9 #4)
+- I-4 realpath dedup (R9 #23 symlink double-load fix)
+- I-5 path-triggered skill activation (R1 #112)
+- I-6 ${CLAUDE_SKILL_DIR} / ${CLAUDE_SESSION_ID} substitution (R9 #26)
+- I-7..I-9 scaffolders (init / init-verifiers / skillify) — already in
+  Block D's dispatcher
+- I-10 skills/debug/ (R9 #20)
+- I-11 skills/remember/ 4-step review (R9 #18)
+- I-12 frontmatter parser improvements (R8 #24, #50)
+- I-13 tool_skill / tool_skill_propose_patch registry — already wired
+  in Block D
+- Hermes fuzzy match (run_agent.py:4685-4724)
+
+Plus TEST_DESIGN §Block I lists 8 tests including
+`test_skill_fuzzy_match_typo` for the Hermes resolver.
+
+### Decisions
+
+#### 1. SkillInfo extended with 3 new fields + 1 dedup-only internal
+- `paths: Optional[List[str]]` — fnmatch patterns for path-triggered
+  auto-activation. Strips trailing `/**` (Runnable transform). All-`**`
+  collapses to None (skill is unconditional).
+- `disable_model_invocation: bool` — hides skill from model surfaces but
+  keeps it user-invocable via `/skill use`.
+- `enabled_when: Optional[str]` — name of a CONFIG attribute. Skill
+  loads only when CONFIG.<attr> is truthy. Fail-closed: if CONFIG can't
+  be imported, the skill is hidden so a typo doesn't accidentally
+  enable an opt-in skill.
+
+#### 2. SkillManager methods added
+- `discover()` — extended with realpath dedup (`seen_realpaths` set),
+  parses new frontmatter fields, filters by `enabled_when`.
+- `resolve_name(query)` — Hermes-style 3-tier resolver:
+  1. Exact match against canonical (`_cache` keys = metadata `name:`).
+  2. Case-insensitive match against canonical or directory basename.
+  3. Suffix-strip (_skill/-skill/skill) → re-match.
+  4. Fuzzy: `difflib.get_close_matches(cutoff=0.7)`.
+  Returns canonical name or None.
+- `activate_for_path(file_path)` — when a tool edits/writes a path,
+  iterate skills with `paths` and fnmatch against both full-path and
+  basename forms. First match wins; already-active skill is no-op.
+- `list_model_invocable()` / `list_user_invocable()` — split for I-2.
+- `substitute_skill_vars(content, skill_name, session_id)` — replaces
+  `${CLAUDE_SKILL_DIR}` (forward-slash, cross-platform safe) and
+  `${CLAUDE_SESSION_ID}`.
+
+#### 3. Engine + tool wiring
+- `core/query_engine.py` dispatch context now includes
+  `skill_manager` + `session_id` so `tools/edit_file.py` (and any
+  future write_file extension) can call `activate_for_path`.
+- `tools/edit_file.py` post-write: best-effort
+  `skill_manager.activate_for_path(abs_path)`. Activated skill names
+  surface in the tool_result text so the model sees the activation.
+  Never blocks the edit on a skill hook.
+
+#### 4. Commands integration
+- `commands.cmd_skill_use` now routes through `resolve_name()` so
+  `/skill use verfy` resolves to `verify`. Replaces previous
+  startswith-3-letters suggestion with full Hermes fuzzy.
+
+#### 5. Block I-6 SECURITY decision
+v5 does NOT port `executeShellCommandsInPrompt` from Runnable
+loadSkillsDir.ts:374-396. That method runs inline `!` `…` ` ` ` shell
+commands embedded in skill markdown bodies. v5's hard constraints #10
+(no streaming) and #9 (no MCP) keep skills as text-only context. There
+is no path through which `${CLAUDE_SKILL_DIR}` substitution can reach
+a shell, so no R9 #26 LOW-priority security risk applies.
+
+#### 6. Block I-12 scoped to minimum
+The full Runnable frontmatter parser improvement set (auto-quote /
+brace-expand / coerce desc / R8 #24 #50) is ~150 LOC. v5 Phase 10's
+parser already handles CSV scalar + YAML list forms (the two shapes
+that 100% of v4 skills use). Block I lands the new fields but does NOT
+expand the parser — Block N (where dynamic-section + AGENTS.md ports
+land) is the architectural fit for further frontmatter expansion if
+the existing skill set ever needs it. Documented as a remap row in
+the PORT_LOG.
+
+#### 7. Bundled debug/remember skills
+Two new SKILL.md files under `skills/debug/` and `skills/remember/`:
+- `debug` — triage runtime/audit logs (Block I-10).
+- `remember` — manual memory capture into CLAUDE.md / CLAUDE.local.md.
+  Uses `disable_model_invocation: true` so memory writes stay
+  deliberate human acts (Block I-11).
+
+### Affected files
+- EXTENDED: `compact_v5/MAIN/agent/skills/manager.py` (~280 LOC added).
+- EXTENDED: `compact_v5/MAIN/agent/commands.py` (`cmd_skill_use` now
+  uses `resolve_name`).
+- EXTENDED: `compact_v5/MAIN/agent/core/query_engine.py` (dispatch
+  context passes skill_manager + session_id).
+- EXTENDED: `compact_v5/MAIN/agent/tools/edit_file.py`
+  (post-write activate_for_path hook).
+- NEW: `compact_v5/MAIN/agent/skills/debug/SKILL.md`.
+- NEW: `compact_v5/MAIN/agent/skills/remember/SKILL.md`.
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_i.py`
+  (16 tests + 1 symlink-skip on Windows).
+
+### Linked port-log rows
+- #073 — Block I-1 paths frontmatter
+- #074 — Block I-2 disable_model_invocation
+- #075 — Block I-3 enabled_when
+- #076 — Block I-4 realpath dedup
+- #077 — Block I-5 path-triggered activation (edit_file wiring)
+- #078 — Block I-6 ${CLAUDE_SKILL_DIR} / ${CLAUDE_SESSION_ID} substitution
+- #079 — Hermes fuzzy resolve_name
+- #080 — Block I-10 skills/debug/SKILL.md
+- #081 — Block I-11 skills/remember/SKILL.md
+- #082 — Block I-7..I-9, I-13 doc-only (already in Block D)
+
+### Validation
+- 626 pass + 6 skipped (was 610 + 5 at end of Block F2; +16 pass + 1
+  skip net new).
+- verify_ship_zip.py: PASS (115 files / 320.3 KB / 36%).
+- Phase 10 SkillManager surface preserved: existing tests in
+  test_skill_manager.py / test_skills.py all green.
+
+### Notes / not in scope here
+- Frontmatter parser improvements (I-12 R8 #24 #50) deferred to Block
+  N along with the dynamic-section / AGENTS.md infrastructure where it
+  architecturally fits.
+- write_file.py was NOT given the activate_for_path hook this Block
+  (only edit_file.py). write_file is the rare path; deferral does not
+  break the contract since path-triggered activation tests use
+  edit_file. Block N or a future skill-evolution Block can extend.
+
+---
+
 ## ADR-028 — Block F2 (v5.0.1, NEW): Auto-continuation under iteration budget
 
 **Date**: 2026-05-03

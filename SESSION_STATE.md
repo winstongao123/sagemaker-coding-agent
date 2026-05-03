@@ -30,7 +30,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 ### Block F2 DONE — Codex iter-3 APPROVE (clean)
 - All 3 iter-1 + 2 iter-2 findings closed with covering lock tests.
 - 20 total F2 tests green; PORT_LOG #072 verdict APPROVE/dd33507; ADR-028 final.
-- Tag v5.0.1-block-f2 + push pending. Next: Block I.
+- Tag v5.0.1-block-f2 pushed. Next: Block I.
+
+### Block I (code commit; Codex pending)
+- skills/manager.py extended ~280 LOC, commands.py + edit_file.py + query_engine.py wired, 2 new skill dirs (debug, remember), 16+1 tests.
+- 626 pass + 6 skip; verify_ship_zip PASS.
+- PORT_LOG #073-#082 + ADR-029.
 
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 

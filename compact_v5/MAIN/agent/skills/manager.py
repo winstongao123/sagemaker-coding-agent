@@ -43,7 +43,9 @@ SKILL_LISTING_DESC_CAP: int = 250                # Per-skill description cap (ch
 @dataclass
 class SkillInfo:
     """Parsed skill metadata. Same shape as v4 SkillInfo + Phase-10 addition
-    of `requires_tools` (Hermes filter, optional)."""
+    of `requires_tools` (Hermes filter, optional) + Block I additions
+    (paths / disable_model_invocation / enabled_when).
+    """
     name: str
     description: str
     location: str          # full path to SKILL.md
@@ -51,6 +53,19 @@ class SkillInfo:
     triggers: Optional[List[str]] = None    # keywords for auto-discovery
     auto_trigger: bool = False              # explicit per-skill opt-in
     requires_tools: Optional[List[str]] = None   # Phase 10 Hermes filter (optional)
+    # Block I-1 / R9 #1: fnmatch patterns for path-triggered auto-activation.
+    # When the user edits a matching path, the skill auto-activates. None or
+    # empty list means the skill is unconditional (the legacy behavior).
+    paths: Optional[List[str]] = None
+    # Block I-2 / R9 #3: when True, the skill is hidden from model-invocation
+    # surfaces (skill_tool / discover_relevant) but remains user-invocable
+    # via /skill use <name>. Useful for skills that should run only at human
+    # request — e.g. /remember which the model shouldn't auto-trigger.
+    disable_model_invocation: bool = False
+    # Block I-3 / R9 #4: name of a CONFIG boolean attribute. If set, the
+    # skill loads only when CONFIG.<enabled_when> is truthy. Lets a skill
+    # be conditionally available behind an opt-in feature flag.
+    enabled_when: Optional[str] = None
 
 
 # ============================================================
@@ -227,8 +242,18 @@ class SkillManager:
     # ------------------------------------------------------------
 
     def discover(self) -> Dict[str, SkillInfo]:
-        """Scan for **/SKILL.md files and legacy *.md files."""
+        """Scan for **/SKILL.md files and legacy *.md files.
+
+        Block I-4 / R9 #23: realpath-dedup. Skills loaded via symlink or
+        duplicate parent paths are de-duplicated by their resolved real
+        path so the same SKILL.md isn't loaded twice (which previously
+        produced double tool-listing entries).
+        """
         self._cache.clear()
+        # Block I-4 lock: track real paths we've already seen this discovery
+        # cycle. First-wins ordering matches Runnable's
+        # `seenFileIds` Map at loadSkillsDir.ts:736-763.
+        seen_realpaths: Set[str] = set()
         search_dirs = [self.skills_dir]
         for sub in (".agent/skills", ".claude/skills"):
             d = self.workspace / sub
@@ -238,6 +263,15 @@ class SkillManager:
         for search_dir in search_dirs:
             for fp in sorted(search_dir.rglob("SKILL.md")):
                 try:
+                    real = os.path.realpath(str(fp))
+                    if real in seen_realpaths:
+                        logging.debug(
+                            f"[skill-dedup] skipping '{fp}' (same realpath "
+                            f"as already-loaded skill)"
+                        )
+                        continue
+                    seen_realpaths.add(real)
+
                     text = fp.read_text(encoding="utf-8", errors="ignore")
                     meta, content = self._parse_frontmatter(text)
                     name = meta.get("name", fp.parent.name)
@@ -257,6 +291,41 @@ class SkillManager:
                         if (triggers_list and auto_trigger) else None
                     )
                     requires_tools = self._split_csv_field(meta.get("requires_tools"))
+                    # Block I-1 / R9 #1: paths frontmatter. Strip trailing
+                    # /** (Runnable's transform: a directory pattern matches
+                    # both itself and its descendants). All-`**` patterns
+                    # collapse to None so the skill is unconditional.
+                    raw_paths = self._split_csv_field(meta.get("paths"))
+                    paths: Optional[List[str]] = None
+                    if raw_paths:
+                        normalized = []
+                        for p in raw_paths:
+                            if p.endswith("/**"):
+                                p = p[:-3]
+                            if p:
+                                normalized.append(p)
+                        if normalized and not all(p == "**" for p in normalized):
+                            paths = normalized
+                    # Block I-2 / R9 #3
+                    disable_model_invocation = (
+                        str(meta.get("disable_model_invocation", "false"))
+                        .strip().lower() == "true"
+                    )
+                    # Block I-3 / R9 #4
+                    enabled_when_raw = meta.get("enabled_when", "")
+                    enabled_when = (
+                        str(enabled_when_raw).strip() if enabled_when_raw else None
+                    )
+
+                    # Block I-3: skip the skill entirely when its
+                    # enabled_when CONFIG flag is falsy. Loading is
+                    # conditional on the gate, not just visibility.
+                    if enabled_when and not self._enabled_when_truthy(enabled_when):
+                        logging.debug(
+                            f"[skill-gate] skipping '{name}' "
+                            f"(enabled_when={enabled_when} is falsy)"
+                        )
+                        continue
 
                     if desc and not desc.lower().lstrip().startswith("use when"):
                         logging.debug(
@@ -271,6 +340,9 @@ class SkillManager:
                         triggers=triggers,
                         auto_trigger=auto_trigger,
                         requires_tools=requires_tools,
+                        paths=paths,
+                        disable_model_invocation=disable_model_invocation,
+                        enabled_when=enabled_when,
                     )
                 except Exception:
                     continue
@@ -355,6 +427,196 @@ class SkillManager:
     def deactivate(self) -> None:
         with self._pending_lock:
             self.active_skill = None
+
+    # ------------------------------------------------------------
+    # Block I-3 — enabled_when CONFIG-flag predicate
+    # ------------------------------------------------------------
+
+    @staticmethod
+    def _enabled_when_truthy(attr: str) -> bool:
+        """Return True iff CONFIG.<attr> is truthy. Best-effort: when
+        CONFIG can't be imported (test isolation, partial env), default
+        to NOT loading the skill (fail-closed) so a typo in the flag
+        name doesn't accidentally enable an opt-in skill.
+        """
+        try:
+            from runtime.config import CONFIG as _CFG
+            return bool(getattr(_CFG, attr, False))
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------
+    # Block I-1 / I-5 — path-triggered auto-activation
+    # ------------------------------------------------------------
+
+    def activate_for_path(self, file_path: str) -> List[str]:
+        """When the user edits/writes `file_path`, auto-activate any skill
+        whose `paths` frontmatter matches via fnmatch. Skills already
+        active are skipped (no-op).
+
+        Returns the list of newly-activated skill names. Caller (edit/write
+        tool) can surface this to the user.
+        """
+        import fnmatch
+        if not self._cache:
+            self.discover()
+        # Normalize the path: relative to workspace if possible, else basename.
+        try:
+            normalized = str(Path(file_path))
+            try:
+                normalized = str(Path(file_path).resolve().relative_to(self.workspace))
+            except Exception:
+                normalized = str(Path(file_path))
+        except Exception:
+            normalized = file_path
+        # Compare with both the full and basename forms; patterns are
+        # typically `*.py` or `src/*` — fnmatch handles both.
+        candidates = {normalized, os.path.basename(normalized)}
+        # Replace backslash → forward-slash for cross-platform fnmatch.
+        candidates = {c.replace("\\", "/") for c in candidates}
+
+        activated: List[str] = []
+        for name, skill in self._cache.items():
+            if not skill.paths:
+                continue
+            if name == self.active_skill:
+                continue
+            for pattern in skill.paths:
+                pat_norm = pattern.replace("\\", "/")
+                if any(fnmatch.fnmatch(c, pat_norm) for c in candidates):
+                    with self._pending_lock:
+                        self.active_skill = name
+                        self._pending_activations.append(name)
+                    activated.append(name)
+                    logging.info(
+                        f"[skill-paths] auto-activated '{name}' "
+                        f"on edit of '{file_path}' (pattern={pattern!r})"
+                    )
+                    break
+        return activated
+
+    # ------------------------------------------------------------
+    # Block I-2 — model-vs-user visibility split
+    # ------------------------------------------------------------
+
+    def list_model_invocable(self) -> List[Dict]:
+        """Return only skills the model is allowed to invoke. Hides any
+        skill with `disable_model_invocation: true` (Block I-2 / R9 #3).
+        Use this for the skill_tool LLM tool description.
+        """
+        if not self._cache:
+            self.discover()
+        return [
+            {"name": s.name, "description": s.description, "path": s.location}
+            for s in self._cache.values()
+            if not s.disable_model_invocation
+        ]
+
+    def list_user_invocable(self) -> List[Dict]:
+        """All skills are user-invocable by default. v5 has no per-skill
+        user-disable knob (Runnable's `userInvocable: false` is unused in
+        the bundled set); this method exists so callers don't have to know.
+        """
+        return self.list_skills()
+
+    # ------------------------------------------------------------
+    # Block I — fuzzy name resolution (Hermes pattern)
+    # ------------------------------------------------------------
+
+    def resolve_name(self, query: str) -> Optional[str]:
+        """Resolve a query to a canonical skill name.
+
+        Resolution order (Hermes run_agent.py:4685-4724 fast-path-then-fuzzy):
+        1. Exact directory name match.
+        2. Case-insensitive directory or metadata `name:` match.
+        3. Hermes fuzzy: difflib.get_close_matches with cutoff=0.7.
+
+        Returns the canonical key into self._cache, or None if no match
+        crosses the cutoff. Never raises — callers can fall back to
+        printing the available list.
+        """
+        from difflib import get_close_matches
+
+        if not self._cache:
+            self.discover()
+        if not query:
+            return None
+        if query in self._cache:
+            return query
+
+        # Build the candidate pool: directory names + metadata names from
+        # SkillInfo. Metadata `name:` field is what self._cache is keyed
+        # by, so the keys ARE the metadata names.
+        canonical_names = list(self._cache.keys())
+        # Also include directory basenames in case metadata name differs
+        # from directory name (e.g. directory=clara-review, name=Clara).
+        dir_names = {os.path.basename(s.base_dir): n for n, s in self._cache.items()}
+
+        # 2a. exact case-insensitive match against canonical or dir name.
+        ql = query.lower()
+        for name in canonical_names:
+            if name.lower() == ql:
+                return name
+        for dname, canonical in dir_names.items():
+            if dname.lower() == ql:
+                return canonical
+
+        # 2b. Hermes-style normalization: strip "skill"/"-skill"/"_skill" suffix.
+        suffixes = ("_skill", "-skill", "skill")
+        for suffix in suffixes:
+            if ql.endswith(suffix):
+                base = ql[: -len(suffix)].rstrip("_-")
+                for name in canonical_names:
+                    if name.lower() == base:
+                        return name
+                for dname, canonical in dir_names.items():
+                    if dname.lower() == base:
+                        return canonical
+                break
+
+        # 3. Fuzzy fallback (difflib.get_close_matches cutoff=0.7).
+        all_names_lower = {n.lower(): n for n in canonical_names}
+        all_names_lower.update({d.lower(): n for d, n in dir_names.items()})
+        matches = get_close_matches(ql, list(all_names_lower.keys()), n=1, cutoff=0.7)
+        if matches:
+            return all_names_lower[matches[0]]
+        return None
+
+    # ------------------------------------------------------------
+    # Block I-6 — ${CLAUDE_SKILL_DIR} / ${CLAUDE_SESSION_ID} substitution
+    # ------------------------------------------------------------
+
+    def substitute_skill_vars(
+        self,
+        content: str,
+        skill_name: str,
+        session_id: str = "",
+    ) -> str:
+        """Replace ${CLAUDE_SKILL_DIR} and ${CLAUDE_SESSION_ID} in skill content.
+
+        Per Runnable loadSkillsDir.ts:356-369, ${CLAUDE_SKILL_DIR} resolves
+        to the skill's own base_dir (forward-slash on Windows so callers can
+        reference bundled scripts safely) and ${CLAUDE_SESSION_ID} resolves
+        to the supplied session_id.
+
+        Block I-6 SECURITY note: v5 does NOT execute inline shell commands
+        from skill markdown bodies (Runnable's `executeShellCommandsInPrompt`
+        is intentionally NOT ported — constraint #10 + #9 keep the skill
+        content as text-only context). Variable substitution is therefore
+        safe; there is no path through which a substituted value reaches
+        a shell.
+        """
+        if not content:
+            return content
+        skill = self._cache.get(skill_name)
+        if skill is not None:
+            base_dir = skill.base_dir
+            # Cross-platform forward-slash.
+            base_dir_fwd = base_dir.replace("\\", "/")
+            content = content.replace("${CLAUDE_SKILL_DIR}", base_dir_fwd)
+        if session_id:
+            content = content.replace("${CLAUDE_SESSION_ID}", session_id)
+        return content
 
     # ------------------------------------------------------------
     # discover_relevant() — auto-trigger with Hermes filter (PS Issue #1)

@@ -227,9 +227,28 @@ def _edit_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
     pos = content.find(old_string)
     line_no = content[:pos].count("\n") + 1 if pos >= 0 else 1
     suffix = f" ({count} replacements)" if (count > 1 and replace_all) else ""
+
+    # Block I-1 / I-5 — path-triggered skill auto-activation. When the
+    # context provides a SkillManager, ask it which (if any) skills declare
+    # this path in their `paths:` frontmatter and auto-activate them.
+    # Best-effort: never block a successful edit on this hook.
+    activated_note = ""
+    try:
+        sm = (context or {}).get("skill_manager") if isinstance(context, dict) else None
+        if sm is not None and hasattr(sm, "activate_for_path"):
+            activated = sm.activate_for_path(abs_path)
+            if activated:
+                activated_note = (
+                    f"\n  [auto-activated skill: {', '.join(activated)} "
+                    f"via paths frontmatter]"
+                )
+    except Exception:
+        pass
+
     return (
         f"Edited {os.path.basename(abs_path)} (line {line_no})\n"
         f"  -{old_lines} lines / +{new_lines} lines{suffix}"
+        f"{activated_note}"
     )
 
 

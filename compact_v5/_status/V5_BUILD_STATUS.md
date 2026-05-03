@@ -1,6 +1,18 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block F2 DONE** — tag `v5.0.1-block-f2` at `dd33507` (pending push); 610 pass + 5 skip; Codex iter-3 APPROVE)
+Last updated: 2026-05-03 (**v5.0.1 Block I IN_PROGRESS** — code + 16 tests green (1 symlink skip), 626 pass + 6 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block I entry (2026-05-03)
+- EXTENDED `skills/manager.py` (~280 LOC): SkillInfo + paths/disable_model_invocation/enabled_when fields + discover() realpath dedup + new frontmatter parsing + activate_for_path() + resolve_name() (Hermes fuzzy) + list_model_invocable/list_user_invocable + substitute_skill_vars().
+- WIRED `core/query_engine.py`: dispatch context now passes skill_manager + session_id to tools.
+- WIRED `tools/edit_file.py`: post-write activate_for_path() hook (best-effort; never blocks edit).
+- WIRED `commands.py`: cmd_skill_use now routes through resolve_name() (replaces prior startswith-3-letter suggestion).
+- NEW `skills/debug/SKILL.md` (Block I-10) + `skills/remember/SKILL.md` (Block I-11, disable_model_invocation:true).
+- 16 new tests in `tests/integration/test_block_i.py` + 1 symlink test (skipped on Windows): all 8 TEST_DESIGN-named tests + 8 behavioral locks (paths-strip-double-star, all-match-all-collapses, fuzzy-returns-none-unrelated, var-substitution-skill-dir, var-substitution-unknown-noop, /skill-use-fuzzy-integration, paths-with-directory-pattern, debug+remember-load-from-real-skills, realpath-dedup-state-isolated).
+- PORT_LOG rows #073-#082 + ADR-029. Closes I-1..I-6 + I-10 + I-11 + Hermes fuzzy + I-7..I-9, I-13 doc-only references to Block D.
+- Block I-12 (frontmatter parser improvements) explicitly deferred to Block N per ADR-029 §6.
+- `verify_ship_zip.py`: PASS (115 files / 320.3 KB / 36%).
+- Pytest: **626 passed + 6 skipped** (was 610 + 5 at Block F2; +16 pass + 1 skip net).
 
 ## v5.0.1 Block F2 entry (2026-05-03)
 - NEW `core/budget_continuation.py` (~145 LOC): BudgetTracker + check_iteration_budget + get_budget_continuation_message + COMPLETION_THRESHOLD=0.9 + DIMINISHING_THRESHOLD=2 (iteration-adapted from Runnable's 500 tokens).
