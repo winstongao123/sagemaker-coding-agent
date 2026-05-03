@@ -267,12 +267,21 @@ class TokenTracker:
     def __init__(self, config=None):
         # `config` is injected so tests can build a TokenTracker without
         # importing the runtime CONFIG singleton at module-import time.
-        # In production we re-bind to the live CONFIG via reset().
-        from runtime.config import CONFIG as _CFG  # local import avoids cycles
-        self._config = config if config is not None else _CFG
+        # When None, we resolve CONFIG dynamically on every read so a
+        # test that `importlib.reload(runtime.config)` doesn't strand the
+        # tracker on a stale instance.
+        self._config_override = config
         self._fixed_overhead: Optional[int] = None
         self._lock = threading.Lock()
         self.reset()
+
+    @property
+    def _config(self):
+        """Resolve CONFIG lazily so reloads in tests don't strand us."""
+        if self._config_override is not None:
+            return self._config_override
+        from runtime.config import CONFIG as _CFG  # noqa: F401 — late import
+        return _CFG
 
     # --------------------------------------------------------
     # Reset / state
@@ -523,6 +532,26 @@ class TokenTracker:
 
 # Module-level singleton (parity with v4 `TOKENS = TokenTracker()`).
 TOKENS = TokenTracker()
+
+
+# Block B+ (PORT_LOG #054): atexit cost-flush via cleanup_registry.
+# Per Runnable costHook.ts:6-22 (R11 N14). On normal exit / SIGINT /
+# SIGTERM, log the final session cost so operators can audit
+# post-hoc even if the user closes the notebook abruptly.
+def _flush_cost_on_exit() -> None:
+    if TOKENS.session_cost > 0:
+        logging.warning(
+            f"session-final cost: {TOKENS.get_cost()} "
+            f"({TOKENS.api_calls} API calls, "
+            f"in={TOKENS.session_input:,} out={TOKENS.session_output:,})"
+        )
+
+
+try:  # pragma: no cover — registration-time best-effort
+    from runtime.cleanup_registry import register as _register_cleanup
+    _register_cleanup(_flush_cost_on_exit)
+except Exception:
+    pass
 
 
 __all__ = [

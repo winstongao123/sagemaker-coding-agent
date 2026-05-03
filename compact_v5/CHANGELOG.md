@@ -1,5 +1,64 @@
 # compact_v5 changelog
 
+## v5.0.1-block-b-plus — SessionManager + cost-limit + AGENT_STATUS + FileCache (2026-05-03)
+
+Codex review: 3-iteration cycle — gpt-5.3-codex throughout (gpt-5.5 was
+hanging on long file lists; reverted per ~/.claude/CLAUDE.md update).
+- iter 1 (gpt-5.3-codex, 13-file prompt): APPROVE_WITH_FIXES, 4 findings
+  (1 HIGH cost-warning state leak + > vs >=, 2 MEDIUM, 1 LOW).
+- All 4 fixed; each has 1+ covering lock test (6 new lock tests added).
+- iter 2 (gpt-5.3-codex, 5-file focused prompt): APPROVE_WITH_FIXES on
+  finding #2 — entry.py guard could false-positive on external pip-installed
+  mcp packages (suffix-match was too broad).
+- Tightened guard to compare realpath against v5 agent package root.
+- Added 2 lock tests that ACTUALLY exercise the guard (drop fake in-tree
+  mcp/ → assert ImportError; add external mcp via syspath_prepend → assert
+  entry imports cleanly).
+- iter 3 (gpt-5.3-codex, 2-file focused prompt): APPROVE.
+- Lesson: focused 2-5 file Codex prompts via stdin pipe complete reliably
+  in 1-3 min. 13-file prompts complete in 5-10 min with gpt-5.3-codex
+  (vs hanging with gpt-5.5).
+
+Third Block of the v5.0.1 21-Block build. Closes the persistence + handoff
+machinery that consumes Block B's data layer.
+
+- NEW `runtime/session.py` (~165 LOC): Session dataclass + SessionManager
+  + SESSIONS singleton (verbatim from v4:2578-2659). Atomic save via
+  tempfile.mkstemp + os.replace. Schema-tolerant load.
+- NEW `runtime/file_cache.py` (~165 LOC): FileCache + FILE_CACHE singleton
+  (verbatim from v4:893-1017). Verified APIs: get/put + is/mark/clear_in_context
+  + save_and_clear_context/restore_context + enter/exit_thread_local_context
+  + clear_all. RLock + threading.local for parallel sub-agents.
+- NEW `runtime/cleanup_registry.py` (~95 LOC): atexit + SIGINT/SIGTERM
+  callback registry. Per ADR-020 Block 0 item 0-7 remap.
+- NEW `runtime/feature_flags.py` (~85 LOC): feature_enabled +
+  is_banned + assert_not_banned. Banned set: mcp / streaming /
+  anthropic_api_direct (per v5.0.1 hard constraints #9, #10). Per
+  ADR-020 Block 0 item 0-9 remap.
+- WIRED `core/query_engine.py`: per-run cost runtime warning at 100%+
+  of session_cost_limit (warn-and-continue per user 2026-05-03 Plan v3
+  update; matches v4 UX).
+- WIRED `subagent/spawn.py`: FILE_CACHE.save_and_clear_context before
+  child.run + FILE_CACHE.restore_context in finally. Sub-agents see a
+  clean slate; parent's set is preserved even if child raises.
+- WIRED `agent/__init__.py`: AGENT_STATUS auto-load on first Agent.run().
+  Reads CONFIG.workspace/AGENT_STATUS.md (8 KB cap), appends to dynamic
+  tail of system prompt after CACHE_BOUNDARY (prefix replay preserved).
+  Idempotent — once per Agent instance.
+- WIRED `runtime/tokens.py`: cleanup_registry registers `_flush_cost_on_exit`
+  so session-final cost is logged at WARNING even on Ctrl+C.
+- LAZY @property `_config` on TokenTracker / AuditLogger / SnapshotManager
+  / SessionManager so `importlib.reload(runtime.config)` in tests doesn't
+  strand singletons on a stale CONFIG instance. Caught when Block B+'s
+  test_session_cost_limit_warns_at_100pct intermittently failed after
+  Block B's test_env_validation_wired_into_config reloaded config.
+- 14 new tests in `tests/integration/test_block_b_plus.py`. PS#5 + PS#6
+  closed via test_session_save_load_preserves_cost +
+  test_tokens_singleton_is_budget_source.
+- PORT_LOG #048-#055 + ADR-022.
+- Pytest: 483 pass + 5 skip (was 469 + 5 at Block B; +14 net new).
+- verify_ship_zip.py: PASS (104 files / 272.4 KB / 38%).
+
 ## v5.0.1-block-b — TokenTracker + AuditLogger + SnapshotManager + tokenEstimation (2026-05-03)
 
 Second Block of the v5.0.1 21-Block build. Closes the v5.0.0 PS_problems
@@ -35,13 +94,15 @@ Second Block of the v5.0.1 21-Block build. Closes the v5.0.0 PS_problems
   `tests/integration/test_subagent.py` to accept the new kwarg.
 - Codex AXIS A/B/C iter 1 (gpt-5.5): APPROVE_WITH_FIXES with 6 findings
   (1 HIGH AU pricing, 1 HIGH dual audit-log paths, 3 MEDIUM, 1 LOW). All
-  6 fixed; each has 1+ covering lock test. iter 2 hung — skipped per
-  Codex resilience rule (see `_status/codex_reviews/block-b-iter2-skipped.md`).
-- Codex resilience rule codified in `BUILDER_PROMPT.md` §Step 8: when
-  iter-1 returns APPROVE_WITH_FIXES, applying fixes + writing one lock
-  test per finding stands as structural verification; iter-2 is the
-  *check*, lock tests are the *contract*. Build is now resume-safe
-  under Codex network failure.
+  6 fixed; each has 1+ covering lock test.
+- Codex iter 2 (gpt-5.3-codex, focused 6-file prompt): **APPROVE** —
+  all 6 fixes verified clean. gpt-5.5 had hung on the same review;
+  gpt-5.3-codex (the Codex-CLI-tuned variant) completed in ~6 min /
+  27k tokens.
+- Codex model rule (codified in BUILDER_PROMPT.md + global CLAUDE.md):
+  use `-m gpt-5.3-codex` for ALL Codex reviews — it's the variant the
+  Codex CLI was specifically tuned for. gpt-5.5 over-explores file
+  reads with `reasoning effort: high` and stalls on prompts >~10 files.
 - PORT_LOG #039-#047 + ADR-021. Closes 9 Wave-5-DEEP findings (B-1 +
   B-3..B-11 + B-13 + R4 #14 + R8 #74) + Block-0 ADR-020 remap rows 0-3
   + 0-8.

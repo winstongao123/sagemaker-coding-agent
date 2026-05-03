@@ -6,9 +6,56 @@ Re-exports the public surface. Notebook cells should be able to:
 
 without knowing which subpackage owns each name.
 
-PORT_LOG: see #031 + #032 (chat.ipynb wiring).
+Block B+ Codex finding #2 (MEDIUM) lock: import-boundary fail-closed
+for v5.0.1 hard-constraint banned subsystems (#9 MCP, #10 streaming,
+anthropic_api_direct). Any future code path that re-introduces them
+will fail at import here.
+
+PORT_LOG: see #031 + #032 (chat.ipynb wiring) + #056 (banned-subsystem guard).
 """
 from __future__ import annotations
+
+# ============================================================
+# Banned-subsystem import-time guard (Block B+ — ADR-022 / PORT_LOG #056)
+# ============================================================
+#
+# v5.0.1 hard constraints #9 + #10 forbid MCP and streaming. The guard
+# below ACTIVELY checks whether a banned subsystem package has been
+# re-introduced (e.g. someone added a `mcp/` package back). If so,
+# importing entry.py — the v5 public surface — fails-closed at load.
+# This is the import-boundary fail-closed contract from ADR-022 §
+# Linked port-log row #051.
+import importlib.util as _importlib_util
+import os as _os
+
+# Resolve the v5 agent package root (the directory containing entry.py).
+# We compare candidate package origins against THIS path so external
+# `mcp` installs (pip-installed) don't false-positive the guard.
+_AGENT_PKG_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+
+_BANNED_PACKAGE_NAMES = ("mcp",)
+for _banned in _BANNED_PACKAGE_NAMES:
+    _spec = _importlib_util.find_spec(_banned)
+    if _spec is None:
+        continue
+    _origin = getattr(_spec, "origin", "") or ""
+    if not _origin:
+        continue
+    # Only raise when the spec resolves to a path INSIDE this v5 agent
+    # package — i.e. someone re-introduced a `<v5_root>/mcp/` directory.
+    # External pip-installed packages (site-packages, conda envs, etc.)
+    # do not match this prefix and pass through silently.
+    try:
+        _origin_real = _os.path.realpath(_origin)
+        _root_real = _os.path.realpath(_AGENT_PKG_ROOT)
+    except OSError:
+        continue
+    if _origin_real.startswith(_root_real + _os.sep):
+        raise ImportError(
+            f"v5.0.1 hard constraint: banned subsystem '{_banned}' "
+            f"has been re-introduced INSIDE the v5 agent package at "
+            f"{_origin_real!r}. See runtime/feature_flags.py."
+        )
 
 # Public Agent class (Phase 11 — wraps Phase 1-10 modules)
 from agent import Agent  # noqa: F401

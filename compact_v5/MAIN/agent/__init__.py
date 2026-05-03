@@ -25,6 +25,38 @@ from core import IterationBudget, QueryEngine
 from core.query_engine import QueryResult
 
 
+# ============================================================
+# Block B+ helper — load AGENT_STATUS.md if present
+# ============================================================
+
+def _load_agent_status_text() -> Optional[str]:
+    """Return the contents of `<workspace>/AGENT_STATUS.md`, or None.
+
+    Honors CONFIG.enable_status_doc + CONFIG.status_doc + CONFIG.workspace.
+    Returns None silently when the file is missing or disabled — the
+    handoff path is a v4 capability that gracefully degrades.
+    """
+    import os
+    from runtime.config import CONFIG
+    if not getattr(CONFIG, "enable_status_doc", True):
+        return None
+    status_path = os.path.join(CONFIG.workspace, CONFIG.status_doc)
+    if not os.path.isfile(status_path):
+        return None
+    try:
+        with open(status_path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    text = text.strip()
+    if not text:
+        return None
+    # Cap at ~8 KB so a runaway status doc can't blow out the prompt.
+    if len(text) > 8000:
+        text = text[:8000] + "\n\n…[truncated; AGENT_STATUS.md exceeds 8 KB]"
+    return text
+
+
 class Agent:
     """Minimal public Agent wrapping the Phase 8-10 surfaces."""
 
@@ -79,6 +111,9 @@ class Agent:
         self._plan_mode = bool(plan_mode)
         self._thinking_enabled = bool(thinking_enabled)
         self._thinking_budget = int(thinking_budget)
+        # Block B+: AGENT_STATUS auto-load runs once on the first run() call.
+        self._agent_status_loaded = False
+        self._agent_status_text: Optional[str] = None
 
     # ------------------------------------------------------------
     # Public surface
@@ -92,10 +127,36 @@ class Agent:
     ) -> QueryResult:
         """Execute a single user turn. Returns the `QueryResult`."""
         # Lazy-import to avoid circular import on package init
-        from prompt import build_system_prompt
+        from prompt import build_system_prompt, CACHE_BOUNDARY
         from tools import all_registered
 
+        # Block B+: AGENT_STATUS auto-load on first run() call. Reads
+        # `<workspace>/AGENT_STATUS.md` (or CONFIG.status_doc) and
+        # appends it to the dynamic tail of the system prompt so the
+        # agent picks up handoff context from a previous session.
+        # Reads file ONCE per Agent instance (idempotent).
+        if not self._agent_status_loaded and self._system_prompt is None:
+            try:
+                self._agent_status_text = _load_agent_status_text()
+            except Exception:
+                self._agent_status_text = None
+            self._agent_status_loaded = True
+
         system_prompt = self._system_prompt or build_system_prompt(ctx={})
+        if self._agent_status_text:
+            # Append to the dynamic tail (after CACHE_BOUNDARY) so the
+            # cache-aware prefix replay (Block G2 territory) still works.
+            if CACHE_BOUNDARY in system_prompt:
+                system_prompt = (
+                    system_prompt + "\n\n## Handoff: AGENT_STATUS\n\n"
+                    + self._agent_status_text
+                )
+            else:
+                system_prompt = (
+                    system_prompt + CACHE_BOUNDARY
+                    + "\n\n## Handoff: AGENT_STATUS\n\n"
+                    + self._agent_status_text
+                )
         active_tools = list(tools) if tools is not None else all_registered()
 
         self._stop_requested = False  # reset between runs

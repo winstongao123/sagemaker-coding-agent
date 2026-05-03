@@ -1,14 +1,29 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block B DONE** — tag `v5.0.1-block-b` at `ee01142`, pushed; 469 pass + 5 skip; Codex resilience rule satisfied via 10 finding-lock tests)
+Last updated: 2026-05-03 (**v5.0.1 Block B+ DONE** — Codex 3-iter cycle ended APPROVE; 490 pass + 5 skip; pending tag + push)
 Updated by: Mode B autonomous build (Codex-only-gate; user reviews FINAL product after Block K + R-tier)
+
+## v5.0.1 Block B+ entry (2026-05-03)
+- 4 NEW runtime modules: `runtime/session.py` (~165 LOC), `runtime/file_cache.py` (~165 LOC), `runtime/cleanup_registry.py` (~95 LOC), `runtime/feature_flags.py` (~85 LOC).
+- WIRED `core/query_engine.py` (per-run cost runtime warning at 100%+; warn-and-continue per user 2026-05-03 plan update), `subagent/spawn.py` (FILE_CACHE.save_and_clear_context + restore_context try/finally around child.run), `agent/__init__.py` (Agent.run AGENT_STATUS auto-load — once per Agent instance, 8 KB cap, after CACHE_BOUNDARY), `runtime/tokens.py` (cleanup_registry _flush_cost_on_exit registration).
+- LAZY @property `_config` on all 4 singletons (TokenTracker / AuditLogger / SnapshotManager / SessionManager) so `importlib.reload(runtime.config)` doesn't strand them.
+- 22 new tests in `tests/integration/test_block_b_plus.py` (14 initial + 6 finding-locks for iter-1 + 2 entry-guard locks for iter-2). PS#5 + PS#6 closed end-to-end via test_session_save_load_preserves_cost + test_tokens_singleton_is_budget_source.
+- Codex AXIS A/B/C 3-iteration cycle (all gpt-5.3-codex):
+  - iter 1 (13 files): APPROVE_WITH_FIXES, 4 findings (1 HIGH + 2 MEDIUM + 1 LOW).
+  - iter 2 (5 files): APPROVE_WITH_FIXES on finding #2 (guard false-positive on external mcp).
+  - iter 3 (2 files): APPROVE — guard now realpath-rooted; 2 lock tests exercise both branches.
+- Removed empty `compact_v5/MAIN/agent/mcp/` placeholder (Phase 0-1 leftover; constraint #9 enforcement).
+- PORT_LOG rows #048-#055 + ADR-022. Closes Block-0 ADR-020 remap rows 0-7 (cleanupRegistry) + 0-9 (feature_flags fail-closed) + B+3..B+6 explicit landing-Block remap (B+3/B+4/B+6 → Block I; B+5 → Block A).
+- `verify_ship_zip.py`: PASS (103 files / 273.5 KB / 38%).
+- Pytest: **490 passed + 5 skipped** (was 469 + 5 at Block B; +21 pass net).
 
 ## v5.0.1 Block B entry (2026-05-03)
 - 4 NEW runtime modules: `runtime/tokens.py` (~480 LOC), `runtime/audit.py` (~155 LOC), `runtime/snapshot.py` (~135 LOC), `runtime/env_validation.py` (~60 LOC).
 - EXTENDED `runtime/bedrock_client.py`: BEDROCK_EXTRA_PARAMS_HEADERS frozenset (3 betas: interleaved-thinking + 1m-context + tool-search) + `count_tokens()` method (B-1, R4 #41 MUST) with thinking-aware body.
 - WIRED `core/query_engine.py` (TOKENS.add + AUDIT.log on ALL 4 dispatch paths: success / raised / unknown-tool / plan-mode-blocked + agent_kind/session_id ctor params), `subagent/spawn.py` (agent_type → agent_kind), `tools/edit_file.py` + `tools/write_file.py` (SNAPSHOTS.save best-effort), `runtime/config.py` (env-validation wiring on 5 numeric knobs).
 - 28 new tests in `tests/integration/test_block_b.py` (27 pass + 1 T5 skipped). 18 from initial scope + 10 finding-lock tests covering each Codex iter-1 finding.
-- Codex AXIS A/B/C iter 1 (gpt-5.5): APPROVE_WITH_FIXES with 6 findings (1 HIGH AU pricing, 1 HIGH dual audit-log paths, 3 MEDIUM, 1 LOW). All 6 fixed; each has 1+ covering lock test. iter 2 hung — skipped per Codex resilience rule (`_status/codex_reviews/block-b-iter2-skipped.md`).
+- Codex AXIS A/B/C iter 1 (gpt-5.5): APPROVE_WITH_FIXES with 6 findings (1 HIGH AU pricing, 1 HIGH dual audit-log paths, 3 MEDIUM, 1 LOW). All 6 fixed; each has 1+ covering lock test.
+- Codex iter 2 (gpt-5.3-codex, focused 6-file prompt): **APPROVE** — all 6 fixes verified clean (`_status/codex_reviews/block-b-iter2.md`). gpt-5.5 had hung on the same review; gpt-5.3-codex (the Codex-CLI-tuned variant) completed in ~6 min / 27k tokens.
 - PORT_LOG rows #039-#047 + ADR-021. Closes 9 Wave-5-DEEP findings (B-1 / B-3..B-11 / B-13 / R4 #14 / R8 #74) + Block-0 ADR-020 remap rows 0-3 + 0-8.
 - PS_problems #5 + #6 STRUCTURALLY ADDRESSED (TokenTracker.restore + singleton-as-budget-source + canonicalize_model_id strips au.).
 - `verify_ship_zip.py`: PASS (100 files / 263.6 KB / 38%).

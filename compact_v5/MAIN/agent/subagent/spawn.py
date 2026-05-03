@@ -238,14 +238,34 @@ def spawn_subagent(
     from tools import all_registered
     child_tools = all_registered()
 
-    # The child runs synchronously to completion or budget exhaustion.
-    result = child.run(
-        user_message=p,
-        system_prompt=child_prompt,
-        tools=child_tools,
-        plan_mode=plan_mode,
-        output_fn=output_fn,
-    )
+    # Block B+ (PORT_LOG #053): save+clear FILE_CACHE main context
+    # before the child runs so the child sees a fresh in-context set;
+    # restore the parent's set after the child returns. Best-effort —
+    # if FILE_CACHE singleton is unavailable, dispatch still proceeds.
+    _file_cache_saved = None
+    try:
+        from runtime.file_cache import FILE_CACHE as _FC
+        _file_cache_saved = _FC.save_and_clear_context()
+    except Exception:
+        pass
+
+    try:
+        # The child runs synchronously to completion or budget exhaustion.
+        result = child.run(
+            user_message=p,
+            system_prompt=child_prompt,
+            tools=child_tools,
+            plan_mode=plan_mode,
+            output_fn=output_fn,
+        )
+    finally:
+        # Always restore parent's in-context set, even if child raised.
+        if _file_cache_saved is not None:
+            try:
+                from runtime.file_cache import FILE_CACHE as _FC
+                _FC.restore_context(_file_cache_saved)
+            except Exception:
+                pass
 
     # Defense-in-depth: confirm the parent buffer wasn't mutated. Structural
     # comparison via the deep snapshot — catches in-place edits that preserve

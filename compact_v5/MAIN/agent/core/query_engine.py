@@ -209,6 +209,11 @@ class QueryEngine:
         # which would silently widen the per-turn tools= payload on later
         # runs. Lock test: test_discovered_tools_reset_between_runs.
         self._discovered_tool_names = set()
+        # Block B+ Codex finding #1 (HIGH) lock: reset the per-run cost
+        # over-budget warning flag so subsequent run() calls re-emit the
+        # warning once each (instead of staying silent for the lifetime
+        # of the engine).
+        self._warned_over_budget = False
 
         # Append user turn (Bedrock requires alternation; merge into trailing
         # user if needed — matches v4 sagemaker_agent.py:8744).
@@ -345,6 +350,23 @@ class QueryEngine:
                     model_id=getattr(self.client, "model_id", None),
                     agent_kind=self.agent_kind,
                 )
+                # Block B+ (PORT_LOG #052): per-turn cost-vs-budget runtime
+                # warning. v4 sagemaker_agent.py:8787 prints
+                #   `[Cost ${session_cost} passed budget ${limit} — continuing.]`
+                # NOT a hard halt — per user 2026-05-03 update to plan v3,
+                # v5 matches v4 UX: warn and continue. True hard halt is at
+                # cloud-budget level (AWS Budget Action / GCP).
+                from runtime.config import CONFIG as _CFG
+                limit = getattr(_CFG, "session_cost_limit", 0.0)
+                # Block B+ Codex finding #1 lock: `>=` so exact-100% trips
+                # the warning (`>` would skip parity-100% cases).
+                if limit > 0 and _TOKENS.session_cost >= limit:
+                    if not getattr(self, "_warned_over_budget", False):
+                        output_fn(
+                            f"[Cost ${_TOKENS.session_cost:.4f} passed "
+                            f"budget ${limit:.2f} — continuing.]"
+                        )
+                        self._warned_over_budget = True
             except Exception:
                 pass
 

@@ -148,7 +148,7 @@ DO NOT read compact_v4/MAIN/agent/sagemaker_agent.py directly.
 Save the prompt to `_status/codex_reviews/block-<BLOCK_ID>-prompt.txt`. Run:
 ```bash
 cd D:/Github/sagemaker-coding-agent
-codex exec --full-auto -s read-only -m gpt-5.5 --skip-git-repo-check \
+codex exec --full-auto -s read-only -m gpt-5.3-codex --skip-git-repo-check \
   "$(cat _status/codex_reviews/block-<BLOCK_ID>-prompt.txt)" \
   > _status/codex_reviews/block-<BLOCK_ID>.md
 ```
@@ -214,17 +214,55 @@ User has explicitly said "Codex-only mode" or equivalent at build start. In this
 - Run R-tier (R1-R12) automatically after Block K completes
 - **STOP at FINAL gate only**: after all 21 Blocks + R-tier, present FINAL product summary to user
 
-**Codex resilience rule (network failure / hang fallback)**:
-If Codex returns APPROVE_WITH_FIXES on iter-N, worker fixes findings AND writes one lock test per finding, and iter-(N+1) hangs >15 min with 0 bytes output OR fails with network error:
-1. Kill the background Codex task.
-2. Verify EVERY iter-N finding has a corresponding lock test in the new commit (grep test names against findings).
-3. If YES → tag with note "iter-(N+1) skipped due to Codex network/hang; lock tests serve as durable verification" + log to `_status/codex_reviews/block-X-iter-skipped.md`.
-4. If NO → ESCALATE to user before tagging.
+**Codex hang ROOT CAUSE (verified 2026-05-03 via direct testing)**:
+Codex hangs are caused by **accumulated zombie `codex.exe` processes**, NOT by file size, file count, or model choice.
 
-Rationale: lock tests are STRONGER than one-shot Codex re-review (they enforce fix permanently; Codex re-review is single-snapshot opinion). This prevents Codex CLI/network issues from blocking the build indefinitely.
+When a Codex bash task is "killed" via TaskStop, it kills the bash WRAPPER but the underlying `codex.exe` process keeps running as a zombie. After ~5-10 zombies accumulate (each ~50-200 MB RAM), new Codex calls hang silently waiting for OS resources / OpenAI API session slots.
 
-**Mode B HARD ESCALATION TRIGGERS (still STOP and ask user even in Mode B)**:
-1. Codex stuck in REJECT loop (3+ iterations on same block, fixes not converging — DIFFERENT from network hang; this is when Codex returns substantive REJECT each time)
+**ALWAYS kill the actual codex.exe process, not just the bash task**:
+```bash
+# AFTER killing a bash task running Codex (or BEFORE retrying):
+taskkill //F //IM codex.exe 2>&1 | tail -5
+
+# Periodically check for zombies (>3 = warning):
+tasklist | grep -i codex | wc -l
+```
+
+**Both models (gpt-5.5 and gpt-5.3-codex) work correctly when no zombies**:
+- gpt-5.5 baseline: 3 sec
+- gpt-5.5 5-file 162-KB read prompt: 25 sec ✓
+- gpt-5.3-codex 5-file prompt: 65 sec ✓
+
+Both also handle 100+ KB single files fine (Test 3 read 106 KB ADR file in 14 sec, returned correct count).
+
+False diagnoses ruled out 2026-05-03:
+- ✗ "gpt-5.5 not Codex-tuned" (it works fine)
+- ✗ "≤7 file rule" (works with more)
+- ✗ ">50 KB file rule" (works with 100+ KB)
+
+Use whichever model. Just always `taskkill //F //IM codex.exe` after kills + before retries.
+
+**STRICT Codex requirement (user directive 2026-05-03 — Codex APPROVE always required for tag)**:
+Every Block tag REQUIRES a successful Codex iter that returns clean APPROVE (not APPROVE_WITH_FIXES; clean APPROVE only). Lock tests do NOT substitute for Codex APPROVE — they are a complement to it, not a replacement.
+
+**Internet / Codex CLI failure handling (3-stage retry → escalate)**:
+
+If Codex iter-(N+1) hangs >15 min with 0 bytes output OR fails with network error:
+
+| Stage | Action | If still failing |
+|---|---|---|
+| **1. Verify connectivity** | `curl -sf https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY" \| head -5` (5 sec). If fails → wait 60s and retry once. | Go to stage 2 |
+| **2. Retry with backoff** | Kill stuck task. Wait 5 min. Re-run Codex with same prompt + model. | If hangs again, go to stage 3 |
+| **3. Fallback model** | Re-run with `-m gpt-5.4` (older but more stable). If returns clean APPROVE → tag. If returns APPROVE_WITH_FIXES → fix → loop back to stage 2 with gpt-5.3-codex. | If gpt-5.4 also hangs → stage 4 |
+| **4. ESCALATE** | STOP. Do NOT tag. Do NOT skip. Document state in `_status/codex_reviews/block-X-blocked.md`. Update V5_BUILD_STATUS "Blockers" section. Report to user with: (a) what was tried, (b) Codex output bytes per attempt, (c) error messages, (d) recommended next action. User decides: try later, manual override (with explicit "I accept the risk" note in PORT_LOG), or different recovery path. |
+
+**The build PAUSES on stage 4 escalation — no autonomous skip. User explicitly unblocks.**
+
+Reason: Codex APPROVE is the discipline gate; internet failures are recoverable by retry + fallback model BEFORE escalation; only PERSISTENT failures interrupt the user.
+
+**Mode B HARD ESCALATION TRIGGERS (always STOP and ask user even in Mode B)**:
+1. Codex returns CHANGES_REQUESTED/REJECT on 3+ rounds (fixes not converging)
+2. Codex hangs >15 min OR fails with network error (per STRICT rule above — NO skip)
 2. New finding NOT in SYNTHESIS_MASTER discovered (truly new, not missed note)
 3. Constraint conflict (v4 needs feature X but X violates a hard constraint)
 4. Real-Bedrock smoke fails for unexplained reasons (don't burn money retrying)

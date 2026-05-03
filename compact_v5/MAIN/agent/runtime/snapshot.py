@@ -28,12 +28,19 @@ class SnapshotManager:
     MAX_SNAPSHOTS = 200
 
     def __init__(self, workspace: Optional[str] = None, config=None):
-        from runtime.config import CONFIG as _CFG  # local import avoids cycles
-        self._config = config if config is not None else _CFG
+        self._config_override = config
         self._workspace = workspace or self._config.workspace
         self._dir = os.path.join(self._workspace, ".snapshots")
         self._log: List[Dict[str, Any]] = []
         self._lock = threading.Lock()
+
+    @property
+    def _config(self):
+        """Resolve CONFIG lazily so reloads in tests don't strand us."""
+        if self._config_override is not None:
+            return self._config_override
+        from runtime.config import CONFIG as _CFG  # noqa: F401
+        return _CFG
 
     # --------------------------------------------------------
     # Save

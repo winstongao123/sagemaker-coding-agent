@@ -57,18 +57,26 @@ class AuditLogger:
     }
 
     def __init__(self, audit_dir: Optional[str] = None, config=None):
-        from runtime.config import CONFIG as _CFG  # local import avoids cycles
-        self._config = config if config is not None else _CFG
-        self.audit_dir = audit_dir or self._config.audit_dir
+        self._config_override = config
+        cfg = self._config
+        self.audit_dir = audit_dir or cfg.audit_dir
         self._lock = threading.Lock()
-        self._disabled = self._config.disable_local_traces
+        self._disabled = cfg.disable_local_traces
         if not self._disabled:
             try:
                 os.makedirs(self.audit_dir, exist_ok=True)
-                self.prune_old_logs(self._config.audit_retention_days)
+                self.prune_old_logs(cfg.audit_retention_days)
             except OSError as e:
                 logging.warning(f"AuditLogger: cannot create audit_dir {self.audit_dir}: {e}")
                 self._disabled = True
+
+    @property
+    def _config(self):
+        """Resolve CONFIG lazily so reloads in tests don't strand us."""
+        if self._config_override is not None:
+            return self._config_override
+        from runtime.config import CONFIG as _CFG  # noqa: F401
+        return _CFG
 
     # --------------------------------------------------------
     # Path resolution

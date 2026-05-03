@@ -1124,6 +1124,129 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-022 — Block B+ (v5.0.1): SessionManager + cost-limit + AGENT_STATUS + FileCache + ADR-020 0-7/0-9 remap
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block B+
+**Status**: ACCEPTED
+
+### Context
+Block B closed PS#5 (cost not persisted) + PS#6 (budget read from wrong
+source) at the data layer (TokenTracker.restore + singleton). Block B+
+ships the persistence + handoff machinery that consumes those data
+points: SessionManager (atomic save/load), AGENT_STATUS.md auto-load
+(handoff continuity), FileCache thread-local context (sub-agent
+isolation boundary), cleanup_registry (atexit cost-flush — Block 0 item
+0-7 remap), feature_flags fail-closed (Block 0 item 0-9 remap).
+
+### Decision
+Verbatim ports of v4 SessionManager (~80 LOC) + FileCache (~125 LOC).
+v5 adapts only:
+- Constructor `config` injection on all four singletons
+  (TokenTracker / AuditLogger / SnapshotManager / SessionManager)
+  with **lazy `@property _config`** so `importlib.reload(runtime.config)`
+  in tests doesn't strand the singleton on a stale CONFIG instance.
+  Caught by `test_session_cost_limit_warns_at_100pct` failing
+  intermittently when run after `test_env_validation_wired_into_config`.
+- Cost-runtime warning is per-`run()`-instance via `_warned_over_budget`
+  flag, not per-process; this avoids spamming the user with the same
+  warning every turn.
+- AGENT_STATUS auto-load is **idempotent** — read once per Agent
+  instance, cached in `_agent_status_text`. Subsequent `run()` calls
+  reuse the cached text. Cap at 8 KB so a runaway status doc can't
+  blow out the prompt.
+- cleanup_registry tolerates Jupyter kernel signal-handler hijacking
+  (`signal.signal()` install wrapped in `try/except`).
+- session_cost_limit is **warn-and-continue** at 100% per user
+  2026-05-03 Plan v3 update — v5 matches v4 UX. True hard halt is at
+  cloud-budget level (AWS Budget Action / GCP Cloud Function — see
+  `docs/CLOUD_COST_CAPS_SETUP.md`).
+
+### Rationale
+- Lazy `@property _config` lookup is cheap (one attribute access +
+  module dict lookup) and eliminates a class of test-isolation bugs
+  that would have grown over time.
+- Block 0 ADR-020 0-7 (cleanup_registry) lands in B+ because B+ is the
+  first block with a real consumer (TokenTracker._flush_cost_on_exit).
+  Block 0 ADR-020 0-9 (feature_flags) lands here because B+ is the
+  first block whose modules use feature_enabled() at import time.
+- AGENT_STATUS auto-load reads the file once per Agent instance, not
+  per turn — handoff continuity should reflect what the user wrote at
+  session start, not racing-with-edits status updates.
+- session_cost_limit warn-vs-halt: matches v4 UX. Per user
+  2026-05-03 update, hard halts belong at cloud-budget level so even
+  unattended overnight runs are bounded without breaking the
+  visible-budget UX users prefer.
+
+### Runnable-fidelity impact
+- SessionManager: TS Promise → Python sync; tempfile.mkstemp + os.replace
+  is the equivalent atomic-rename pattern.
+- FileCache: TS class → Python class with threading.RLock + threading.local.
+- cleanupRegistry: full equivalence (atexit + signal handlers).
+- entry.ts fail-closed: feature_flags helper exposes the same surface
+  Runnable's `flags.ts` provides.
+- Cost-runtime warning: v4 had print(); v5 routes through query_engine
+  output_fn so notebook UI captures it.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/runtime/session.py`
+- NEW: `compact_v5/MAIN/agent/runtime/file_cache.py`
+- NEW: `compact_v5/MAIN/agent/runtime/cleanup_registry.py`
+- NEW: `compact_v5/MAIN/agent/runtime/feature_flags.py`
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_b_plus.py`
+- MODIFIED: `compact_v5/MAIN/agent/runtime/tokens.py` (lazy @property
+  _config + atexit cost-flush registration)
+- MODIFIED: `compact_v5/MAIN/agent/runtime/audit.py` (lazy @property)
+- MODIFIED: `compact_v5/MAIN/agent/runtime/snapshot.py` (lazy @property)
+- MODIFIED: `compact_v5/MAIN/agent/__init__.py` (Agent.run AGENT_STATUS
+  auto-load + first-call cache)
+- MODIFIED: `compact_v5/MAIN/agent/core/query_engine.py` (cost runtime
+  warning post-chat())
+- MODIFIED: `compact_v5/MAIN/agent/subagent/spawn.py` (FILE_CACHE
+  save/restore around child.run try/finally)
+
+### Linked port-log rows
+- #048 — SessionManager
+- #049 — FileCache
+- #050 — cleanup_registry (ADR-020 0-7 remap)
+- #051 — feature_flags (ADR-020 0-9 remap)
+- #052 — cost runtime warning
+- #053 — sub-agent FILE_CACHE save/restore boundary
+- #054 — atexit cost-flush
+- #055 — AGENT_STATUS auto-load
+
+### Validation
+- 483 pass + 5 skipped (was 469 + 5 at end of Block B; +14 net new).
+- verify_ship_zip.py: PASS (104 files / 272.4 KB / 38%).
+
+### PS_problems closed/extended
+- **PS#5** (session cost not persisted): SessionManager round-trip
+  test confirms TOKENS.session_cost survives save → load. Lock test:
+  test_session_save_load_preserves_cost.
+- **PS#6** (budget read from wrong source): test_tokens_singleton_is_budget_source
+  asserts both Agents share TOKENS state. Lock test in this Block.
+
+### Notes / known scope remaps (Block B+ items B+3..B+6)
+
+Codex Block-B+ iter-1 finding #4 (LOW) flagged B+3..B+6 as
+UNDECLARED_PATTERN until remap is concretely declared. Per
+constraint #3 (no deferrals), this table records the explicit
+landing Block + lock test for each:
+
+| Item | Capability | LOC | Lands in Block | Implementation site (target file) | Lock test (Block where it runs) |
+|---|---|---|---|---|---|
+| B+3 | 4-line cost block format (R11 N10) | 15 | **Block I** (UI/widgets) | `ui/widgets.py:CostWidget.render_html` (4-line block: total / per-model / per-agent / cache) | `test_cost_widget_renders_4_line_block` (Block I) |
+| B+4 | Local OTel-style counters (R11 N11) | 25 | **Block I** | `runtime/tokens.py:TokenTracker.get_otel_counters()` (local SQLite/JSON only — never external endpoint per Bedrock-only constraint) | `test_otel_counters_emitted_locally_only` (Block I) |
+| B+5 | Recursive advisor sub-cost accounting (R11 N12) | 30 | **Block A** (Compactor) | `core/compactor.py` calls `TOKENS.add(usage, agent_kind="advisor")` for the auxiliary compaction-summary model | `test_advisor_sub_cost_attributed` (Block A) |
+| B+6 | contextWindow refresh on every cost update (R11 N13) | 5 | **Block I** | hook `IterationBudgetWidget.update()` to fire on every TOKENS.add (per-update refresh) | `test_iteration_budget_widget_refreshes_on_token_add` (Block I) |
+
+Each row's TARGET BLOCK must verify:
+- (a) the row above is honored
+- (b) the lock test exists and is green
+- (c) PORT_LOG row references the implementing Block
+
+This closes Codex iter-1 finding #4 (UNDECLARED_PATTERN) for B+3..B+6.
+
 ## ADR-021 — Block B (v5.0.1): TokenTracker + AuditLogger + SnapshotManager + tokenEstimation + ADR-020 0-3/0-8 remap
 
 **Date**: 2026-05-03

@@ -77,7 +77,7 @@ Any single failure = stop, fix, re-test, re-Codex, re-approve.
 |---|---|---|---|
 | `test_session_manager_atomic_save` | T1 | save → tmp file → atomic rename; partial-write doesn't corrupt | $0 |
 | `test_session_save_load_preserves_cost` | T1 | save at $2.09 → load → `TOKENS.session_cost == 2.09` (closes PS#5) | $0 |
-| `test_session_cost_limit_blocks_at_100pct` | T1 | when `session_cost > session_cost_limit`, agent halts with explicit message | $0 |
+| `test_session_cost_limit_warns_at_100pct` | T1 | when `session_cost >= session_cost_limit`, query_engine emits a `[Cost ${cost} passed budget ${limit} — continuing.]` line ONCE per run() call AND `TOKENS.add()` does NOT raise on subsequent calls (warn-and-continue per user 2026-05-03 Plan v3 update; matches v4 UX). Hard halt is at cloud-budget level (AWS Budget Action / GCP) — see `docs/CLOUD_COST_CAPS_SETUP.md`. | $0 |
 | `test_agent_status_auto_load` | T1 | first `Agent.run()` call reads `AGENT_STATUS.md` and injects into system prompt | $0 |
 | `test_filecache_thread_local_isolation` | T2 | parent `_FILES_READ` not visible inside sub-agent thread context (uses verified v4 APIs `save_and_clear_context` + `enter_thread_local_context`) | $0 |
 | `test_subagent_token_attribution` | T2 | spawn parent + sub-agent → assert `TOKENS.parent_input_tokens > 0` AND `TOKENS.subagent_input_tokens["build"] > 0` AND `session_cost == sum_of(per_agent_cost) ± $0.0001` | $0 |

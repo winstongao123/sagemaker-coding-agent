@@ -1,0 +1,123 @@
+You are reviewing Block B+ of v5.0.1.
+
+Block B+ deliverable: SessionManager (atomic save/load) + cost-runtime
+warning + AGENT_STATUS.md auto-load + FileCache thread-local context +
+ADR-020 Block 0 item 0-7 / 0-9 remap implementations + lazy @property
+_config refactor.
+
+Files changed (diff vs v5.0.1-block-b / ee01142):
+- NEW compact_v5/MAIN/agent/runtime/session.py (~165 LOC) — Session
+  dataclass + SessionManager + SESSIONS singleton (verbatim port of
+  v4 lines 2578-2659).
+- NEW compact_v5/MAIN/agent/runtime/file_cache.py (~165 LOC) — FileCache
+  + FILE_CACHE singleton (verbatim port of v4 lines 893-1017).
+- NEW compact_v5/MAIN/agent/runtime/cleanup_registry.py (~95 LOC) —
+  atexit + SIGINT/SIGTERM callback registry. Per ADR-020 Block 0 item
+  0-7 remap.
+- NEW compact_v5/MAIN/agent/runtime/feature_flags.py (~85 LOC) —
+  fail-closed feature flags. Banned set: mcp / streaming /
+  anthropic_api_direct (v5.0.1 hard constraints #9, #10). Per ADR-020
+  Block 0 item 0-9 remap.
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_b_plus.py
+  (14 lock tests, all pass).
+- MODIFIED compact_v5/MAIN/agent/runtime/tokens.py — added @property
+  _config (lazy lookup to survive importlib.reload(runtime.config)) +
+  registered _flush_cost_on_exit via cleanup_registry.
+- MODIFIED compact_v5/MAIN/agent/runtime/audit.py + snapshot.py — same
+  lazy @property _config refactor.
+- MODIFIED compact_v5/MAIN/agent/runtime/session.py constructor uses
+  the same lazy @property _config pattern.
+- MODIFIED compact_v5/MAIN/agent/__init__.py — Agent.run AGENT_STATUS
+  auto-load (idempotent, once per Agent instance, 8 KB cap, appends to
+  dynamic tail after CACHE_BOUNDARY so prefix replay still works).
+- MODIFIED compact_v5/MAIN/agent/core/query_engine.py — per-run cost
+  runtime warning at 100%+ of session_cost_limit. Warn-and-continue
+  per user 2026-05-03 Plan v3 update.
+- MODIFIED compact_v5/MAIN/agent/subagent/spawn.py — FILE_CACHE
+  save_and_clear_context before child.run / restore_context in finally.
+
+Tests: 483 pass + 5 skip (was 469 + 5 at end of Block B; +14 net new).
+verify_ship_zip.py: PASS (104 files / 272.4 KB / 38%).
+
+Apply the 3-axis review template:
+
+AXIS A — Errors / bugs / regressions
+For each changed file: correctness defects, security, concurrency
+(SessionManager._save_lock + FileCache._lock + cleanup_registry _lock
+all guard the right sections), dead code, test coverage gaps. Flag any:
+- SessionManager atomic-save: tempfile.mkstemp + os.replace works on
+  Windows (cross-filesystem caveats?). Schema-tolerant load drops
+  unknown fields — does that risk silently swallowing a future schema
+  field?
+- FileCache: thread-local pattern (`getattr(self._local, "in_context",
+  None)` with `is not None` check, NOT `or` — verify empty-set case
+  works correctly). save_and_clear_context returns the saved set so
+  the caller can restore — does the caller-side wiring in
+  subagent/spawn.py handle the failure path correctly?
+- AGENT_STATUS auto-load: 8 KB cap is reasonable; the caching ("read
+  once per Agent instance") may surprise users editing AGENT_STATUS.md
+  mid-session. Is that the right contract?
+- Lazy @property _config: any race condition where two singletons
+  observe two different CONFIG instances during a reload? (Probably
+  not — Python module reload is atomic-ish — but worth a glance.)
+- Cost runtime warning is per-run via _warned_over_budget flag —
+  resets between agent.run() calls (any state leak?).
+- cleanup_registry: signal.signal install wrapped in try/except — does
+  Jupyter swallow the SIGINT handler reliably? Does atexit fire even
+  when a Jupyter kernel is force-killed?
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+Does this advance v5's BETTER axes (memory, focus, long-complex-coding,
+session-resumability)? Honor 15 hard constraints?
+- Constraint #9 (drop MCP entirely): feature_flags.is_banned("mcp")
+  returns True; assert_not_banned raises ImportError. Verifiable.
+- Constraint #10 (drop streaming): feature_flags.is_banned("streaming")
+  returns True. Verifiable.
+- Per-Agent AGENT_STATUS cache: handoff continuity. v4 parity.
+- Warn-and-continue cost: per user explicit 2026-05-03 Plan v3 update —
+  v5 must NOT hard-halt at session_cost_limit. (cloud-budget level
+  handles hard halts — see docs/CLOUD_COST_CAPS_SETUP.md.)
+Verdict: FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+SYNTHESIS_MASTER §Block B+ items B+1..B+8 + Plan v3 §Block B+:
+- B+1 persist session cost on resume → wired via TokenTracker.restore
+  (Block B) + SessionManager save/load (this Block). Lock test:
+  test_session_save_load_preserves_cost. DONE.
+- B+2 canonical-name collapse → in canonicalize_model_id (Block B).
+- B+3 4-line cost block format → NOT IMPLEMENTED here (Block B's
+  TokenTracker.get_cost is single-line). Where should this land?
+  TEST_DESIGN doesn't list it as a Block B+ test.
+- B+4 OTel-style counters → NOT IMPLEMENTED (R11 N11). Where?
+- B+5 Recursive advisor sub-cost accounting → NOT IMPLEMENTED. Where?
+  This is Block A (Compactor) territory — auxiliary model is invoked
+  only via Compactor.
+- B+6 contextWindow refresh on every cost update → NOT IMPLEMENTED.
+  Where?
+- B+7 Atexit cost flush → DONE (PORT_LOG #054).
+- B+8 Config dataclass doc row → covered by ADR-022 §Affected files.
+- ADR-020 0-7 (cleanupRegistry) → DONE (PORT_LOG #050).
+- ADR-020 0-9 (feature_flags) → DONE (PORT_LOG #051).
+
+Question: are B+3, B+4, B+5, B+6 true scope drops, deferred-with-intent,
+or remap to other Blocks (Block A or E+F)? Lock-test coverage for any
+that should land here?
+UNDECLARED_PATTERN flag if invented.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Read paths (v5 changed files):
+  - compact_v5/MAIN/agent/runtime/{session.py,file_cache.py,cleanup_registry.py,feature_flags.py,tokens.py,audit.py,snapshot.py}
+  - compact_v5/MAIN/agent/__init__.py
+  - compact_v5/MAIN/agent/core/query_engine.py
+  - compact_v5/MAIN/agent/subagent/spawn.py
+  - compact_v5/MAIN/agent/tests/integration/test_block_b_plus.py
+  - compact_v5/_status/V5_DESIGN_DECISIONS.md (ADR-022 only — bottom)
+  - compact_v5/_status/V5_RUNNABLE_PORT_LOG.md (rows #048-#055 only — bottom)
+
+v4 source PRE-EXTRACTED (avoid 12K-LOC monolith):
+  - /tmp/v4_session_section.txt   (SessionManager; v4 lines 2578-2659; 82 LOC)
+  - /tmp/v4_filecache_section.txt (FileCache; v4 lines 893-1017; 125 LOC)
+
+DO NOT read compact_v4/MAIN/agent/sagemaker_agent.py directly.
