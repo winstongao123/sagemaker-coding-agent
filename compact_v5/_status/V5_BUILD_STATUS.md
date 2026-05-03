@@ -1,6 +1,15 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block G3 DONE** — tag `v5.0.1-block-g3` at `6a49879` (pending push); 679 pass + 7 skip; Codex iter-3 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block G2 IN_PROGRESS** — code + 8 tests green (1 T5 skip), 687 pass + 8 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block G2 entry (2026-05-03)
+- NEW `subagent/fork.py` (~210 LOC): is_in_fork_child + build_child_message + build_forked_messages + serialize_for_cache_prefix + cache_prefix_match_length helpers + FORK_BOILERPLATE_TAG / FORK_PLACEHOLDER_RESULT verbatim from Runnable.
+- EXTENDED `subagent/__init__.py`: re-exports new fork surface.
+- 8 new tests + 1 T5 skip in `tests/integration/test_block_g2.py`: 3 TEST_DESIGN-named (byte-identical-prefix / cache-aware-serialization / real-bedrock skipped) + 6 behavior locks (placeholder-text-constant / fork-detection / no-tool-use-fallback / directive-only-in-last-block / parent-history-preserved / non-assistant-parent-rejected).
+- PORT_LOG row #094 + ADR-033.
+- ADR-033 §4: spawn_subagent wiring for agent_type="fork" deferred to Block L (real-Bedrock cache-prefix exercise has architectural fit there).
+- `verify_ship_zip.py`: PASS (121 files / 338.9 KB / 36%).
+- Pytest: **687 passed + 8 skipped** (was 679 + 7 at Block G3; +8 pass + 1 skip net new).
 
 ## v5.0.1 Block G3 entry (2026-05-03)
 - NEW `coordinator/` module (~250 LOC): coordinator/system_prompt.py (4-phase orchestrator block) + coordinator/user_context.py (worker-tools + scratchpad description) + __init__.py.

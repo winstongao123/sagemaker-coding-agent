@@ -1124,6 +1124,91 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-033 — Block G2 (v5.0.1): forkSubagent cache-prefix replay
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block G2
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block G2 / G-8 ports Runnable's forkSubagent
+cache-prefix replay: when a parent agent dispatches multiple fork
+sub-agents at the same point in its conversation, all children should
+share a BYTE-IDENTICAL API request prefix so they hit the prompt cache
+together. Without this, each fork is a fresh cache miss — multiplying
+input-token cost by N for N parallel forks.
+
+Source: Runnable tools/AgentTool/forkSubagent.ts:73-end (~140 LOC).
+
+### Decisions
+
+#### 1. NEW `subagent/fork.py` (~150 LOC)
+- `FORK_BOILERPLATE_TAG = "fork-boilerplate"` — verbatim Runnable
+  identifier; recursive-fork guard scans for this tag.
+- `FORK_PLACEHOLDER_RESULT = "Fork started — processing in background"`
+  — verbatim from Runnable. Identical across children for cache.
+- `FORK_DIRECTIVE_PREFIX = "Your directive: "` — verbatim.
+- `is_in_fork_child(messages) -> bool` — verbatim port.
+- `build_child_message(directive) -> str` — verbatim port (constant
+  body + per-child directive suffix).
+- `build_forked_messages(parent_messages, parent_assistant_message,
+  directive) -> List[Dict]` — the cache-prefix builder.
+- `serialize_for_cache_prefix(messages) -> str` — TEST helper for
+  byte-identical-prefix verification (sorted keys, deterministic
+  separator).
+- `cache_prefix_match_length(a, b) -> int` — TEST helper.
+
+#### 2. Cache-prefix-share contract
+For two children spawned at the same parent state with different
+directives:
+- The first `len(parent_messages)` entries are byte-identical.
+- The replayed parent assistant message is byte-identical.
+- The placeholder-tool_result blocks (one per parent tool_use) are
+  byte-identical.
+- The ONLY variation is the trailing text block in the placeholder
+  user message, which carries the per-child directive.
+
+#### 3. T5 real-AWS deferral to R-tier R3
+TEST_DESIGN row 3 (real-Bedrock cache-hit verification, ~$0.01) is
+gated by `RUN_REAL_BEDROCK=1` and SKIP'd with a deferral note pointing
+to R-tier R3 (sub-agent dispatch + cache-prefix). Burning credit during
+unit-test phase isn't justified when the byte-identical-prefix lock
+tests cover correctness; the actual cache-hit assertion belongs with
+the rest of the real-AWS suite.
+
+#### 4. NOT wired into spawn_subagent yet
+Block G2 ships the cache-prefix builder + recursive-fork guard, but
+does NOT auto-invoke them from spawn_subagent for `agent_type="fork"`.
+Reason: forkSubagent is an Anthropic-API-direct optimization that
+relies on Bedrock-compatible cache-prefix matching, which is a v5
+runtime concern. The wiring belongs with Block L (real-Bedrock cache
+verification) where we'll exercise the cache-hit path end-to-end. For
+Block G2, the deliverable is the helper module + lock tests.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/subagent/fork.py` (~210 LOC including docstrings)
+- EXTENDED: `compact_v5/MAIN/agent/subagent/__init__.py` (re-exports)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_g2.py`
+  (8 tests + 1 T5 skip)
+
+### Linked port-log rows
+- #094 — Block G2 fork module
+
+### Validation
+- 687 pass + 8 skipped (was 679 + 7 at end of Block G3; +8 pass + 1
+  skip net new).
+- verify_ship_zip.py: PASS (121 files / 338.9 KB / 36%).
+
+### Notes / not in scope here
+- Wiring fork-subagent into spawn_subagent for agent_type="fork" lands
+  in Block L where the real-Bedrock cache-prefix exercise (R-tier R3)
+  has architectural fit.
+- Phase-9 sub-agents (general/explore/plan/etc.) get fresh buffers and
+  do NOT need the cache-prefix replay — only the `fork` agent_type
+  inherits parent context, which is where the cache-share matters.
+
+---
+
 ## ADR-032 — Block G3 (v5.0.1, NEW): Coordinator System Prompt
 
 **Date**: 2026-05-03

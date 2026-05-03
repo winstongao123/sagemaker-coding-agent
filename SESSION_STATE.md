@@ -37,6 +37,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G2 (code commit; Codex pending)
+- subagent/fork.py NEW (~210 LOC): forkSubagent cache-prefix replay helpers (verbatim Runnable port).
+- 8 new tests + 1 T5 skip; 687 pass + 8 skip; verify_ship_zip PASS.
+- PORT_LOG #094 + ADR-033.
+- spawn_subagent wiring for agent_type="fork" deferred to Block L per ADR-033 §4.
+
 ### Block G3 DONE — Codex iter-3 APPROVE (clean)
 - 15 total Block G3 tests + 1 T5 skip; PORT_LOG #092-#093 + ADR-032.
 - 3-iter Codex cycle: APPROVE_WITH_FIXES → APPROVE_WITH_FIXES → APPROVE.

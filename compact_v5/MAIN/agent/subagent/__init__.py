@@ -23,5 +23,13 @@ from .agent_types import (  # noqa: F401
     get_agent_prompt,
 )
 from .worktree import create_worktree, cleanup_worktree, WORKTREE_SUBDIR  # noqa: F401
+from .fork import (  # noqa: F401
+    build_forked_messages,
+    build_child_message,
+    is_in_fork_child,
+    cache_prefix_match_length,
+    FORK_BOILERPLATE_TAG,
+    FORK_PLACEHOLDER_RESULT,
+)
 from .env import build_env_details  # noqa: F401
 from .handoff import build_handoff_block  # noqa: F401
