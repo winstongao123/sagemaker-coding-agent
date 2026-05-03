@@ -97,6 +97,15 @@ Required before next phase:
 ```
 
 ## Notes
-- Save Codex output to `_status/codex_reviews/phase-{{ID}}.md`.
-- Do NOT tag `v5-phase-{{ID}}` if any AXIS A finding ≥ CHANGES_REQUESTED is unresolved.
-- Phase 0 has no Runnable patterns adopted (scaffold only) — AXIS B is N/A; provide the table as empty and note "scaffold-only phase, no Runnable port".
+- Save Codex output to `_status/codex_reviews/block-{{ID}}-iter{{N}}.md`
+  (legacy phase reviews under `phase-{{ID}}.md` retained for audit history).
+- **Tag is FORBIDDEN if any open finding (AXIS A, AXIS B, OR AXIS C)
+  has severity ≥ CHANGES_REQUESTED.** Codex Block K iter-1 minor #6
+  fix: was previously "AXIS A finding" only — now covers all three
+  axes per LF / WORKER_HINT_2026-05-03.md gate model.
+- Tag name convention: `v5.0.1-block-{{ID}}` (current — e.g.
+  `v5.0.1-block-t`, `v5.0.1-block-j`, `v5.0.1-block-k`). Legacy
+  `v5-phase-{{ID}}` tags exist only for Phase 0..13 history.
+- Phase 0 has no Runnable patterns adopted (scaffold only) — AXIS B
+  is N/A; provide the table as empty and note "scaffold-only phase,
+  no Runnable port".

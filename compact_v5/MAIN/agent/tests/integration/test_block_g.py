@@ -75,7 +75,7 @@ def test_agent_types_dict_has_7():
 
     expected = {"build", "plan", "explore", "verify", "general", "review", "fork"}
     assert set(AGENT_TYPES.keys()) == expected
-    assert len(AGENT_TYPES) == 7
+    assert len(AGENT_TYPES) == 7  # noqa: A44
 
 
 def test_one_shot_builtin_agent_types_has_explore_plan_verify_review():

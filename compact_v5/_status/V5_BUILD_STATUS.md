@@ -1,6 +1,24 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block J IN_PROGRESS** — 4 T4 tests green + 3 T5 env-gated; 775 pass + 17 skip total; CAUGHT REAL packaging bug (Agent module split), ADR-039)
+Last updated: 2026-05-03 (**v5.0.1 Block K IN_PROGRESS** — 6 T4 tests green; 781 pass + 17 skip total; codex iter-1 fixes pending; next pickup = Block U HTMLs)
+
+Phase ID: K
+Last commit sha: 9c8fcb47caba05413b6b16bb014604bb6464a3d7
+
+## v5.0.1 Block K entry (2026-05-03)
+- Block K — process discipline (LF AXIS C + per-block user gate + STATE/RESUME + 3-critic + A44 test refactor) per TEST_DESIGN §Block K (5 named tests + 1 meta-count = 6 tests, all T4 $0).
+- NEW `tests/integration/test_block_k_process.py` (~250 LOC, 6 tests):
+  - test_axis_c_template_present
+  - test_state_resume_anchor_per_block
+  - test_per_block_user_approval_gate_documented
+  - test_a44_no_change_detector_tests_audit
+  - test_lint_phase_id
+  - test_block_k_5_of_5_test_count (meta-count lock)
+- UPDATED `_status/CODEX_REVIEW_TEMPLATE.md` — added AXIS C "Reference-repo coverage gaps" section with MUST/DEFER/DROP/N/A disposition categories per LF / WORKER_HINT_2026-05-03.md.
+- Codex Block K iter-1 = APPROVE_WITH_FIXES (3 major + 3 minor); iter-2 fixes in progress.
+- 781 pass + 17 skip (was 775 + 17 at end of Block J; +6 net for Block K).
+- verify_ship_zip PASS (134 files / 377.1 KB / 36%).
+- PORT_LOG row + ADR-040 + tag `v5.0.1-block-k` will follow Codex APPROVE.
 
 ## v5.0.1 Block J entry (2026-05-03)
 - THE SHIP GATE: 7 tests in `tests/integration/test_block_j_ship_gate.py` per TEST_DESIGN §Block J + 1 meta-count lock = 8 tests.
@@ -489,7 +507,15 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block T — 11 missing v4 tools (~780 LOC)** (after Block N tag).
+**Block U — v5 learning HTMLs (Block U deliverable per WORKER_HINT_2026-05-03.md §3)** (after Block K tag).
+
+Block U scope: archive v4 HTMLs, update HERMES_VS_CODING_AGENT_v4.html → HERMES_VS_v4_VS_v5.html (add v5 column), and create 4 new v5-specific HTMLs in `compact_v5/HTML/`:
+- v5_architecture.html (file tree + per-module purpose + Bedrock data flow)
+- PS_FLOWCHART_V5.html (core loop / sub-agent / compact / memory / dream / cache / approval Mermaid)
+- v5_complete.html (single-file 7-tab learning doc)
+- v5_PS_PROBLEMS_FIXED.html (PS#1-7 with v4 file:line + v5 file:line + lock test name)
+
+10-step sequence (U-1 .. U-10) per WORKER_HINT §3 closes with Playwright validation + Codex AXIS A/B/C review + user-approval gate.
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -508,7 +534,10 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block H status: DONE — tag `v5.0.1-block-h` at `9759c11`; pushed.
 - Block H+ status: DONE — tag `v5.0.1-block-h-plus` at `d40493e`; pushed.
 - Block L status: DONE — tag `v5.0.1-block-l` at `686a3d5`; pushed.
-- Block N status: DONE — tag `v5.0.1-block-n` at `136f41b`; pending push.
+- Block N status: DONE — tag `v5.0.1-block-n` at `136f41b`; pushed.
+- Block T status: DONE — tag `v5.0.1-block-t` at `1cda54a`; pushed.
+- Block J status: DONE — tag `v5.0.1-block-j` at `cab61ec`; pushed.
+- Block K status: IN_PROGRESS — code at `9c8fcb4`, Codex iter-1 fixes in progress; tag deferred until APPROVE.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

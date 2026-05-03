@@ -57,6 +57,16 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block K iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES — 3 major + 3 minor)
+- **major #1**: V5_BUILD_STATUS.md was stale (Block J IN_PROGRESS / 775 pass). Updated: Block K IN_PROGRESS / 781 pass / Phase ID + last commit sha / next pickup = Block U HTMLs / DONE rows added for Block N (push), Block T, Block J.
+- **major #2**: test_state_resume_anchor_per_block strengthened — now parses real "Block <TOKEN> status: DONE — tag `...` at `<sha>`" lines + verifies recorded sha matches actual git tag sha (per TEST_DESIGN §Block K row 2). Token regex accepts digit (Block 0), letter, plus (B+/H+/E+F), and digit-suffix (G2/G3/F2) forms.
+- **major #3**: A44 audit allowlist switched from whole-file to per-line `# noqa: A44` opt-out marker. `_A44_OPTOUT_REASONS` dict records justification for each exempt line. test_block_g.py:78 `assert len(AGENT_TYPES) == 7` is the only current opt-out — Constraint #1 v4 parity sub-agent type lock.
+- **minor #4**: A44 `*_COUNT` regex broadened to `[A-Z][A-Z0-9_]*_COUNT` (catches `R13_COUNT` etc).
+- **minor #5**: env_block.py malformed dead key `anthropic.au.anthropic.claude-sonnet-4-5...` cleaned — replaced with proper `au.anthropic.claude-sonnet-4-5-20250929-v1:0` AU cross-region key.
+- **minor #6**: CODEX_REVIEW_TEMPLATE.md tag convention updated `v5-phase-` → `v5.0.1-block-`; FORBIDDEN-on-CHANGES_REQUESTED gate now covers all three axes (was AXIS A only).
+- 781 pass + 17 skip (unchanged total — fixes don't add new tests).
+- verify_ship_zip PASS (134 files / 377.1 KB / 36%).
+
 ### Block K (code commit; Codex ON HOLD per user 2026-05-03)
 - 5 TEST_DESIGN-named + 1 meta-count = 6 tests in `tests/integration/test_block_k_process.py`.
 - Added AXIS C section to `_status/CODEX_REVIEW_TEMPLATE.md` (errors+bugs / Runnable-fidelity / reference-repo coverage gaps with MUST/DEFER/DROP/N/A categories).
