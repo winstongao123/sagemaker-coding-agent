@@ -37,6 +37,13 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G3 (code commit; Codex pending)
+- coordinator/ module NEW (~250 LOC: system_prompt + user_context + __init__).
+- runtime/config.py: coordinator_mode_enabled flag (default OFF).
+- core/query_engine.py: append coordinator block to effective_system_prompt for parent agents when flag on.
+- 11 new tests + 1 T5 skip; 675 pass + 7 skip; verify_ship_zip PASS.
+- PORT_LOG #092-#093 + ADR-032.
+
 ### Block G DONE — Codex iter-3 APPROVE (clean)
 - 22 total Block G tests; PORT_LOG #086-#091 + ADR-031.
 - 3-iter Codex cycle: REJECT → REJECT → APPROVE.

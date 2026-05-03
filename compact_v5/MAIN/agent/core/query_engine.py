@@ -345,6 +345,25 @@ class QueryEngine:
         # tool names so skills with `requires_tools` are pruned when the
         # required tools aren't currently available.
         effective_system_prompt = system_prompt
+        # Block G3 — coordinator-mode prompt augmentation. Default OFF.
+        # Only the PARENT agent gets the coordinator block (sub-agents are
+        # workers, not coordinators). Best-effort try/except.
+        try:
+            from runtime.config import CONFIG as _CFG_G3
+            if (
+                getattr(_CFG_G3, "coordinator_mode_enabled", False)
+                and self.agent_kind == "parent"
+            ):
+                from coordinator.system_prompt import get_coordinator_system_prompt
+                effective_system_prompt = (
+                    effective_system_prompt + "\n\n" + get_coordinator_system_prompt()
+                )
+        except Exception as _g3_exc:
+            logging.warning(
+                "[coordinator-prompt] %s: %s",
+                type(_g3_exc).__name__, _g3_exc,
+            )
+
         if self.skill_manager is not None:
             try:
                 active_block = self.skill_manager.get_active_skill_prompt(

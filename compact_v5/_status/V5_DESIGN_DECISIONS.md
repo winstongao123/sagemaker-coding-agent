@@ -1124,6 +1124,107 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-032 — Block G3 (v5.0.1, NEW): Coordinator System Prompt
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block G3
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block G3 marks coordinator-mode prompt as
+**HIGH-MUST**: it codifies the user's #1 collaboration rule (4 phases,
+NEVER delegate understanding, continue-vs-spawn matrix, parallel-
+research / serial-write). Without it, a model launched via the `task`
+tool has no orchestration discipline — it spawns ad-hoc, doesn't
+synthesize, and loses the "your job is to direct, not do" framing.
+
+Source: Runnable coordinator/coordinatorMode.ts:111-369
+(getCoordinatorSystemPrompt) + :80-109 (getCoordinatorUserContext).
+
+### Decisions
+
+#### 1. NEW `coordinator/` module (~250 LOC)
+- `coordinator/__init__.py` — re-exports.
+- `coordinator/system_prompt.py` — `get_coordinator_system_prompt()` —
+  returns the full coordinator block. Adapted from Runnable:
+  - SendMessage / TaskStop / subscribe_pr_activity dropped (constraint
+    #9 + #10 — v5 sub-agents are sync, no async dispatch channel).
+  - MCP references dropped (constraint #9).
+  - Worker capability list uses v5's actual tool set + 7 agent types.
+- `coordinator/user_context.py` —
+  `get_coordinator_user_context(scratchpad_dir, workspace)` — describes
+  v5's worker tool set + scratchpad. Falls back to
+  `{workspace}/.scratchpad` when scratchpad_dir is None.
+
+#### 2. CONFIG flag `coordinator_mode_enabled: bool = False` (default OFF)
+- Default-OFF preserves Phase-9 behavior for users who don't want
+  coordinator mode.
+- Added to `_SCALAR_FIELDS` validation.
+
+#### 3. Engine wiring
+- `core/query_engine.py.run()`:
+  - Best-effort try/except (never blocks run on a missing module).
+  - Append-only: coordinator block goes to the END of effective_system_prompt
+    so it lands AFTER the cache boundary (preserves prefix replay for
+    static portion).
+  - Gated on `CONFIG.coordinator_mode_enabled AND agent_kind == "parent"`.
+    Sub-agents are workers, not coordinators — they never see this block
+    even when the global flag is on.
+
+#### 4. T5 deferral to R-tier
+TEST_DESIGN row 5 (real-Haiku orchestration round-trip, ~$0.01) is
+gated by `RUN_REAL_BEDROCK=1` and currently SKIP'd with a deferral
+comment pointing to R-tier R3 (sub-agent dispatch + cache-prefix). The
+real-AWS test isn't worth burning credit during unit-test phase when
+the prompt-content locks are sufficient.
+
+### Key contracts
+1. **Default OFF**: lock test
+   `test_coordinator_prompt_NOT_appended_when_flag_off`.
+2. **Parent-only**: lock test
+   `test_coordinator_prompt_NOT_appended_for_subagent`.
+3. **Verbatim phrasing**: 4-phase chain "Research → Synthesis →
+   Implementation → Verification" appears verbatim. "NEVER delegate
+   understanding" appears verbatim. Lock tests pin both.
+4. **Concurrency rule**: "Read-only tasks: run in parallel; Write tasks:
+   one at a time" appears verbatim. Lock test pins it.
+5. **Continue-vs-spawn matrix**: 6-row decision table covering research/
+   correction/verification/wrong-approach scenarios.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/coordinator/__init__.py`
+- NEW: `compact_v5/MAIN/agent/coordinator/system_prompt.py`
+- NEW: `compact_v5/MAIN/agent/coordinator/user_context.py`
+- EXTENDED: `compact_v5/MAIN/agent/runtime/config.py`
+  (`coordinator_mode_enabled` flag + `_SCALAR_FIELDS` row)
+- WIRED: `compact_v5/MAIN/agent/core/query_engine.py.run()`
+  (coordinator block append at start of run)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_g3.py`
+  (11 tests + 1 T5 skip)
+
+### Linked port-log rows
+- #092 — Block G3-1 system prompt + engine wiring
+- #093 — Block G3-2 user context
+
+### Validation
+- 675 pass + 7 skipped (was 664 + 6 at end of Block G; +11 pass + 1
+  skip net new). The +1 skip is the T5 real-AWS deferral.
+- verify_ship_zip.py: PASS (120 files / 334.7 KB / 36%).
+- Phase 11 widget surface preserved: no regressions in existing tests.
+
+### Notes / not in scope
+- A `/coordinator on` slash command (Block D extension) would let users
+  toggle the flag at runtime instead of via config file. Deferred to
+  Block K's documentation pass.
+- The T5 real-AWS orchestration test moves to R-tier R3 (sub-agent
+  dispatch + cache-prefix) where it has natural fit.
+- The full Anthropic-API streaming features (subscribe_pr_activity,
+  SendMessage continuation, parallel async tool calls) are categorical
+  drops per constraint #9 + #10. v5's coordinator mode is sync-only
+  but covers the critical "synthesize, don't delegate" axis.
+
+---
+
 ## ADR-031 — Block G (v5.0.1): Full AGENT_TYPES registry + worktree isolation + verify-skill auto-load
 
 **Date**: 2026-05-03

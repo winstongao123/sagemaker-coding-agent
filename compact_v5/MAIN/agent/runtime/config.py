@@ -136,6 +136,13 @@ class Config:
     # auto-continues with a "Keep working — do not summarize." nudge.
     enable_token_budget_continuation: bool = False
 
+    # Block G3: opt-in coordinator mode. Default OFF. When True, the parent
+    # agent's system prompt is augmented with the coordinator block from
+    # coordinator/system_prompt.py — codifies the 4-phases /
+    # never-delegate-understanding / continue-vs-spawn / parallel-research-
+    # serial-write rules.
+    coordinator_mode_enabled: bool = False
+
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)
 
@@ -236,6 +243,7 @@ def _apply_config_file(config: Config) -> None:
         "enforce_verify_contract": bool,
         "enable_subagent_handoff": bool,
         "enable_token_budget_continuation": bool,
+        "coordinator_mode_enabled": bool,
     }
     for key, expected_type in _SCALAR_FIELDS.items():
         if key not in ext:

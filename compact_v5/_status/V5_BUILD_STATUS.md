@@ -1,6 +1,15 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block G DONE** — tag `v5.0.1-block-g` at `0fe6454` (pending push); 664 pass + 6 skip; Codex iter-3 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block G3 IN_PROGRESS** — code + 11 tests green (1 T5 skip), 675 pass + 7 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block G3 entry (2026-05-03)
+- NEW `coordinator/` module (~250 LOC): coordinator/system_prompt.py (4-phase orchestrator block) + coordinator/user_context.py (worker-tools + scratchpad description) + __init__.py.
+- EXTENDED `runtime/config.py`: `coordinator_mode_enabled: bool = False` flag (default OFF) + `_SCALAR_FIELDS` row.
+- WIRED `core/query_engine.py.run()`: append-only coordinator block when `CONFIG.coordinator_mode_enabled AND agent_kind=="parent"`. Best-effort try/except so missing module doesn't block run.
+- 11 new tests in `tests/integration/test_block_g3.py`: 4 TEST_DESIGN-named (4-phases / synthesize-not-delegate / continue-vs-spawn / parallel-research-serial-write) + 1 T5 skip (real-Haiku orchestration deferred to R-tier R3) + 4 user-context tests + 3 engine-wiring locks (appended-when-on / not-appended-when-off / not-appended-for-subagent).
+- PORT_LOG rows #092-#093 + ADR-032.
+- `verify_ship_zip.py`: PASS (120 files / 334.7 KB / 36%).
+- Pytest: **675 passed + 7 skipped** (was 664 + 6 at Block G; +11 pass + 1 skip net new).
 
 ## v5.0.1 Block G entry (2026-05-03)
 - NEW `subagent/agent_types.py` (~180 LOC): AgentType dataclass with `allowed_tools` field + AGENT_TYPES dict (7 entries) + DEFAULT_AGENT_PROMPT + SUBAGENT_NOTES + ONE_SHOT_BUILTIN_AGENT_TYPES + _READ_ONLY_TOOLS / _VERIFY_TOOLS allowlists + get_agent_type/get_agent_prompt(is_coordinator).
