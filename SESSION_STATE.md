@@ -37,6 +37,15 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block T iter-2 fixes (Codex iter-1 = REJECT — 2 CRITICAL + 1 HIGH + 1 MEDIUM)
+- web_fetch.py: SSRF blocking (private/loopback/AWS-metadata) + 2MB cap via iter_content + allow_redirects=False + requires_approval=True (Codex iter-1 CRITICAL #1).
+- v4_documents.py: `_validate_doc_path()` helper using security.manager._resolve_path; all 6 creators now path-validate + requires_approval=True (Codex iter-1 CRITICAL #2).
+- v4_documents.py: schema v4 contracts — create_excel accepts list-of-dicts `data`, create_chart accepts `{labels, values}` shape, create_pdf accepts `data` alias (Codex iter-1 HIGH).
+- semantic_search.py: status action + accept both `top_k` (v4) and `k` (v5) (Codex iter-1 MEDIUM).
+- ask_user.py: `options` field for v4 parity (Codex iter-1 MEDIUM).
+- test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
+- 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
+
 ### Block T (code commit; Codex pending)
 - 11 v4 tools restored across 5 new files (consolidated by domain). Lazy-import pattern.
 - 15 tests; 760 pass + 14 skip; ship-zip PASS.

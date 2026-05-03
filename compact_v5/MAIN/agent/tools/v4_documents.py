@@ -30,6 +30,21 @@ from typing import Any, Dict, List, Optional
 from .registry import build_tool, register
 
 
+def _validate_doc_path(filepath: str) -> Optional[str]:
+    """Codex iter-1 CRITICAL fix: validate filepath against workspace
+    before write. Returns error string on failure, None on OK.
+
+    Uses security.manager._resolve_path which checks workspace + allowed_paths.
+    """
+    try:
+        from security.manager import _resolve_path
+        # _resolve_path raises on out-of-workspace writes.
+        _resolve_path(filepath)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        return f"Error: path validation failed: {exc}"
+
+
 # ============================================================
 # create_word — python-docx
 # ============================================================
@@ -41,6 +56,9 @@ def _create_word_executor(args: Dict[str, Any], context: Optional[Dict] = None) 
         return "Error: filepath is required"
     if not filepath.endswith(".docx"):
         filepath += ".docx"
+    err = _validate_doc_path(filepath)
+    if err:
+        return err
     try:
         from docx import Document
     except ImportError:
@@ -83,26 +101,42 @@ _CREATE_WORD_SCHEMA = {
 
 def _create_excel_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> str:
     filepath = str(args.get("filepath") or args.get("file_path") or "").strip()
-    rows = args.get("rows") or args.get("data") or []
+    raw_data = args.get("rows") or args.get("data") or []
     chart_type = args.get("chart_type") or ""
     if not filepath:
         return "Error: filepath is required"
     if not filepath.endswith(".xlsx"):
         filepath += ".xlsx"
+    err = _validate_doc_path(filepath)
+    if err:
+        return err
     try:
         from openpyxl import Workbook
         from openpyxl.chart import BarChart, LineChart, PieChart, Reference
     except ImportError:
         return "Error: openpyxl not installed; install via `pip install openpyxl`"
+    # Codex iter-1 HIGH fix: accept BOTH v4 shapes:
+    # - rows = [[a, b], [c, d]] (list of lists; v5 added shape)
+    # - data = [{"col": val, ...}, ...] (list of dicts; v4 advertised)
+    rows: List[List[Any]] = []
+    if isinstance(raw_data, list) and raw_data:
+        if isinstance(raw_data[0], dict):
+            # v4 list-of-dicts: emit header row + value rows.
+            cols = list(raw_data[0].keys())
+            rows.append(cols)
+            for d in raw_data:
+                rows.append([d.get(c, "") for c in cols])
+        else:
+            for row in raw_data:
+                if isinstance(row, list):
+                    rows.append(row)
+                else:
+                    rows.append([row])
     try:
         wb = Workbook()
         ws = wb.active
-        if isinstance(rows, list):
-            for row in rows:
-                if isinstance(row, list):
-                    ws.append(row)
-                else:
-                    ws.append([row])
+        for row in rows:
+            ws.append(row)
         if chart_type and len(rows) >= 2:
             chart_cls = {
                 "bar": BarChart, "line": LineChart, "pie": PieChart,
@@ -143,6 +177,9 @@ def _create_markdown_executor(args: Dict[str, Any], context: Optional[Dict] = No
         return "Error: filepath is required"
     if not filepath.endswith(".md"):
         filepath += ".md"
+    err = _validate_doc_path(filepath)
+    if err:
+        return err
     try:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
@@ -173,6 +210,9 @@ def _create_notebook_executor(args: Dict[str, Any], context: Optional[Dict] = No
         return "Error: filepath is required"
     if not filepath.endswith(".ipynb"):
         filepath += ".ipynb"
+    err = _validate_doc_path(filepath)
+    if err:
+        return err
     try:
         nb_cells = []
         for c in cells:
@@ -240,6 +280,9 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
         return "Error: filepath is required"
     if not filepath.endswith(".png"):
         filepath += ".png"
+    err = _validate_doc_path(filepath)
+    if err:
+        return err
     try:
         import matplotlib
         matplotlib.use("Agg")  # non-interactive backend for SageMaker
@@ -247,8 +290,19 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
     except ImportError:
         return "Error: matplotlib not installed; install via `pip install matplotlib`"
     try:
-        labels = list(data.keys()) if isinstance(data, dict) else []
-        values = list(data.values()) if isinstance(data, dict) else []
+        # Codex iter-1 HIGH fix: accept BOTH v4 shapes:
+        # - data = {label: value, ...}  (v5 dict shape)
+        # - data = {labels: [...], values: [...]}  (v4 advertised shape)
+        labels: List[Any] = []
+        values: List[Any] = []
+        if isinstance(data, dict):
+            if "labels" in data and "values" in data:
+                # v4 explicit shape.
+                labels = list(data.get("labels") or [])
+                values = list(data.get("values") or [])
+            else:
+                labels = list(data.keys())
+                values = list(data.values())
         if not labels or not values:
             # Default to a tiny demo chart for tests.
             labels = ["A", "B", "C"]
@@ -288,11 +342,15 @@ _CREATE_CHART_SCHEMA = {
 
 def _create_pdf_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> str:
     filepath = str(args.get("filepath") or args.get("file_path") or "").strip()
-    content_blocks = args.get("content") or []
+    # Codex iter-1 HIGH: accept v4 `data` field as alias for `content`.
+    content_blocks = args.get("content") or args.get("data") or []
     if not filepath:
         return "Error: filepath is required"
     if not filepath.endswith(".pdf"):
         filepath += ".pdf"
+    err = _validate_doc_path(filepath)
+    if err:
+        return err
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -386,7 +444,7 @@ def _register():
             description=desc,
             input_schema=schema,
             execute=executor,
-            requires_approval=False,
+            requires_approval=True,
             should_defer=True,  # deferred-loading saves tokens
             max_result_size_chars=2000,
         ))

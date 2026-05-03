@@ -26,11 +26,24 @@ def _ask_user_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> 
     if not question:
         return "Error: question is required"
 
+    # Codex iter-1 MEDIUM: support v4 `options` field.
+    raw_options = args.get("options")
+    options: list = []
+    if isinstance(raw_options, list):
+        options = [str(o).strip() for o in raw_options if str(o).strip()]
+    prompt = question
+    if options:
+        prompt = (
+            question
+            + "\nOptions:\n"
+            + "\n".join(f"  {i+1}. {o}" for i, o in enumerate(options))
+        )
+
     # Test/UI hook: caller injects a response provider via context.
     provider = (context or {}).get("ask_user_response_provider")
     if callable(provider):
         try:
-            response = provider(question)
+            response = provider(prompt)
             return str(response or "")
         except Exception as exc:  # noqa: BLE001
             return f"Error: ask_user provider raised: {type(exc).__name__}: {exc}"
@@ -38,7 +51,7 @@ def _ask_user_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> 
     # Live console path: blocks for user input.
     try:
         import builtins
-        return builtins.input(f"\n[ask_user] {question}\n> ").strip()
+        return builtins.input(f"\n[ask_user] {prompt}\n> ").strip()
     except EOFError:
         return "(no response)"
     except Exception as exc:  # noqa: BLE001
@@ -49,6 +62,11 @@ _SCHEMA = {
     "type": "object",
     "properties": {
         "question": {"type": "string"},
+        "options": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Optional list of choices to present alongside the question (v4 parity).",
+        },
     },
     "required": ["question"],
 }

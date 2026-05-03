@@ -203,24 +203,43 @@ def test_tool_semantic_search_index_then_search(tmp_path):
 def test_tool_web_fetch_html_to_markdown(monkeypatch):
     pytest.importorskip("requests")
 
+    body = b"<html><body><h1>Hello</h1><p>World</p></body></html>"
+
     class _MockResponse:
-        text = "<html><body><h1>Hello</h1><p>World</p></body></html>"
+        status_code = 200
         headers = {"Content-Type": "text/html"}
+
+        def iter_content(self, chunk_size=8192):
+            yield body
 
         def raise_for_status(self):
             pass
 
-    def fake_get(url, timeout=15):
+    def fake_get(url, timeout=15, allow_redirects=False, stream=False):
         return _MockResponse()
 
     import requests
     monkeypatch.setattr(requests, "get", fake_get)
 
     tool = _find_tool("web_fetch")
+    # Use a public DNS name (not SSRF-blocked) so the tool actually fetches.
     out = tool.execute({"url": "https://example.com"}, context={})
     # html-to-markdown should produce # Hello and World.
     assert "# Hello" in out
     assert "World" in out
+
+
+def test_tool_web_fetch_blocks_ssrf():
+    """Codex iter-1 CRITICAL: SSRF protection blocks private/loopback hosts."""
+    tool = _find_tool("web_fetch")
+    for url in (
+        "http://127.0.0.1/admin",
+        "http://localhost/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.1/",
+    ):
+        out = tool.execute({"url": url}, context={})
+        assert "Error" in out and "blocked" in out.lower(), f"URL not blocked: {url}: {out}"
 
 
 def test_tool_web_fetch_rejects_non_http_url():

@@ -72,6 +72,15 @@ def _semantic_search_executor(args: Dict[str, Any], context: Optional[Dict] = No
     action = (args.get("action") or "search").lower()
     path = args.get("path") or "."
 
+    # Codex iter-1 MEDIUM: support v4 `status` action.
+    if action == "status":
+        if not _INDEX_CACHE:
+            return "(no index built yet)"
+        lines = []
+        for ipath, idx in _INDEX_CACHE.items():
+            lines.append(f"{ipath}\t{len(idx.get('files', []))} files")
+        return "\n".join(lines)
+
     if action == "index":
         try:
             idx = _build_index(path)
@@ -98,7 +107,8 @@ def _semantic_search_executor(args: Dict[str, Any], context: Optional[Dict] = No
             from sklearn.metrics.pairwise import cosine_similarity
             qvec = idx["vectorizer"].transform([query])
             sims = cosine_similarity(qvec, idx["matrix"])[0]
-            k = int(args.get("k") or 5)
+            # Codex iter-1 MEDIUM: accept BOTH v4 `top_k` and v5 `k`.
+            k = int(args.get("top_k") or args.get("k") or 5)
             ranked = sorted(
                 zip(idx["files"], sims), key=lambda t: t[1], reverse=True,
             )[:k]
@@ -115,10 +125,11 @@ def _semantic_search_executor(args: Dict[str, Any], context: Optional[Dict] = No
 _SCHEMA = {
     "type": "object",
     "properties": {
-        "action": {"type": "string", "enum": ["index", "search"]},
+        "action": {"type": "string", "enum": ["index", "search", "status"]},
         "path": {"type": "string", "description": "Directory or file path."},
         "query": {"type": "string", "description": "Required for search action."},
-        "k": {"type": "integer", "default": 5, "description": "Top-k results."},
+        "k": {"type": "integer", "default": 5, "description": "Top-k results (v5 alias)."},
+        "top_k": {"type": "integer", "description": "Top-k results (v4 advertised name)."},
     },
     "required": ["action"],
 }
