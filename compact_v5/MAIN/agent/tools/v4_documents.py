@@ -383,8 +383,10 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
     # Codex iter-3 MEDIUM: v4 required `data`. Reject missing payload.
     if data is None:
         return "Error: data is required ({labels:[],values:[]} or {x:[],y:[]} or {labels:[],series:[{name,values}]})"
+    # Codex iter-4 HIGH fix: v4 defaults filepath to "chart.png" when omitted
+    # (sagemaker_agent.py:6049-6052; schema required=[data]).
     if not filepath:
-        return "Error: filepath is required"
+        filepath = "chart.png"
     if not filepath.endswith(".png"):
         filepath += ".png"
     err, abs_path = _validate_doc_path(filepath)
@@ -483,16 +485,42 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
                 ax.legend()
             except Exception:
                 ax.bar(labels, values, color=colors)
-        elif chart_type == "combo" and series:
-            # Combo: first series as bar, rest as line.
+        elif chart_type == "combo":
+            # Codex iter-4 MEDIUM fix: v4 combo shape is
+            # {labels, bar_values, line_values, bar_label, line_label, line_ylabel}
+            # (sagemaker_agent.py:6194-6214). Support v4 shape first;
+            # fall back to series-based combo if data uses {labels, series}.
             try:
-                first = series[0]
-                ax.bar(labels[:len(first["values"])], first["values"], label=first["name"],
-                       color=(colors[0] if colors else None))
-                for i, s in enumerate(series[1:], start=1):
-                    ax.plot(labels[:len(s["values"])], s["values"], label=s["name"],
-                            color=(colors[i] if colors and i < len(colors) else None))
-                ax.legend()
+                if isinstance(data, dict) and "bar_values" in data and "line_values" in data:
+                    bar_values = list(data.get("bar_values") or [])
+                    line_values = list(data.get("line_values") or [])
+                    bar_label = str(data.get("bar_label") or "Bar")
+                    line_label = str(data.get("line_label") or "Line")
+                    line_ylabel = data.get("line_ylabel")
+                    n = min(len(labels), len(bar_values))
+                    ax.bar(labels[:n], bar_values[:n], label=bar_label,
+                           color=(colors[0] if colors else None))
+                    if line_ylabel:
+                        ax2 = ax.twinx()
+                        ax2.set_ylabel(str(line_ylabel))
+                        ax2.plot(labels[:len(line_values)], line_values, label=line_label,
+                                 color=(colors[1] if colors and len(colors) > 1 else "tab:orange"))
+                        ax2.legend(loc="upper right")
+                    else:
+                        ax.plot(labels[:len(line_values)], line_values, label=line_label,
+                                color=(colors[1] if colors and len(colors) > 1 else "tab:orange"))
+                    ax.legend(loc="upper left")
+                elif series:
+                    # series-based combo: first series as bar, rest as line.
+                    first = series[0]
+                    ax.bar(labels[:len(first["values"])], first["values"], label=first["name"],
+                           color=(colors[0] if colors else None))
+                    for i, s in enumerate(series[1:], start=1):
+                        ax.plot(labels[:len(s["values"])], s["values"], label=s["name"],
+                                color=(colors[i] if colors and i < len(colors) else None))
+                    ax.legend()
+                else:
+                    ax.bar(labels, values, color=colors)
             except Exception:
                 ax.bar(labels, values, color=colors)
         else:  # bar (default + fallback)
@@ -682,7 +710,11 @@ def _register():
         ("create_notebook", _CREATE_NOTEBOOK_SCHEMA, _create_notebook_executor,
          "Write an .ipynb file. cells = [{type: code|markdown, source: text}]."),
         ("create_chart", _CREATE_CHART_SCHEMA, _create_chart_executor,
-         "Write a .png chart via matplotlib. chart_type: bar | line | pie."),
+         "Create chart PNG image. WHEN: generating visualizations for "
+         "Word/PDF reports (create chart FIRST, then embed). Types: bar, "
+         "grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, "
+         "combo. Always set title, xlabel, ylabel for professional output. "
+         "Use dpi=150 for reports."),
         ("create_pdf", _CREATE_PDF_SCHEMA, _create_pdf_executor,
          "Write a .pdf file via matplotlib. content = [{type: heading|text|table|image, ...}]."),
     ]

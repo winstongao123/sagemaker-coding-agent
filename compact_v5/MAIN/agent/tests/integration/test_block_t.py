@@ -240,6 +240,50 @@ def test_tool_create_chart_rejects_missing_data(workspace_tmp):
     assert "data" in out.lower()
 
 
+def test_tool_create_chart_v4_combo_shape(workspace_tmp):
+    """Codex iter-4 MEDIUM lock: create_chart combo type accepts v4
+    {labels, bar_values, line_values, bar_label, line_label, line_ylabel}
+    shape (sagemaker_agent.py:6194-6214)."""
+    pytest.importorskip("matplotlib")
+    fp = str(workspace_tmp / "combo.png")
+    tool = _find_tool("create_chart")
+    out = tool.execute({
+        "filepath": fp,
+        "chart_type": "combo",
+        "data": {
+            "labels": ["Q1", "Q2", "Q3", "Q4"],
+            "bar_values": [10, 20, 15, 25],
+            "line_values": [12, 18, 14, 22],
+            "bar_label": "Revenue",
+            "line_label": "Profit",
+            "line_ylabel": "Profit ($M)",
+        },
+        "title": "Annual Performance",
+    }, context={})
+    assert out.startswith("Wrote "), out
+    assert os.path.isfile(fp)
+
+
+def test_tool_create_chart_filepath_defaults_to_chart_png(workspace_tmp):
+    """Codex iter-4 HIGH lock: v4 defaults filepath to 'chart.png' when
+    omitted (sagemaker_agent.py:6049-6052; schema required=[data])."""
+    pytest.importorskip("matplotlib")
+    # Cd into workspace so relative "chart.png" resolves under it.
+    cwd = os.getcwd()
+    os.chdir(str(workspace_tmp))
+    try:
+        tool = _find_tool("create_chart")
+        out = tool.execute({
+            "chart_type": "bar",
+            "data": {"A": 1, "B": 2},
+        }, context={})
+        assert out.startswith("Wrote "), out
+        # Default filepath = chart.png within workspace.
+        assert "chart.png" in out
+    finally:
+        os.chdir(cwd)
+
+
 def test_tool_create_excel_rejects_empty_payload(workspace_tmp):
     """Codex iter-3 MEDIUM lock: missing data+rows rejected."""
     pytest.importorskip("openpyxl")

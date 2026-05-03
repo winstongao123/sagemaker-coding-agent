@@ -46,6 +46,13 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block T iter-5 fixes (Codex iter-4 = APPROVE_WITH_FIXES — 1 HIGH + 1 MEDIUM + 1 LOW)
+- v4_documents.py HIGH fix: create_chart now defaults filepath to "chart.png" when omitted (v4 parity at sagemaker_agent.py:6049-6052; schema required=[data] honored).
+- v4_documents.py MEDIUM fix: create_chart combo type now supports v4 shape `{labels, bar_values, line_values, bar_label, line_label, line_ylabel}` (sagemaker_agent.py:6194-6214) with twinx() for separate line y-axis when line_ylabel set; series-based combo retained as fallback.
+- v4_documents.py LOW fix: registered description for create_chart now lists all 8 v4 chart types (was "bar | line | pie").
+- test_block_t.py: +2 lock tests (chart-v4-combo-shape / chart-filepath-defaults).
+- 770 pass + 14 skip (was 768+14; +2 net for iter-4 lock tests); verify_ship_zip PASS (133 files / 376.0 KB / 36%).
+
 ### Block T iter-4 fixes (Codex iter-3 = APPROVE_WITH_FIXES — 1 HIGH + 2 MEDIUM + 1 LOW)
 - v4_documents.py HIGH fix: create_chart now ports v4 advertised types (grouped_bar/stacked_bar/scatter/horizontal_bar/combo + bar/line/pie) and v4 fields (xlabel/ylabel/colors/dpi/width/height/style). data shape now also handles {x,y} (scatter) and {labels, series:[{name, values}]} (grouped/stacked/combo). required=[data] (not [filepath]) per v4 schema.
 - v4_documents.py MEDIUM fix: create_excel + create_pdf now reject empty payload (was: silently writes empty workbook/blank PDF). Match v4 required-field semantics.
