@@ -1124,6 +1124,95 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-036 — Block L (v5.0.1): Error/retry/cache-break + Bedrock guardrails
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block L
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block L lists ~966 LOC of Bedrock guardrails:
+- 18-category error classification with retryable verdicts (Phase 8 had 9).
+- max-tokens-overflow detection → compact+retry (R4 #2 MUST).
+- 5xx HTML error humanization (R4 #9 MUST).
+- Retry-After header parsing.
+- Per-tool cache-break detection.
+- Haiku exclusion from cache-break detection (R4 #14 MUST 3LOC).
+- Daemon-thread Bedrock call + Ctrl-C responsiveness.
+- 30s heartbeat during long calls.
+
+### Decisions
+
+#### 1. Extended error classification (PORT_LOG #100)
+- core/errors.py: 9 new BedrockErrorCategory entries
+  (MAX_TOKENS_OVERFLOW / BEDROCK_5XX_HTML / REQUEST_TIMEOUT /
+  PAYLOAD_TOO_LARGE / CONFLICT_409 / GATEWAY_TIMEOUT /
+  MALFORMED_RESPONSE / SIGV4_FAILURE / DEPENDENCY_FAILURE).
+- categorize_retryable(category) → bool. 13 of 18 are retryable.
+- ErrorClassifier.classify extended to recognize each new category
+  (most-specific-first ordering preserves Phase 8 behavior).
+- extract_nested_error_message — humanizes HTML / JSON / plain
+  errors. R4 #9 MUST.
+- parse_max_tokens_context_overflow_error — predicate. R4 #2 MUST.
+- get_retry_after_ms — parses Retry-After header (integer seconds OR
+  HTTP-date) → milliseconds. Returns 0 on no-match.
+
+#### 2. Per-tool cache-break detection (PORT_LOG #101)
+- core/cache_break_detection.py:
+  - hash_tool_schema(schema) — deterministic SHA256/16chars.
+  - PerToolCacheBreakDetector — per-tool baseline with diff.
+  - is_cache_break_excluded(model_id) — checks against
+    EXCLUDED_MODELS_3LOC frozenset (Haiku 4.5 + Haiku 4.1 + 3.5
+    Haiku) with cross-region prefix stripping (au./apac./us./eu./
+    global./ap./in.). R4 #14 MUST 3LOC.
+  - notify_cache_deletion(model_id, tools) — returns False for
+    excluded models (skip), True for others (signal to notify).
+
+#### 3. T2 daemon-thread + heartbeat tests deferred to Block J
+The `test_daemon_thread_bedrock_call_responds_to_ctrl_c` and
+`test_30s_heartbeat_during_long_call` T2 tests are timing-sensitive
+(rely on actual long-running Bedrock calls + 30s wall-clock). They
+are deferred to Block J's real-AWS gate where they have natural fit.
+Block L ships the underlying mechanism (error classifier + cache-break
+detection) without the wall-clock tests.
+
+#### 4. Why this is acceptable
+The 6 T1 tests cover the load-bearing correctness contracts:
+- 18-category classification + retryable verdicts.
+- Max-tokens recovery (R4 #2 MUST).
+- 5xx HTML humanization (R4 #9 MUST).
+- Retry-After parsing.
+- Per-tool cache-break detection.
+- Haiku exclusion (R4 #14 MUST).
+
+The deferred T2 tests are integration-level (timing + Ctrl-C
+behavior) — they verify wiring, not algorithm correctness. The
+algorithm is locked by the T1 tests; wiring is verified end-to-end
+in Block J.
+
+### Affected files
+- EXTENDED: `compact_v5/MAIN/agent/core/errors.py` (~150 LOC added)
+- NEW: `compact_v5/MAIN/agent/core/cache_break_detection.py` (~120 LOC)
+- EXTENDED: `compact_v5/MAIN/agent/core/__init__.py` (re-exports)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_l.py`
+  (9 tests + 2 T2 deferred-skipped)
+
+### Linked port-log rows
+- #100 — 18 error categories + retryable + helpers
+- #101 — Per-tool cache-break detection + Haiku exclusion
+
+### Validation
+- 729 pass + 11 skipped (was 720 + 9 at end of Block H+; +9 pass +
+  2 skip net new).
+- verify_ship_zip.py: PASS (127 files / 357.2 KB / 36%).
+
+### Notes / not in scope here
+- Daemon-thread + heartbeat integration with the actual chat() call
+  is wired in Block J (real-AWS gate) where the long-running call
+  context is naturally available.
+
+---
+
 ## ADR-035 — Block H+ (v5.0.1, NEW): Memory Consolidation Engine — `/dream` MANUAL ONLY
 
 **Date**: 2026-05-03

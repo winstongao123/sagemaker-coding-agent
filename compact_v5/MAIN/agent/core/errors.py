@@ -20,7 +20,13 @@ from __future__ import annotations
 
 
 class BedrockErrorCategory:
-    """Categories of Bedrock invoke errors. Used by ErrorClassifier + RetryPolicy."""
+    """Categories of Bedrock invoke errors. Used by ErrorClassifier + RetryPolicy.
+
+    Block L (PORT_LOG #100) extends to 18 categories per Runnable R4 18-categorization.
+    The original 9 (Phase 8) cover the v4 surface; the additional 9 distinguish
+    finer-grained cases that benefit from differentiated retry/recovery semantics.
+    """
+    # Phase 8 (v4) categories — 9
     THROTTLE = "throttle"  # ThrottlingException, rate-limited
     SERVICE_UNAVAILABLE = "service_unavailable"
     MODEL_NOT_READY = "model_not_ready"
@@ -30,6 +36,147 @@ class BedrockErrorCategory:
     CONTEXT_OVERFLOW = "context_overflow"  # prompt-too-long
     ACCESS_DENIED = "access_denied"
     UNKNOWN = "unknown"
+    # Block L additions — 9 more (R4 18 categories)
+    MAX_TOKENS_OVERFLOW = "max_tokens_overflow"  # output capped at max_tokens — compact + retry
+    BEDROCK_5XX_HTML = "bedrock_5xx_html"  # raw HTML 5xx — humanize before user
+    REQUEST_TIMEOUT = "request_timeout"  # client-side timeout
+    PAYLOAD_TOO_LARGE = "payload_too_large"  # 413 — compact request
+    CONFLICT_409 = "conflict_409"  # session/state conflict
+    GATEWAY_TIMEOUT = "gateway_timeout"  # 504 — backoff
+    MALFORMED_RESPONSE = "malformed_response"  # body parse failure — retry once
+    SIGV4_FAILURE = "sigv4_failure"  # auth signature error — no retry, surface
+    DEPENDENCY_FAILURE = "dependency_failure"  # downstream service error — backoff
+
+
+# Block L: which categories are retryable. Used by categorize_retryable().
+# Per Runnable R4 categorization.
+_RETRYABLE_CATEGORIES = frozenset({
+    BedrockErrorCategory.THROTTLE,
+    BedrockErrorCategory.SERVICE_UNAVAILABLE,
+    BedrockErrorCategory.MODEL_NOT_READY,
+    BedrockErrorCategory.NETWORK,
+    BedrockErrorCategory.VALIDATION_CACHE,  # retry once after stripping
+    BedrockErrorCategory.CONTEXT_OVERFLOW,  # retry after compact
+    BedrockErrorCategory.MAX_TOKENS_OVERFLOW,  # retry after compact
+    BedrockErrorCategory.BEDROCK_5XX_HTML,  # backoff
+    BedrockErrorCategory.REQUEST_TIMEOUT,  # retry once
+    BedrockErrorCategory.PAYLOAD_TOO_LARGE,  # retry after compact
+    BedrockErrorCategory.GATEWAY_TIMEOUT,  # backoff
+    BedrockErrorCategory.MALFORMED_RESPONSE,  # retry once
+    BedrockErrorCategory.DEPENDENCY_FAILURE,  # backoff
+})
+
+
+def categorize_retryable(category: str) -> bool:
+    """Return True iff `category` is in the retryable set (Block L PORT_LOG #100)."""
+    return category in _RETRYABLE_CATEGORIES
+
+
+def extract_nested_error_message(exc_or_text) -> str:
+    """Block L (R4 #9 MUST): humanize Bedrock 5xx errors that contain raw HTML.
+
+    Bedrock occasionally returns HTML error pages on 5xx; the user sees a wall
+    of `<html>...<body>The server encountered an error...</body></html>`.
+    This helper extracts the readable text from common error shapes:
+    - `<title>Error</title>` → use the title.
+    - `<body>...text...</body>` → use the body text.
+    - `<h1>Error 502</h1>` → use the heading.
+    - JSON `{"message": "..."}` → use the message field.
+
+    Falls back to the first 200 chars of the input when no pattern matches.
+    """
+    import re
+    import json as _json
+
+    text = str(exc_or_text)
+    if not text.strip():
+        return "(empty error)"
+
+    # Try JSON first.
+    try:
+        data = _json.loads(text)
+        if isinstance(data, dict):
+            for key in ("message", "Message", "error", "Error"):
+                v = data.get(key)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()[:200]
+    except (_json.JSONDecodeError, ValueError):
+        pass
+
+    # Try HTML title.
+    m = re.search(r"<title[^>]*>([^<]+)</title>", text, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()[:200]
+    # Try h1.
+    m = re.search(r"<h1[^>]*>([^<]+)</h1>", text, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()[:200]
+    # Try body text — strip remaining tags.
+    m = re.search(r"<body[^>]*>(.*?)</body>", text, re.IGNORECASE | re.DOTALL)
+    if m:
+        body_text = re.sub(r"<[^>]+>", " ", m.group(1))
+        body_text = re.sub(r"\s+", " ", body_text).strip()
+        if body_text:
+            return body_text[:200]
+
+    # Fallback: strip ALL HTML tags from the full input.
+    stripped = re.sub(r"<[^>]+>", " ", text)
+    stripped = re.sub(r"\s+", " ", stripped).strip()
+    return stripped[:200] or text[:200]
+
+
+def parse_max_tokens_context_overflow_error(exc) -> bool:
+    """Block L (R4 #2 MUST): True iff `exc` is a max-tokens or context-
+    overflow error that should trigger compact+retry.
+
+    Distinguishes max_tokens (output cap hit) from prompt-too-long
+    (context overflow) — both trigger compact+retry but for different
+    reasons. Returns True for either.
+    """
+    msg = str(exc).lower()
+    if "max_tokens" in msg or "max output tokens" in msg or "output token limit" in msg:
+        return True
+    if "prompt is too long" in msg or "too many tokens" in msg or "input length" in msg:
+        return True
+    if "context length" in msg or "context_overflow" in msg:
+        return True
+    return False
+
+
+def get_retry_after_ms(exc) -> int:
+    """Block L (R4 retry-after): parse Retry-After header value from exception.
+
+    Bedrock 429 responses include a Retry-After header (seconds). This helper
+    extracts the integer second value and returns milliseconds. Returns 0
+    when no Retry-After is found.
+
+    Accepts:
+    - integer seconds: "5" → 5000
+    - HTTP-date format (RFC 1123): "Wed, 21 Oct 2026 07:28:00 GMT" → ms-until-then
+    - error message containing "Retry-After: 5": parses the trailing seconds
+    """
+    import re
+    import time
+    from email.utils import parsedate_to_datetime
+
+    s = str(exc)
+    # Match "Retry-After: <value>" header pattern.
+    m = re.search(r"retry-after\s*:?\s*(\d+)", s, re.IGNORECASE)
+    if m:
+        try:
+            return int(m.group(1)) * 1000
+        except (ValueError, TypeError):
+            return 0
+    # Match HTTP-date.
+    m = re.search(r"retry-after\s*:?\s*([A-Z][a-z]{2},\s*\d.+\d{4}.+GMT)", s)
+    if m:
+        try:
+            dt = parsedate_to_datetime(m.group(1))
+            wait = max(0, int((dt.timestamp() - time.time()) * 1000))
+            return wait
+        except (ValueError, TypeError):
+            return 0
+    return 0
 
 
 class ErrorClassifier:
@@ -47,6 +194,30 @@ class ErrorClassifier:
         msg_lower = str(exc).lower()
         cls_name = type(exc).__name__.lower()
 
+        # Block L additions — check most-specific first.
+        if "max_tokens" in msg_lower or "max output tokens" in msg_lower or "output token limit" in msg_lower:
+            return BedrockErrorCategory.MAX_TOKENS_OVERFLOW, "compact_retry", str(exc)[:200]
+        if "<html" in msg_lower or "<body" in msg_lower or "<title" in msg_lower:
+            # Raw HTML 5xx error — backoff + humanize before user-facing display.
+            return BedrockErrorCategory.BEDROCK_5XX_HTML, "backoff", str(exc)[:200]
+        if "504" in msg_lower or "gatewaytimeout" in msg_lower:
+            return BedrockErrorCategory.GATEWAY_TIMEOUT, "backoff", str(exc)[:200]
+        if "413" in msg_lower or "payload too large" in msg_lower or "request entity too large" in msg_lower:
+            return BedrockErrorCategory.PAYLOAD_TOO_LARGE, "compact_retry", str(exc)[:200]
+        if "409" in msg_lower or "conflictexception" in msg_lower:
+            return BedrockErrorCategory.CONFLICT_409, "no_retry", str(exc)[:200]
+        if "request_timeout" in msg_lower or "request-timeout" in msg_lower or (
+            "408" in msg_lower
+        ):
+            return BedrockErrorCategory.REQUEST_TIMEOUT, "backoff", str(exc)[:200]
+        if "malformed" in msg_lower or "could not parse response" in msg_lower or "decode" in cls_name:
+            return BedrockErrorCategory.MALFORMED_RESPONSE, "backoff", str(exc)[:200]
+        if "sigv4" in msg_lower or "signature" in msg_lower or "credentialverify" in cls_name:
+            return BedrockErrorCategory.SIGV4_FAILURE, "no_retry", str(exc)[:200]
+        if "dependency" in msg_lower or "dependencyfailedexception" in msg_lower:
+            return BedrockErrorCategory.DEPENDENCY_FAILURE, "backoff", str(exc)[:200]
+
+        # Phase 8 categories — preserved.
         if "validationexception" in msg_lower and (
             "cache_control" in msg_lower
             or "prompt-caching" in msg_lower

@@ -1,6 +1,15 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block H+ DONE** — tag `v5.0.1-block-h-plus` at `d40493e` (pending push); 720 pass + 9 skip; Codex iter-4 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block L IN_PROGRESS** — code + 9 tests green (2 T2 deferred), 729 pass + 11 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block L entry (2026-05-03)
+- EXTENDED `core/errors.py` (~150 LOC): BedrockErrorCategory 9→18 categories + categorize_retryable + extract_nested_error_message (R4 #9 MUST) + parse_max_tokens_context_overflow_error (R4 #2 MUST) + get_retry_after_ms.
+- NEW `core/cache_break_detection.py` (~120 LOC): hash_tool_schema + PerToolCacheBreakDetector + is_cache_break_excluded(model_id) (R4 #14 MUST: Haiku exclusion w/ cross-region prefix stripping) + notify_cache_deletion.
+- EXTENDED `core/__init__.py`: re-exports.
+- 9 new tests in `tests/integration/test_block_l.py` + 2 T2 deferred (daemon-thread + 30s heartbeat → Block J real-AWS gate per ADR-036 §3): 6 TEST_DESIGN-named (18-categories / max-tokens-recovers / humanizes-5xx-html / retry-after / per-tool-cache-break / haiku-excluded) + 3 behavior locks (classifier-recognizes-new-cats / hash-deterministic / notify-skips-excluded).
+- PORT_LOG rows #100-#101 + ADR-036.
+- `verify_ship_zip.py`: PASS (127 files / 357.2 KB / 36%).
+- Pytest: **729 passed + 11 skipped** (was 720 + 9 at Block H+; +9 pass + 2 skip net new).
 
 ## v5.0.1 Block H+ entry (2026-05-03)
 - NEW `runtime/dream.py` (~250 LOC): DREAM_PROMPT_TEMPLATE (4 phases: Orient → Gather → Consolidate → Prune+Index) + DreamLock (file-based with stale-recovery >600s) + run_dream(workspace, consolidator) + get_dream_prompt + DreamResult + _backup_memory_md + _restore_from_backup. **MANUAL TRIGGER ONLY per user decision 2026-05-01** — daemon scheduler / asyncio / atexit / env auto-enable INTENTIONALLY DROPPED.

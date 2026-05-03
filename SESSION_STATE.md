@@ -37,6 +37,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block L (code commit; Codex pending)
+- core/errors.py extended (9→18 categories + categorize_retryable + extract_nested_error_message + parse_max_tokens_overflow + get_retry_after_ms).
+- core/cache_break_detection.py NEW (per-tool detector + Haiku exclusion).
+- 9 new tests + 2 T2 deferred to Block J; 729 pass + 11 skip.
+- PORT_LOG #100-#101 + ADR-036.
+
 ### Block H+ DONE — Codex iter-4 APPROVE (clean)
 - 14 total Block H+ tests + 1 T5 skip; PORT_LOG #099 + ADR-035 (with concurrency trade-off section).
 - 4-iter Codex cycle: APPROVE_WITH_FIXES (1 main + 1 secondary) → APPROVE_WITH_FIXES (race partial) → APPROVE_WITH_FIXES (race partial) → APPROVE.
