@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block L DONE — Codex iter-2 APPROVE (clean)
+- 12 total Block L tests + 2 T2 deferred; PORT_LOG #100-#101 + ADR-036.
+- 2-iter Codex cycle: APPROVE_WITH_FIXES (3 findings) → APPROVE.
+- Tag v5.0.1-block-l at 686a3d5 pending push. Next: Block N.
+
 ### Block L iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
 - get_retry_after_ms: HTTP-date regex now accepts both "GMT" and "±0000" forms (email.utils.format_datetime emits the latter on Python 3) + case-insensitive header matching (Codex iter-1 #1).
 - extract_nested_error_message: now walks nested .error.message and .error.error.message JSON paths (Codex iter-1 #2 — Bedrock + Anthropic API actually return these shapes).
