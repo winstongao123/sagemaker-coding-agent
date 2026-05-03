@@ -1,0 +1,40 @@
+You are reviewing Block G2 of v5.0.1 — ITER 2 (re-review after doc fix).
+
+Iter-1 verdict was APPROVE_WITH_FIXES with 1 doc finding:
+  - PORT_LOG #094 Notes only said T5 was deferred to R-tier R3, but
+    ADR-033 §4 also declares spawn-time wiring for agent_type="fork"
+    deferred to Block L. PORT_LOG should mirror.
+
+Verify the iter-2 doc fix lands cleanly. Focus on iter-2 commit 4a7fd7e.
+
+Diff range: <prev>..HEAD (iter-2 commit 4a7fd7e).
+
+Iter-2 file changes:
+- MODIFIED compact_v5/_status/V5_RUNNABLE_PORT_LOG.md
+  - Row #094 Notes column updated to include:
+    "spawn_subagent wiring for agent_type='fork' deferred to Block L
+     per ADR-033 §4 (real-Bedrock cache-prefix exercise has
+     architectural fit there). T5 real-AWS cache-hit verification
+     deferred to R-tier R3 per ADR-033 §Notes."
+
+Tests: 687 pass + 8 skip (unchanged from iter-1).
+
+Apply the 3-axis review template focused on iter-2.
+
+AXIS A — Errors / bugs / regressions
+- Code unchanged. Tests unchanged. PASS.
+
+AXIS B — v5 architecture + goals fit
+- Pure documentation alignment. FAITHFUL.
+
+AXIS C — Reference-repo coverage
+- PORT_LOG #094 now explicitly declares both deferrals (spawn-time
+  wiring → Block L; real-AWS verification → R-tier R3). ADR-033 §4
+  was already explicit; the PORT_LOG row now matches.
+
+Verdict: ALL_PORTED.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if the doc finding is cleanly fixed AND no new findings
+emerge. Be specific. Cite file:line.

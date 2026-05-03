@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G2 DONE — Codex iter-2 APPROVE (clean)
+- 9 total Block G2 tests + 1 T5 skip; PORT_LOG #094 + ADR-033.
+- 2-iter Codex cycle: APPROVE_WITH_FIXES (1 doc) → APPROVE.
+- Tag v5.0.1-block-g2 at 4a7fd7e pending push. Next: Block H.
+
 ### Block G2 iter-2 doc fix (Codex iter-1 = APPROVE_WITH_FIXES)
 - PORT_LOG #094 Notes column now explicitly mentions Block L deferral for spawn_subagent fork-agent wiring (was only mentioning T5 R-tier deferral).
 

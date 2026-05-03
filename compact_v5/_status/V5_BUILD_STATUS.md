@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block G2 IN_PROGRESS** — code + 8 tests green (1 T5 skip), 687 pass + 8 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block G2 DONE** — tag `v5.0.1-block-g2` at `4a7fd7e` (pending push); 687 pass + 8 skip; Codex iter-2 APPROVE clean)
 
 ## v5.0.1 Block G2 entry (2026-05-03)
 - NEW `subagent/fork.py` (~210 LOC): is_in_fork_child + build_child_message + build_forked_messages + serialize_for_cache_prefix + cache_prefix_match_length helpers + FORK_BOILERPLATE_TAG / FORK_PLACEHOLDER_RESULT verbatim from Runnable.
@@ -434,7 +434,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block G2 — forkSubagent cache-prefix replay** (after Block G3 tag).
+**Block H — Memory extraction + Hermes patterns (~945 LOC)** (after Block G2 tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -448,7 +448,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block I status: DONE — tag `v5.0.1-block-i` at `c46be09`; pushed.
 - Block M status: DONE — tag `v5.0.1-block-m` at `09b6114`; pushed.
 - Block G status: DONE — tag `v5.0.1-block-g` at `0fe6454`; pushed.
-- Block G3 status: DONE — tag `v5.0.1-block-g3` at `6a49879`; pending push.
+- Block G3 status: DONE — tag `v5.0.1-block-g3` at `6a49879`; pushed.
+- Block G2 status: DONE — tag `v5.0.1-block-g2` at `4a7fd7e`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
