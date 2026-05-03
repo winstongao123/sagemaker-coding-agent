@@ -121,6 +121,28 @@ Output: scoring table in `v5_complete.html` "v5 vs Runnable vs v4" tab. Without 
 
 **R-tier + Block V combined**: ~$25-35. Gets EMPIRICAL "v5 > Runnable > v4" with screenshot-able evidence.
 
+## 9.1. BLOCK V DROPPED + per-test quality review (user 2026-05-03 — auto mode)
+
+User directive 2026-05-03: "i dont want run v4 to waste money, only run v5, but report back logs, to codex AND claude code worker to check ... if any error, or semantic bugs or problems"
+
+Changes:
+1. **Block V DROPPED** — do NOT run any v4 task. Saves $2.
+   - "v5 > v4" claim becomes ARCHITECTURAL only (PORT_LOG file:line refs + 7 PS_problems CERTAIN-NO-RECUR)
+   - "v5 > Runnable" claim stays ARCHITECTURAL (was already deferred)
+   - R-tier total cap: $11.55 → **$9.55**
+
+2. **NEW MANDATORY OUTPUT (File 10)** per R-test: `r-tier-<TEST>-aws-call<N>-quality.md`
+   - PASS 1: worker self-review of telemetry.json + raw .log on 6 axes (tool choice, path efficiency, reasoning, resources, waste, outcome)
+   - PASS 2: Codex independent review of same 6 axes
+   - Final verdict: NEAR_IDEAL | WORKING_BUT_SUBOPTIMAL | INEFFICIENT | SEMANTIC_BUG_DETECTED
+   - If SEMANTIC_BUG_DETECTED: write `r-tier-<TEST>-bug-<N>.md` + ESCALATE to user
+
+3. Mandatory file count: was 9 (with telemetry.json), now **10** (with quality.md). Per §9.4 hard rule, all 10 must exist before advancing to next test.
+
+4. Codex review depth per R-test: was 2-3 (PRE-FLIGHT + POST-PASS, optionally DIAGNOSIS), now 3-4 (PRE-FLIGHT + AWS call + POST-PASS + QUALITY review). Each saved separately.
+
+See PS_V5_TEST_PLAYBOOK.md §4.4 (Block V drop) and §4.5 (quality review schema) for full spec.
+
 ## 9.2. MASTER PLAYBOOK — single source of truth for R-tier + Block V (added 2026-05-03)
 
 **`compact_v5/docs/PS_V5_TEST_PLAYBOOK.md`** is the canonical playbook. Read it FIRST at every R-tier or Block V session.

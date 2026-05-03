@@ -238,7 +238,99 @@ If ANY checkbox missed → test INCOMPLETE → do NOT advance.
 
 ---
 
-## Section 4.5 — Gap closures 2026-05-03 (user "100%" pushback)
+## Section 4.4 — Block V DROPPED per user 2026-05-03
+
+**User directive 2026-05-03**: "i dont want run v4 to waste money, only run v5"
+
+Block V (head-to-head v4 vs v5) is **DROPPED**. Worker does NOT run any v4 task. Saving ~$2 of AWS spend.
+
+Replacement strategy for "v5 > v4 > Runnable" claim:
+- v5 > v4: ARCHITECTURAL only (PORT_LOG file:line refs, PS#1-7 fixes, sectioned prompt token math). Plus 7 PS_problems all CERTAIN-NO-RECUR per Wave 4 evidence matrix.
+- v5 > Runnable: ARCHITECTURAL only (every Runnable mechanism ported with file:line refs).
+- v5 has no semantic bugs: EMPIRICAL via R1-R17 (17 tests on real Bedrock).
+
+What we lose vs Block V plan:
+- No empirical "v5 > v4" with side-by-side metrics
+- No screenshot-able comparison table
+
+What we keep:
+- 17 R-tier tests cover all PS_problem fixes + coding accuracy + multi-file + debug + long-session + thinking visibility
+- Per-test telemetry.json fully diagnoses v5 internal correctness + ideal-ness (per §4.5)
+- Architectural argument with file:line refs in PORT_LOG (verifiable)
+
+Updated cost cap: $9.55 (was $11.55 with Block V).
+
+## Section 4.5 — Per-test "ideal vs problematic" review (added 2026-05-03)
+
+**User directive 2026-05-03**: "report back logs, to codex AND claude code worker to check ... if need further improvements, if any error, or semantic bugs or problems"
+
+EVERY R-test (R1-R17) MUST produce a `r-tier-<TEST>-aws-call<N>-quality.md` file IN ADDITION to the 9 mandatory files. This file contains:
+
+### Two-pass quality review
+
+**PASS 1 — Worker self-review** (worker reads its own telemetry.json + raw .log):
+- Did the agent take the shortest path to the goal? (compare turns_used vs minimum-possible)
+- Did the agent select optimal tools? (no `bash` when `python_exec` would do; no `read_file` repeated for same file)
+- Were there REPEATED tool calls indicating waste?
+- Did sub-agent dispatches happen when appropriate? (or skipped when overhead would dominate?)
+- Did compaction fire at right moments? (long tasks should compact; short shouldn't)
+- Were thinking blocks coherent? (read thinking_text — does the LLM's stated plan match its actions?)
+- Did final outcome match task intent? (artifacts_valid + content body checks)
+- Score 1-5 on each axis. Composite ideal_score = avg.
+
+**PASS 2 — Codex review** (Codex reads telemetry.json + raw .log + worker's PASS 1 review):
+- Independent grade of same 6 axes
+- Flag any semantic bugs the worker missed
+- Suggest specific code changes if behavior was non-ideal
+- Final verdict: NEAR_IDEAL | WORKING_BUT_SUBOPTIMAL | INEFFICIENT | SEMANTIC_BUG_DETECTED
+
+### Output schema (`r-tier-<TEST>-aws-call<N>-quality.md`)
+
+```markdown
+# Quality Review — <TEST> Call <N>
+Date: <ISO timestamp>
+Worker: claude-opus-4-7
+Codex model: gpt-5.5
+CLI version: <codex --version>
+
+## PASS 1 — Worker self-review
+| Axis | Score 1-5 | Evidence |
+|---|---|---|
+| Tool choice optimality | <X> | <e.g. "used python_exec 3x for sales aggregation, optimal"> |
+| Path efficiency | <X> | <e.g. "8 turns vs ~6 minimum, slight overshoot"> |
+| Reasoning soundness | <X> | <e.g. "thinking blocks correctly identified top-2 categories"> |
+| Resource utilization | <X> | <e.g. "no compaction needed, no sub-agents (right call)"> |
+| Wasted calls | <X> | <e.g. "REPEATED_calls=0, clean"> |
+| Outcome quality | <X> | <e.g. "chart.png + report.docx valid + body matches CSV"> |
+| **Composite ideal_score** | <avg> | |
+
+Worker conclusion: NEAR_IDEAL | WORKING_BUT_SUBOPTIMAL | INEFFICIENT
+Suggested improvements (if any): <list>
+
+## PASS 2 — Codex review
+[Codex's independent same-axis review + verdict]
+
+Codex conclusion: NEAR_IDEAL | WORKING_BUT_SUBOPTIMAL | INEFFICIENT | SEMANTIC_BUG_DETECTED
+Specific findings (if any): <list with file:line>
+Required code changes (if SEMANTIC_BUG_DETECTED): <list>
+
+## Reconciliation
+[If worker + Codex disagree by >1 point on any axis, flag for user]
+```
+
+### When SEMANTIC_BUG_DETECTED
+
+Worker MUST:
+1. Write the bug to `r-tier-<TEST>-bug-<N>.md` with reproduction steps
+2. Add to `r_tier_review_log.md` "Problems found" column
+3. ESCALATE to user (don't auto-fix in R-tier — bug fixes require Block scope)
+4. Do NOT advance to next R-test until user decides
+
+### Updated mandatory output count
+
+Was 9, now **10** files per test. Workflow: 8 logs + telemetry.json + quality.md.
+
+## Section 4.6 — Gap closures 2026-05-03 (user "100%" pushback)
 
 ### Gap A: Bedrock `thinking` blocks NOT in telemetry schema
 

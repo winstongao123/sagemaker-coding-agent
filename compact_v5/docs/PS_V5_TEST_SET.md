@@ -15,8 +15,9 @@
 | **Mock tests** (no AWS) | 798 collected, 775 pass + 17 env-gated skip | $0 | seconds | Internal correctness + regression prevention |
 | **R1-R12 real-AWS** (no semantic bugs) | 11 real + 1 mock | $6.50 cap | ~2 hours | Every PS_problem fix + every Block works on real Bedrock |
 | **R13-R16 real-AWS** (actually codes) | 4 | $2.75 cap | ~2 hours | Coding accuracy + multi-file + debug + long-session |
-| **Block V real-AWS** (head-to-head) | 6 (3 tasks × 2 systems) | $2.00 cap | ~1.5 hours | EMPIRICAL v5 > v4 with metrics |
-| **TOTAL** | **22 distinct AWS tests** | **$11.25** | **~6 hours** | **Production-ready evidence** |
+| **R17 real-AWS** (thinking visibility, PS#4) | 1 | $0.30 cap | ~10 min | PS#4 thinking-visible fix end-to-end |
+| ~~Block V (head-to-head v4 vs v5)~~ | **DROPPED 2026-05-03 per user** ("don't run v4, save money") | ~~$2.00~~ | — | "v5 > v4" stays ARCHITECTURAL (PORT_LOG file:line refs + PS#1-7 CERTAIN-NO-RECUR) |
+| **TOTAL** | **17 distinct AWS tests (v5 only)** | **$9.55** | **~5 hours** | **Production-ready evidence (architectural for v5>v4>Runnable; empirical for no-bugs + codes-well + thinking-visible)** |
 
 Worst case if every test maxes 3 retries: ~$33. Hard stop: AWS Budget `Bedrock-Monthly-50` at $50/mo.
 
