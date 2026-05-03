@@ -1124,6 +1124,53 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-025 — Block D (v5.0.1): Slash-command dispatcher (20 v4 + /auth + 6 LF)
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block D
+**Status**: ACCEPTED
+
+### Context
+v4 dispatched `/foo` commands inline in the chat-input handler, with
+~700 LOC of cascaded if/elif chains across sagemaker_agent.py:10789-:11341.
+v5 needs the same surface (constraint #1 v4.10.10 baseline) but in a
+testable shape. Plus 6 Learning-Factory additions documented in
+Wave-5-DEEP entry.
+
+### Decision
+Single `commands.py` module with:
+- `CommandResult` dataclass — return shape with consumed/deny_auth/side_effect.
+- One handler function per command (cmd_cost / cmd_skills / cmd_revert / etc.).
+- Dispatch table (`_DISPATCH`) — single source of truth ordered so
+  longer prefixes win (`/skill clear` matches before `/skills`).
+- `/auth` runs BEFORE custom dispatch per v4 :11314 explicit check.
+- `is_command()` + `dispatch_command()` public API.
+- Wired in `ConsoleChatUI.send` + `WidgetChatUI._on_send`: messages
+  starting with `/` route to dispatcher BEFORE agent.run().
+
+### Rationale
+- Flat dispatch table is easier to test than v4's monolithic if/elif.
+- Each handler is small (10-30 LOC) and delegates to existing v5
+  services (SkillManager, SnapshotManager, TOKENS, CONFIG).
+- LF additions (/init, /skillify, /dream, /promote-to-skill) are
+  scaffolding-only here; Block H+ wires the real /dream writer, Block
+  I extends the others.
+- Order matters in dispatch table — `/skill suggestions` listed before
+  `/skill use` so the longer prefix wins. Verified by spot tests.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/commands.py` (~450 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_d.py` (19 tests)
+- MODIFIED: `compact_v5/MAIN/agent/ui/chat_ui.py` — pre-agent dispatch
+  in both `ConsoleChatUI.send` and `WidgetChatUI._on_send`.
+
+### Linked port-log rows
+- #065 — commands dispatcher + chat-UI routing
+
+### Validation
+- 547 pass + 5 skipped (was 528 + 5 at end of Block C+; +19 net new).
+- verify_ship_zip.py: PASS (110 files / 300.1 KB / 37%).
+
 ## ADR-024 — Block C+ (v5.0.1): Approval/diff dispatch + rate limits + ipywidgets fallback + Block-C UI remaps
 
 **Date**: 2026-05-03

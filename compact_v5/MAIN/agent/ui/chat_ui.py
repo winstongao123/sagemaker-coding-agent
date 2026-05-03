@@ -40,7 +40,25 @@ class ConsoleChatUI:
         self.thinking_widget = ThinkingBudgetWidget(agent=agent)
 
     def send(self, message: str) -> str:
-        """Send a user message; return the agent's final text."""
+        """Send a user message; return the agent's final text.
+
+        Block D (PORT_LOG #065): if the message starts with `/`, route
+        it through the slash-command dispatcher BEFORE invoking the
+        agent loop. /auth gates can short-circuit a turn entirely.
+        """
+        # Block D — slash-command dispatch.
+        if message.startswith("/"):
+            try:
+                from commands import is_command, dispatch_command
+                if is_command(message):
+                    cr = dispatch_command(message)
+                    if cr.consumed:
+                        return cr.text
+            except Exception as _cmd_exc:
+                # Best-effort: fall through to agent.run() if dispatch fails.
+                import logging as _lg
+                _lg.warning(f"slash-command dispatch error: {_cmd_exc}")
+
         result = self.agent.run(message)
         # Print the budget snapshot so the operator can see consumption.
         try:
@@ -140,6 +158,19 @@ class WidgetChatUI:
         with self._output:
             print(f"\n>>> user: {msg}")
             try:
+                # Block D — slash-command dispatch BEFORE agent loop.
+                if msg.startswith("/"):
+                    try:
+                        from commands import is_command, dispatch_command
+                        if is_command(msg):
+                            cr = dispatch_command(msg)
+                            if cr.consumed:
+                                print(cr.text)
+                                return
+                    except Exception as _cmd_exc:
+                        logging.warning(
+                            f"[chat-ui] slash-command dispatch error: {_cmd_exc}"
+                        )
                 result = self.agent.run(msg, output_fn=lambda s: print(s))
                 print(f"\nstop_reason: {result.stop_reason}")
             except Exception as exc:  # noqa: BLE001 — never crash the UI

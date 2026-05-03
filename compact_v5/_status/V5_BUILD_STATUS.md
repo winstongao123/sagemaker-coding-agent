@@ -1,6 +1,20 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block C+ DONE** — Codex 2-iter cycle ended APPROVE; 528 pass + 5 skip; pending tag + push)
+Last updated: 2026-05-03 (**v5.0.1 Block D DONE** — Codex 4-iter cycle ended APPROVE; 550 pass + 5 skip; pending tag + push)
+
+## v5.0.1 Block D entry (2026-05-03)
+- NEW `commands.py` (~450 LOC): 27-command dispatch table + handler functions + CommandResult shape.
+- WIRED `ui/chat_ui.py` (ConsoleChatUI + WidgetChatUI): pre-agent dispatch when message starts with `/`.
+- 24 canonical commands: 17 v4 advertised + /auth + 6 LF additions; +1 alias (/skill suggestion) for v4-parity per sagemaker_agent.py:10874 = 25 in full listing.
+- 22 new tests in `tests/integration/test_block_d.py` (19 initial + 3 finding-locks for iter-1/iter-2) covering dispatch table, /auth env match/mismatch/skipped, all major handlers, ConsoleChatUI routing, /revert all safety, alias routing, canonical count exactness.
+- Codex AXIS A/B/C 4-iter cycle (gpt-5.3-codex throughout):
+  - iter 1 (3 files): APPROVE_WITH_FIXES with 2 findings (1 HIGH /revert all safety + 1 MEDIUM accounting drift).
+  - iter 2 (3 files): APPROVE_WITH_FIXES — finding #2 still inconsistent (27-vs-24 mismatch).
+  - iter 3 (2 files): REJECT — inner docstring still claimed 26/27.
+  - iter 4 (1 file): APPROVE — inner docstring also reconciled.
+- PORT_LOG row #065 + ADR-025.
+- `verify_ship_zip.py`: PASS (110 files / 300.9 KB / 37%).
+- Pytest: **550 passed + 5 skipped** (was 528 + 5 at Block C+; +22 pass net).
 
 ## v5.0.1 Block C+ entry (2026-05-03)
 - NEW `ui/approval_dialog.py` (~280 LOC): PermissionDialog + RateLimiter + ApprovalResult.
@@ -323,13 +337,14 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block D — Slash commands (19 advertised + /auth + /simplify + /init + /init-verifiers + /skillify + /dream + /promote-to-skill)** (after Block C+ tag).
+**Block A — Compactor + auto-compact circuit breaker + Runnable cache_edits** (after Block D tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
 - Block B+ status: DONE — tag `v5.0.1-block-b-plus` at `ff30e8d`; pushed.
 - Block C status: DONE — tag `v5.0.1-block-c` at `77c6eb4`; pushed.
-- Block C+ status: DONE — tag `v5.0.1-block-c-plus` (pending; tagging this commit); pushed.
+- Block C+ status: DONE — tag `v5.0.1-block-c-plus` at `f9e4000`; pushed.
+- Block D status: DONE — tag `v5.0.1-block-d` (pending; tagging this commit); pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

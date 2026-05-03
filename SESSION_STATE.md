@@ -1039,3 +1039,5 @@ Added `.env.*`, `*.pem`, `*.key`, `credentials*.json`,
 - V4.8.0 needs AWS Bedrock testing before final ship
 - Remaining gaps: auto-nudge on 3+ tasks, multi-agent FP filtering, fork cache sharing (blocked on Bedrock)
 - Consider adding chat_height_slider to the layout row in chat.ipynb as well
+
+<!-- Block D done 2026-05-03 -->

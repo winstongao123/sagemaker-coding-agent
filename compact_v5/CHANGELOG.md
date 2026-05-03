@@ -1,5 +1,55 @@
 # compact_v5 changelog
 
+## v5.0.1-block-d — Slash-command dispatcher (2026-05-03)
+
+Codex review: 4-iteration cycle (gpt-5.3-codex throughout):
+- iter 1 (3 files): APPROVE_WITH_FIXES with 2 findings (1 HIGH safety
+  — /revert all without --yes was destructive; 1 MEDIUM coverage
+  accounting drift).
+- iter 2 (3 files): APPROVE_WITH_FIXES — finding #1 closed; #2 still
+  flagged as inconsistent (my "27 canonical" claim didn't match actual
+  dispatch table).
+- Recounted dispatch: 17 v4 advertised + /auth + 6 LF = 24 canonical;
+  +1 alias (/skill suggestion) = 25 in full listing. Reconciled module
+  docstring + test assertions to exactly these numbers.
+- iter 3 (2 files): REJECT — list_commands() inner docstring still
+  said 26/27.
+- iter 4 (1 file): APPROVE — inner docstring also reconciled.
+
+3 finding-lock tests added (/revert all safety, alias routing,
+canonical count). Total Block D tests: 22.
+
+Sixth Block of the v5.0.1 21-Block build. Closes constraint #1
+(v4.10.10 baseline) for the slash-command surface — 20 v4 commands +
+/auth gate + 6 Learning-Factory additions.
+
+NEW:
+- `commands.py` (~450 LOC) — flat dispatch table + 27 handler functions
+  + CommandResult dataclass + `is_command()` / `dispatch_command()` /
+  `list_commands()` public API.
+
+WIRED:
+- `ui/chat_ui.py` — both ConsoleChatUI.send and WidgetChatUI._on_send
+  route `/foo` messages through commands.dispatch BEFORE agent.run().
+
+Commands (20 v4 + 6 LF + /auth = 27):
+  /auth — auth-token gate
+  /skills, /skill use, /skill clear, /unskill, /skill suggestions,
+  /skill apply, /skill reject — skill mgmt (V4.9.1+V4.9.5 surface)
+  /revert (incl. `all --yes`) — SnapshotManager
+  /cost, /context, /status (incl. init/path) — diagnostics
+  /verify, /checkpoint (create/list/restore), /phase, /diffs (summary/
+  last/<file>), /regression, /done — workflow gates
+  /simplify, /init, /init-verifiers, /skillify, /dream,
+  /promote-to-skill — Learning-Factory additions
+
+TESTS: 19 new in `tests/integration/test_block_d.py`.
+
+PORT_LOG #065 + ADR-025.
+
+Pytest: 547 passed + 5 skipped (was 528 + 5 at Block C+; +19 net new).
+verify_ship_zip.py: PASS (110 files / 300.1 KB / 37%).
+
 ## v5.0.1-block-c-plus — Approval/diff + rate limits + ipywidgets fallback (2026-05-03)
 
 Codex review: 2-iteration cycle (gpt-5.3-codex throughout):
