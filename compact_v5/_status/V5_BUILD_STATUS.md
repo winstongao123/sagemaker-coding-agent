@@ -313,8 +313,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 77c6eb4 (v5/block-c: runtime safety + JSON repair + injection scan + bash hardening + ADR-020 0-5/0-10) — pushed 2026-05-03
-- Last tag: v5.0.1-block-c (Block C done, Codex 2-iter cycle ended APPROVE)
+- Last commit: f9e4000 (v5/block-c-plus: approval/diff dispatch + rate limits + ipywidgets fallback) — pushed 2026-05-03
+- Last tag: v5.0.1-block-c-plus (Block C+ done, Codex 2-iter cycle ended APPROVE)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
