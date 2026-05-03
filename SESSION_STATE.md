@@ -46,6 +46,20 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block T iter-3 fixes (Codex iter-2 = REJECT — 1 CRITICAL + 1 HIGH + user directive)
+**User directive 2026-05-03**: disable web_fetch — SageMaker single-user typically VPC-isolated; ship disabled vs ship+leave dead code.
+
+- v4_documents.py CRITICAL fix: `_validate_doc_path` now uses `SECURITY.validate_path()` (real workspace gate) instead of `_resolve_path()` (path-join helper, no gate). Returns `(err, abs_path)` tuple; all 6 creators write to validated `abs_path`.
+- v4_documents.py HIGH fix: schema v4 advertised fields. create_word adds `title/include_toc/header/footer`; create_excel adds `sheet_name/chart_title/x_column/y_columns` + advertises `data` list-of-dicts; create_pdf adds `title/page_size` + advertises v4 per-block `data`; create_chart accepts {labels,values}.
+- web_fetch.py: DISABLED — module-level `raise NotImplementedError`; impl retained below as unreachable for forward re-enable; `_SSRF_BLOCKED_HOSTS` extended with kubernetes.default + metadata + trailing-dot canonicalization (for re-enable correctness).
+- tools/__init__.py: `web_fetch` import + `_register()` call commented out with "DISABLED 2026-05-03" markers.
+- test_block_t.py: workspace_tmp fixture (rebuilds SECURITY for tmp_path) + web_fetch active tests replaced with `test_web_fetch_module_disabled` + `test_web_fetch_not_in_registry`. Added 4 new lock tests: word v4 fields / excel v4 dict-shape / pdf v4 blocks / out-of-workspace reject.
+- PORT_LOG row 103-A documents iter-2 fixes + DECISION-DROP-PER-USER for web_fetch (NOT silent narrowing).
+- ADR-038 amended with iter-2 update section.
+- SYNTHESIS_MASTER §Block T row T-4 annotated DROPPED 2026-05-03.
+- V5_BUILD_STATUS Block T entry rewritten: "10 of 11 active" + DECISION-DROP-PER-USER block.
+- 764 pass + 14 skip (was 761+14; +3 net: +5 new locks -2 web_fetch active tests); verify_ship_zip PASS (133 files / 374.2 KB / 36%).
+
 ### Block T (code commit; Codex pending)
 - 11 v4 tools restored across 5 new files (consolidated by domain). Lazy-import pattern.
 - 15 tests; 760 pass + 14 skip; ship-zip PASS.

@@ -1161,11 +1161,56 @@ test_tool_create_html_via_write_file_documented.
 - NEW: tests/integration/test_block_t.py (15 tests)
 
 ### Linked port-log rows
-- #103 — Block T 11 v4 tools
+- #103 — Block T 11 v4 tools (initial)
+- #103-A — Block T iter-2 fixes + web_fetch DECISION-DROP-PER-USER 2026-05-03
 
-### Validation
-- 760 pass + 14 skipped (was 745 + 14 at end of Block N; +15 net new).
-- verify_ship_zip.py: PASS (133 files / 370.9 KB / 36%).
+### iter-2 update (2026-05-03)
+**Codex iter-1 + iter-2 findings closed plus user web_fetch directive.**
+
+1. **CRITICAL: doc-creator path validation** was using `_resolve_path()` (a
+   join helper, NOT a workspace gate). Fixed: `_validate_doc_path` now uses
+   `SECURITY.validate_path()` and returns `(err_or_None, abs_path)`. All 6
+   creators write to `abs_path` post-validation, mirroring write_file.
+
+2. **CRITICAL: doc creators + web_fetch unapproved**. Fixed:
+   `requires_approval=True` on all 6 doc creators (were False).
+
+3. **HIGH: schema v4 contracts**. Fixed:
+   - create_word advertises `title / include_toc / header / footer`.
+   - create_excel advertises `data` (list-of-dicts), `sheet_name`,
+     `chart_title`, `x_column`, `y_columns` + accepts both `data` and `rows`.
+   - create_pdf advertises `data` (block list), `title`, `page_size`
+     (letter/a4/legal) + accepts v4 per-block `data` field.
+   - create_chart accepts `{labels, values}` and `{label: value}`.
+
+4. **MEDIUM: semantic_search**. Fixed: `status` action + accept both
+   v4 `top_k` and v5 `k`.
+
+5. **MEDIUM: ask_user**. Fixed: `options` field for v4 parity; renders
+   numbered choices into the prompt.
+
+6. **DECISION-DROP-PER-USER: web_fetch disabled** 2026-05-03. v5 single-user
+   SageMaker context typically VPC-isolated, so shipping web_fetch active
+   = SSRF surface for zero benefit. Implementation:
+   - `tools/web_fetch.py` raises `NotImplementedError` at module load
+     (defensive guard against accidental re-wiring).
+   - The full v4-parity implementation (SSRF blocking, 2MB cap,
+     allow_redirects=False, etc.) is retained as unreachable code below
+     the guard for forward re-enable.
+   - `tools/__init__.py` import + bootstrap call commented out with
+     "DISABLED 2026-05-03" markers.
+   - This is **NOT silent scope narrowing** — explicit user override
+     captured in PORT_LOG row 103-A. Constraint #1 honored.
+   - Re-enable steps documented in `tools/web_fetch.py` docstring.
+
+**Active Block T tool count**: 10 (was 11 in iter-1).
+
+### Validation (post-iter-2)
+- 764 pass + 14 skipped (was 760 + 14 at iter-1; +4 net new lock tests:
+  word v4 fields / excel v4 dict-shape / pdf v4 blocks / out-of-workspace
+  reject; +1 SSRF block; web_fetch active tests replaced with module-disabled
+  + not-in-registry locks).
+- verify_ship_zip.py: PASS.
 
 ---
 

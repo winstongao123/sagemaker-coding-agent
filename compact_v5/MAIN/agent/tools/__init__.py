@@ -69,7 +69,11 @@ from . import skill_propose_patch as _skill_patch        # noqa: F401  defines _
 from . import v4_documents as _v4_documents              # noqa: F401  defines _register()
 from . import todo as _todo                              # noqa: F401  defines _register()
 from . import semantic_search as _semantic_search        # noqa: F401  defines _register()
-from . import web_fetch as _web_fetch                    # noqa: F401  defines _register()
+# DISABLED 2026-05-03 (user decision): web_fetch ships disabled in v5.0.1.
+# v5 single-user SageMaker context is typically VPC-isolated. Importing the
+# module raises NotImplementedError. To re-enable, uncomment the next line
+# and the bootstrap call below + delete the raise in tools/web_fetch.py.
+# from . import web_fetch as _web_fetch                    # noqa: F401  defines _register()
 from . import ask_user as _ask_user                      # noqa: F401  defines _register()
 
 
@@ -107,7 +111,7 @@ def bootstrap_built_ins():
     _v4_documents._register()
     _todo._register()
     _semantic_search._register()
-    _web_fetch._register()
+    # _web_fetch._register()  # DISABLED 2026-05-03 per user decision (see import block above).
     _ask_user._register()
     return all_registered()
 

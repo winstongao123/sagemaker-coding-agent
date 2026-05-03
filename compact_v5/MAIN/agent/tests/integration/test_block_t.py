@@ -44,13 +44,34 @@ def fresh_registry():
     yield
 
 
+@pytest.fixture
+def workspace_tmp(tmp_path, monkeypatch):
+    """Codex iter-2 CRITICAL fix follow-up: doc creators now enforce
+    workspace bounds via SECURITY.validate_path(). Tests that write to
+    pytest tmp_path must point CONFIG.workspace at tmp_path and rebuild
+    the SECURITY singleton, otherwise the validation correctly rejects
+    the out-of-workspace write.
+
+    Yields tmp_path; restores SECURITY at teardown.
+    """
+    from runtime.config import CONFIG
+    import security.manager as sec_mgr
+    saved_ws = CONFIG.workspace
+    saved_sec = sec_mgr.SECURITY
+    CONFIG.workspace = str(tmp_path)
+    sec_mgr.rebuild_singleton_for_tests()
+    yield tmp_path
+    CONFIG.workspace = saved_ws
+    sec_mgr.SECURITY = saved_sec
+
+
 # ============================================================
 # Document creators
 # ============================================================
 
-def test_tool_create_word_writes_docx(tmp_path):
+def test_tool_create_word_writes_docx(workspace_tmp):
     docx = pytest.importorskip("docx")
-    fp = str(tmp_path / "out.docx")
+    fp = str(workspace_tmp / "out.docx")
     tool = _find_tool("create_word")
     assert tool is not None
     out = tool.execute({"filepath": fp, "content": "# Title\n\nBody text.\n"}, context={})
@@ -61,9 +82,27 @@ def test_tool_create_word_writes_docx(tmp_path):
         assert f.read(2) == b"PK"
 
 
-def test_tool_create_excel_with_chart(tmp_path):
+def test_tool_create_word_v4_advertised_fields(workspace_tmp):
+    """Codex iter-2 Axis-C lock: create_word v4 advertised
+    title/include_toc/header/footer fields are accepted."""
+    pytest.importorskip("docx")
+    fp = str(workspace_tmp / "fancy.docx")
+    tool = _find_tool("create_word")
+    out = tool.execute({
+        "filepath": fp,
+        "content": "Body.",
+        "title": "Doc Title",
+        "include_toc": True,
+        "header": "PageHeader",
+        "footer": "PageFooter",
+    }, context={})
+    assert out.startswith("Wrote ")
+    assert os.path.isfile(fp)
+
+
+def test_tool_create_excel_with_chart(workspace_tmp):
     pytest.importorskip("openpyxl")
-    fp = str(tmp_path / "out.xlsx")
+    fp = str(workspace_tmp / "out.xlsx")
     tool = _find_tool("create_excel")
     out = tool.execute({
         "filepath": fp,
@@ -76,17 +115,40 @@ def test_tool_create_excel_with_chart(tmp_path):
     assert zipfile.is_zipfile(fp)
 
 
-def test_tool_create_markdown(tmp_path):
-    fp = str(tmp_path / "doc.md")
+def test_tool_create_excel_v4_data_dict_shape(workspace_tmp):
+    """Codex iter-1/2 HIGH lock: create_excel accepts the v4 list-of-dicts
+    `data` shape, plus sheet_name + chart_title + x_column + y_columns.
+    """
+    pytest.importorskip("openpyxl")
+    fp = str(workspace_tmp / "v4shape.xlsx")
+    tool = _find_tool("create_excel")
+    out = tool.execute({
+        "filepath": fp,
+        "data": [
+            {"month": "Jan", "sales": 100, "cost": 60},
+            {"month": "Feb", "sales": 120, "cost": 70},
+        ],
+        "sheet_name": "Q1",
+        "chart_type": "bar",
+        "chart_title": "Q1 Sales vs Cost",
+        "x_column": "month",
+        "y_columns": ["sales", "cost"],
+    }, context={})
+    assert out.startswith("Wrote ")
+    assert zipfile.is_zipfile(fp)
+
+
+def test_tool_create_markdown(workspace_tmp):
+    fp = str(workspace_tmp / "doc.md")
     tool = _find_tool("create_markdown")
     out = tool.execute({"filepath": fp, "content": "# Hello\n\nWorld."}, context={})
     assert out.startswith("Wrote ")
-    assert (tmp_path / "doc.md").read_text(encoding="utf-8") == "# Hello\n\nWorld."
+    assert (workspace_tmp / "doc.md").read_text(encoding="utf-8") == "# Hello\n\nWorld."
 
 
-def test_tool_create_notebook_cells(tmp_path):
+def test_tool_create_notebook_cells(workspace_tmp):
     import json
-    fp = str(tmp_path / "n.ipynb")
+    fp = str(workspace_tmp / "n.ipynb")
     tool = _find_tool("create_notebook")
     out = tool.execute({
         "filepath": fp,
@@ -96,16 +158,16 @@ def test_tool_create_notebook_cells(tmp_path):
         ],
     }, context={})
     assert out.startswith("Wrote ")
-    nb = json.loads((tmp_path / "n.ipynb").read_text(encoding="utf-8"))
+    nb = json.loads((workspace_tmp / "n.ipynb").read_text(encoding="utf-8"))
     assert nb["nbformat"] == 4
     assert len(nb["cells"]) == 2
     assert nb["cells"][0]["cell_type"] == "markdown"
     assert nb["cells"][1]["cell_type"] == "code"
 
 
-def test_tool_create_chart_png(tmp_path):
+def test_tool_create_chart_png(workspace_tmp):
     pytest.importorskip("matplotlib")
-    fp = str(tmp_path / "chart.png")
+    fp = str(workspace_tmp / "chart.png")
     tool = _find_tool("create_chart")
     out = tool.execute({
         "filepath": fp,
@@ -120,9 +182,9 @@ def test_tool_create_chart_png(tmp_path):
         assert f.read(4) == b"\x89PNG"
 
 
-def test_tool_create_pdf_sections(tmp_path):
+def test_tool_create_pdf_sections(workspace_tmp):
     pytest.importorskip("matplotlib")
-    fp = str(tmp_path / "doc.pdf")
+    fp = str(workspace_tmp / "doc.pdf")
     tool = _find_tool("create_pdf")
     out = tool.execute({
         "filepath": fp,
@@ -138,6 +200,53 @@ def test_tool_create_pdf_sections(tmp_path):
     # PDF signature.
     with open(fp, "rb") as f:
         assert f.read(4) == b"%PDF"
+
+
+def test_tool_create_pdf_v4_data_blocks_with_title_and_a4(workspace_tmp):
+    """Codex iter-2 HIGH lock: create_pdf accepts v4 `data` (block list),
+    `title`, and `page_size` (a4/letter/legal)."""
+    pytest.importorskip("matplotlib")
+    fp = str(workspace_tmp / "v4pdf.pdf")
+    tool = _find_tool("create_pdf")
+    out = tool.execute({
+        "filepath": fp,
+        "title": "Quarterly Report",
+        "page_size": "a4",
+        # v4 shape: per-block `data` field instead of `text`/`rows`.
+        "data": [
+            {"type": "heading", "data": "Section 1"},
+            {"type": "text", "data": "Body para."},
+            {"type": "table", "data": [["A", "B"], [1, 2]]},
+        ],
+    }, context={})
+    assert out.startswith("Wrote ")
+    with open(fp, "rb") as f:
+        assert f.read(4) == b"%PDF"
+
+
+def test_tool_create_doc_rejects_out_of_workspace(tmp_path, monkeypatch):
+    """Codex iter-2 CRITICAL lock: doc creators reject paths outside
+    workspace + allowed_paths. tmp_path is intentionally NOT added to
+    workspace so the validation must fail-closed.
+    """
+    from runtime.config import CONFIG
+    import security.manager as sec_mgr
+    saved_ws = CONFIG.workspace
+    saved_sec = sec_mgr.SECURITY
+    try:
+        # Point workspace at a different tmp dir that does NOT contain tmp_path.
+        other_root = tmp_path.parent / "other_workspace_root"
+        other_root.mkdir(exist_ok=True)
+        CONFIG.workspace = str(other_root)
+        sec_mgr.rebuild_singleton_for_tests()
+        bad_fp = str(tmp_path / "evil.md")
+        tool = _find_tool("create_markdown")
+        out = tool.execute({"filepath": bad_fp, "content": "x"}, context={})
+        assert out.startswith("Error"), f"Expected validation error, got: {out}"
+        assert "outside workspace" in out.lower() or "path" in out.lower()
+    finally:
+        CONFIG.workspace = saved_ws
+        sec_mgr.SECURITY = saved_sec
 
 
 # ============================================================
@@ -200,52 +309,26 @@ def test_tool_semantic_search_index_then_search(tmp_path):
 # web_fetch with mocked HTTP response
 # ============================================================
 
-def test_tool_web_fetch_html_to_markdown(monkeypatch):
-    pytest.importorskip("requests")
+def test_web_fetch_module_disabled():
+    """User decision 2026-05-03: web_fetch is shipped DISABLED in v5.0.1.
+    v5's single-user SageMaker context is typically VPC-isolated, so the
+    tool would be dead code. Importing the module must raise
+    NotImplementedError so accidental re-wiring fails loudly.
 
-    body = b"<html><body><h1>Hello</h1><p>World</p></body></html>"
-
-    class _MockResponse:
-        status_code = 200
-        headers = {"Content-Type": "text/html"}
-
-        def iter_content(self, chunk_size=8192):
-            yield body
-
-        def raise_for_status(self):
-            pass
-
-    def fake_get(url, timeout=15, allow_redirects=False, stream=False):
-        return _MockResponse()
-
-    import requests
-    monkeypatch.setattr(requests, "get", fake_get)
-
-    tool = _find_tool("web_fetch")
-    # Use a public DNS name (not SSRF-blocked) so the tool actually fetches.
-    out = tool.execute({"url": "https://example.com"}, context={})
-    # html-to-markdown should produce # Hello and World.
-    assert "# Hello" in out
-    assert "World" in out
+    PORT_LOG #103: DECISION-DROP-PER-USER (NOT silent narrowing).
+    """
+    import importlib
+    # Force a fresh import — the module may already be cached.
+    import sys
+    sys.modules.pop("tools.web_fetch", None)
+    with pytest.raises(NotImplementedError) as excinfo:
+        importlib.import_module("tools.web_fetch")
+    assert "disabled" in str(excinfo.value).lower()
 
 
-def test_tool_web_fetch_blocks_ssrf():
-    """Codex iter-1 CRITICAL: SSRF protection blocks private/loopback hosts."""
-    tool = _find_tool("web_fetch")
-    for url in (
-        "http://127.0.0.1/admin",
-        "http://localhost/",
-        "http://169.254.169.254/latest/meta-data/",
-        "http://10.0.0.1/",
-    ):
-        out = tool.execute({"url": url}, context={})
-        assert "Error" in out and "blocked" in out.lower(), f"URL not blocked: {url}: {out}"
-
-
-def test_tool_web_fetch_rejects_non_http_url():
-    tool = _find_tool("web_fetch")
-    out = tool.execute({"url": "ftp://x"}, context={})
-    assert "Error" in out
+def test_web_fetch_not_in_registry():
+    """Block T: web_fetch must NOT appear in the active tool registry."""
+    assert _find_tool("web_fetch") is None
 
 
 # ============================================================
@@ -295,13 +378,20 @@ def test_tool_create_html_via_write_file_documented():
 # Block T — all 11 tools registered
 # ============================================================
 
-def test_block_t_all_11_tools_registered():
-    """Constraint #1 (v4.10.10 baseline): all 11 v4 tools must register."""
-    expected = [
+def test_block_t_active_tools_registered():
+    """Constraint #1 (v4.10.10 baseline) honored as DECISION-DROP-PER-USER:
+    10 of 11 v4 tools register; web_fetch dropped 2026-05-03 by user
+    (SageMaker VPC-isolated; tool would be dead code). PORT_LOG #103.
+    """
+    expected_active = [
         "create_word", "create_excel", "create_markdown", "create_notebook",
         "create_chart", "create_pdf",
         "todo_write", "todo_read",
-        "semantic_search", "web_fetch", "ask_user",
+        "semantic_search", "ask_user",
     ]
-    for name in expected:
+    for name in expected_active:
         assert _find_tool(name) is not None, f"Block T tool '{name}' missing"
+    # Explicit dropped tool — locked here so accidental re-wiring fails.
+    assert _find_tool("web_fetch") is None, (
+        "web_fetch must remain disabled per user decision 2026-05-03"
+    )

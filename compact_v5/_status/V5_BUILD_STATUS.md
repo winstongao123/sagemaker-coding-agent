@@ -1,16 +1,19 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block T IN_PROGRESS** — code + 15 tests green, 760 pass + 14 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block T IN_PROGRESS iter-2** — 19 Block T tests green / 764 pass + 14 skip total; web_fetch DROPPED per user 2026-05-03; pending Codex iter-3 APPROVE + tag)
 
 ## v5.0.1 Block T entry (2026-05-03)
-- 11 v4 tools restored across 5 new files (constraint #5 minimum-file): tools/v4_documents.py (create_word/excel/markdown/notebook/chart/pdf, 6 tools consolidated) + tools/todo.py (todo_write + todo_read) + tools/semantic_search.py + tools/web_fetch.py + tools/ask_user.py.
+- **10 of 11 v4 tools active** across 5 new files (constraint #5 minimum-file): tools/v4_documents.py (create_word/excel/markdown/notebook/chart/pdf, 6 tools consolidated) + tools/todo.py (todo_write + todo_read) + tools/semantic_search.py + tools/web_fetch.py (DISABLED — see below) + tools/ask_user.py.
+- **web_fetch DECISION-DROP-PER-USER 2026-05-03**: ships disabled in v5.0.1 (module-level `raise NotImplementedError` guard + bootstrap import commented out). v5 single-user SageMaker context typically VPC-isolated; web_fetch active = SSRF surface for zero benefit. NOT silent narrowing — explicit user override; PORT_LOG row 103-A. Re-enable steps documented in tools/web_fetch.py docstring.
 - Lazy-import pattern: external libs (python-docx / openpyxl / matplotlib / requests / sklearn) imported at execute time. Tool registration always succeeds; missing lib returns Error.
 - create_html intentionally NOT a separate tool — use write_file with .html ext (Wave 6 design note).
-- WIRED tools/__init__.py to register all 11 in bootstrap_built_ins.
-- 15 tests in tests/integration/test_block_t.py: 11 TEST_DESIGN-named + 4 behavior locks (todo-read-empty / web-fetch-rejects-non-http / ask-user-provider-exception / all-11-tools-registered).
+- WIRED tools/__init__.py to register the 10 active tools in bootstrap_built_ins (web_fetch line commented + flagged "DISABLED 2026-05-03").
+- iter-2 schema parity: create_word adds title/include_toc/header/footer; create_excel adds sheet_name/chart_title/x_column/y_columns + accepts list-of-dicts data; create_pdf adds title/page_size + accepts v4 per-block data; create_chart accepts {labels,values}.
+- iter-2 path validation fix: `_validate_doc_path` now uses `SECURITY.validate_path()` (was `_resolve_path` which is a path-join helper, not a gate). All 6 doc creators write to `abs_path` returned by validation. requires_approval=True for all 6.
+- 19 tests in tests/integration/test_block_t.py: 10 active-tool tests + 4 v4-shape locks (word v4 fields / excel v4 dict-shape / pdf v4 blocks / out-of-workspace reject) + 1 SSRF block lock + 2 web_fetch-disabled locks (module-import-raises / not-in-registry) + create_html-doc + 2 todo behavior locks + 1 active-set registry lock.
 - Block G3 test test_coordinator_user_context_NOT_injected_for_subagent updated to use coordinator-specific markers (Phase-7 deferred-tool reminder legitimately mentions create_word now).
-- PORT_LOG #103 + ADR-038.
-- 760 pass + 14 skip (was 745 + 14; +15 pass net new).
+- PORT_LOG #103 + #103-A + ADR-038.
+- 764 pass + 14 skip (was 745 + 14 baseline; +19 pass net new).
 
 ## v5.0.1 Block N entry (2026-05-03)
 - NEW `core/parallel_dispatch.py` (~150 LOC): MAX_TOOL_WORKERS=4 + dedup_tool_calls + detect_path_conflicts + fuzzy_resolve_tool_name + mark_ephemeral_block + strip_ephemeral_blocks_for_persist + inject_dynamic_tool_refs + synthetic_tool_result_stub + partial_tool_call_warning.
