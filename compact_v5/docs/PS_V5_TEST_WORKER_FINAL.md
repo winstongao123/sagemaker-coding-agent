@@ -43,10 +43,20 @@ Worker should use Git Bash (already installed) for simplicity. If unavailable, t
 WORKER ACTION (mandatory order):
 1. Pull latest sageagent v5-build
 2. Verify both fixes in place: grep require_tool_approval test_r1; grep _make_unicode_safe_output_fn
-3. RE-RUN PHASE A pre-flight on FIXED code (filled TEMPLATE A → Codex CLI iter-5)
-4. ONLY after Codex returns APPROVE_FOR_AWS_CALL on iter-5 → run AWS call #2
-5. NEVER skip Phase A because "code looks the same as iter-4" — the Unicode fix
-   is a real diff that needs an explicit Codex APPROVE before spending AWS again
+3. RE-RUN PHASE A pre-flight on FIXED code using **the NEXT UNUSED iteration number**
+   (NOT iter-5 — that file already exists from a prior approval-bypass review before
+   the Unicode failure. Currently next unused = iter-6; verify by `ls
+   compact_v5/_status/codex_reviews/r-tier-R1-phaseA-iter*.md` and increment from
+   highest existing). NEVER overwrite an existing review file.
+4. ONLY after Codex returns APPROVE_FOR_AWS_CALL on the new iter → run AWS call #2
+5. NEVER skip Phase A because "code looks the same as a prior iter" — the Unicode fix
+   is a real diff that needs an explicit Codex APPROVE on the fixed code before
+   spending AWS again
+
+GENERAL RULE for ALL R-tests, ALL phases (A/B/C):
+- Iteration numbering is monotonic-increasing per (test, phase).
+- Before writing iter-N, `ls` the existing iter files; N must be max+1.
+- Never overwrite, never reuse, never decrement.
 
 ## PRE-FLIGHT (run in order, STOP if any fails)
 
