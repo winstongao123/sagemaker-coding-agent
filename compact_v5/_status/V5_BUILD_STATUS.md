@@ -1,17 +1,21 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block G IN_PROGRESS** — code + 14 tests green, 656 pass + 6 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block G DONE** — tag `v5.0.1-block-g` at `0fe6454` (pending push); 664 pass + 6 skip; Codex iter-3 APPROVE clean)
 
 ## v5.0.1 Block G entry (2026-05-03)
-- NEW `subagent/agent_types.py` (~150 LOC): AgentType dataclass + AGENT_TYPES dict (7 entries) + DEFAULT_AGENT_PROMPT + SUBAGENT_NOTES + ONE_SHOT_BUILTIN_AGENT_TYPES + get_agent_type/get_agent_prompt(is_coordinator).
+- NEW `subagent/agent_types.py` (~180 LOC): AgentType dataclass with `allowed_tools` field + AGENT_TYPES dict (7 entries) + DEFAULT_AGENT_PROMPT + SUBAGENT_NOTES + ONE_SHOT_BUILTIN_AGENT_TYPES + _READ_ONLY_TOOLS / _VERIFY_TOOLS allowlists + get_agent_type/get_agent_prompt(is_coordinator).
 - NEW `subagent/worktree.py` (~120 LOC): create_worktree() + cleanup_worktree() with 3-tier fallback (git → fallback_copy → fallback_tempdir).
-- EXTENDED `subagent/spawn.py`: per-type max_turns clamping + worktree creation for build + verify-skill auto-load. Removed Phase-9 `_AGENT_TYPE_SUFFIXES` placeholder.
-- EXTENDED `tools/task.py`: validation against full AGENT_TYPES (Block G supports build/plan/explore/verify/general/review/fork).
+- EXTENDED `subagent/spawn.py`: per-type max_turns clamping + worktree creation for build with CONFIG.workspace swap (build agents actually run inside the worktree, restored in finally) + verify-skill auto-load + tool allowlist filtering (no `task` for restricted agents — would bypass allowlist via build-child).
+- EXTENDED `tools/task.py`: JSON-schema enum + per-type description + validation against full AGENT_TYPES.
 - EXTENDED `subagent/__init__.py`: re-exports new public surface.
-- 14 new tests in `tests/integration/test_block_g.py`: 8 TEST_DESIGN-named + 6 behavior locks (one_shot_set, unknown-agent-type, coordinator-drops-notes, default-agent-prompt-no-gold-plating, max-turns-clamped, env-empty).
-- PORT_LOG rows #086-#088 + ADR-031.
-- `verify_ship_zip.py`: PASS (117 files / 328.1 KB / 36%).
-- Pytest: **656 passed + 6 skipped** (was 642 + 6 at Block M; +14 pass net).
+- 22 new tests in `tests/integration/test_block_g.py`: 8 TEST_DESIGN-named + 6 initial behavior locks + 6 iter-2 finding-locks (build-runs-in-worktree / explore-allowlist / plan-allowlist / verify-allowlist / general-full-registry / task-schema-lists-7) + 2 iter-3 finding-locks (restricted-agents-no-task-allowlist / explore-no-task-end-to-end).
+- Codex AXIS A/B/C 3-iter cycle (gpt-5.5 -c model_reasoning_effort=high throughout):
+  - iter 1: REJECT — 1 BLOCKER (worktree CONFIG.workspace not swapped) + 1 HIGH (allowlist prompt-only) + 1 MEDIUM (task description "general only") + 1 DOC (G-1/G-2 deferral undeclared).
+  - iter 2: REJECT — 1 HIGH (`task` in restricted allowlist let explore spawn build) + 1 MEDIUM (loose test assertion).
+  - iter 3: **APPROVE** — clean. (`_status/codex_reviews/block-g-iter3.md`).
+- PORT_LOG rows #086-#091 + ADR-031.
+- `verify_ship_zip.py`: PASS (117 files / 329.5 KB / 36%).
+- Pytest: **664 passed + 6 skipped** (was 642 + 6 at Block M; +22 pass net).
 
 ## v5.0.1 Block M entry (2026-05-03)
 - EXTENDED `core/query_engine.py`: count_tool_calls() helper + 2 new QueryEngine ctor params (synthetic_output_tool_name, max_structured_output_retries; both default OFF) + per-turn retry-limit gate emitting stop_reason="error_max_structured_output_retries" + per-run discoveredSkillNames reset (skill_manager._pending_activations.clear() at run() entry; best-effort try/except).
@@ -402,8 +406,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 09b6114 (v5/block-m: Phase 8 critical fixes) — pending push
-- Last tag: v5.0.1-block-m (Block M done, Codex iter-1 APPROVE clean) — pending
+- Last commit: 0fe6454 (v5/block-g: iter-3 fixes — Codex iter-2 REJECT) — pending push
+- Last tag: v5.0.1-block-g (Block G done, Codex 3-iter cycle ended APPROVE) — pending
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
@@ -412,7 +416,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block G — AGENT_TYPES + worktree + handoff/env** (after Block M tag).
+**Block G3 — Coordinator System Prompt** (after Block G tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -424,7 +428,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block E+F status: DONE — tag `v5.0.1-block-e-f` at `2388e64`; pushed.
 - Block F2 status: DONE — tag `v5.0.1-block-f2` at `9d3cd50`; pushed.
 - Block I status: DONE — tag `v5.0.1-block-i` at `c46be09`; pushed.
-- Block M status: DONE — tag `v5.0.1-block-m` at `09b6114`; pending push.
+- Block M status: DONE — tag `v5.0.1-block-m` at `09b6114`; pushed.
+- Block G status: DONE — tag `v5.0.1-block-g` at `0fe6454`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
