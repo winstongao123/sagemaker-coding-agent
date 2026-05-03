@@ -46,6 +46,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block T DONE — Codex iter-6 = APPROVE (clean)
+- Iter-cycle: 1 REJECT → 2 REJECT → 3 APPROVE_WITH_FIXES → 4 APPROVE_WITH_FIXES → 5 APPROVE_WITH_FIXES → 6 APPROVE.
+- Active Block T tool count: 10 (web_fetch DECISION-DROP-PER-USER 2026-05-03 per PORT_LOG row 103-A).
+- PORT_LOG #103 + #103-A; ADR-038.
+- Tag `v5.0.1-block-t` to be created. Next: Block J — real-AWS gate.
+
 ### Block T iter-6 fixes (Codex iter-5 = APPROVE_WITH_FIXES — 1 MEDIUM)
 - v4_documents.py MEDIUM fix: combo shape parser bug. `{labels, bar_values, line_values}` was hitting the generic dict.keys() fallback (labels became `["labels", "bar_values", ...]`). Added explicit branch in the parser BEFORE the generic fallback that recognizes labels+bar_values/line_values and sets labels correctly.
 - test_block_t.py: combo lock test strengthened with monkeypatch spies on Axes.bar/plot to verify the rendered x-axis labels are the actual quarter labels (catches the iter-5 regression directly).
