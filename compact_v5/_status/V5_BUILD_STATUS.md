@@ -1,18 +1,22 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block F2 IN_PROGRESS** — code + 14 tests green, 604 pass + 5 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block F2 DONE** — tag `v5.0.1-block-f2` at `dd33507` (pending push); 610 pass + 5 skip; Codex iter-3 APPROVE)
 
 ## v5.0.1 Block F2 entry (2026-05-03)
-- NEW `core/budget_continuation.py` (~140 LOC): BudgetTracker + check_iteration_budget + get_budget_continuation_message + COMPLETION_THRESHOLD=0.9 + DIMINISHING_THRESHOLD=2 (iteration-adapted from Runnable's 500 tokens).
+- NEW `core/budget_continuation.py` (~145 LOC): BudgetTracker + check_iteration_budget + get_budget_continuation_message + COMPLETION_THRESHOLD=0.9 + DIMINISHING_THRESHOLD=2 (iteration-adapted from Runnable's 500 tokens).
 - EXTENDED `runtime/config.py`: `enable_token_budget_continuation: bool = False` (default OFF per Wave 6 NLT row #21 opt-in contract) + `_SCALAR_FIELDS` row.
-- WIRED `core/query_engine.py`: at the no-tool_calls (end_turn) branch, before `stop_reason = "end_turn"; break`. Best-effort try/except so F2 never blocks normal end_turn. Sub-agents always halt (parent-only auto-continuation). Cost-cap halt has priority over under-90% check. `self._budget_tracker = None` reset at run() entry.
-- 14 new tests in `tests/integration/test_block_f2.py`:
-  - 7 pure-function tests (continue-under-90 / stop-at-90 / cost-cap / subagent / diminishing-after-3 / no-budget / message-format).
-  - 3 TEST_DESIGN-named tests: test_f2_auto_continue_at_under_90pct / test_f2_blocks_at_90pct / test_f2_respects_cost_cap.
-  - 4 behavioral lock tests: default-off-no-continuation, diminishing-returns-end-to-end, subagent-no-auto-continue, tracker-resets-between-runs.
+- WIRED `core/query_engine.py`: at the no-tool_calls (end_turn) branch, before `stop_reason = "end_turn"; break`. Best-effort try/except (logs warning on raise per Codex iter-1 #2). StopDecision telemetry logged + AUDIT.log("budget_continuation_stop") for cost_cap/diminishing/above_threshold paths (per Codex iter-1 #1). Sub-agents always halt (parent-only). Cost-cap halt has priority. `self._budget_tracker = None` reset at run() entry.
+- 20 new tests in `tests/integration/test_block_f2.py`:
+  - 7 pure-function tests + 3 TEST_DESIGN-named + 4 behavioral locks (initial 14).
+  - 3 iter-2 finding-locks (StopDecision audit / exception-logged / snapshot-restore-pattern).
+  - 3 iter-3 finding-locks (pct in completion_event for cost_cap / diminishing / above_threshold).
+- Codex AXIS A/B/C 3-iter cycle (gpt-5.5 -c model_reasoning_effort=high throughout):
+  - iter 1 (3 files initial): APPROVE_WITH_FIXES — 3 findings (StopDecision telemetry / silent F2 swallow / test globals snapshot pattern).
+  - iter 2 (4 files iter-2 fix): APPROVE_WITH_FIXES — 2 findings (meta-lock test still violated rule it locked / completion_event missing pct).
+  - iter 3 (4 files iter-3 fix): **APPROVE** — clean. Findings: none. (`_status/codex_reviews/block-f2-iter3.md`).
 - PORT_LOG row #072 + ADR-028. Closes Wave 6 NLT row #21 (cost-cap + opt-in contracts).
-- `verify_ship_zip.py`: PASS (113 files / 313.8 KB / 36%).
-- Pytest: **604 passed + 5 skipped** (was 590 + 5 at Block E+F; +14 pass net).
+- `verify_ship_zip.py`: PASS (113 files / 314.4 KB / 36%).
+- Pytest: **610 passed + 5 skipped** (was 590 + 5 at Block E+F; +20 pass net).
 
 ## v5.0.1 Block E+F entry (2026-05-03)
 - NEW `prompt/env_block.py` (~125 LOC): get_session_start_date (lru_cached) + get_local_month_year + get_knowledge_cutoff (5-model lookup + cross-region prefix strip) + get_os_string + get_shell_hint + render_env_block.
@@ -362,8 +366,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 2388e64 (v5/block-e-f: env_block + ADR-020 0-2/0-4/0-6 remap closure) — pushed 2026-05-03
-- Last tag: v5.0.1-block-e-f (Block E+F done, Codex 2-iter cycle ended APPROVE)
+- Last commit: dd33507 (v5/block-f2: iter-3 fixes — Codex iter-2 APPROVE_WITH_FIXES) — pending push
+- Last tag: v5.0.1-block-f2 (Block F2 done, Codex 3-iter cycle ended APPROVE) — pending
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
@@ -372,7 +376,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block F2 — Auto-continuation under iteration budget** (after Block E+F tag).
+**Block I — Skill name resolution + Hermes fuzzy + paths frontmatter + scaffolders** (after Block F2 tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -381,7 +385,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block C+ status: DONE — tag `v5.0.1-block-c-plus` at `f9e4000`; pushed.
 - Block D status: DONE — tag `v5.0.1-block-d` at `7a19715`; pushed.
 - Block A status: DONE — tag `v5.0.1-block-a` at `c87a823`; pushed.
-- Block E+F status: DONE — tag `v5.0.1-block-e-f` (pending; tagging this commit); pushed.
+- Block E+F status: DONE — tag `v5.0.1-block-e-f` at `2388e64`; pushed.
+- Block F2 status: DONE — tag `v5.0.1-block-f2` at `dd33507`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

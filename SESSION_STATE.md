@@ -27,6 +27,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - tests/integration/test_block_f2.py: meta-lock test now itself snapshots+restores outer state (Codex iter-2 finding #1) + 3 lock tests for pct-in-completion_event added (cost_cap, diminishing, above_threshold).
 - 610 pass + 5 skip (was 607; +3 finding-locks); verify_ship_zip PASS.
 
+### Block F2 DONE — Codex iter-3 APPROVE (clean)
+- All 3 iter-1 + 2 iter-2 findings closed with covering lock tests.
+- 20 total F2 tests green; PORT_LOG #072 verdict APPROVE/dd33507; ADR-028 final.
+- Tag v5.0.1-block-f2 + push pending. Next: Block I.
+
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 
 **Foundation reconciled per Path A** — 78 Phase 2 files + status/RESUME/gitignore updated.
