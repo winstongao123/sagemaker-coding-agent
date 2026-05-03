@@ -1,9 +1,23 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block K IN_PROGRESS** — 6 T4 tests green; 781 pass + 17 skip total; codex iter-1 fixes pending; next pickup = Block U HTMLs)
+Last updated: 2026-05-03 (**v5.0.1 Block K DONE + tagged** — 781 pass + 17 skip; **Block U DEFERRED-POST-SHIP per user 2026-05-03**; next pickup = R-tier R1-R12 real-AWS validation)
 
-Phase ID: K
-Last commit sha: 9c8fcb47caba05413b6b16bb014604bb6464a3d7
+Phase ID: R-tier (PHASE 3 of post-Block-K plan)
+Last commit sha: d89067c (Block K iter-2 APPROVE)
+
+## Block U status (2026-05-03)
+
+**DEFERRED-POST-SHIP per user 2026-05-03**. Code-to-production first.
+
+- Scaffold + archive landed (kept as Block-U-foundation):
+  - `compact_v5/HTML/` directory created.
+  - `compact_v5/docs/htmls/archive/` with `v4_architecture.html` + `PS_FLOWCHART_V4.html` moved (per WORKER_HINT_2026-05-03.md §3).
+- 4 NEW HTMLs DEFERRED (not yet written): `v5_architecture.html`, `PS_FLOWCHART_V5.html`, `v5_complete.html` (7 tabs), `v5_PS_PROBLEMS_FIXED.html`.
+- HERMES_VS file rename + v5 column DEFERRED.
+- Rationale: HTMLs document a SHIPPED product; building them before R-tier validates v5 risks wasted work if R-tier surfaces a code change. Block U fires after user approves v5.0.1 ship + signs off on R-tier results.
+- Block U "R-tier results" tab will be populated with actual R-tier metrics + screenshots from `r_tier_metrics.jsonl`.
+
+## v5.0.1 Block K entry (2026-05-03)
 
 ## v5.0.1 Block K entry (2026-05-03)
 - Block K — process discipline (LF AXIS C + per-block user gate + STATE/RESUME + 3-critic + A44 test refactor) per TEST_DESIGN §Block K (5 named tests + 1 meta-count = 6 tests, all T4 $0).
@@ -507,15 +521,22 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block U — v5 learning HTMLs (Block U deliverable per WORKER_HINT_2026-05-03.md §3)** (after Block K tag).
+**R-tier R1-R12 real-AWS validation (PHASE 3, $3-7 cap)**.
 
-Block U scope: archive v4 HTMLs, update HERMES_VS_CODING_AGENT_v4.html → HERMES_VS_v4_VS_v5.html (add v5 column), and create 4 new v5-specific HTMLs in `compact_v5/HTML/`:
-- v5_architecture.html (file tree + per-module purpose + Bedrock data flow)
-- PS_FLOWCHART_V5.html (core loop / sub-agent / compact / memory / dream / cache / approval Mermaid)
-- v5_complete.html (single-file 7-tab learning doc)
-- v5_PS_PROBLEMS_FIXED.html (PS#1-7 with v4 file:line + v5 file:line + lock test name)
+User decision 2026-05-03 (Path B): Block U HTMLs DEFERRED post-ship. v5 is substantively ship-gate-ready (781 pass + 17 skip, 14 code Blocks tagged, verify_ship_zip PASS). R-tier proves "v5 has no semantic bugs on real Bedrock" and is the actual ship gate.
 
-10-step sequence (U-1 .. U-10) per WORKER_HINT §3 closes with Playwright validation + Codex AXIS A/B/C review + user-approval gate.
+Sequence:
+1. **PHASE 3 — R1-R12** ($3-7): per WORKER_HINT §10 + R_TIER_REVIEW_TEMPLATE TEMPLATE A/B/C. Max 3 AWS calls per test, BOTH worker AND Codex APPROVE before each call.
+2. **PHASE 4 — R13-R16 enhanced** ($5-6): coding accuracy / multi-file refactor / bug detection / long session.
+3. **PHASE 5 — Block V head-to-head v4 vs v5** ($2-3): comparative benchmark, USER-APPROVAL needed before scheduling.
+4. **PHASE 6 — Final gate**: full-codebase Codex AXIS A/B/C review + present v5.0.1 product summary to user before tagging.
+5. **POST-SHIP** — Block U HTMLs (4 NEW + HERMES update + Playwright + tag).
+
+R-tier discipline (HARD RULES):
+- 3 AWS calls per test, total. BOTH worker AND Codex must APPROVE before each call.
+- ESCALATE-to-user triggers: 3 calls + still failing / Codex BLOCKER / AWS Budget 80% ($40/$50) / worker+Codex disagree after 3 rounds / Bedrock infra error / 2 consecutive R-tests fail at call #1.
+- Append row to `compact_v5/_status/r_tier_review_log.md` after every test.
+- Append JSONL to `compact_v5/_status/r_tier_metrics.jsonl`.
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -537,7 +558,8 @@ Block U scope: archive v4 HTMLs, update HERMES_VS_CODING_AGENT_v4.html → HERME
 - Block N status: DONE — tag `v5.0.1-block-n` at `136f41b`; pushed.
 - Block T status: DONE — tag `v5.0.1-block-t` at `1cda54a`; pushed.
 - Block J status: DONE — tag `v5.0.1-block-j` at `cab61ec`; pushed.
-- Block K status: IN_PROGRESS — code at `9c8fcb4`, Codex iter-1 fixes in progress; tag deferred until APPROVE.
+- Block K status: DONE — tag `v5.0.1-block-k` at `d89067c`; pushed.
+- Block U status: DEFERRED-POST-SHIP — scaffold + archive landed at `9c8fcb4`+later; 4 NEW HTMLs deferred per user 2026-05-03 (Path B: code-to-production first).
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

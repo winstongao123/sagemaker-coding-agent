@@ -17,7 +17,19 @@ These supersede prior wording in BUILDER_PROMPT.md / SYNTHESIS_MASTER.md if any 
 - Update SYNTHESIS_MASTER.md tools table to mark web_fetch DROPPED (not deferred).
 - ADR row in V5_DESIGN_DECISIONS.md.
 
-## 3. v5 learning HTML — ADD a new Block "U" at end (after K, before R-tier)
+## 3. v5 learning HTML — Block "U" — DEFERRED-POST-SHIP per user 2026-05-03 (Path B)
+
+**STATUS UPDATE 2026-05-03 (Path B confirmed by user)**: Block U HTMLs are DEFERRED post-ship.
+
+- Original placement was "after K, before R-tier"; user re-routed to **post-ship**.
+- Code-to-production first: Block K DONE → R-tier R1-R12 → R13-R16 → Block V (user-approved) → final gate → ship → THEN Block U.
+- Rationale: HTMLs document a SHIPPED product. Building them before R-tier validates v5 risks wasted work if R-tier surfaces a code change. The "R-tier results" tab in `v5_complete.html` will be populated AFTER R-tier metrics land in `r_tier_metrics.jsonl`.
+
+### Block U scaffold landed (kept as foundation):
+- `compact_v5/HTML/` directory created (empty, ready for the 4 NEW HTMLs).
+- `compact_v5/docs/htmls/archive/` with `v4_architecture.html` + `PS_FLOWCHART_V4.html` already moved per the spec below.
+
+### Original Block U spec (apply post-ship)
 
 User's HTML-purpose memory (`feedback_html_purpose.md`): HTMLs are learning tools. v5 needs the SAME HTML coverage v4 had. Existing `compact_v5/docs/htmls/` has 6 v4-era files (none describe v5).
 
