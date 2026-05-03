@@ -6,6 +6,27 @@ Used at every PHASE A (pre-flight) and PHASE C (diagnosis) per WORKER_HINT_2026-
 
 ---
 
+## CONTEXT-PASSING PROTOCOL (worker MUST follow when filling templates)
+
+Codex CLI runs in `--sandbox read-only` and CAN read any file in the repo via its own tools. But for token efficiency + reliability, worker MUST inline these snippets directly in the filled-in template (not just paths):
+
+| Section | What to inline | Why |
+|---|---|---|
+| Test code (PHASE A) | Full test file content (typically <300 lines) | Codex needs to see assertions to grade them |
+| Filled scenario fixtures | Inline 5-row CSV / 30-line script / etc. | Critical to grade if test exercises what it claims |
+| Telemetry summary (PHASE B/C) | Inline `tool_call_summary` + `outcome` + first/last 5 entries of `per_turn` | Codex needs metrics without parsing 1MB JSON |
+| Raw log tail (PHASE B/C) | Inline LAST 100 LINES of `aws-call<N>.log` (not full 500KB-1MB) + the file path so Codex can cat more if needed | Captures stop_reason + final agent text + any error |
+| Worker's PASS 1 grade (PASS 2) | Inline FULL PASS 1 markdown | Codex grades independently but should see worker's view to flag disagreements |
+| Previous iter findings (iter-N+1) | Inline PREVIOUS Codex verdict's findings (not whole review) | Codex confirms each finding closed |
+| File paths (always) | Provide for Codex to cat if it wants more | Fallback if inline summary insufficient |
+
+**Hard rule**: never pass JUST a path expecting Codex to read the file. Always inline the relevant excerpt PLUS provide path for deeper exploration. This protects against:
+- Codex token-budget exhaustion mid-review
+- Codex not realizing it needs to read a specific file
+- Inconsistent reviews depending on what Codex chose to read
+
+---
+
 ## TEMPLATE A — PHASE A pre-flight review (BEFORE first AWS call)
 
 ```
