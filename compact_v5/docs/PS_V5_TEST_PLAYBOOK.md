@@ -238,6 +238,38 @@ If ANY checkbox missed → test INCOMPLETE → do NOT advance.
 
 ---
 
+## Section 4.3 — R18 Edge Cases Battery (added 2026-05-03 per user "do it")
+
+User directive: "why do we have some edge cases? why not test to 100% within the budget?" → "do it"
+
+ADD R18 — single batch test running ~15 enumerable edge cases. Closes the 95%→99%+ gap on internal correctness.
+
+| # | Edge case | Type | Cost |
+|---|---|---|---|
+| E1 | Bedrock 429 throttle response | mock | $0 |
+| E2 | Bedrock 5xx flake (3 retries) | mock | $0 |
+| E3 | Cost cap hit mid-tool-call (halt timing) | real | $0.10 |
+| E4 | Skill activation by alias (`/skill activate clara` → `clara-review`) | mock | $0 |
+| E5 | Save/load with corrupt session JSON | mock | $0 |
+| E6 | Empty CSV / missing file → tool error handling | real | $0.10 |
+| E7 | Very long single-tool output (50K tokens) → truncation | real | $0.10 |
+| E8 | Concurrent tool calls in parallel sub-agents → race | real | $0.10 |
+| E9 | Snapshot directory disk-full simulation | mock | $0 |
+| E10 | Plan-mode tool-allowlist edge cases (deferred + restricted) | mock | $0 |
+| E11 | Sub-agent timeout during parent compaction | real | $0.20 |
+| E12 | Audit log rotation at 10MB threshold | mock | $0 |
+| E13 | memory.md with Unicode emojis + RTL text | mock | $0 |
+| E14 | `/dream` interrupted mid-write (atomicity) | mock | $0 |
+| E15 | Cache TTL expiry mid-conversation | real | $0.20 |
+
+**Total**: 9 free mock + 6 real-AWS = $0.80 cap. Updated R-tier cap: $9.55 → **$10.35**.
+
+R18 placement: AFTER R17 (last R-test) BEFORE final Codex review.
+
+R18 file: `compact_v5/MAIN/agent/tests/r_tier/test_r18_edge_cases.py`. Same review discipline as R1-R17 (PRE-FLIGHT + AWS + POST-PASS + quality.md). Each E1-E15 is a separate test function, each producing its own assertion + telemetry slot.
+
+Same 10 mandatory output files apply.
+
 ## Section 4.4 — Block V DROPPED per user 2026-05-03
 
 **User directive 2026-05-03**: "i dont want run v4 to waste money, only run v5"

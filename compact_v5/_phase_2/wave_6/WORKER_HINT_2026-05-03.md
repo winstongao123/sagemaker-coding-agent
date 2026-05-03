@@ -121,6 +121,16 @@ Output: scoring table in `v5_complete.html` "v5 vs Runnable vs v4" tab. Without 
 
 **R-tier + Block V combined**: ~$25-35. Gets EMPIRICAL "v5 > Runnable > v4" with screenshot-able evidence.
 
+## 9.0. R18 EDGE CASES BATTERY ADDED (user 2026-05-03 — auto mode "do it")
+
+NEW: R18 = batch of 15 enumerable edge cases that closes the 95%→99%+ gap. See PLAYBOOK §4.3 for full E1-E15 list. Cost +$0.80, total R-tier cap now **$10.35**.
+
+R18 covers: throttling/5xx (mock), cost cap mid-call (real), skill alias resolution (mock), corrupt session load (mock), empty/missing files (real), 50K-token output truncation (real), concurrent sub-agent races (real), disk-full snapshots (mock), plan-mode allowlist (mock), sub-agent timeout during compaction (real), audit log rotation (mock), Unicode/RTL memory (mock), /dream atomicity (mock), cache TTL expiry (real).
+
+Pipeline: R1 → R2 → ... → R16 → R17 → **R18** → final Codex → STOP at F5.
+
+Each E1-E15 is a separate test function in `test_r18_edge_cases.py`. Same 10 mandatory files per AWS-side test (mock-only Es batch into one telemetry.json).
+
 ## 9.1. BLOCK V DROPPED + per-test quality review (user 2026-05-03 — auto mode)
 
 User directive 2026-05-03: "i dont want run v4 to waste money, only run v5, but report back logs, to codex AND claude code worker to check ... if any error, or semantic bugs or problems"
