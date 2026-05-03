@@ -1204,6 +1204,42 @@ R6 (memory consolidation /dream).
 - USER_GUIDE.md update documenting `/dream` usage is a Block K
   documentation item.
 
+### Concurrency trade-off (Codex iter-3 review acknowledgment)
+
+DreamLock has a residual TOCTOU race window in `release()`: the nonce
+is read, then the file is unlinked. A theoretical 3-process race
+(A acquires → A stalls past stale_after_s → B reclaims → A wakes and
+unlinks B's lock) is observable on POSIX with `os.rename` overwrite.
+
+Iter-2 used read-then-unlink (race window between read and unlink).
+Iter-3 tried atomic rename but introduced its own race (the rename
+moves whatever happens to be at lock_path, which may be B's lock).
+Iter-4 returns to read-then-unlink WITH explicit acceptance of the
+residual race because:
+
+1. v5's /dream is MANUAL TRIGGER ONLY. No daemon, no auto-fire (the
+   `test_dream_no_daemon_no_auto_fire` lock test grep-scans the
+   codebase and fails on any forbidden pattern).
+2. The chat UI dispatches /dream synchronously — a single UI process
+   can't have two /dream calls in flight.
+3. The "stale reclaim" path requires:
+   (a) prior /dream crashed without releasing,
+   (b) ≥ stale_after_s (default 600s) elapsed,
+   (c) a new /dream invocation fires.
+   In practice this is only reachable across kernel-restart boundaries
+   where the previous process is gone — meaning A's `release()` will
+   never run (the process holding A's nonce no longer exists).
+4. v5's deployment is single-user SageMaker; there is no multi-user
+   /dream scenario.
+
+A future block (when/if v5 grows multi-process concurrency) can revisit
+with a kernel-level file lock (`fcntl.flock` on POSIX, `msvcrt.locking`
+on Windows) — those are platform-specific and not worth the complexity
+for v5's current shape.
+
+This trade-off is documented in `runtime/dream.py:DreamLock.release`
+docstring and acknowledged in the iter-3 codex review.
+
 ---
 
 ## ADR-034 — Block H (v5.0.1): Memory extraction + sessionMemory + compact-API-invariants

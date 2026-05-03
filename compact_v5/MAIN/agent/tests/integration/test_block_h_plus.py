@@ -328,38 +328,25 @@ def test_dream_invoked_via_console_chat_ui(tmp_path, monkeypatch):
         CONFIG.workspace = _saved_ws
 
 
-def test_dream_lock_release_atomic_rename_no_toctou(tmp_path):
-    """Codex iter-2 finding lock: release() uses atomic rename so a
-    concurrent reclaim between our nonce-read and unlink can't clobber
-    the new owner's lock.
+def test_dream_lock_release_clean_when_owner(tmp_path):
+    """Codex iter-2/iter-3 lock contract: when A holds the lock and
+    releases without contention, the lock_path must be removed.
 
-    Setup: A acquires. We monkey-patch json.load (called inside
-    release()) to swap the file contents AFTER A has renamed but
-    BEFORE A unlinks — simulating the race window. With the atomic-
-    rename fix, the renamed file is exclusively ours and the swap
-    happens on the original lock_path, which is not what we unlink.
+    See ADR-035 §"Concurrency trade-off" for why the residual TOCTOU
+    race window between read+unlink is acceptable for v5's manual-only
+    deployment shape. This lock test covers the happy path; the
+    cross-worker scenarios (A vs B reclaim) are covered by
+    test_dream_lock_release_only_unlinks_own_nonce.
     """
-    import json
     from runtime.dream import DreamLock, LOCK_FILENAME
 
     workspace = str(tmp_path)
     a = DreamLock(workspace)
     assert a.acquire() is True
-    nonce_a = a._nonce
     lock_path = tmp_path / LOCK_FILENAME
-
-    # Sanity: file exists before release.
     assert lock_path.exists()
-
-    # Release — should atomic-rename then unlink.
     a.release()
-
-    # The original lock_path is GONE (we owned it; no one reclaimed).
-    assert not lock_path.exists(), "release() must unlink the renamed file"
-
-    # No leftover .releasing.* tombstones.
-    leftovers = [p for p in tmp_path.iterdir() if "releasing" in p.name]
-    assert leftovers == [], f"no .releasing tombstones expected; got {leftovers}"
+    assert not lock_path.exists()
 
 
 def test_dream_lock_release_only_unlinks_own_nonce(tmp_path):

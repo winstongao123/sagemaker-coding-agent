@@ -158,58 +158,57 @@ class DreamLock:
         nonce. Otherwise, someone else now owns the lock and we must NOT
         unlink it.
 
-        Codex iter-2 hardening: read-then-unlink had a TOCTOU race where
-        worker B could reclaim between our nonce read and our unlink call.
-        Fixed via atomic rename: rename the lock file to a unique temp
-        path; if rename fails, the file's gone or moved (someone else has
-        it) — abort. After rename, we have exclusive ownership of the
-        renamed path; verify nonce + unlink. If nonce mismatches (which
-        is impossible post-atomic-rename since contents move with the
-        file), rename back.
+        Concurrency model and acceptable race window
+        --------------------------------------------
+        v5's /dream is **MANUAL TRIGGER ONLY** (per user decision
+        2026-05-01). There is exactly ONE chat UI per session, and that
+        UI dispatches /dream synchronously — no concurrent /dream
+        invocations are possible from the same chat UI process.
+
+        A residual TOCTOU window exists between the nonce-read and the
+        unlink call. In a hypothetical multi-process scenario:
+          - A reads file (sees A's nonce);
+          - B somehow reclaims A's stale lock (rare: stale_after_s=600s);
+          - A unlinks → B's lock is gone.
+
+        For v5's deployment shape this race is not reachable:
+          - There are no background daemons spawning /dream (Block H+
+            forbids them; lock test test_dream_no_daemon_no_auto_fire
+            grep-scans the codebase).
+          - The chat UI awaits /dream synchronously; user can't issue a
+            second /dream until the first returns.
+          - A "stale" reclaim requires the prior /dream to have crashed
+            without releasing AND >= 600s elapsed AND a new /dream
+            invocation to fire — practically only reachable across
+            kernel-restart boundaries.
+
+        Iter-3 attempted an atomic-rename approach but introduced its
+        own race (the rename moves whatever happens to be at lock_path,
+        which may be B's lock if B reclaimed). Codex iter-3 reviewer
+        flagged this. Iter-4 returns to the simpler nonce-check +
+        unlink pattern with this explicit doc — the residual race is
+        acceptable for v5's manual-only use case. A future block can
+        revisit with a kernel-level file lock (fcntl on POSIX,
+        msvcrt.locking on Windows) if/when v5 grows multi-process
+        concurrency.
         """
         if not self._held:
             return
-        if not self._nonce:
-            self._held = False
-            return
-
-        releasing_path = self.lock_path + f".releasing.{self._nonce}"
         try:
-            # Atomic rename. Fails if the source file doesn't exist OR
-            # someone else moved/deleted it between our acquire and now.
-            try:
-                os.rename(self.lock_path, releasing_path)
-            except OSError:
-                # File gone or moved — not ours to release; no-op.
-                return
-
-            # Now we have exclusive ownership of the renamed path.
-            # Verify the nonce (paranoia: should always match since
-            # rename moves contents atomically, but be safe).
+            # Read current file content; only unlink if nonce matches OURS.
             owner_match = False
             try:
-                with open(releasing_path, "r", encoding="utf-8") as f:
+                with open(self.lock_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if data.get("nonce") == self._nonce:
                     owner_match = True
             except (OSError, json.JSONDecodeError):
+                # Lock file gone or corrupt; treat as not-our-lock.
                 owner_match = False
-
             if owner_match:
                 try:
-                    os.unlink(releasing_path)
+                    os.unlink(self.lock_path)
                 except OSError:
-                    pass
-            else:
-                # Defensive: nonce mismatch on a file we just renamed
-                # atomically. Try to rename it back so we don't strand
-                # someone else's lock.
-                try:
-                    os.rename(releasing_path, self.lock_path)
-                except OSError:
-                    # If rename-back fails, leave the renamed file as a
-                    # tombstone; the next acquire's stale-recovery will
-                    # ignore it (different filename).
                     pass
         finally:
             self._held = False
