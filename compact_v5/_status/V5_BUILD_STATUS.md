@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block B IN_PROGRESS** — 18 new tests green; pending Codex AXIS A/B/C + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block B DONE** — tag `v5.0.1-block-b` at `ee01142`, pushed; 469 pass + 5 skip; Codex resilience rule satisfied via 10 finding-lock tests)
 Updated by: Mode B autonomous build (Codex-only-gate; user reviews FINAL product after Block K + R-tier)
 
 ## v5.0.1 Block B entry (2026-05-03)
@@ -274,8 +274,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 19e7823 (v5/block-0: sagemaker_agent.py shim + notebook smoke gate) — pushed to sageagent 2026-05-03
-- Last tag: v5.0.1-block-0 (Block 0 done, Codex APPROVE iter 2; v5.0.0 retained as ship-blocked baseline)
+- Last commit: ee01142 (v5/block-b: TokenTracker + AuditLogger + SnapshotManager + tokenEstimation) — pushed to sageagent 2026-05-03
+- Last tag: v5.0.1-block-b (Block B done, Codex iter-1 APPROVE_WITH_FIXES → 6 fixes + 10 lock tests; iter-2 skipped per resilience rule)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
