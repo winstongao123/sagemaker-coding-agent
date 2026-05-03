@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block I DONE — Codex iter-3 APPROVE (clean)
+- All 4 iter-1 + 2 iter-2 findings closed with covering lock tests.
+- 21 total Block I tests green (1 symlink skip on Windows); PORT_LOG #073-#083 + ADR-029.
+- Tag v5.0.1-block-i at 43d1ebe pending push. Next: Block M.
+
 ### Block I iter-3 fixes (Codex iter-2 = APPROVE_WITH_FIXES)
 - tests/integration/test_block_i.py: tightened test_paths_first_match_wins_per_adr029 — now asserts `activated == ["alpha"]` and `active_skill == "alpha"` (was loose `in {alpha, beta}`).
 - _status/V5_RUNNABLE_PORT_LOG.md: row #072 Notes column restored (F2 NEEDS-ADAPTATION text was lost when commit sha was edited; row was 9 fields instead of 10). Row #083 Notes trimmed to end at "ADR-029."

@@ -1,18 +1,23 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block I IN_PROGRESS** — code + 16 tests green (1 symlink skip), 626 pass + 6 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block I DONE** — tag `v5.0.1-block-i` at `43d1ebe` (pending push); 631 pass + 6 skip; Codex iter-3 APPROVE)
 
 ## v5.0.1 Block I entry (2026-05-03)
 - EXTENDED `skills/manager.py` (~280 LOC): SkillInfo + paths/disable_model_invocation/enabled_when fields + discover() realpath dedup + new frontmatter parsing + activate_for_path() + resolve_name() (Hermes fuzzy) + list_model_invocable/list_user_invocable + substitute_skill_vars().
-- WIRED `core/query_engine.py`: dispatch context now passes skill_manager + session_id to tools.
+- WIRED `core/query_engine.py`: dispatch context now passes skill_manager + session_id to tools; get_active_skill_prompt(session_id) wired to substitute ${CLAUDE_SKILL_DIR} / ${CLAUDE_SESSION_ID}.
 - WIRED `tools/edit_file.py`: post-write activate_for_path() hook (best-effort; never blocks edit).
+- WIRED `tools/skill.py`: list uses list_model_invocable; read/activate reject disable_model_invocation skills (Codex iter-1 #2).
 - WIRED `commands.py`: cmd_skill_use now routes through resolve_name() (replaces prior startswith-3-letter suggestion).
 - NEW `skills/debug/SKILL.md` (Block I-10) + `skills/remember/SKILL.md` (Block I-11, disable_model_invocation:true).
-- 16 new tests in `tests/integration/test_block_i.py` + 1 symlink test (skipped on Windows): all 8 TEST_DESIGN-named tests + 8 behavioral locks (paths-strip-double-star, all-match-all-collapses, fuzzy-returns-none-unrelated, var-substitution-skill-dir, var-substitution-unknown-noop, /skill-use-fuzzy-integration, paths-with-directory-pattern, debug+remember-load-from-real-skills, realpath-dedup-state-isolated).
-- PORT_LOG rows #073-#082 + ADR-029. Closes I-1..I-6 + I-10 + I-11 + Hermes fuzzy + I-7..I-9, I-13 doc-only references to Block D.
-- Block I-12 (frontmatter parser improvements) explicitly deferred to Block N per ADR-029 §6.
-- `verify_ship_zip.py`: PASS (115 files / 320.3 KB / 36%).
-- Pytest: **626 passed + 6 skipped** (was 610 + 5 at Block F2; +16 pass + 1 skip net).
+- 21 new tests in `tests/integration/test_block_i.py` + 1 symlink test skipped on Windows: 8 TEST_DESIGN-named + 8 behavioral locks + 5 Codex iter-1 finding-locks.
+- Codex AXIS A/B/C 3-iter cycle (gpt-5.5 -c model_reasoning_effort=high throughout):
+  - iter 1 (initial Block I): APPROVE_WITH_FIXES — 4 code findings (paths/**-descendants, disable_model_invocation in discover_relevant + skill tool, I-6 substitution unwired, first-match-wins) + 1 doc finding (PORT_LOG #082 missing I-12 deferral / verify remap / gap #8).
+  - iter 2 (4 code fixes + PORT_LOG #083 added): APPROVE_WITH_FIXES — 2 findings (loose first-match test, PORT_LOG #072 lost Notes column with F2 spillover into #083).
+  - iter 3 (test tightened + PORT_LOG row repair): **APPROVE** — clean. (`_status/codex_reviews/block-i-iter3.md`).
+- PORT_LOG rows #073-#083 + ADR-029.
+- Block I-12 (frontmatter parser improvements) explicitly deferred to Block N per ADR-029 §6. Wave 6 gap #8 tool-vs-skill precedence documented in PORT_LOG #083.
+- `verify_ship_zip.py`: PASS (115 files / 321.2 KB / 36%).
+- Pytest: **631 passed + 6 skipped** (was 610 + 5 at Block F2; +21 pass + 1 skip net).
 
 ## v5.0.1 Block F2 entry (2026-05-03)
 - NEW `core/budget_continuation.py` (~145 LOC): BudgetTracker + check_iteration_budget + get_budget_continuation_message + COMPLETION_THRESHOLD=0.9 + DIMINISHING_THRESHOLD=2 (iteration-adapted from Runnable's 500 tokens).
@@ -378,8 +383,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: dd33507 (v5/block-f2: iter-3 fixes — Codex iter-2 APPROVE_WITH_FIXES) — pending push
-- Last tag: v5.0.1-block-f2 (Block F2 done, Codex 3-iter cycle ended APPROVE) — pending
+- Last commit: 43d1ebe (v5/block-i: iter-3 fixes — Codex iter-2 APPROVE_WITH_FIXES) — pending push
+- Last tag: v5.0.1-block-i (Block I done, Codex 3-iter cycle ended APPROVE) — pending
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
@@ -388,7 +393,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block I — Skill name resolution + Hermes fuzzy + paths frontmatter + scaffolders** (after Block F2 tag).
+**Block M — Phase 8 critical fixes (per-turn discoveredSkillNames reset + countToolCalls retry-limit)** (after Block I tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -398,7 +403,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block D status: DONE — tag `v5.0.1-block-d` at `7a19715`; pushed.
 - Block A status: DONE — tag `v5.0.1-block-a` at `c87a823`; pushed.
 - Block E+F status: DONE — tag `v5.0.1-block-e-f` at `2388e64`; pushed.
-- Block F2 status: DONE — tag `v5.0.1-block-f2` at `dd33507`; pending push.
+- Block F2 status: DONE — tag `v5.0.1-block-f2` at `9d3cd50`; pushed.
+- Block I status: DONE — tag `v5.0.1-block-i` at `43d1ebe`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
