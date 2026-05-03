@@ -16,9 +16,10 @@
 | **R1-R12 real-AWS** (no semantic bugs) | 11 real + 1 mock | $6.50 cap | ~2 hours | Every PS_problem fix + every Block works on real Bedrock |
 | **R13-R16 real-AWS** (actually codes) | 4 | $2.75 cap | ~2 hours | Coding accuracy + multi-file + debug + long-session |
 | **R17 real-AWS** (thinking visibility, PS#4) | 1 | $0.30 cap | ~10 min | PS#4 thinking-visible fix end-to-end |
-| **R18 real-AWS + mock** (Edge Cases Battery, NEW 2026-05-03) | 15 (9 mock + 6 real) | $0.80 cap | ~30 min | Throttling, race conditions, encoding, atomicity, cap timing, etc. — closes 95%→99%+ |
+| **R18 real-AWS + mock** (Infrastructure Edge Cases, NEW 2026-05-03) | 15 (4 mock + 11 real) | $1.60 cap | ~45 min | Throttling, races, encoding, atomicity, cap timing — INFRASTRUCTURE edges |
+| **R19 real-AWS** (UX Edge Cases, NEW 2026-05-03) | 10 real | $3.10 cap | ~1.5 hours | Ambiguous specs, hidden deps, sub-agent conflicts/fails, tool recovery, memory conflicts, long-session model-switch — USER EXPERIENCE edges |
 | ~~Block V (head-to-head v4 vs v5)~~ | **DROPPED 2026-05-03 per user** ("don't run v4, save money") | ~~$2.00~~ | — | "v5 > v4" stays ARCHITECTURAL (PORT_LOG file:line refs + PS#1-7 CERTAIN-NO-RECUR) |
-| **TOTAL** | **18 distinct test scenarios (v5 only)** | **$10.35** | **~5.5 hours** | **Production-ready evidence (99%+ internal correctness; architectural for v5>v4>Runnable)** |
+| **TOTAL** | **42 distinct test scenarios (v5 only)** | **$14.25** | **~7 hours** | **Production-ready evidence: ~99% internal correctness + ~98% UX edge coverage** |
 
 Worst case if every test maxes 3 retries: ~$33. Hard stop: AWS Budget `Bedrock-Monthly-50` at $50/mo.
 

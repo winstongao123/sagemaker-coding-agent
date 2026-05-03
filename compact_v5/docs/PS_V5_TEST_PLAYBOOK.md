@@ -246,29 +246,65 @@ ADD R18 — single batch test running ~15 enumerable edge cases. Closes the 95%�
 
 | # | Edge case | Type | Cost |
 |---|---|---|---|
-| E1 | Bedrock 429 throttle response | mock | $0 |
-| E2 | Bedrock 5xx flake (3 retries) | mock | $0 |
+| E1 | Bedrock 429 throttle (force via parallel spam) | **real** | $0.30 |
+| E2 | Bedrock 5xx flake (3 retries) | mock (can't force 5xx on demand) | $0 |
 | E3 | Cost cap hit mid-tool-call (halt timing) | real | $0.10 |
-| E4 | Skill activation by alias (`/skill activate clara` → `clara-review`) | mock | $0 |
-| E5 | Save/load with corrupt session JSON | mock | $0 |
+| E4 | Skill activation by alias on real Bedrock | **real** | $0.10 |
+| E5 | Save/load with corrupt session JSON | mock (pure file IO, no Bedrock) | $0 |
 | E6 | Empty CSV / missing file → tool error handling | real | $0.10 |
 | E7 | Very long single-tool output (50K tokens) → truncation | real | $0.10 |
 | E8 | Concurrent tool calls in parallel sub-agents → race | real | $0.10 |
-| E9 | Snapshot directory disk-full simulation | mock | $0 |
-| E10 | Plan-mode tool-allowlist edge cases (deferred + restricted) | mock | $0 |
+| E9 | Snapshot directory disk-full simulation | mock (can't force disk-full) | $0 |
+| E10 | Plan-mode allowlist on real Bedrock | **real** | $0.10 |
 | E11 | Sub-agent timeout during parent compaction | real | $0.20 |
-| E12 | Audit log rotation at 10MB threshold | mock | $0 |
-| E13 | memory.md with Unicode emojis + RTL text | mock | $0 |
-| E14 | `/dream` interrupted mid-write (atomicity) | mock | $0 |
+| E12 | Audit log rotation at 10MB threshold | mock (pure file IO) | $0 |
+| E13 | memory.md with Unicode emojis + RTL text on real | **real** | $0.10 |
+| E14 | `/dream` interrupted mid-write on real | **real** | $0.20 |
 | E15 | Cache TTL expiry mid-conversation | real | $0.20 |
 
-**Total**: 9 free mock + 6 real-AWS = $0.80 cap. Updated R-tier cap: $9.55 → **$10.35**.
+**Total**: 4 mock (justified — can't be real) + 11 real-AWS = $1.60 cap. Updated R-tier cap: $9.55 → **$11.15**.
+
+Mock justifications:
+- E2 5xx flake — can't force 5xx on demand reliably
+- E5 corrupt session — pure file IO, no Bedrock involvement
+- E9 disk-full — no way to force disk-full cheaply
+- E12 audit rotation — pure file IO, deterministic logic test
 
 R18 placement: AFTER R17 (last R-test) BEFORE final Codex review.
 
 R18 file: `compact_v5/MAIN/agent/tests/r_tier/test_r18_edge_cases.py`. Same review discipline as R1-R17 (PRE-FLIGHT + AWS + POST-PASS + quality.md). Each E1-E15 is a separate test function, each producing its own assertion + telemetry slot.
 
 Same 10 mandatory output files apply.
+
+## Section 4.2 — R19 UX Edge Cases Battery (added 2026-05-03 per user)
+
+User: "edge cases on testing of its coding ability, subagent coordination, tool use, memory, status management — these are directly to user experience"
+
+R19 = real-AWS battery covering 10 USER-EXPERIENCE edge cases. These are tricky scenarios that happen in real coding work, NOT infrastructure failures (those are R18).
+
+| # | UX edge | Axis | Real | Cost |
+|---|---|---|---|---|
+| U1 | Ambiguous requirement ("make this better") — agent should ask clarifying question via ask_user, not assume | Coding ability | real | $0.20 |
+| U2 | Contradictory specs in same prompt ("use REST, also use GraphQL") — agent recognizes + flags conflict | Coding ability | real | $0.20 |
+| U3 | Large refactor with HIDDEN cross-file dep (5-file project; renaming class breaks hidden inheritance in file 5) — agent must discover via grep before changing | Coding ability + tool use | real | $0.50 |
+| U4 | 3 sub-agents return CONFLICTING findings — parent must reconcile, not blindly take majority | Sub-agent coordination | real | $0.40 |
+| U5 | Sub-agent FAILS mid-task (timeout / error) — parent recovers, completes task with remaining sub-agents | Sub-agent coordination | real | $0.30 |
+| U6 | Tool produces garbage output (e.g., python_exec returns malformed JSON) — agent recovers via re-call or alternative tool | Tool use | real | $0.20 |
+| U7 | Agent stuck calling SAME tool with SAME args 3+ times — circuit breaker should fire + try alternative | Tool use | real | $0.20 |
+| U8 | Memory conflicts (user said "use Python 3.10" then later "use Python 3.12") — /dream resolves; agent uses latest | Memory | real | $0.30 |
+| U9 | /dream consolidates 50 entries with duplicates + outdated info — verify NOTHING important is lost (semantic check) | Memory | real | $0.30 |
+| U10 | 150-turn session + 2 mid-conv model switches + 3 compactions — agent stays coherent + final task succeeds | Context management | real | $0.50 |
+
+**Total**: 10 real-AWS = **$3.10 cap**.
+
+Updated R-tier cap: $11.15 → **$14.25**. Still well under $50/mo AWS Budget.
+
+R19 placement: AFTER R18, BEFORE final Codex review.
+R19 file: `compact_v5/MAIN/agent/tests/r_tier/test_r19_ux_edges.py` — each U1-U10 = separate test function with own quality.md + telemetry.json.
+
+Same review discipline (PRE-FLIGHT + AWS + POST-PASS + quality on 6 axes + Codex SEMANTIC_BUG_DETECTED check).
+
+After R19: confidence on v5 user-experience = **~98%** (from ~70% before R19).
 
 ## Section 4.4 — Block V DROPPED per user 2026-05-03
 

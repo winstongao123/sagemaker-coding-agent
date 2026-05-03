@@ -121,6 +121,16 @@ Output: scoring table in `v5_complete.html` "v5 vs Runnable vs v4" tab. Without 
 
 **R-tier + Block V combined**: ~$25-35. Gets EMPIRICAL "v5 > Runnable > v4" with screenshot-able evidence.
 
+## 8.9. R19 USER-EXPERIENCE EDGE CASES (added 2026-05-03 per user)
+
+User clarified R18 (infrastructure) NOT enough — need UX edge cases on coding ability, sub-agent coordination, tool use, memory, context management. ADDED R19.
+
+R19 = 10 real-AWS UX edges, $3.10 cap. See PLAYBOOK §4.2:
+U1 ambiguous req | U2 contradictory specs | U3 hidden cross-file dep | U4 conflicting sub-agent findings | U5 sub-agent fail recovery | U6 tool garbage output | U7 stuck-on-tool loop | U8 memory conflicts | U9 /dream info-preservation | U10 150-turn + model switch + compaction
+
+Pipeline: R1..R17 → R18 (infra edges) → **R19 (UX edges)** → final Codex → STOP at F5.
+R-tier total cap: $11.15 → **$14.25**.
+
 ## 9.0. R18 EDGE CASES BATTERY ADDED (user 2026-05-03 — auto mode "do it")
 
 NEW: R18 = batch of 15 enumerable edge cases that closes the 95%→99%+ gap. See PLAYBOOK §4.3 for full E1-E15 list. Cost +$0.80, total R-tier cap now **$10.35**.
