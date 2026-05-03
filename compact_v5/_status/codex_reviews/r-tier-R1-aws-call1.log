@@ -10,38 +10,119 @@ plugins: anyio-4.12.1, langsmith-0.6.8, asyncio-1.3.0, benchmark-5.2.3, codspeed
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
 collecting ... collected 1 item
 
-tests/r_tier/test_r1_dashboard.py::test_r1_dashboard_build VBox(children=(HTML(value='<b>Approve `python_exec`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `python_exec`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_word`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `bash`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `bash`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_word`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_word`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
+tests/r_tier/test_r1_dashboard.py::test_r1_dashboard_build FAILED
 
-[ask_user] I've analyzed the sales data and am ready to create the chart.png and report.docx files. The data shows:
-- Total Revenue: $21,400
-- Top 2 Categories: Electronics ($9,000) and Apparel ($5,000)
+================================== FAILURES ===================================
+___________________________ test_r1_dashboard_build ___________________________
 
-Should I proceed with creating both files in C:\Users\winst\AppData\Local\Temp\pytest-of-winst\pytest-211\test_r1_dashboard_build0?
-Options:
-  1. Yes, proceed
-  2. No, cancel
-> VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_word`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_word`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `bash`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `python_exec`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_word`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `python_exec`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_chart`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `create_excel`?</b>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
-VBox(children=(HTML(value='<b>Approve `write_file`?</b>'), HTML(value='<div style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:0.85em;line-height:1.45;border:1px solid #d0d7de;border-radius:6px;overflow:hidden;margin:4px 0;"><div style="padding:6px 10px;background:#f6f8fa;border-bottom:1px solid #d0d7de;font-weight:600;color:#1f2328;">C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-211\\test_r1_dashboard_build0\\chart.png<span style="margin-left:8px;padding:1px 6px;border-radius:3px;background:#ddf4ff;color:#0969da;font-size:0.85em;font-weight:600;">NEW FILE</span></div><div style="display:flex;background:#e6ffec;color:#1a7f37;padding:1px 0;"><span style="display:inline-block;width:46px;text-align:right;padding-right:8px;color:#57606a;opacity:0.85;border-right:1px solid #eaeef2;flex-shrink:0;">1</span><span style="display:inline-block;width:18px;text-align:center;flex-shrink:0;">+</span><span style="white-space:pre;">This is a placeholder for the chart PNG file.</span></div></div>'), HBox(children=(Button(button_style='success', description='Approve', style=ButtonStyle()), Button(button_style='danger', description='Deny', style=ButtonStyle()), Button(button_style='warning', description='Always allow this tool', style=ButtonStyle())))))
+tmp_path = WindowsPath('C:/Users/winst/AppData/Local/Temp/pytest-of-winst/pytest-217/test_r1_dashboard_build0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000023D96DF97D0>
+request = <FixtureRequest for <Function test_r1_dashboard_build>>
+
+    @pytest.mark.skipif(
+        not os.getenv("RUN_REAL_BEDROCK"),
+        reason="RUN_REAL_BEDROCK not set; R1 is real-AWS gated.",
+    )
+    def test_r1_dashboard_build(tmp_path, monkeypatch, request):
+        """R-tier R1 � composite dashboard build on real Bedrock.
+    
+        PASS criteria (assertions):
+          - chart.png exists and starts with PNG signature.
+          - report.docx exists and is a valid .docx (zip with PK header).
+          - Total cost <= R1 cap ($1.00).
+          - Agent completed (not max_turns or stopped on error).
+        """
+        from runtime.bedrock_client import BedrockClient
+        from runtime.config import CONFIG
+        from runtime.tokens import TOKENS
+        import security.manager as sec_mgr
+        from agent import Agent
+    
+        # ------------------------------------------------------------
+        # Workspace fixture
+        # ------------------------------------------------------------
+        csv_path = tmp_path / "sales.csv"
+        csv_path.write_text(_SAMPLE_CSV, encoding="utf-8")
+    
+        # Point CONFIG.workspace at tmp_path so SECURITY allows writes here.
+        saved_ws = CONFIG.workspace
+        saved_sec = sec_mgr.SECURITY
+        saved_cost_limit = getattr(CONFIG, "session_cost_limit", None)
+        saved_model = getattr(CONFIG, "model_id", None)
+        saved_max_tokens = getattr(CONFIG, "max_tokens", None)
+        saved_require_approval = getattr(CONFIG, "require_tool_approval", None)
+        cwd_before = os.getcwd()
+        try:
+            CONFIG.workspace = str(tmp_path)
+            CONFIG.session_cost_limit = _R1_COST_CAP_USD
+            CONFIG.model_id = _HAIKU_45_AU
+            # Codex Phase A iter-1 cost-risk fix: cap per-turn output.
+            # Default CONFIG.max_tokens=16384 is too high � at $5/MTok out
+            # that's ~$0.08/turn � 50 turns = $4 worst case. With max_tokens=2048
+            # the per-turn worst case is ~$0.01 � 50 turns = ~$0.50 � under
+            # the $1.00 R1 cap even if every turn produced max output.
+            CONFIG.max_tokens = 2048
+            # R1 first-run hung on interactive ipywidget approval prompts �
+            # R-tier runs un-attended. Bypass tool approval for this test.
+            # (Workspace + python AST + bash allowlist + cost cap still enforce
+            # safety; only the per-tool human-in-the-loop dialog is skipped.)
+            CONFIG.require_tool_approval = False
+            sec_mgr.rebuild_singleton_for_tests()
+            # cd into workspace so relative paths (chart.png, report.docx)
+            # resolve here for the agent's tools.
+            os.chdir(str(tmp_path))
+            TOKENS.reset()
+    
+            # ------------------------------------------------------------
+            # Agent + run with HARD cost halt
+            # ------------------------------------------------------------
+            region = os.getenv("AWS_REGION", "ap-southeast-2")
+            client = BedrockClient(
+                model_id=_HAIKU_45_AU,
+                region=region,
+                mock_mode=False,
+            )
+    
+            # Codex Phase A iter-1 cost-risk fix: v5's session_cost_limit is a
+            # WARN-and-continue (query_engine.py:518-530) not a hard halt.
+            # R1 needs a hard halt before it slips past the $1.00 cap. We
+            # use Agent's on_stop_check hook: returns True once TOKENS reports
+            # over-budget, which causes the next-turn loop to break cleanly.
+            def _hard_cost_halt():
+                return TOKENS.is_over_budget() if hasattr(TOKENS, "is_over_budget") else (
+                    TOKENS.session_cost >= _R1_COST_CAP_USD
+                )
+    
+            # Tools auto-loaded from registry (read_file + create_chart +
+            # create_word + python_exec etc).
+            agent = Agent(
+                client=client,
+                max_turns=50,
+                on_stop_check=_hard_cost_halt,
+            )
+            t0 = time.time()
+>           result = agent.run(_R1_PROMPT)
+                     ^^^^^^^^^^^^^^^^^^^^^
+
+tests\r_tier\test_r1_dashboard.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+agent.py:171: in run
+    result = self._engine.run(
+core\query_engine.py:650: in run
+    output_fn(response.text)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <encodings.cp1252.IncrementalEncoder object at 0x0000023D928F5210>
+input = "Perfect! I've successfully completed all the tasks:\\r\\n\\r\\n## Summary\\r\\n\\r\\n\u2705 **Task 1 - Read sales.csv**: Loaded th...ference to chart.png\\r\\n\\r\\nBoth **chart.png** and **report.docx** are now in your current directory and ready to use."
+final = False
+
+    def encode(self, input, final=False):
+>       return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 69: character maps to <undefined>
+
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\encodings\cp1252.py:19: UnicodeEncodeError
+=========================== short test summary info ===========================
+FAILED tests/r_tier/test_r1_dashboard.py::test_r1_dashboard_build - UnicodeEn...
+============================= 1 failed in 15.08s ==============================
+WARNING:root:session-final cost: $0.03 (cache 100% | saved ~$0.0285) (6 API calls, in=12,976 out=1,535)

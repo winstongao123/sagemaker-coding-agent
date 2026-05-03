@@ -151,6 +151,45 @@ def test_build_telemetry_captures_thinking_when_audit_emits_chat_response(tmp_pa
     assert abs(pt["cache_hit_pct"] - 0.3333) < 0.001
 
 
+def test_build_telemetry_reads_query_engine_nested_chat_response(tmp_path):
+    """R-tier telemetry lock: QueryEngine writes chat_response payloads under
+    parameters.response, which must be treated the same as legacy top-level
+    response payloads."""
+    bt = _load_build_telemetry()
+    audit_path = tmp_path / "audit.jsonl"
+    _write_audit_jsonl(audit_path, [
+        {"timestamp": "2026-05-04T10:00:00.000",
+         "session_id": "s1", "action": "chat_response",
+         "tool_name": "(engine)",
+         "parameters": {
+             "turn": 1,
+             "response": {
+                 "thinking": "Real thinking text",
+                 "text": "answer",
+                 "usage": {"input_tokens": 200, "output_tokens": 50,
+                           "cache_read_input_tokens": 100,
+                           "cache_creation_input_tokens": 25},
+             },
+         },
+         "result_summary": "OK", "user_approved": False, "hash": "h1"},
+    ])
+    raw_log = tmp_path / "raw.log"
+    raw_log.write_text("ok\n", encoding="utf-8")
+
+    telemetry = bt.build_telemetry(
+        test="R17", call=1,
+        audit_log_path=audit_path,
+        raw_log_path=raw_log,
+        side_channel_path=None,
+    )
+    pt = telemetry["per_turn"][0]
+    assert pt["thinking_text"] == "Real thinking text"
+    assert pt["tokens_in"] == 200
+    assert pt["tokens_out"] == 50
+    assert pt["cache_read_tokens"] == 100
+    assert pt["cache_write_tokens"] == 25
+
+
 def test_build_telemetry_validation_rejects_malformed_output(tmp_path):
     """Validation function catches missing required keys."""
     bt = _load_build_telemetry()

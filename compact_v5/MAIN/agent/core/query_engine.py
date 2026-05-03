@@ -148,6 +148,42 @@ def _truncate_tool_result(text: str, max_chars: int) -> str:
     )
 
 
+def _make_unicode_safe_output_fn(fn: Callable[[str], None]) -> Callable[[str], None]:
+    """Wrap an output_fn so UnicodeEncodeError doesn't kill the agent loop.
+
+    R-tier R1 PHASE B iter-1 fix (2026-05-03): on Windows the default
+    stdout encoding is cp1252, which can't encode emoji like ✅ (U+2705).
+    The model frequently emits emoji in summary blocks. Without this
+    wrapper, the very first call to `print(response.text)` raises
+    UnicodeEncodeError and the entire agent loop dies — even though
+    the agent's actual work (chart.png + report.docx) was done.
+
+    Strategy:
+    1. Try the callable as-is (no behavior change on UTF-8 terminals).
+    2. On UnicodeEncodeError, fall back to the terminal's encoding with
+       errors='replace' (preserves more chars than ASCII).
+    3. If THAT still fails, ASCII-replace as the final safe net.
+
+    This is symmetric to Block H's input-side surrogate sanitization —
+    Bedrock returns valid UTF-8; the *terminal* may not be configured
+    for it. Pure platform robustness; no behavioral change otherwise.
+    """
+    import sys as _sys
+
+    def _safe(text: str) -> None:
+        try:
+            fn(text)
+            return
+        except UnicodeEncodeError:
+            pass
+        try:
+            enc = getattr(_sys.stdout, "encoding", None) or "ascii"
+            fn(text.encode(enc, "replace").decode(enc, "replace"))
+        except (UnicodeEncodeError, LookupError):
+            fn(text.encode("ascii", "replace").decode("ascii"))
+    return _safe
+
+
 # ============================================================
 # QueryEngine
 # ============================================================
@@ -250,6 +286,13 @@ class QueryEngine:
 
         See class docstring for the IN-SCOPE / OUT-OF-SCOPE list.
         """
+        # R-tier R1 PHASE B iter-1 fix: wrap output_fn to swallow
+        # UnicodeEncodeError on Windows cp1252 stdout. The agent emits
+        # valid UTF-8 (e.g. ✅ U+2705 in summary blocks); a raw print()
+        # on a default-Windows console crashes the entire loop. Block H
+        # surrogate sanitization handles INPUT; this is the symmetric
+        # output-side robustness. Codex R1 PhaseB iter-1 APPROVE_FIX.
+        output_fn = _make_unicode_safe_output_fn(output_fn)
         # Codex Phase-08 finding (high): the discovered-tool set MUST be reset
         # at each run() entry. The contract docstring promises "fresh each
         # user message" but the previous version persisted it across runs,
@@ -513,6 +556,39 @@ class QueryEngine:
                     model_id=getattr(self.client, "model_id", None),
                     agent_kind=self.agent_kind,
                 )
+                try:
+                    from runtime.audit import AUDIT as _AUDIT_CHAT
+                    _AUDIT_CHAT.log(
+                        session_id=self.session_id,
+                        action="chat_response",
+                        tool_name="(engine)",
+                        parameters={
+                            "turn": turns_used,
+                            "response": {
+                                "usage": response.usage or {},
+                                "thinking": getattr(response, "thinking", "") or "",
+                                "text": response.text or "",
+                                "stop_reason": getattr(response, "stop_reason", ""),
+                                "tool_calls": [
+                                    {
+                                        "id": getattr(c, "id", ""),
+                                        "name": getattr(c, "name", ""),
+                                        "input": getattr(c, "input", {}),
+                                    }
+                                    for c in (response.tool_calls or [])
+                                ],
+                            },
+                        },
+                        result_summary=(
+                            f"stop={getattr(response, 'stop_reason', '')}; "
+                            f"tools={len(response.tool_calls or [])}; "
+                            f"text_chars={len(response.text or '')}; "
+                            f"thinking_chars={len(getattr(response, 'thinking', '') or '')}"
+                        ),
+                        user_approved=False,
+                    )
+                except Exception:
+                    pass
                 # Block B+ (PORT_LOG #052): per-turn cost-vs-budget runtime
                 # warning. v4 sagemaker_agent.py:8787 prints
                 #   `[Cost ${session_cost} passed budget ${limit} — continuing.]`

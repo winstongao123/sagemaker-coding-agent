@@ -163,7 +163,8 @@ def _aggregate_per_turn(turns: List[List[Dict[str, Any]]]) -> List[Dict[str, Any
         agent_text_chars_t: Optional[int] = None
         for ev in turn_events:
             if ev.get("action") == "chat_response":
-                resp = ev.get("response") or ev.get("parameters") or {}
+                params = ev.get("parameters") or {}
+                resp = ev.get("response") or params.get("response") or params or {}
                 if isinstance(resp, dict):
                     th = resp.get("thinking")
                     if isinstance(th, str) and th:

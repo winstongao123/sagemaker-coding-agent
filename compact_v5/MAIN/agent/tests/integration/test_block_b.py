@@ -593,6 +593,49 @@ def test_audit_log_on_plan_mode_block(tmp_path, monkeypatch):
     )
 
 
+def test_audit_log_on_chat_response_contains_usage_and_thinking(tmp_path, monkeypatch):
+    """R-tier telemetry lock: every Bedrock turn must emit a chat_response
+    audit event so real-AWS runs can be reviewed per-turn for cost, cache,
+    text, thinking, and tool-use behavior."""
+    from runtime.audit import AuditLogger
+    import runtime.audit as audit_mod
+
+    test_audit = AuditLogger(audit_dir=str(tmp_path))
+    monkeypatch.setattr(audit_mod, "AUDIT", test_audit)
+
+    from runtime.bedrock_client import BedrockClient, Response
+    from core.query_engine import QueryEngine
+
+    client = BedrockClient(model_id="x", region="us-east-1", mock_mode=True)
+    fake_response = Response(
+        text="final answer",
+        tool_calls=[],
+        stop_reason="end_turn",
+        usage={
+            "input_tokens": 123,
+            "output_tokens": 45,
+            "cache_read_input_tokens": 67,
+            "cache_creation_input_tokens": 8,
+        },
+        thinking="think carefully",
+    )
+
+    monkeypatch.setattr(client, "chat", lambda *args, **kwargs: fake_response)
+
+    engine = QueryEngine(client=client, max_turns=1)
+    engine.run(user_message="hi", system_prompt="test", tools=[], output_fn=lambda _s: None)
+
+    entries = test_audit.get_session_log(engine.session_id)
+    chat_entries = [e for e in entries if e.get("action") == "chat_response"]
+    assert len(chat_entries) == 1, f"expected one chat_response audit event, got {entries}"
+    payload = chat_entries[0]["parameters"]["response"]
+    assert payload["usage"]["input_tokens"] == 123
+    assert payload["usage"]["cache_read_input_tokens"] == 67
+    assert payload["thinking"] == "think carefully"
+    assert payload["text"] == "final answer"
+    assert payload["stop_reason"] == "end_turn"
+
+
 def test_count_tokens_includes_thinking_when_messages_have_thinking():
     """Codex iter-1 finding #3 (MEDIUM) lock: count_tokens body switches to
     max_tokens=2048 + thinking config when any message contains a
