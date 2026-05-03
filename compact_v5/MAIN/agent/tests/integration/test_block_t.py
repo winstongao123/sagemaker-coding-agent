@@ -240,11 +240,34 @@ def test_tool_create_chart_rejects_missing_data(workspace_tmp):
     assert "data" in out.lower()
 
 
-def test_tool_create_chart_v4_combo_shape(workspace_tmp):
-    """Codex iter-4 MEDIUM lock: create_chart combo type accepts v4
+def test_tool_create_chart_v4_combo_shape(workspace_tmp, monkeypatch):
+    """Codex iter-4/5 MEDIUM lock: create_chart combo type accepts v4
     {labels, bar_values, line_values, bar_label, line_label, line_ylabel}
-    shape (sagemaker_agent.py:6194-6214)."""
+    shape (sagemaker_agent.py:6194-6214). iter-5 strengthens this by
+    spying on the labels actually passed to ax.bar() — proving the
+    parser does NOT fall through to the generic dict.keys() path
+    (which would render ["labels", "bar_values", ...] as the x-axis).
+    """
     pytest.importorskip("matplotlib")
+
+    captured = {"bar_labels": None, "line_labels": None}
+    import matplotlib.axes
+    real_bar = matplotlib.axes.Axes.bar
+    real_plot = matplotlib.axes.Axes.plot
+
+    def spy_bar(self, x, *a, **kw):
+        if captured["bar_labels"] is None:
+            captured["bar_labels"] = list(x)
+        return real_bar(self, x, *a, **kw)
+
+    def spy_plot(self, x, *a, **kw):
+        if captured["line_labels"] is None:
+            captured["line_labels"] = list(x)
+        return real_plot(self, x, *a, **kw)
+
+    monkeypatch.setattr(matplotlib.axes.Axes, "bar", spy_bar)
+    monkeypatch.setattr(matplotlib.axes.Axes, "plot", spy_plot)
+
     fp = str(workspace_tmp / "combo.png")
     tool = _find_tool("create_chart")
     out = tool.execute({
@@ -262,6 +285,13 @@ def test_tool_create_chart_v4_combo_shape(workspace_tmp):
     }, context={})
     assert out.startswith("Wrote "), out
     assert os.path.isfile(fp)
+    # The bug case would have bar_labels == ["labels", "bar_values", "line_values", ...].
+    assert captured["bar_labels"] == ["Q1", "Q2", "Q3", "Q4"], (
+        f"bar got wrong labels: {captured['bar_labels']}"
+    )
+    assert captured["line_labels"] == ["Q1", "Q2", "Q3", "Q4"], (
+        f"line got wrong labels: {captured['line_labels']}"
+    )
 
 
 def test_tool_create_chart_filepath_defaults_to_chart_png(workspace_tmp):

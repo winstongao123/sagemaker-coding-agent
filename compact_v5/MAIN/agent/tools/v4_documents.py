@@ -433,6 +433,14 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
             elif "labels" in data and "values" in data:
                 labels = list(data.get("labels") or [])
                 values = list(data.get("values") or [])
+            elif "labels" in data and ("bar_values" in data or "line_values" in data):
+                # Codex iter-5 MEDIUM fix: v4 combo shape
+                # {labels, bar_values, line_values, ...} must NOT fall through
+                # to the generic dict-keys path (which would set labels =
+                # ["labels", "bar_values", ...]). Set labels + values from
+                # explicit fields; the combo branch later reads bar/line vals.
+                labels = list(data.get("labels") or [])
+                values = list(data.get("bar_values") or data.get("line_values") or [])
             else:
                 labels = list(data.keys())
                 values = list(data.values())
