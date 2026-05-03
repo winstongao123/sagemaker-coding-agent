@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block B+ DONE** — Codex 3-iter cycle ended APPROVE; 490 pass + 5 skip; pending tag + push)
+Last updated: 2026-05-03 (**v5.0.1 Block B+ DONE** — tag `v5.0.1-block-b-plus` at `ff30e8d`, pushed; 490 pass + 5 skip)
 Updated by: Mode B autonomous build (Codex-only-gate; user reviews FINAL product after Block K + R-tier)
 
 ## v5.0.1 Block B+ entry (2026-05-03)
@@ -289,8 +289,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: ee01142 (v5/block-b: TokenTracker + AuditLogger + SnapshotManager + tokenEstimation) — pushed to sageagent 2026-05-03
-- Last tag: v5.0.1-block-b (Block B done, Codex iter-1 APPROVE_WITH_FIXES → 6 fixes + 10 lock tests; iter-2 skipped per resilience rule)
+- Last commit: ff30e8d (v5/block-b-plus: SessionManager + cost-limit + AGENT_STATUS + FileCache + ADR-020 0-7/0-9) — pushed 2026-05-03
+- Last tag: v5.0.1-block-b-plus (Block B+ done, Codex 3-iter cycle ended APPROVE; gpt-5.3-codex throughout)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
@@ -299,10 +299,11 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block B+ — SessionManager + cost-limit + AGENT_STATUS auto-load + FileCache thread-local** (after Block B tag).
+**Block C — Runtime safety + secret scanner + JSON repair + injection scan + bash hardening** (after Block B+ tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
-- Block B status: DONE — tag `v5.0.1-block-b` (pending; tagging this commit); pushed.
+- Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
+- Block B+ status: DONE — tag `v5.0.1-block-b-plus` at `ff30e8d`; pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
