@@ -1,1 +1,2 @@
 
+{"test":"R1","call":2,"date":"2026-05-04T09:11:00Z","model":"au.anthropic.claude-haiku-4-5-20251001-v1:0","tokens_in":12961,"tokens_out":1616,"cache_hit_pct":null,"wallclock_s":20.89,"tool_calls":6,"completed":true,"cost_usd":0.0332,"verdict":"GENUINE_PASS"}

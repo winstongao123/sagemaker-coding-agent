@@ -57,6 +57,16 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### R-tier R1 = READY (NEAR_IDEAL) — 2026-05-04
+- AWS call #2 PASSED (call#1 surfaced + fixed Unicode stdout bug).
+- Cost: $0.0632 cumulative for R1 ($0.03 wasted call#1 + $0.0332 call#2). Cap $1.00.
+- 6 tool calls (tool_search → read_file → python_exec ×2 → create_chart → create_word). 0 REPEATED. 100% cache hit on subsequent turns.
+- Codex iter-6 PRE-FLIGHT APPROVE → AWS call #2 → Codex POST-PASS GENUINE_PASS.
+- 6-axis quality grade: composite 4.83/5; both worker + Codex = NEAR_IDEAL.
+- All 10 mandatory files produced + r_tier_review_log.md row + r_tier_metrics.jsonl row appended.
+- Artifacts (chart.png + report.docx) valid + body content matches CSV (Sales Report heading + Electronics + $21,400).
+- Next: R2 (80K compaction + cache_edits, $0.50 cap).
+
 ### R-tier infrastructure (2026-05-03) — pre-R1-redo
 - AWS pre-flight clean: $0/$50 budget, IAM OK, Haiku 4.5 + Sonnet 4.5 AU profiles available.
 - Block J T5 fix: `au.` prefix for Haiku 4.5 (no on-demand throughput); 3/3 T5 PASS on real Bedrock at ~$0.007.
