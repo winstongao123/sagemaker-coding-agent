@@ -37,14 +37,31 @@ The local gate enforces:
   telemetry JSON, quality review, metrics row, and review-log row
 - telemetry JSON has the required review schema and non-empty `per_turn`
 
+## AFK worker prompt
+
+Use `compact_v5/docs/CODEX_AFK_WORKER_PROMPT.md` for a fresh autonomous
+worker session. It contains:
+
+- exact first commands
+- required docs to read
+- per-test loop
+- AWS Budget checks
+- local cost cap rules
+- mandatory files
+- commit/push requirements
+- escalation triggers where the worker must stop and wait for the user
+
+AFK is allowed only under that prompt. The worker may continue test by test
+while all gates pass, but must stop on any escalation trigger.
+
 ## Current status
 
 The gate currently fails, intentionally:
 
 - executable R-tier coverage exists for R1 and R17 only
 - R2-R16, R18-E1..E15, and R19-U1..U10 are not yet materialized as test code
-- `_status/r_tier_metrics.jsonl` does not exist yet
-- `_status/r_tier_review_log.md` does not exist yet
+- `_status/r_tier_metrics.jsonl` is initialized at `$0.00` local recorded spend
+- `_status/r_tier_review_log.md` is initialized with its table header
 
 Do not claim all 42 tests are ready until this gate passes.
 

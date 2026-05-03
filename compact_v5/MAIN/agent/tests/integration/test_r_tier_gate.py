@@ -54,6 +54,15 @@ def test_r_tier_gate_detects_cost_cap_excess(tmp_path):
     assert any("R1 cost" in e for e in errors)
 
 
+def test_r_tier_gate_allows_initialized_empty_metrics(tmp_path):
+    gate = _load_gate()
+    status = tmp_path / "compact_v5" / "_status"
+    status.mkdir(parents=True)
+    (status / "r_tier_metrics.jsonl").write_text("", encoding="utf-8")
+
+    assert gate.check_costs(tmp_path) == []
+
+
 def test_r_tier_gate_accepts_complete_single_test_evidence(tmp_path):
     gate = _load_gate()
     status = tmp_path / "compact_v5" / "_status"

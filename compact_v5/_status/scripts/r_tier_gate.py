@@ -98,9 +98,9 @@ def check_costs(repo_root: Path) -> List[str]:
     """Verify local metrics stay within total and per-scenario caps."""
     errors: List[str] = []
     metrics_path = repo_root / "compact_v5" / "_status" / "r_tier_metrics.jsonl"
+    if not metrics_path.is_file():
+        return [f"missing metrics file: {metrics_path}"]
     rows = _load_metrics(metrics_path)
-    if not rows:
-        return [f"missing or empty metrics file: {metrics_path}"]
     total = 0.0
     by_test: Dict[str, float] = {}
     for i, row in enumerate(rows, start=1):
