@@ -97,8 +97,17 @@ def _write_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]]
     # Phase-5 ADR will reconcile this gap.
 
     try:
-        # Phase-8 deferred: SnapshotManager.save (snapshot-before-write for revert).
-        # Lands with Phase 8 query_engine session machinery.
+        # Block B (PORT_LOG #044): SnapshotManager.save snapshots the
+        # current file before overwrite/append so /revert restores it.
+        # No-op on first write (file doesn't exist yet) and in stealth
+        # mode (CONFIG.disable_local_traces=True).
+        try:
+            from runtime.snapshot import SNAPSHOTS
+            SNAPSHOTS.save(abs_path)
+        except Exception:
+            # Snapshot is best-effort — never block the write on a
+            # snapshot failure (insufficient disk space, perms, etc.).
+            pass
         dir_path = os.path.dirname(abs_path)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)

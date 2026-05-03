@@ -1,5 +1,53 @@
 # compact_v5 changelog
 
+## v5.0.1-block-b — TokenTracker + AuditLogger + SnapshotManager + tokenEstimation (2026-05-03)
+
+Second Block of the v5.0.1 21-Block build. Closes the v5.0.0 PS_problems
+#5 (session cost not persisted) + #6 (budget read from wrong source).
+
+- NEW `runtime/tokens.py` (~480 LOC): TokenTracker (verbatim from v4) +
+  per-agent attribution (parent_input/output/cost + subagent_*[type]
+  dicts) + MODEL_COSTS for Haiku 4.5 / Sonnet 4.6 + EXCLUDED_MODELS_
+  FOR_CACHE_BREAK Haiku set + IMAGE_MAX_TOKEN_SIZE + canonicalize_model_id
+  + Runnable tokenEstimation helpers (bytes_per_token_for_file_type +
+  estimate_message_tokens 4/3 padding + has_thinking_blocks +
+  rough_token_count_for_block + final_context_tokens_from_last_response
+  + token_count_with_estimation) + ToolResult dataclass.
+- NEW `runtime/audit.py` (~155 LOC): AuditEntry + AuditLogger (verbatim
+  from v4) + AUDIT singleton.
+- NEW `runtime/snapshot.py` (~135 LOC): SnapshotManager (verbatim from
+  v4) + SNAPSHOTS singleton.
+- NEW `runtime/env_validation.py` (~60 LOC): validate_bounded_int_env_var
+  (per ADR-020 Block 0 item 0-8 remap).
+- EXTENDED `runtime/bedrock_client.py`: BEDROCK_EXTRA_PARAMS_HEADERS
+  frozenset (per ADR-020 Block 0 item 0-3 remap) + count_tokens method
+  (B-1, R4 #41 MUST). Mock-mode falls through to rough estimator.
+- WIRED `core/query_engine.py`: TOKENS.add(usage, model_id, agent_kind)
+  after every chat() return; AUDIT.log on every tool dispatch (success
+  + failure paths); new agent_kind + session_id ctor params.
+- WIRED `subagent/spawn.py`: `_new_child_engine` accepts `agent_type`
+  and forwards as `agent_kind` so sub-agent costs go to the right bucket.
+- WIRED `tools/edit_file.py` + `tools/write_file.py`: SNAPSHOTS.save
+  best-effort before mutation. Failure does not block the write.
+- TESTS: 28 new in `tests/integration/test_block_b.py` (27 pass + 1
+  T5 skipped without RUN_REAL_BEDROCK). 18 original + 10 finding-lock
+  tests added after Codex iter 1. Plus 3 mock signature updates in
+  `tests/integration/test_subagent.py` to accept the new kwarg.
+- Codex AXIS A/B/C iter 1 (gpt-5.5): APPROVE_WITH_FIXES with 6 findings
+  (1 HIGH AU pricing, 1 HIGH dual audit-log paths, 3 MEDIUM, 1 LOW). All
+  6 fixed; each has 1+ covering lock test. iter 2 hung — skipped per
+  Codex resilience rule (see `_status/codex_reviews/block-b-iter2-skipped.md`).
+- Codex resilience rule codified in `BUILDER_PROMPT.md` §Step 8: when
+  iter-1 returns APPROVE_WITH_FIXES, applying fixes + writing one lock
+  test per finding stands as structural verification; iter-2 is the
+  *check*, lock tests are the *contract*. Build is now resume-safe
+  under Codex network failure.
+- PORT_LOG #039-#047 + ADR-021. Closes 9 Wave-5-DEEP findings (B-1 +
+  B-3..B-11 + B-13 + R4 #14 + R8 #74) + Block-0 ADR-020 remap rows 0-3
+  + 0-8.
+- Pytest: 469 pass + 5 skip (was 442 + 4 at Block 0; +27 pass + 1 skip).
+- verify_ship_zip.py: PASS (100 files / 263.6 KB / 38%).
+
 ## v5.0.1-block-0 — `sagemaker_agent.py` shim + notebook smoke gate (2026-05-02)
 
 First Block of the v5.0.1 21-Block build (Mode B autonomous; Codex-only-gate).

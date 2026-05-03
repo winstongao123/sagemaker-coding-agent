@@ -121,6 +121,15 @@ def _edit_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
 
     new_content = content.replace(old_string, new_string) if replace_all else content.replace(old_string, new_string, 1)
 
+    # Block B (PORT_LOG #044): SnapshotManager.save snapshots the
+    # current file before edit so /revert restores it. Best-effort —
+    # snapshot failure must not block the edit.
+    try:
+        from runtime.snapshot import SNAPSHOTS
+        SNAPSHOTS.save(abs_path)
+    except Exception:
+        pass
+
     try:
         with open(abs_path, "w", encoding="utf-8") as f:
             f.write(new_content)

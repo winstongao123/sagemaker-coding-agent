@@ -137,6 +137,8 @@ class QueryEngine:
         budget: Optional[IterationBudget] = None,
         on_stop_check: Optional[Callable[[], bool]] = None,
         skill_manager: Optional[Any] = None,
+        agent_kind: str = "parent",
+        session_id: Optional[str] = None,
     ):
         """Construct a QueryEngine.
 
@@ -160,6 +162,18 @@ class QueryEngine:
         self.budget = budget if budget is not None else IterationBudget()
         self.on_stop_check = on_stop_check
         self.skill_manager = skill_manager
+        # Block B: per-agent attribution key for TOKENS.add(). "parent" by
+        # default; sub-agents pass their type-string ("build", "explore",
+        # "verify", etc.) via subagent.spawn._new_child_engine.
+        self.agent_kind = agent_kind
+        # Block B: session_id used by AUDIT.log on each tool dispatch.
+        # Block B+ will swap this to the SessionManager-issued id; for
+        # now we mint a process-lifetime id so audit lines are at least
+        # grouped per-engine.
+        if session_id is None:
+            import uuid as _uuid
+            session_id = _uuid.uuid4().hex[:12]
+        self.session_id = session_id
 
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
@@ -321,6 +335,19 @@ class QueryEngine:
 
             turns_used += 1
 
+            # Block B (PORT_LOG #039+#040): record token usage + per-agent
+            # attribution. "parent" or sub-agent type-string. Best-effort —
+            # never break the agent loop if the singleton import fails.
+            try:
+                from runtime.tokens import TOKENS as _TOKENS
+                _TOKENS.add(
+                    response.usage or {},
+                    model_id=getattr(self.client, "model_id", None),
+                    agent_kind=self.agent_kind,
+                )
+            except Exception:
+                pass
+
             # Append assistant turn (text + tool_use blocks, plus thinking).
             assistant_content = self._build_assistant_content(response)
             self.messages.append({"role": "assistant", "content": assistant_content})
@@ -348,6 +375,21 @@ class QueryEngine:
                         "content": f"Error: unknown tool '{call.name}'",
                         "is_error": True,
                     })
+                    # Block B (Codex finding #2 HIGH lock): every dispatch
+                    # path — including unknown-tool — must be audited so
+                    # forensics can see what the model attempted to call.
+                    try:
+                        from runtime.audit import AUDIT as _AUDIT
+                        _AUDIT.log(
+                            session_id=self.session_id,
+                            action="tool_unknown",
+                            tool_name=call.name,
+                            parameters=call.input or {},
+                            result_summary=f"unknown tool '{call.name}'",
+                            user_approved=False,
+                        )
+                    except Exception:
+                        pass
                     continue
 
                 # Plan-mode dispatch gate — strict allowlist by name (v4
@@ -370,6 +412,22 @@ class QueryEngine:
                         ),
                         "is_error": True,
                     })
+                    # Block B (Codex finding #2 HIGH lock): plan-mode
+                    # block is an audit-relevant security event.
+                    try:
+                        from runtime.audit import AUDIT as _AUDIT
+                        _AUDIT.log(
+                            session_id=self.session_id,
+                            action="plan_mode_blocked",
+                            tool_name=call.name,
+                            parameters=call.input or {},
+                            result_summary=(
+                                f"plan-mode allowlist blocked '{call.name}'"
+                            ),
+                            user_approved=False,
+                        )
+                    except Exception:
+                        pass
                     continue
 
                 # Execute. Tool implementations may raise; we trap and surface
@@ -390,6 +448,21 @@ class QueryEngine:
                         "tool_use_id": call.id,
                         "content": text,
                     })
+                    # Block B (PORT_LOG #043): audit-log every tool dispatch
+                    # so /diffs / /regression / forensics have a tamper-hashed
+                    # trail. Best-effort.
+                    try:
+                        from runtime.audit import AUDIT as _AUDIT
+                        _AUDIT.log(
+                            session_id=self.session_id,
+                            action="tool_dispatch",
+                            tool_name=call.name,
+                            parameters=call.input or {},
+                            result_summary=text[:500] if isinstance(text, str) else "",
+                            user_approved=True,
+                        )
+                    except Exception:
+                        pass
                     # Phase 7 wiring: extract discovered names from tool_search
                     # results and add to the next turn's tools= payload.
                     if call.name == "tool_search":
@@ -407,6 +480,20 @@ class QueryEngine:
                         "content": f"Error: {type(exc).__name__}: {exc}",
                         "is_error": True,
                     })
+                    # Audit the failed dispatch too so forensics can see what
+                    # was attempted (sanitized parameters; no result body).
+                    try:
+                        from runtime.audit import AUDIT as _AUDIT
+                        _AUDIT.log(
+                            session_id=self.session_id,
+                            action="tool_error",
+                            tool_name=call.name,
+                            parameters=call.input or {},
+                            result_summary=f"{type(exc).__name__}: {exc}",
+                            user_approved=False,
+                        )
+                    except Exception:
+                        pass
 
             # Append the tool_results as a user turn (Bedrock convention).
             self.messages.append({"role": "user", "content": tool_results})

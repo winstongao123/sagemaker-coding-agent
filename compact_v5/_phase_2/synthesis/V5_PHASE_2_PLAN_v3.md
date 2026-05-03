@@ -162,6 +162,11 @@ Plus standing rules: quality not rush, status/changelogs/PORT_LOG updated each B
 - **Q4**: lock test for TOKENS.update() + AUDIT.log() file format + SNAPSHOTS.snapshot+restore.
 
 ### Block B+ — SessionManager + cost-limit + AGENT_STATUS auto-load + FileCache thread-local
+
+**Default-values update (user 2026-05-03)**:
+- `CONFIG.session_cost_limit = 20.0` (v5 default; visible budget for awareness, NOT a hard cap; v4 default was 0.0 = no limit)
+- `CONFIG.model_id = "au.anthropic.claude-sonnet-4-6-..."` (default Sonnet 4.6; carry v4.10.1+ preference forward)
+- **Behavior matches v4**: warn at 80%, warn at 100% but agent CONTINUES. User decides whether to manually click Stop, raise budget, or let it run. NO hard halt at application level — that's deliberate, matches v4 UX, lets user overspend on critical tasks if they choose. The TRUE hard halt is at cloud level (AWS Budget Action $50/month + GCP Cloud Function $200/month) — those auto-stop without user intervention.
 - SessionManager: `:2578-...` (atomic save/load). Verbatim into `runtime/session.py` (extends Phase-1 stub).
 - session_cost_limit enforcement: TokenTracker has `:3638-3652` block (warns 80% / blocks 100%). Already wires from B.
 - Cost runtime warning at run-loop: `:8787` printed as `[Cost ${TOKENS.session_cost} passed budget ${CONFIG.session_cost_limit} — continuing.]`. Wire in `core/query_engine.py:run()`.

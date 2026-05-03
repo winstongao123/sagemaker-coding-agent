@@ -1,13 +1,26 @@
 # V5 Build Status
 
-Last updated: 2026-05-02 (**v5.0.1 Block 0 IN_PROGRESS** — shim + 5 lock tests green; pending Codex AXIS A/B/C + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block B IN_PROGRESS** — 18 new tests green; pending Codex AXIS A/B/C + tag)
 Updated by: Mode B autonomous build (Codex-only-gate; user reviews FINAL product after Block K + R-tier)
+
+## v5.0.1 Block B entry (2026-05-03)
+- 4 NEW runtime modules: `runtime/tokens.py` (~480 LOC), `runtime/audit.py` (~155 LOC), `runtime/snapshot.py` (~135 LOC), `runtime/env_validation.py` (~60 LOC).
+- EXTENDED `runtime/bedrock_client.py`: BEDROCK_EXTRA_PARAMS_HEADERS frozenset (3 betas: interleaved-thinking + 1m-context + tool-search) + `count_tokens()` method (B-1, R4 #41 MUST) with thinking-aware body.
+- WIRED `core/query_engine.py` (TOKENS.add + AUDIT.log on ALL 4 dispatch paths: success / raised / unknown-tool / plan-mode-blocked + agent_kind/session_id ctor params), `subagent/spawn.py` (agent_type → agent_kind), `tools/edit_file.py` + `tools/write_file.py` (SNAPSHOTS.save best-effort), `runtime/config.py` (env-validation wiring on 5 numeric knobs).
+- 28 new tests in `tests/integration/test_block_b.py` (27 pass + 1 T5 skipped). 18 from initial scope + 10 finding-lock tests covering each Codex iter-1 finding.
+- Codex AXIS A/B/C iter 1 (gpt-5.5): APPROVE_WITH_FIXES with 6 findings (1 HIGH AU pricing, 1 HIGH dual audit-log paths, 3 MEDIUM, 1 LOW). All 6 fixed; each has 1+ covering lock test. iter 2 hung — skipped per Codex resilience rule (`_status/codex_reviews/block-b-iter2-skipped.md`).
+- PORT_LOG rows #039-#047 + ADR-021. Closes 9 Wave-5-DEEP findings (B-1 / B-3..B-11 / B-13 / R4 #14 / R8 #74) + Block-0 ADR-020 remap rows 0-3 + 0-8.
+- PS_problems #5 + #6 STRUCTURALLY ADDRESSED (TokenTracker.restore + singleton-as-budget-source + canonicalize_model_id strips au.).
+- `verify_ship_zip.py`: PASS (100 files / 263.6 KB / 38%).
+- Pytest: **469 passed + 5 skipped** (was 442 + 4 at Block 0; +27 pass + 1 skip).
+- Codex resilience rule codified in `BUILDER_PROMPT.md` §Step 8 (lock-tests-as-fallback under network failure).
 
 ## v5.0.1 Block 0 entry (2026-05-02)
 - `compact_v5/MAIN/agent/sagemaker_agent.py` (NEW, 31 LOC): re-exports v5's public surface at the v4-canonical import path.
 - 5 lock tests in `tests/integration/test_block0_shim.py` per TEST_DESIGN §Block 0 — 5/5 green.
 - Notebook smoke gate: `test_chat_ipynb_cells_1_3` parses + execs cells 1-3 against mock Bedrock — green.
 - PORT_LOG row #038 + ADR-020 added.
+- Tagged `v5.0.1-block-0` at commit `19e7823`, pushed to sageagent.
 - `verify_ship_zip.py`: PASS (96 files / 249.0 KB compressed / 38% ratio).
 - Pytest: **442 passed + 4 skipped** (was 437 + 4 at v5.0.0; +5 net).
 
@@ -271,9 +284,10 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block B — TokenTracker + AuditLogger + SnapshotManager + Runnable tokenEstimation** (after Block 0 tag + post-Block-0 smoke gate).
+**Block B+ — SessionManager + cost-limit + AGENT_STATUS auto-load + FileCache thread-local** (after Block B tag).
 
-- Block 0 status: code + tests done (5/5 green); pending Codex AXIS A/B/C → tag `v5.0.1-block-0` → push.
+- Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
+- Block B status: DONE — tag `v5.0.1-block-b` (pending; tagging this commit); pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

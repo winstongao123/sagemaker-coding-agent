@@ -71,12 +71,17 @@ class SubagentResult:
     depth: int = 1
 
 
-def _new_child_engine(parent_engine: Any, max_turns: int) -> Any:
+def _new_child_engine(parent_engine: Any, max_turns: int, agent_type: str = "general") -> Any:
     """Construct a fresh QueryEngine that shares the parent's IterationBudget.
 
     Lazy-imports to avoid a circular load at module-import time
     (core.query_engine imports tools/registry which may import
     tools/task.py which imports this module).
+
+    Block B: `agent_type` is forwarded as `agent_kind` so TOKENS.add()
+    attributes the child's input/output/cost to the right per-agent
+    bucket. The child also gets a fresh session_id so AUDIT.log entries
+    can be filtered to a single sub-agent run.
     """
     from core.query_engine import QueryEngine
     return QueryEngine(
@@ -84,6 +89,7 @@ def _new_child_engine(parent_engine: Any, max_turns: int) -> Any:
         max_turns=max_turns,
         budget=parent_engine.budget,            # SHARED — the Phase-9 contract
         on_stop_check=parent_engine.on_stop_check,
+        agent_kind=agent_type,
     )
 
 
@@ -208,7 +214,7 @@ def spawn_subagent(
 
     # Construct child engine. The shared-budget invariant is enforced by
     # _new_child_engine — verified by test_subagent_shares_iteration_budget.
-    child = _new_child_engine(parent_engine, max_turns=max_turns)
+    child = _new_child_engine(parent_engine, max_turns=max_turns, agent_type=agent_type)
 
     # Codex Phase-09 finding (BLOCKER): thread the child's depth so that
     # IF the child itself dispatches `task`, the QueryEngine's tool-dispatch

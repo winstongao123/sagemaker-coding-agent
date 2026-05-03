@@ -1124,6 +1124,127 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-021 — Block B (v5.0.1): TokenTracker + AuditLogger + SnapshotManager + tokenEstimation + ADR-020 0-3/0-8 remap
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block B
+**Status**: ACCEPTED
+
+### Context
+v5.0.0 shipped without TokenTracker / AuditLogger / SnapshotManager — a
+documented PS_problem (#5 cost not persisted, #6 budget read from wrong
+source). Block B closes that gap with verbatim ports of v4's three
+classes plus Runnable's tokenEstimation helpers (so Block A Compactor
+has accurate context-budget math) plus per-agent attribution so parent
++ sub-agent costs roll up correctly. Block 0 items 0-3 (BEDROCK_EXTRA_
+PARAMS_HEADERS) and 0-8 (validate_bounded_int_env_var) land here per
+ADR-020's remap table — Block B owns runtime/bedrock_client + runtime/
+config consumers.
+
+### Options
+1. **Verbatim ports + Runnable estimators** (chosen): port v4's
+   TokenTracker / AuditLogger / SnapshotManager byte-for-byte (modulo
+   constructor injection of `config`), add Runnable's tokenEstimation
+   helpers, extend TokenTracker with per-agent attribution. Wire only
+   in places that already exist (QueryEngine, edit_file, write_file).
+   Skill apply_proposal wiring deferred to Block I (skill manager).
+2. **Re-implement from Runnable's TokenTracker**: would lose v4's
+   cache-aware pricing math (cache_read=10%, cache_write=125%) which
+   v5 needs for Bedrock prompt caching cost reporting. Rejected.
+3. **Skip per-agent attribution to Block B+**: Plan v3 Block B+
+   acceptance test demands `TOKENS.parent_input_tokens > 0 AND
+   TOKENS.subagent_input_tokens["build"] > 0` so the data model has
+   to land here even if the wiring contract finalizes in B+. Done as
+   chosen.
+
+### Decision
+Option 1. Block B ships:
+- `runtime/tokens.py` (verbatim TokenTracker + MODEL_COSTS + per-agent
+  attribution + EXCLUDED_MODELS_FOR_CACHE_BREAK + IMAGE_MAX_TOKEN_SIZE
+  + bytes_per_token_for_file_type + estimate_message_tokens +
+  has_thinking_blocks + rough_token_count_for_block + rough_token_
+  count_for_message + final_context_tokens_from_last_response +
+  token_count_with_estimation + ToolResult dataclass)
+- `runtime/audit.py` (verbatim AuditLogger + AuditEntry)
+- `runtime/snapshot.py` (verbatim SnapshotManager)
+- `runtime/env_validation.py` (validate_bounded_int_env_var per
+  ADR-020 0-8 remap)
+- `runtime/bedrock_client.py` extended:
+    - `BEDROCK_EXTRA_PARAMS_HEADERS` frozenset (per ADR-020 0-3 remap)
+    - `BedrockClient.count_tokens()` method (B-1, R4 #41 MUST)
+- Wiring:
+    - `core/query_engine.py` — TOKENS.add(usage, model_id, agent_kind)
+      after every chat() return; AUDIT.log on every tool dispatch
+      (success + failure paths); `agent_kind` + `session_id` ctor params
+    - `subagent/spawn.py` — `_new_child_engine` accepts `agent_type`
+      and forwards to QueryEngine ctor as `agent_kind`
+    - `tools/edit_file.py` + `tools/write_file.py` — SNAPSHOTS.save
+      best-effort before write/edit
+- Tests: 18 new (17 pass + 1 T5 skipped without RUN_REAL_BEDROCK).
+
+### Rationale
+- Verbatim ports preserve v4's battle-tested invariants (cache pricing
+  math, LRU snapshot eviction, redaction sensitive-key set).
+- Constructor `config` injection avoids the v4 import-time global
+  dependency that Phase 1-13 already moved away from for `BedrockClient`.
+- Per-agent attribution data model lives on the same singleton so
+  `session_cost == parent_cost + sum(subagent_cost.values())` is
+  enforceable (the test_token_tracker_per_agent_breakdown lock pins
+  this within $0.0001).
+- ADR-020 0-3 and 0-8 land here because runtime/bedrock_client.py and
+  runtime/config.py consumers are the targets — Block 0 didn't touch
+  either.
+- The remaining ADR-020 remap rows (0-4 / 0-5 / 0-6 / 0-7 / 0-9 / 0-10)
+  land in their declared Blocks (B+ / C / E+F) — none silently dropped.
+
+### Runnable-fidelity impact
+- MODEL_COSTS: dropped `fast-mode` tier (Anthropic-direct only); kept
+  cache-aware math. FAITHFUL-WITH-JUSTIFIED-ADAPTATION.
+- tokenEstimation: TS Promise-based async → Python sync. Per-block-type
+  math preserved. countTokensViaHaikuFallback (B-2) deferred-with-
+  intent to Block A (where it's used) — no scope drop.
+- EXCLUDED_MODELS_FOR_CACHE_BREAK: net-new (R4 #14 was a Wave-5-DEEP
+  finding not in original Runnable code).
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/runtime/tokens.py`
+- NEW: `compact_v5/MAIN/agent/runtime/audit.py`
+- NEW: `compact_v5/MAIN/agent/runtime/snapshot.py`
+- NEW: `compact_v5/MAIN/agent/runtime/env_validation.py`
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_b.py`
+- MODIFIED: `compact_v5/MAIN/agent/runtime/bedrock_client.py`
+- MODIFIED: `compact_v5/MAIN/agent/core/query_engine.py`
+- MODIFIED: `compact_v5/MAIN/agent/subagent/spawn.py`
+- MODIFIED: `compact_v5/MAIN/agent/tools/edit_file.py`
+- MODIFIED: `compact_v5/MAIN/agent/tools/write_file.py`
+- MODIFIED: `compact_v5/MAIN/agent/tests/integration/test_subagent.py`
+  (mock signatures updated to accept new `agent_type` kwarg)
+
+### Linked port-log rows
+- #039 — TokenTracker
+- #040 — MODEL_COSTS + EXCLUDED_MODELS_FOR_CACHE_BREAK + canonicalize_model_id
+- #041 — Runnable tokenEstimation helpers
+- #042 — ToolResult dataclass
+- #043 — AuditLogger + AuditEntry
+- #044 — SnapshotManager
+- #045 — validate_bounded_int_env_var (Block 0 item 0-8 remap)
+- #046 — BEDROCK_EXTRA_PARAMS_HEADERS (Block 0 item 0-3 remap)
+- #047 — BedrockClient.count_tokens
+
+### Validation
+- 459 pass + 5 skipped (was 442 + 4 at end of Block 0; +17 pass + 1 skip).
+- verify_ship_zip.py: PASS (100 files / 262.4 KB / 38%).
+- 1 T5 test gated by `RUN_REAL_BEDROCK=1` (~$0.005); to be run as part
+  of Block J real-Bedrock smoke gate so Block B doesn't burn API budget
+  per local pytest.
+
+### PS_problems addressed
+- **PS#5 (session cost not persisted)**: TokenTracker has `restore()`
+  reconstructor; Block B+ wires it to SessionManager `/resume`.
+- **PS#6 (budget read from wrong source)**: `_TOKENS.add` always reads
+  CONFIG.session_cost_limit; Block B+ acceptance test
+  test_tokens_singleton_is_budget_source pins this.
+
 ## ADR-020 — Block 0 (v5.0.1): `sagemaker_agent.py` shim + notebook smoke gate
 
 **Date**: 2026-05-02

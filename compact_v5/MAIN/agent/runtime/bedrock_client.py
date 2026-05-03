@@ -70,6 +70,31 @@ from core.retry import RetryPolicy  # noqa: F401
 
 
 # ============================================================
+# BEDROCK_EXTRA_PARAMS_HEADERS (Block 0 item 0-3 → Block B per ADR-020)
+# ============================================================
+#
+# Anthropic-API-direct features (interleaved-thinking beta, 1m-context
+# beta) ride on `anthropic-beta` HTTP headers. Bedrock does NOT accept
+# those headers; the equivalent goes in `additionalModelRequestFields`
+# in the request body. This Set documents which beta names we know need
+# the body-not-header treatment, so any future code that wants to opt
+# in to a beta has a single source of truth and can't accidentally pass
+# them as headers (which Bedrock would silently drop).
+#
+# Per Runnable constants/betas.ts:38-43 (R8 #74 — load-bearing).
+
+BEDROCK_EXTRA_PARAMS_HEADERS: frozenset = frozenset({
+    "interleaved-thinking-2025-05-14",
+    "context-1m-2025-08-07",
+    # Codex Block-B finding #4 (MEDIUM) lock: tool-search beta is the
+    # 3rd Runnable constants/betas.ts entry that goes in body, not
+    # headers. v5 already implements tool_search via Phase-7 deferred
+    # loading, so this name belongs here.
+    "tool-search-tool-2025-10-19",
+})
+
+
+# ============================================================
 # BedrockClient (v4 verbatim port)
 # ============================================================
 
@@ -342,3 +367,79 @@ class BedrockClient:
             usage=result.get("usage", {}),
             thinking=thinking,
         )
+
+    # ============================================================
+    # B-1 — countTokensWithBedrock (R4 #41, MUST)
+    # ============================================================
+
+    def count_tokens(
+        self,
+        messages: List[Dict[str, Any]],
+        system: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model_id: Optional[str] = None,
+    ) -> Optional[int]:
+        """Real Bedrock token count via the bedrock-runtime CountTokens API.
+
+        Returns the token count as int, or None on failure / mock mode.
+        Per Runnable services/tokenEstimation.ts:437-495 (R4 #41 MUST):
+        without this, v5 has no real Bedrock token count and the
+        Compactor (Block A) cannot make safe context-budget decisions.
+
+        Falls through to None when:
+          - mock_mode is True (no Bedrock contact)
+          - the bedrock-runtime client doesn't expose count_tokens
+            (older boto3 versions; retry by upgrading boto3 ≥ 1.35)
+          - the API returns a malformed response
+        """
+        if self.mock_mode:
+            # Crude fallback for mock-mode tests so the call shape is
+            # exercised without hitting Bedrock.
+            from runtime.tokens import rough_token_count_for_message
+            base = sum(rough_token_count_for_message(m) for m in messages)
+            if system:
+                from runtime.tokens import estimate_message_tokens
+                base += estimate_message_tokens(system)
+            return base
+
+        if self.client is None:
+            return None
+
+        try:
+            # Codex Block-B finding #3 (MEDIUM) lock: when any message
+            # contains a thinking block, switch the count-tokens body to
+            # match the assistant turn's actual shape (max_tokens=2048 +
+            # thinking config). Otherwise Bedrock either rejects or
+            # undercounts the thinking budget. Per Runnable
+            # services/tokenEstimation.ts:437-495 (R4 #43).
+            from runtime.tokens import has_thinking_blocks
+            uses_thinking = any(has_thinking_blocks(m) for m in messages)
+            body: Dict[str, Any] = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "messages": messages,
+                **({"system": system} if system else {}),
+                **({"tools": tools} if tools else {}),
+                "max_tokens": 2048 if uses_thinking else 1,
+            }
+            if uses_thinking:
+                body["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+            kwargs: Dict[str, Any] = {
+                "modelId": model_id or self.model_id,
+                "input": {
+                    "invokeModel": {"body": json.dumps(body).encode("utf-8")},
+                },
+            }
+            resp = self.client.count_tokens(**kwargs)
+            count = resp.get("inputTokens")
+            if isinstance(count, int):
+                return count
+            return None
+        except (AttributeError,) as exc:
+            logging.warning(
+                "BedrockClient.count_tokens: client missing count_tokens method "
+                "(boto3 < 1.35?): %s", exc,
+            )
+            return None
+        except Exception as exc:  # noqa: BLE001 — best-effort; no raise
+            logging.warning("BedrockClient.count_tokens failed: %s", exc)
+            return None

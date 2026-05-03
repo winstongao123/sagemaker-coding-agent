@@ -414,8 +414,8 @@ def test_real_spawn_child_budget_is_parent_budget():
     captured = {}
     real_factory = spawn_mod._new_child_engine
 
-    def capturing_factory(p, max_turns):
-        c = real_factory(p, max_turns)
+    def capturing_factory(p, max_turns, agent_type="general"):
+        c = real_factory(p, max_turns, agent_type=agent_type)
         captured["child"] = c
         return c
 
@@ -462,7 +462,7 @@ def test_parent_immutability_check_catches_in_place_mutation(monkeypatch):
             return QueryResult(text="", stop_reason="end_turn", turns_used=0,
                                budget_used=0, messages=[])
 
-    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns: _MutatorChild(p))
+    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns, agent_type="general": _MutatorChild(p))
     result = spawn_mod.spawn_subagent(
         parent_engine=parent, prompt="x", agent_type="general"
     )
@@ -525,7 +525,7 @@ def test_subagent_returns_error_if_parent_context_mutated(monkeypatch):
             return QueryResult(text="", stop_reason="end_turn", turns_used=0,
                                budget_used=0, messages=[])
 
-    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns: _BadChild(p))
+    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns, agent_type="general": _BadChild(p))
     result = spawn_mod.spawn_subagent(
         parent_engine=parent, prompt="x", agent_type="general"
     )

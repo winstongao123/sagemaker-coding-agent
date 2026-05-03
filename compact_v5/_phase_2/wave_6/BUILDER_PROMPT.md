@@ -128,6 +128,23 @@ RUN_REAL_BEDROCK=1 AWS_REGION=ap-southeast-2 \
 If ANY test fails: STOP, fix, re-run. Never tag with red tests.
 
 ### Step 8 — Codex AXIS A/B/C review
+
+**MANDATORY pre-step (added 2026-05-03 after Block B review stalled)**:
+when citing v4 source for cross-check, **PRE-EXTRACT only the cited line
+ranges** to small files via `sed -n 'A,Bp' compact_v4/MAIN/agent/sagemaker_agent.py
+> /tmp/v4_<name>.txt` BEFORE invoking Codex. Reading the full 12,088-LOC
+v4 monolith stalls Codex (it tried to ingest the entire file once and
+returned 0 bytes after 10+ minutes). Pre-extracting keeps Codex review
+under 10 minutes. Same rule for any other large reference (Hermes
+`run_agent.py`, etc.) — extract the cited ranges only.
+
+The Codex prompt's "Read paths" section MUST then read like:
+```
+v4 source PRE-EXTRACTED (avoid 12K-LOC monolith):
+  - /tmp/v4_<name>_section.txt   (...; v4 lines A-B; N LOC)
+DO NOT read compact_v4/MAIN/agent/sagemaker_agent.py directly.
+```
+
 Save the prompt to `_status/codex_reviews/block-<BLOCK_ID>-prompt.txt`. Run:
 ```bash
 cd D:/Github/sagemaker-coding-agent
@@ -135,6 +152,9 @@ codex exec --full-auto -s read-only -m gpt-5.5 --skip-git-repo-check \
   "$(cat _status/codex_reviews/block-<BLOCK_ID>-prompt.txt)" \
   > _status/codex_reviews/block-<BLOCK_ID>.md
 ```
+Run in background via Claude Code's `run_in_background=true` so a stalled
+Codex (e.g. monolith ingest) can be killed via TaskStop without losing
+your terminal session.
 Codex review template (copy this into the prompt):
 ```
 You are reviewing Block <BLOCK_ID> of v5.0.1.
@@ -194,8 +214,17 @@ User has explicitly said "Codex-only mode" or equivalent at build start. In this
 - Run R-tier (R1-R12) automatically after Block K completes
 - **STOP at FINAL gate only**: after all 21 Blocks + R-tier, present FINAL product summary to user
 
+**Codex resilience rule (network failure / hang fallback)**:
+If Codex returns APPROVE_WITH_FIXES on iter-N, worker fixes findings AND writes one lock test per finding, and iter-(N+1) hangs >15 min with 0 bytes output OR fails with network error:
+1. Kill the background Codex task.
+2. Verify EVERY iter-N finding has a corresponding lock test in the new commit (grep test names against findings).
+3. If YES → tag with note "iter-(N+1) skipped due to Codex network/hang; lock tests serve as durable verification" + log to `_status/codex_reviews/block-X-iter-skipped.md`.
+4. If NO → ESCALATE to user before tagging.
+
+Rationale: lock tests are STRONGER than one-shot Codex re-review (they enforce fix permanently; Codex re-review is single-snapshot opinion). This prevents Codex CLI/network issues from blocking the build indefinitely.
+
 **Mode B HARD ESCALATION TRIGGERS (still STOP and ask user even in Mode B)**:
-1. Codex stuck in REJECT loop (3+ iterations on same block, fixes not converging)
+1. Codex stuck in REJECT loop (3+ iterations on same block, fixes not converging — DIFFERENT from network hang; this is when Codex returns substantive REJECT each time)
 2. New finding NOT in SYNTHESIS_MASTER discovered (truly new, not missed note)
 3. Constraint conflict (v4 needs feature X but X violates a hard constraint)
 4. Real-Bedrock smoke fails for unexplained reasons (don't burn money retrying)

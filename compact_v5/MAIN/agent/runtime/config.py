@@ -288,3 +288,32 @@ def _apply_config_file(config: Config) -> None:
 
 CONFIG = Config()
 _apply_config_file(CONFIG)
+
+# Block B (Codex finding #5 MEDIUM lock): wire validate_bounded_int_env_var
+# into the runtime numeric knobs so env-var overrides clamp safely + log
+# WARNING on bad input. Per ADR-021 §Linked port-log rows #045.
+try:
+    from runtime.env_validation import validate_bounded_int_env_var as _vbiev
+    CONFIG.max_turns = _vbiev(
+        "SAGEMAKER_AGENT_MAX_TURNS",
+        minimum=1, maximum=10_000, default=CONFIG.max_turns,
+    )
+    CONFIG.max_iteration_budget = _vbiev(
+        "SAGEMAKER_AGENT_MAX_ITERATION_BUDGET",
+        minimum=1, maximum=100_000, default=CONFIG.max_iteration_budget,
+    )
+    CONFIG.audit_retention_days = _vbiev(
+        "SAGEMAKER_AGENT_AUDIT_RETENTION_DAYS",
+        minimum=0, maximum=3650, default=CONFIG.audit_retention_days,
+    )
+    CONFIG.max_exec_calls_per_session = _vbiev(
+        "SAGEMAKER_AGENT_MAX_EXEC_CALLS",
+        minimum=1, maximum=100_000, default=CONFIG.max_exec_calls_per_session,
+    )
+    CONFIG.max_exec_seconds_per_session = _vbiev(
+        "SAGEMAKER_AGENT_MAX_EXEC_SECONDS",
+        minimum=0, maximum=86_400, default=CONFIG.max_exec_seconds_per_session,
+    )
+except Exception:  # pragma: no cover — env-validation is best-effort
+    # If anything goes wrong, keep CONFIG defaults; never block import.
+    pass
