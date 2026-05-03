@@ -121,6 +121,24 @@ Output: scoring table in `v5_complete.html` "v5 vs Runnable vs v4" tab. Without 
 
 **R-tier + Block V combined**: ~$25-35. Gets EMPIRICAL "v5 > Runnable > v4" with screenshot-able evidence.
 
+## 9.2. MASTER PLAYBOOK — single source of truth for R-tier + Block V (added 2026-05-03)
+
+**`compact_v5/docs/PS_V5_TEST_PLAYBOOK.md`** is the canonical playbook. Read it FIRST at every R-tier or Block V session.
+
+It contains:
+- §1: build_telemetry.py exact spec (algorithm, schema, validation)
+- §2: Block V v4-side runner (how to launch v4 with same prompt + capture v4 telemetry)
+- §3: Block V scoring rubric (weighted axes for "v5 > v4" empirical verdict)
+- §4: Worker checklist (verbatim, use at every test)
+- §5: User trigger phrases worker recognizes
+
+This playbook closes the 3 gaps the user flagged 2026-05-03 ("are we 100% certain"):
+- build_telemetry.py wasn't formalized → §1
+- Block V v4-side runner wasn't specified → §2
+- Block V scoring rubric wasn't formalized → §3
+
+If ANY conflict between PLAYBOOK and other docs, PLAYBOOK wins (per user 2026-05-03).
+
 ## 9.3. ENHANCED TELEMETRY PER TEST (for Block V "v5 > v4" empirical proof — user 2026-05-03)
 
 In addition to the 8 mandatory output files in §9.4, every R-tier + Block V AWS call MUST also produce:

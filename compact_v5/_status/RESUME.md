@@ -12,6 +12,7 @@ Use this checklist cold (zero prior context, after compaction, in a new session)
                                                             #   R13-R16 enhanced, Block V v4-vs-v5, R-tier 3-AWS-call cap,
                                                             #   test→review→fix loop, R_TIER_REVIEW_TEMPLATE routing
 2. compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md            # ★ R-tier review prompts — TEMPLATE A/B/C for AWS tests
+2a. compact_v5/docs/PS_V5_TEST_PLAYBOOK.md                 # ★ MASTER PLAYBOOK — build_telemetry.py spec + Block V v4 runner + scoring rubric (READ FIRST in any R-tier or Block V session, supersedes other docs on conflict)
 3. compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md            # the worker prompt — your job spec
 4. compact_v5/_status/V5_BUILD_STATUS.md                   # current state + next pickup
 5. compact_v5/_status/V5_DESIGN_DECISIONS.md               # ADR log (append-only)
