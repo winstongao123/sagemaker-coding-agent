@@ -152,11 +152,44 @@ Side-by-side scoring table embedded in `v5_complete.html` "v5 vs v4" tab (Block 
 
 ## Per-test logs — complete audit trail
 
-**YES, every test is reviewed by BOTH worker AND Codex before moving on.** Confirmed 2026-05-03 user directive. No exceptions.
+**YES, every test gets BOTH worker self-review AND Codex review before next test.** Confirmed 2026-05-03 user directive. No exceptions.
 
-Every test produces 5+ persistent log files. All committed to git so they survive new sessions.
+But review GRANULARITY differs by test type. Practical reality table:
 
-### Files written for EACH test (named after test ID, e.g. R1, R14, V2)
+| Test type | Review granularity | Why this granularity | Example |
+|---|---|---|---|
+| **Mock test (T1/T2/T3/T4)** | Reviewed by Codex AS PART OF its parent Block's code review | 798 mock tests — individual Codex per test would be 798 reviews. Block-level review covers the test code (Codex sees test diffs in Block diff). | Block H (16 mock tests) → Codex iter-1 + iter-2 reviewed all 16 in one pass |
+| **Mock test failure during Block work** | Worker fixes BEFORE commit; if structural issue → Block re-review | A failing mock test blocks commit anyway (CI would fail) | Block G iter-1 failed on test_g_subagent_inheritance → fix → iter-2 |
+| **Real-AWS test (R1-R16, Block V)** | INDIVIDUAL pre-flight + post-pass review per test, EVERY time | Real money on the line — each AWS call needs explicit worker+Codex APPROVE | R2 had 1 PRE-FLIGHT + 1 DIAGNOSIS + 1 POST-PASS = 3 separate Codex reviews |
+| **Real-AWS test failure** | INDIVIDUAL diagnosis review + fix-justification review BEFORE next AWS call | Cannot waste $$$ on un-vetted retry | R6 had 3 AWS calls → 2 DIAGNOSIS reviews → still failed → ESCALATE |
+
+**So total Codex reviews across the build**:
+- 50 already done (20 Blocks × 2.5 avg iters each)
+- ~3 more for Block K + Block U (2 Blocks × ~2 iters)
+- ~30-50 for R-tier R1-R16 (16 tests × 2-3 reviews each)
+- ~12-20 for Block V (6 runs × 2-3 reviews each)
+- 1-2 for final full-codebase Codex
+- **Total ~100-130 Codex reviews across entire v5.0.1 build**
+
+Every test produces 4-8 persistent log files. All committed to git so they survive new sessions.
+
+### Logs for MOCK tests (per Block, not per test)
+
+Mock tests live inside Blocks. Their logs live with the Block:
+
+| File | Purpose | Example |
+|---|---|---|
+| `compact_v5/_status/codex_reviews/block-<X>-iter<N>-prompt.txt` | Codex prompt — includes ALL tests added in this Block | `block-h-iter1-prompt.txt` (covers all 16 H tests) |
+| `compact_v5/_status/codex_reviews/block-<X>-iter<N>.md` | Codex verdict on Block code + tests | `block-h-iter1.md` (REJECT — found 4 issues incl. test gaps) |
+| `compact_v5/_status/codex_reviews/block-<X>-iter<N+1>.md` | Codex re-verdict after fixes | `block-h-iter2.md` (APPROVE) |
+| `compact_v5/CHANGELOG.md` Block section | Block summary including what tests were added | (one section per Block) |
+| `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md` | One row per Runnable pattern adopted (test refs included) | rows #095-#098 for Block H |
+| Git commits | Test code (per `git log --oneline`) | `v5/block-h: memory extraction + sessionMemory + 16 tests` |
+| `pytest -q` output | PASS/FAIL counts per Block close | `703 passed + 8 skipped` (logged in V5_BUILD_STATUS.md) |
+
+**For 798 mock tests across 22 Blocks**: 50+ Codex review files already exist at `compact_v5/_status/codex_reviews/block-*.md`. Each one reviewed all the tests added in that Block.
+
+### Files written for EACH real-AWS test (named after test ID, e.g. R1, R14, V2)
 
 | File | Purpose | When written | Example |
 |---|---|---|---|
