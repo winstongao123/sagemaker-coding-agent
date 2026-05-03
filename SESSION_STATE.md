@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G (code commit; Codex pending)
+- subagent/agent_types.py NEW (~150 LOC), subagent/worktree.py NEW (~120 LOC), subagent/spawn.py extended, tools/task.py validation upgraded.
+- 14 new tests, 656 pass + 6 skip; verify_ship_zip PASS.
+- PORT_LOG #086-#088 + ADR-031.
+
 ### Block M DONE — Codex iter-1 APPROVE (clean, 0 findings)
 - count_tool_calls helper + synthetic_output_tool_name + max_structured_output_retries ctor + retry-limit halt + discoveredSkillNames reset.
 - 11 new tests, 642 pass + 6 skip; verify_ship_zip PASS.

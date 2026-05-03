@@ -86,18 +86,18 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         return "Error: prompt is required and must be a non-empty string"
     subagent_type = str(args.get("subagent_type", "general")).strip() or "general"
 
-    # Codex Phase-09 finding (medium): Phase-9 supports `general` only.
-    # Silently falling back to general for unknown types hides caller/model
-    # errors and diverges from v4's explicit-unknown-type contract
-    # (compact_v4/MAIN/agent/sagemaker_agent.py:8366). Reject unknowns so
-    # the model can self-correct via tool_search before retrying.
-    from subagent.spawn import _AGENT_TYPE_SUFFIXES
-    if subagent_type not in _AGENT_TYPE_SUFFIXES:
-        available = ", ".join(sorted(_AGENT_TYPE_SUFFIXES.keys()))
+    # Codex Phase-09 finding (medium): silently falling back to general for
+    # unknown types hides caller/model errors. v4's explicit-unknown-type
+    # contract (sagemaker_agent.py:8366) is preserved here.
+    # Block G: validation now consults the full AGENT_TYPES registry
+    # (build / plan / explore / verify / general / review / fork) — was
+    # the Phase-9 single-entry _AGENT_TYPE_SUFFIXES dict.
+    from subagent.agent_types import AGENT_TYPES
+    if subagent_type not in AGENT_TYPES:
+        available = ", ".join(sorted(AGENT_TYPES.keys()))
         return (
             f"Error: unknown subagent_type '{subagent_type}'. "
-            f"Phase-9 supports: {available}. "
-            "(build/plan/explore/verify types reserved for later phases.)"
+            f"Block G supports: {available}."
         )
 
     if not isinstance(context, dict) or "parent_engine" not in context:

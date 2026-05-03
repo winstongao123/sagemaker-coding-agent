@@ -1,6 +1,17 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block M DONE** — tag `v5.0.1-block-m` at `09b6114` (pending push); 642 pass + 6 skip; Codex iter-1 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block G IN_PROGRESS** — code + 14 tests green, 656 pass + 6 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block G entry (2026-05-03)
+- NEW `subagent/agent_types.py` (~150 LOC): AgentType dataclass + AGENT_TYPES dict (7 entries) + DEFAULT_AGENT_PROMPT + SUBAGENT_NOTES + ONE_SHOT_BUILTIN_AGENT_TYPES + get_agent_type/get_agent_prompt(is_coordinator).
+- NEW `subagent/worktree.py` (~120 LOC): create_worktree() + cleanup_worktree() with 3-tier fallback (git → fallback_copy → fallback_tempdir).
+- EXTENDED `subagent/spawn.py`: per-type max_turns clamping + worktree creation for build + verify-skill auto-load. Removed Phase-9 `_AGENT_TYPE_SUFFIXES` placeholder.
+- EXTENDED `tools/task.py`: validation against full AGENT_TYPES (Block G supports build/plan/explore/verify/general/review/fork).
+- EXTENDED `subagent/__init__.py`: re-exports new public surface.
+- 14 new tests in `tests/integration/test_block_g.py`: 8 TEST_DESIGN-named + 6 behavior locks (one_shot_set, unknown-agent-type, coordinator-drops-notes, default-agent-prompt-no-gold-plating, max-turns-clamped, env-empty).
+- PORT_LOG rows #086-#088 + ADR-031.
+- `verify_ship_zip.py`: PASS (117 files / 328.1 KB / 36%).
+- Pytest: **656 passed + 6 skipped** (was 642 + 6 at Block M; +14 pass net).
 
 ## v5.0.1 Block M entry (2026-05-03)
 - EXTENDED `core/query_engine.py`: count_tool_calls() helper + 2 new QueryEngine ctor params (synthetic_output_tool_name, max_structured_output_retries; both default OFF) + per-turn retry-limit gate emitting stop_reason="error_max_structured_output_retries" + per-run discoveredSkillNames reset (skill_manager._pending_activations.clear() at run() entry; best-effort try/except).

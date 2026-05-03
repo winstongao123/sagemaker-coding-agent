@@ -1124,6 +1124,121 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-031 — Block G (v5.0.1): Full AGENT_TYPES registry + worktree isolation + verify-skill auto-load
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block G
+**Status**: ACCEPTED
+
+### Context
+Phase 9 (ADR-015) shipped a placeholder `_AGENT_TYPE_SUFFIXES` dict
+with `general` only. SYNTHESIS_MASTER §Block G + plan v3 §Block G
+require lifting this to v4's full 7-type AGENT_TYPES registry (build /
+plan / explore / verify / general / review / fork) plus:
+- Worktree isolation for `build` agents (v4 sagemaker_agent.py:8413+).
+- verify-skill auto-load for `verify` agents.
+- Runnable's ONE_SHOT_BUILTIN_AGENT_TYPES (constants.ts) for prompt-
+  trailer-skipping on Explore/Plan/Verify/Review.
+- DEFAULT_AGENT_PROMPT verbatim phrasing (constants/prompts.ts:758).
+- Notes appendix (constants/prompts.ts:766-770).
+- Coordinator-mode slim prompt (AgentTool/prompt.ts:202-213).
+
+### Decisions
+
+#### 1. NEW `subagent/agent_types.py` (~150 LOC)
+- `AgentType` dataclass: `name`, `system_suffix`, `max_turns`,
+  `one_shot`, `auto_load_skill`, `needs_worktree`.
+- `AGENT_TYPES` dict with 7 entries.
+- `DEFAULT_AGENT_PROMPT` constant (Runnable verbatim).
+- `SUBAGENT_NOTES` appendix (Runnable verbatim).
+- `ONE_SHOT_BUILTIN_AGENT_TYPES` frozenset (computed from AGENT_TYPES
+  so it stays in sync).
+- `get_agent_type(name)` / `get_agent_prompt(name, is_coordinator)`.
+
+#### 2. NEW `subagent/worktree.py` (~120 LOC)
+- `create_worktree(parent_dir)` returns `(path, source)` where source
+  is `"git"` | `"fallback_copy"` | `"fallback_tempdir"` | `"error"`.
+- 3-tier fallback: try `git worktree add` first; fall back to
+  `os.makedirs` (no isolation but path exists for tests); last resort
+  `tempfile.mkdtemp`.
+- `cleanup_worktree(path)` — `git worktree remove --force` then
+  `shutil.rmtree`. Best-effort: returns True iff path no longer exists.
+- Best-effort error handling: NEVER raises into the spawn loop; logs
+  warnings instead.
+
+#### 3. EXTENDED `subagent/spawn.py`
+- `_resolve_agent_suffix` now consults `agent_types.get_agent_type`
+  (was: dict lookup against placeholder).
+- `spawn_subagent` resolves the AgentType row and applies:
+  - `max_turns` clamped to `min(caller_supplied, agent_def.max_turns)`
+    (defense in depth — caller can lower further but can't exceed).
+  - For `agent_def.needs_worktree=True`: `create_worktree(workspace)`
+    before child.run; `cleanup_worktree` in the finally clause.
+  - For `agent_def.auto_load_skill=<name>`:
+    `parent.skill_manager.activate(<name>)` + skill body spliced into
+    `child_prompt` before run. Best-effort try/except.
+- Removed the Phase-9 `_AGENT_TYPE_SUFFIXES` placeholder dict.
+
+#### 4. EXTENDED `tools/task.py`
+- Validation against `AGENT_TYPES` (not the removed placeholder dict).
+- Error message updated to "Block G supports: ..." with the full list.
+
+#### 5. EXTENDED `subagent/__init__.py`
+- Re-exports the new public surface (AGENT_TYPES, get_agent_type,
+  get_agent_prompt, ONE_SHOT_BUILTIN_AGENT_TYPES, create_worktree,
+  cleanup_worktree, build_env_details, build_handoff_block).
+
+### Key contracts
+1. **Per-type max_turns ceiling**: each agent type has a max_turns cap
+   that the caller cannot exceed (only lower).
+2. **Worktree best-effort**: `build` agents always try to isolate;
+   on hard failure they run in parent cwd with a logged warning.
+   This is intentional — never block a useful build agent on
+   missing-git.
+3. **verify-skill auto-load**: when the parent has a SkillManager AND
+   the agent_type defines `auto_load_skill`, activate the skill +
+   splice its body into the child prompt before run.
+4. **Coordinator slim prompt**: `get_agent_prompt(name,
+   is_coordinator=True)` drops the Notes appendix; coordinator system
+   prompts already cover usage notes (Block G3 will land that surface).
+5. **Cleanup-on-completion**: `cleanup_worktree` runs in the spawn's
+   `finally` so a child that crashes doesn't leak worktrees.
+6. **No silent fallback to general**: unknown agent_type returns
+   SubagentResult with `stop_reason="invalid_args"` and the available
+   list.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/subagent/agent_types.py`
+- NEW: `compact_v5/MAIN/agent/subagent/worktree.py`
+- EXTENDED: `compact_v5/MAIN/agent/subagent/spawn.py`
+- EXTENDED: `compact_v5/MAIN/agent/subagent/__init__.py`
+- EXTENDED: `compact_v5/MAIN/agent/tools/task.py`
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_g.py`
+  (14 tests: 8 TEST_DESIGN-named + 6 behavior locks)
+
+### Linked port-log rows
+- #086 — AGENT_TYPES dict + DEFAULT_AGENT_PROMPT + Notes + coordinator slim
+- #087 — Worktree create/cleanup + 3-tier fallback
+- #088 — Spawn dispatch by AGENT_TYPES + verify-skill auto-load + task.py validation
+
+### Validation
+- 656 pass + 6 skipped (was 642 + 6 at end of Block M; +14 net new).
+- verify_ship_zip.py: PASS (117 files / 328.1 KB / 36%).
+- Existing test_subagent.py (Phase 9) preserved: all 16 prior tests
+  green (1 was updated for the validation message change).
+
+### Notes / not in scope
+- G-2 `isAgentMemoryPath` per-agent memory isolation lands in Block H
+  along with the memory extraction infrastructure.
+- G-5 Hermes IterationBudget explicit PORT_LOG row already covered in
+  Phase 9 (PORT_LOG #016).
+- G-8 `forkSubagent` cache-prefix replay is Block G2 (separately
+  scheduled).
+- Coordinator system prompt (Block G3) is the next block — it consumes
+  `get_agent_prompt(is_coordinator=True)` from this Block.
+
+---
+
 ## ADR-030 — Block M (v5.0.1): Phase 8 critical fixes — discoveredSkillNames per-run reset + structured-output retry-limit guard
 
 **Date**: 2026-05-03

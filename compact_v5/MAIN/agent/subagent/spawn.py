@@ -26,6 +26,8 @@ Usage:
 """
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional, Tuple
 
@@ -36,17 +38,9 @@ from .handoff import build_handoff_block
 # Default cap on sub-agent depth. Matches v4 CONFIG.subagent_max_depth=2.
 DEFAULT_MAX_DEPTH: int = 2
 
-# Per-agent-type prompt suffix table. Phase 9 ships `general` only; richer
-# types (build/plan/explore/verify) land in later phases as their prompts
-# become part of the deferred-loading content review surface.
-_AGENT_TYPE_SUFFIXES = {
-    "general": (
-        "You are a sub-agent working on a focused task. Always use ABSOLUTE "
-        "file paths (cwd may reset between bash calls). In your final "
-        "response, share relevant file paths and key findings. Be concise — "
-        "the parent will read your full reply."
-    ),
-}
+# Block G — full AGENT_TYPES registry (build / plan / explore / verify /
+# general / review / fork) lands as a sibling module. Spawn dispatches via
+# get_agent_type for type validation + worktree / skill auto-load.
 
 
 @dataclass
@@ -99,8 +93,13 @@ def _resolve_agent_suffix(agent_type: str) -> Optional[str]:
     Returns None for unknown types so the caller (spawn_subagent / task tool)
     can surface an explicit error instead of silently falling back. Phase-9
     Codex finding: silent fallback masks contract bugs.
+
+    Block G: now consults the AGENT_TYPES registry (was: tiny dict keyed on
+    "general" only). Returns the per-type system_suffix.
     """
-    return _AGENT_TYPE_SUFFIXES.get(agent_type)
+    from .agent_types import get_agent_type
+    at = get_agent_type(agent_type)
+    return at.system_suffix if at is not None else None
 
 
 def spawn_subagent(
@@ -166,17 +165,28 @@ def spawn_subagent(
     # silently fall back to `general`.
     suffix = _resolve_agent_suffix(agent_type)
     if suffix is None:
-        available = ", ".join(sorted(_AGENT_TYPE_SUFFIXES.keys()))
+        from .agent_types import AGENT_TYPES
+        available = ", ".join(sorted(AGENT_TYPES.keys()))
         return SubagentResult(
             text="",
             stop_reason="invalid_args",
             error=(
                 f"Error: unknown agent_type '{agent_type}'. "
-                f"Phase-9 supports: {available}."
+                f"Block G supports: {available}."
             ),
             agent_type=agent_type,
             depth=child_depth,
         )
+
+    # Block G — resolve the AgentType row for per-type max_turns / worktree
+    # / auto_load_skill knobs.
+    from .agent_types import get_agent_type
+    agent_def = get_agent_type(agent_type)
+    if agent_def is not None:
+        # Per-type max_turns: caller can override via the max_turns param.
+        # Default policy: use the per-type ceiling unless caller passed
+        # something smaller (defense in depth — caller knows the task).
+        max_turns = min(max_turns, agent_def.max_turns)
 
     # Assemble the child's system prompt:
     #   <static> [+ env_details + handoff_block + agent_type_suffix in dynamic tail]
@@ -249,6 +259,52 @@ def spawn_subagent(
     except Exception:
         pass
 
+    # Block G — worktree spawn for `build` agents. Best-effort; on hard
+    # failure, runs in parent dir with a warning.
+    _worktree_path: Optional[str] = None
+    if agent_def is not None and agent_def.needs_worktree:
+        try:
+            from .worktree import create_worktree
+            from runtime.config import CONFIG as _CFG_W
+            _wt_parent = workspace or getattr(_CFG_W, "workspace", os.getcwd())
+            _worktree_path, _wt_source = create_worktree(_wt_parent)
+            if _worktree_path:
+                logging.info(
+                    "[subagent] build agent isolated in worktree=%s (source=%s)",
+                    _worktree_path, _wt_source,
+                )
+            else:
+                logging.warning(
+                    "[subagent] build agent worktree creation failed — "
+                    "running in parent cwd."
+                )
+        except Exception as _wt_exc:
+            logging.warning("[subagent] worktree setup raised: %s", _wt_exc)
+            _worktree_path = None
+
+    # Block G — verify agent auto-loads the verify skill so its body sits
+    # in the child's system prompt as the gate-check checklist.
+    if (
+        agent_def is not None
+        and agent_def.auto_load_skill
+        and parent_engine.skill_manager is not None
+    ):
+        try:
+            ok, _msg = parent_engine.skill_manager.activate(agent_def.auto_load_skill)
+            if ok:
+                # Inject the active skill body into the child's system prompt
+                # tail (cannot share parent's skill_manager state directly
+                # since child has its own SkillManager surface in v5).
+                _skill_body = parent_engine.skill_manager.get_active_skill_prompt(
+                    session_id=getattr(parent_engine, "session_id", ""),
+                )
+                if _skill_body:
+                    child_prompt = child_prompt + _skill_body
+        except Exception as _sk_exc:
+            logging.warning(
+                "[subagent] verify-skill auto-load failed: %s", _sk_exc,
+            )
+
     try:
         # The child runs synchronously to completion or budget exhaustion.
         result = child.run(
@@ -266,6 +322,16 @@ def spawn_subagent(
                 _FC.restore_context(_file_cache_saved)
             except Exception:
                 pass
+        # Block G — worktree cleanup on child completion (or failure).
+        # Best-effort; logs but doesn't block.
+        if _worktree_path:
+            try:
+                from .worktree import cleanup_worktree
+                cleanup_worktree(_worktree_path)
+            except Exception as _wt_cleanup_exc:
+                logging.warning(
+                    "[subagent] worktree cleanup raised: %s", _wt_cleanup_exc,
+                )
 
     # Defense-in-depth: confirm the parent buffer wasn't mutated. Structural
     # comparison via the deep snapshot — catches in-place edits that preserve
