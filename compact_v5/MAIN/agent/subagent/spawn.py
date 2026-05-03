@@ -247,14 +247,23 @@ def spawn_subagent(
     # enforced at spawn — prompt-only "Do NOT edit files" wording was not a
     # contract. When agent_def.allowed_tools is set, child_tools is filtered
     # to that subset; otherwise the full registry is used.
+    #
+    # Block G iter-3 (Codex iter-2 finding #1 HIGH): do NOT auto-include the
+    # `task` tool for restricted agents. Otherwise a read-only explore agent
+    # could call task(subagent_type="build") and regain mutating tools via
+    # a child — completely bypassing the allowlist contract. Restricted
+    # agents are intentionally one-shot leaf-roles; they don't need to
+    # spawn further sub-agents.
+    # `tool_search` is still safe to include (it just changes which tool
+    # schemas are visible; it cannot reach mutators that aren't in the
+    # allowlist).
     from tools import all_registered
     child_tools = all_registered()
     if agent_def is not None and agent_def.allowed_tools:
         _allow = set(agent_def.allowed_tools)
-        # Always include `task` so a plan/explore agent can still spawn
-        # further sub-agents (depth-limit gates separately).
-        # Always include `tool_search` so deferred-loading still works.
-        _allow.update({"task", "tool_search"})
+        # Block G iter-3: tool_search is harmless (read-only metadata),
+        # task is NOT auto-included — restricted agents stay restricted.
+        _allow.add("tool_search")
         child_tools = [t for t in child_tools if t.name in _allow]
         logging.debug(
             "[subagent] agent_type=%s tool allowlist (%d tools): %s",

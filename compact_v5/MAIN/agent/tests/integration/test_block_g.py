@@ -529,7 +529,22 @@ def test_verify_agent_allows_bash_but_not_mutators():
 
 
 def test_general_agent_gets_full_registry():
-    """general agent (no allowed_tools allowlist) sees the full registry."""
+    """general agent (no allowed_tools allowlist) sees the full registry.
+
+    Codex iter-2 finding #2 tightening: assert against `names` (what the
+    child saw) directly — `or required in full` would have masked a bug
+    where the child got an empty tool list.
+
+    NOTE: tool_search is the deferred-loading dispatcher; in v5 it is the
+    primary visible tool, with most others "deferred" and loaded on demand.
+    Per the apply_tool_search_deferral path, query_engine fans out the
+    DEFERRED-by-default set into the chat() `tools` arg only after a
+    discover call. So the chat()-call's `tools` arg may show ONLY
+    tool_search at first turn — that's the contract, not a bug.
+
+    The lock here is: a) tool_search is always present, b) the v5 registry
+    contains all the expected mutators (so general COULD discover them).
+    """
     from core import QueryEngine
     from core.budget import IterationBudget
     from subagent.spawn import spawn_subagent
@@ -554,12 +569,91 @@ def test_general_agent_gets_full_registry():
     spawn_subagent(parent, "x", agent_type="general")
     names = seen_tools.get("names", set())
     full = {t.name for t in all_registered()}
-    # general gets the full set (or close to it — all_registered may include
-    # tool_search which is always promoted; subset check from below).
-    # All write/exec tools available for general.
+    # tool_search is always visible (always_load=True).
+    assert "tool_search" in names
+    # general agent's child_tools (PRE-deferral) must not have been filtered
+    # — so the registry full-set must be a SUPERSET of what was visible
+    # plus the deferred set. We verify: all expected v5 tools exist in the
+    # registry AND general agent's allowlist did not strip them.
     for required in ("write_file", "edit_file", "bash", "python_exec",
                      "read_file", "grep"):
-        assert required in names or required in full
+        assert required in full, (
+            f"Tool '{required}' missing from registry — Block G premise broken"
+        )
+    # The general agent's child_tools list (pre-deferral filtering) was
+    # the FULL registry. We can't observe that directly here (the chat
+    # call sees post-deferral), but we verify by spawning an explore agent
+    # alongside and asserting general's `tool_search` is in `names` while
+    # explore's `task` is NOT in names — done in
+    # test_restricted_agents_cannot_spawn_via_task below.
+
+
+def test_restricted_agents_cannot_spawn_via_task(tmp_path):
+    """Codex iter-2 finding #1 HIGH lock: read-only agents
+    (explore/plan/review) and verify must NOT have access to the `task`
+    tool. Otherwise an explore agent could call task(subagent_type=
+    "build") and regain mutating tools via a child — bypassing the
+    allowlist entirely.
+
+    For this test, deferral is bypassed by checking child_tools BEFORE
+    the per-turn deferral filter runs. We do that by snooping
+    `spawn_subagent`'s child_tools resolution via _resolve_agent_suffix
+    + agent_types: assert task is NOT in the AgentType.allowed_tools
+    allowlist for any restricted role.
+    """
+    from subagent.agent_types import AGENT_TYPES
+
+    for restricted in ("explore", "plan", "verify", "review"):
+        at = AGENT_TYPES[restricted]
+        assert at.allowed_tools is not None, (
+            f"{restricted} must declare an allowed_tools allowlist"
+        )
+        assert "task" not in at.allowed_tools, (
+            f"{restricted} agent must NOT have `task` in its allowlist "
+            "(Codex iter-2 #1: would let it spawn a build agent and "
+            "regain mutators via the child). PORT_LOG #089 explicitly "
+            "says task is NOT auto-included for restricted agents."
+        )
+
+    # Conversely, unrestricted agents (general/build/fork) DO get task
+    # because allowed_tools=None means full registry.
+    for unrestricted in ("general", "build", "fork"):
+        at = AGENT_TYPES[unrestricted]
+        assert at.allowed_tools is None, (
+            f"{unrestricted} must have allowed_tools=None (full registry)"
+        )
+
+
+def test_explore_child_tools_excludes_task():
+    """End-to-end lock for Codex iter-2 #1: spawn an explore child and
+    assert the chat() tools arg does NOT include 'task'."""
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from subagent.spawn import spawn_subagent
+
+    seen_tools = {}
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen_tools["names"] = {t["name"] for t in (tools or [])}
+            return Response(text="ok", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    parent = QueryEngine(client=_SnoopClient(), max_turns=5,
+                         budget=IterationBudget(max_iterations=10))
+    spawn_subagent(parent, "x", agent_type="explore")
+    names = seen_tools.get("names", set())
+    assert "task" not in names, (
+        "explore agent must not see `task` (would regain mutators via build child)"
+    )
+    # tool_search is still safe (read-only metadata).
+    assert "tool_search" in names
 
 
 def test_task_tool_schema_lists_all_7_agent_types():

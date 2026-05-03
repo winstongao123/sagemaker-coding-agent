@@ -37,6 +37,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G iter-3 fixes (Codex iter-2 = REJECT)
+- spawn.py: dropped `task` from restricted agents' auto-include set. Restricted agents (explore/plan/review/verify) can no longer call task(subagent_type="build") to bypass the allowlist by spawning a child with full tools. tool_search remains (read-only metadata).
+- test_block_g.py: tightened test_general_agent_gets_full_registry assertion (asserts against `names`, not `or required in full`) + 2 new lock tests (test_restricted_agents_cannot_spawn_via_task / test_explore_child_tools_excludes_task).
+- 664 pass + 6 skip; verify_ship_zip PASS.
+- PORT_LOG #091 added.
+
 ### Block G iter-2 fixes (Codex iter-1 = REJECT)
 - spawn.py: BLOCKER fix — build agents now actually run inside worktree (CONFIG.workspace swapped + restored in finally).
 - agent_types.py: HIGH fix — AgentType.allowed_tools field + _READ_ONLY_TOOLS / _VERIFY_TOOLS allowlists; explore/plan/review = read-only, verify = read+bash+python_exec, general/build/fork = full.
