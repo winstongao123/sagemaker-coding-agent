@@ -64,6 +64,22 @@ class AgentType:
     one_shot: bool = False
     auto_load_skill: Optional[str] = None
     needs_worktree: bool = False
+    # Block G iter-2 (Codex finding #2 HIGH): allowed_tools allowlist enforced
+    # at spawn time (was: prompt-only "Do NOT edit files" wording, which the
+    # model could ignore). When None, the child gets the full registry.
+    # When set, child_tools is filtered to this list before child.run.
+    allowed_tools: Optional[tuple] = None  # tuple for frozen-dataclass safety
+
+
+# Read-only tool allowlist for explore / plan / review (no file mutation,
+# no shell exec). semantic_search included because it's read-only.
+_READ_ONLY_TOOLS: tuple = (
+    "read_file", "grep", "glob", "list_dir", "view_image",
+    "todo_read", "todo_write", "semantic_search", "ask_user",
+)
+# Verify allowlist: read-only + bash (so verify can run pytest / lint /
+# build commands). NO edit/write tools.
+_VERIFY_TOOLS: tuple = _READ_ONLY_TOOLS + ("bash", "python_exec")
 
 
 # Block G-1: AGENT_TYPES dict — 7 entries per TEST_DESIGN test_agent_types_dict_has_7.
@@ -84,6 +100,7 @@ AGENT_TYPES: dict = {
         ),
         max_turns=20,
         one_shot=True,  # Block G-3: ONE_SHOT_BUILTIN_AGENT_TYPES
+        allowed_tools=_READ_ONLY_TOOLS,
     ),
     "plan": AgentType(
         name="plan",
@@ -96,6 +113,7 @@ AGENT_TYPES: dict = {
         ),
         max_turns=15,
         one_shot=True,
+        allowed_tools=_READ_ONLY_TOOLS,
     ),
     "verify": AgentType(
         name="verify",
@@ -109,6 +127,7 @@ AGENT_TYPES: dict = {
         max_turns=20,
         one_shot=True,
         auto_load_skill="verify",  # Block G — TEST_DESIGN row 3
+        allowed_tools=_VERIFY_TOOLS,  # read-only + bash + python_exec
     ),
     "build": AgentType(
         name="build",
@@ -134,6 +153,7 @@ AGENT_TYPES: dict = {
         ),
         max_turns=20,
         one_shot=True,
+        allowed_tools=_READ_ONLY_TOOLS,
     ),
     "fork": AgentType(
         name="fork",

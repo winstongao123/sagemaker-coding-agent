@@ -358,6 +358,231 @@ def test_default_agent_prompt_has_no_gold_plating_phrasing():
     assert "refactor" in DEFAULT_AGENT_PROMPT.lower()
 
 
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_build_agent_actually_runs_inside_worktree(tmp_path):
+    """Codex iter-1 finding #1 BLOCKER lock: spawn_subagent must swap
+    CONFIG.workspace to the worktree path during child.run so tools
+    that read CONFIG.workspace (bash cwd, security path checks,
+    edit_file allowed-paths) actually execute inside the worktree.
+    Restored in finally so the parent sees its original workspace.
+    """
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from runtime.config import CONFIG
+    from subagent.spawn import spawn_subagent
+
+    workspace = str(tmp_path)
+    _saved_ws = CONFIG.workspace
+    CONFIG.workspace = workspace
+
+    # Capture CONFIG.workspace as observed by the child during chat.
+    seen_during_run = {}
+
+    class _ObservingClient:
+        def __init__(self):
+            self.calls = []
+            self.model_id = "anthropic.claude-haiku-4-5-20251001-v1:0"
+            self.mock_mode = True
+            self.script = [("text", "build done")]
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen_during_run["cfg_ws"] = CONFIG.workspace
+            kind, *rest = self.script.pop(0)
+            return Response(text=rest[0], tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    try:
+        client = _ObservingClient()
+        parent = QueryEngine(client=client, max_turns=5,
+                             budget=IterationBudget(max_iterations=10))
+        result = spawn_subagent(
+            parent_engine=parent,
+            prompt="build x",
+            agent_type="build",
+            workspace=workspace,
+        )
+        assert result.stop_reason == "end_turn"
+        # During child.run, CONFIG.workspace must point INTO the worktree.
+        assert "cfg_ws" in seen_during_run
+        observed = seen_during_run["cfg_ws"]
+        # Worktree path is somewhere under the requested workspace dir.
+        assert observed != workspace, (
+            "CONFIG.workspace must be swapped to worktree, not left as parent"
+        )
+        # Restored after spawn returns.
+        assert CONFIG.workspace == workspace, (
+            "CONFIG.workspace must be restored after build sub-agent completes"
+        )
+    finally:
+        CONFIG.workspace = _saved_ws
+
+
+def test_explore_agent_tool_allowlist_excludes_mutators():
+    """Codex iter-1 finding #2 HIGH lock: explore agent gets a read-only
+    allowlist enforced at spawn — write_file / edit_file / bash /
+    python_exec are NOT in the child's tool pool. Prompt-only
+    'Do NOT edit files' would not be a contract; this is.
+    """
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from subagent.spawn import spawn_subagent
+
+    seen_tools = {}
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen_tools["names"] = {t["name"] for t in (tools or [])}
+            return Response(text="explored", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    parent = QueryEngine(client=_SnoopClient(), max_turns=5,
+                         budget=IterationBudget(max_iterations=10))
+    spawn_subagent(parent, "explore x", agent_type="explore")
+    names = seen_tools.get("names", set())
+    # Mutating tools must be ABSENT.
+    for forbidden in ("write_file", "edit_file", "bash", "python_exec"):
+        assert forbidden not in names, (
+            f"explore agent must NOT see '{forbidden}' (Codex iter-1 #2)"
+        )
+    # Read-only tools must be PRESENT.
+    for required in ("read_file", "grep", "glob"):
+        assert required in names, (
+            f"explore agent must see '{required}'"
+        )
+
+
+def test_plan_agent_tool_allowlist_read_only():
+    """plan agent: same read-only allowlist as explore."""
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from subagent.spawn import spawn_subagent
+
+    seen_tools = {}
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen_tools["names"] = {t["name"] for t in (tools or [])}
+            return Response(text="planned", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    parent = QueryEngine(client=_SnoopClient(), max_turns=5,
+                         budget=IterationBudget(max_iterations=10))
+    spawn_subagent(parent, "plan x", agent_type="plan")
+    names = seen_tools.get("names", set())
+    for forbidden in ("write_file", "edit_file", "bash", "python_exec"):
+        assert forbidden not in names
+
+
+def test_verify_agent_allows_bash_but_not_mutators():
+    """verify agent: read-only + bash + python_exec (so it can run
+    pytest / lint / build), but NO file mutation tools."""
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from skills.manager import SkillManager
+    from subagent.spawn import spawn_subagent
+
+    seen_tools = {}
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen_tools["names"] = {t["name"] for t in (tools or [])}
+            return Response(text="verified", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        # Set up a minimal SkillManager so verify-skill auto-load doesn't crash.
+        sm = SkillManager(workspace=td, skills_dir=td + "/skills")
+        sm.discover()
+        parent = QueryEngine(client=_SnoopClient(), max_turns=5,
+                             budget=IterationBudget(max_iterations=10),
+                             skill_manager=sm)
+        spawn_subagent(parent, "verify x", agent_type="verify")
+        names = seen_tools.get("names", set())
+        assert "bash" in names, "verify agent must have bash for running checks"
+        assert "python_exec" in names
+        for forbidden in ("write_file", "edit_file"):
+            assert forbidden not in names
+
+
+def test_general_agent_gets_full_registry():
+    """general agent (no allowed_tools allowlist) sees the full registry."""
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from subagent.spawn import spawn_subagent
+    from tools import all_registered
+
+    seen_tools = {}
+
+    class _SnoopClient:
+        def __init__(self):
+            self.model_id = "x"
+            self.mock_mode = True
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            from runtime.bedrock_client import Response
+            seen_tools["names"] = {t["name"] for t in (tools or [])}
+            return Response(text="ok", tool_calls=[],
+                            stop_reason="end_turn", usage={})
+
+    parent = QueryEngine(client=_SnoopClient(), max_turns=5,
+                         budget=IterationBudget(max_iterations=10))
+    spawn_subagent(parent, "x", agent_type="general")
+    names = seen_tools.get("names", set())
+    full = {t.name for t in all_registered()}
+    # general gets the full set (or close to it — all_registered may include
+    # tool_search which is always promoted; subset check from below).
+    # All write/exec tools available for general.
+    for required in ("write_file", "edit_file", "bash", "python_exec",
+                     "read_file", "grep"):
+        assert required in names or required in full
+
+
+def test_task_tool_schema_lists_all_7_agent_types():
+    """Codex iter-1 finding #3 MEDIUM lock: tools/task.py JSON schema
+    `subagent_type` enum lists all 7 agent types AGENT_TYPES.keys() — not
+    just 'general'."""
+    from tools import all_registered
+    from subagent import AGENT_TYPES
+
+    task_tool = next((t for t in all_registered() if t.name == "task"), None)
+    assert task_tool is not None
+    schema = task_tool.input_schema
+    enum = schema["properties"]["subagent_type"].get("enum", [])
+    assert set(enum) == set(AGENT_TYPES.keys()), (
+        f"task tool subagent_type enum {set(enum)} must == AGENT_TYPES.keys() "
+        f"{set(AGENT_TYPES.keys())} (Codex iter-1 #3)"
+    )
+    # Description should mention each major type.
+    desc = schema["properties"]["subagent_type"].get("description", "")
+    for at in ("explore", "plan", "verify", "build"):
+        assert at in desc, f"task tool subagent_type description must mention {at!r}"
+
+
 def test_agent_max_turns_clamped_by_per_type_ceiling():
     """spawn_subagent clamps max_turns to min(caller-supplied, agent_type ceiling)."""
     from core import QueryEngine

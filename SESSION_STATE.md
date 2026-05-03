@@ -37,7 +37,16 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block G (code commit; Codex pending)
+### Block G iter-2 fixes (Codex iter-1 = REJECT)
+- spawn.py: BLOCKER fix — build agents now actually run inside worktree (CONFIG.workspace swapped + restored in finally).
+- agent_types.py: HIGH fix — AgentType.allowed_tools field + _READ_ONLY_TOOLS / _VERIFY_TOOLS allowlists; explore/plan/review = read-only, verify = read+bash+python_exec, general/build/fork = full.
+- spawn.py: child_tools filtered by allowed_tools at spawn time (not just prompt wording).
+- tools/task.py: MEDIUM fix — subagent_type JSON-schema enum + description listing all 7 types.
+- PORT_LOG #089 (iter-2 fixes) + #090 (G-1/G-2 explicit DEFER to Block H).
+- 6 new lock tests (build-runs-in-worktree / explore-allowlist / plan-allowlist / verify-allowlist / general-full-registry / task-schema-lists-7).
+- 662 pass + 6 skip; verify_ship_zip PASS.
+
+### Block G (code commit; Codex iter-1 = REJECT)
 - subagent/agent_types.py NEW (~150 LOC), subagent/worktree.py NEW (~120 LOC), subagent/spawn.py extended, tools/task.py validation upgraded.
 - 14 new tests, 656 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #086-#088 + ADR-031.

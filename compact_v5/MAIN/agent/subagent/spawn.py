@@ -242,11 +242,24 @@ def spawn_subagent(
     import copy
     parent_msgs_snapshot = copy.deepcopy(parent_engine.messages)
 
-    # Resolve the child's tool pool. Phase 9 keeps it simple: the child
-    # gets the full registry (subject to plan-mode if requested). Future
-    # phases may filter by AGENT_TYPES["tools"].
+    # Resolve the child's tool pool. Block G iter-2 (Codex finding #2 HIGH):
+    # specialized agents (explore/plan/verify/review) get a tool allowlist
+    # enforced at spawn — prompt-only "Do NOT edit files" wording was not a
+    # contract. When agent_def.allowed_tools is set, child_tools is filtered
+    # to that subset; otherwise the full registry is used.
     from tools import all_registered
     child_tools = all_registered()
+    if agent_def is not None and agent_def.allowed_tools:
+        _allow = set(agent_def.allowed_tools)
+        # Always include `task` so a plan/explore agent can still spawn
+        # further sub-agents (depth-limit gates separately).
+        # Always include `tool_search` so deferred-loading still works.
+        _allow.update({"task", "tool_search"})
+        child_tools = [t for t in child_tools if t.name in _allow]
+        logging.debug(
+            "[subagent] agent_type=%s tool allowlist (%d tools): %s",
+            agent_type, len(child_tools), sorted(t.name for t in child_tools),
+        )
 
     # Block B+ (PORT_LOG #053): save+clear FILE_CACHE main context
     # before the child runs so the child sees a fresh in-context set;
@@ -305,6 +318,27 @@ def spawn_subagent(
                 "[subagent] verify-skill auto-load failed: %s", _sk_exc,
             )
 
+    # Block G iter-2 (Codex finding #1 BLOCKER): swap CONFIG.workspace to
+    # the worktree path so tools that read `CONFIG.workspace` (bash cwd,
+    # security path checks, edit_file allowed-paths) actually run inside
+    # the isolated worktree. Restore in finally so the parent sees its
+    # original workspace afterward — even if child.run raises.
+    _saved_workspace = None
+    if _worktree_path:
+        try:
+            from runtime.config import CONFIG as _CFG_S
+            _saved_workspace = _CFG_S.workspace
+            _CFG_S.workspace = _worktree_path
+            logging.debug(
+                "[subagent] swapped CONFIG.workspace=%s -> %s for build agent",
+                _saved_workspace, _worktree_path,
+            )
+        except Exception as _ws_exc:
+            logging.warning(
+                "[subagent] CONFIG.workspace swap failed: %s", _ws_exc,
+            )
+            _saved_workspace = None
+
     try:
         # The child runs synchronously to completion or budget exhaustion.
         result = child.run(
@@ -320,6 +354,14 @@ def spawn_subagent(
             try:
                 from runtime.file_cache import FILE_CACHE as _FC
                 _FC.restore_context(_file_cache_saved)
+            except Exception:
+                pass
+        # Block G iter-2 — restore CONFIG.workspace before worktree cleanup
+        # so subsequent parent-side tools see the original workspace again.
+        if _saved_workspace is not None:
+            try:
+                from runtime.config import CONFIG as _CFG_S
+                _CFG_S.workspace = _saved_workspace
             except Exception:
                 pass
         # Block G — worktree cleanup on child completion (or failure).

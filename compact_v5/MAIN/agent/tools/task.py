@@ -45,7 +45,14 @@ Do NOT use a sub-agent when:
 Inputs:
 - description: 1-line summary shown to the user.
 - prompt: the actual task description for the sub-agent. Be specific.
-- subagent_type: "general" (default; full tool access). Other types are reserved for future phases.
+- subagent_type: one of `general` | `explore` | `plan` | `verify` | `build` | `review` | `fork` (default `general`).
+  - `general` — full tool access; default.
+  - `explore` — read-only exploration (no edit/write/exec); produces a report.
+  - `plan` — read-only planning (no edit/write/exec); produces a step-by-step plan.
+  - `verify` — read + bash; auto-loads the `verify` skill; runs gate checks.
+  - `build` — full tools, runs in isolated git worktree.
+  - `review` — read-only code review; surfaces concrete issues with file:line.
+  - `fork` — inherits parent context conceptually; full tools.
 
 Returns the sub-agent's final answer as a string. If the sub-agent hits its iteration budget or max_turns, the partial work + reason is returned."""
 
@@ -63,7 +70,9 @@ _INPUT_SCHEMA: Dict[str, Any] = {
         },
         "subagent_type": {
             "type": "string",
-            "description": "Agent type. 'general' (default) for full tool access. Other types reserved for future phases.",
+            "enum": ["general", "explore", "plan", "verify", "build", "review", "fork"],
+            "default": "general",
+            "description": "Agent type. general (default; full tools) | explore (read-only) | plan (read-only) | verify (read + bash + auto-loads verify skill) | build (full + isolated git worktree) | review (read-only code review) | fork (full tools, parent-context).",
         },
     },
     "required": ["prompt"],
