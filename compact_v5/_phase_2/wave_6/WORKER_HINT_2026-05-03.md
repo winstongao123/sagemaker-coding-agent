@@ -8,6 +8,7 @@ These supersede prior wording in BUILDER_PROMPT.md / SYNTHESIS_MASTER.md if any 
 - **Test default (R1-R10, R12 + all integration tests)**: `au.anthropic.claude-haiku-4-5-20251001-v1:0` (Haiku 4.5).
 - **R11 only**: Sonnet 4.5 (was 4.6 — already updated in `TEST_DESIGN.md`).
 - All 6 active files were swept 2026-05-03 (env_block.py, tokens.py, test_block_l.py, TEST_DESIGN.md, W6_notebook_ux.md, V5_PHASE_2_PLAN_v3.md). Historical `wave_5_deep/` + `codex_reviews/` files left as audit history.
+- **AU geo profile carries 10% premium over global per Anthropic pricing — TOKENS.py applies via get_geo_multiplier()** (R-tier R1 PHASE A iter-3 fix; sources: AWS Bedrock Haiku 4.5 model card + https://platform.claude.com/docs/en/about-claude/pricing + clara/prompts/HOW_TO_USE.md:31). Lock tests: `compact_v5/MAIN/agent/tests/integration/test_geo_inference_premium.py`. R-tier cost caps assume 1.10x; if R-tier ever switches to global profile, multiply caps by 1/1.10 ≈ 0.91 to preserve real-AWS cap parity.
 
 ## 2. web_fetch — DROP per user (2026-05-03)
 
@@ -119,6 +120,58 @@ After R-tier, ONE optional Block V: head-to-head v5 vs v4 vs Runnable on 5 repre
 Output: scoring table in `v5_complete.html` "v5 vs Runnable vs v4" tab. Without this, "v5 > Runnable > v4" claim stays architectural only — empirical proof requires this Block. User must APPROVE Block V before scheduling.
 
 **R-tier + Block V combined**: ~$25-35. Gets EMPIRICAL "v5 > Runnable > v4" with screenshot-able evidence.
+
+## 9.3. ENHANCED TELEMETRY PER TEST (for Block V "v5 > v4" empirical proof — user 2026-05-03)
+
+In addition to the 8 mandatory output files in §9.4, every R-tier + Block V AWS call MUST also produce:
+
+**File 9 (NEW)**: `compact_v5/_status/r-tier-<TEST>-aws-call<N>-telemetry.json`
+
+This aggregates raw audit_logs + .log into the comparison-ready schema in `PS_V5_TEST_SET.md` (per-turn tokens / cache hit % / tool calls / compaction events / subagent dispatches / cache trend / outcome).
+
+### Why this is mandatory (not optional)
+
+Without per-turn telemetry, Block V's "v5 > v4" comparison is too coarse. With it, we have:
+- Total tokens v4 vs v5 (proves token efficiency)
+- Cache hit % per-turn trend (proves prompt sectioning superiority)
+- Wallclock comparison
+- Tool call count + REPEATED calls (proves better tool selection)
+- Compaction triggered events (proves Block A correctness under load)
+- Sub-agent dispatch events (proves Block G/G2/G3 superiority — v4 only has `general`, v5 has 4 types)
+
+**The empirical "v5 > v4" claim REQUIRES this data. Without it, Block V can only score binary completion + cost — too weak to be convincing.**
+
+### Implementation
+
+Create ONCE: `compact_v5/_status/scripts/build_telemetry.py`
+- Inputs: test_name, call_num, audit_log_path, raw_log_path
+- Reads `MAIN/agent/audit_logs/<session_id>.jsonl` for per-event data (tool dispatches, compaction events, subagent events)
+- Reads `r-tier-<TEST>-aws-call<N>.log` for raw turn-by-turn agent output
+- Aggregates into the schema in `PS_V5_TEST_SET.md`
+- Writes `r-tier-<TEST>-aws-call<N>-telemetry.json`
+
+Run AFTER every R-tier + Block V AWS call, BEFORE moving to next test.
+
+### For Block V specifically (head-to-head v4 vs v5)
+
+Generate telemetry.json for BOTH v4-side AND v5-side runs of each task. Comparison table goes into `v5_complete.html` "Block V" tab post-ship. Key axes:
+- v4 tokens / v5 tokens — ratio
+- v4 cache_hit_pct / v5 cache_hit_pct
+- v4 tool_calls / v5 tool_calls (raw + REPEATED)
+- v4 wallclock / v5 wallclock
+- v4 compaction_events (none expected) / v5 (some expected on long tasks)
+- v4 subagent_dispatches (`general` only) / v5 (build/plan/explore/verify)
+- v4 final outcome / v5 final outcome (artifacts valid)
+
+### Data sources already exist in v5
+
+You DON'T need to add any code to the agent. v5 already logs:
+- Tool dispatches → `audit_logs/<session_id>.jsonl` event `tool_dispatch`
+- Bedrock calls → `audit_logs/<session_id>.jsonl` event `chat_response` (with usage block)
+- Compaction → `audit_logs/<session_id>.jsonl` event `compact`
+- Subagent spawn/complete → `audit_logs/<session_id>.jsonl` events `subagent_spawn` + `subagent_complete`
+
+You only need the AGGREGATOR script that reads + reshapes this data. ~150 LOC Python.
 
 ## 9.4. MANDATORY OUTPUTS PER R-TIER OR BLOCK V TEST (audit trail — DO NOT SKIP)
 

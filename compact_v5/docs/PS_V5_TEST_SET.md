@@ -189,6 +189,72 @@ Mock tests live inside Blocks. Their logs live with the Block:
 
 **For 798 mock tests across 22 Blocks**: 50+ Codex review files already exist at `compact_v5/_status/codex_reviews/block-*.md`. Each one reviewed all the tests added in that Block.
 
+### Per-test diagnostic telemetry — MANDATORY for Block V "v5 > v4" proof
+
+**User directive 2026-05-03**: existing per-test logs prove "v5 ran without bugs" but do NOT prove "v5 > v4 empirically." For empirical comparison, every R-tier + Block V test produces ONE additional aggregated diagnostic file:
+
+```
+compact_v5/_status/r-tier-<TEST>-aws-call<N>-telemetry.json
+```
+
+Schema:
+```json
+{
+  "test": "R1",
+  "call": 1,
+  "per_turn": [
+    {
+      "turn": N,
+      "agent_text_chars": <int>,
+      "tokens_in": <int>,
+      "tokens_out": <int>,
+      "cache_read_tokens": <int>,
+      "cache_write_tokens": <int>,
+      "cache_hit_pct": <float>,
+      "tool_calls": [{"name": "...", "args_summary": "..."}],
+      "wallclock_s": <float>
+    }
+  ],
+  "tool_call_summary": {
+    "<tool_name>": <count>,
+    "TOTAL_calls": <int>,
+    "REPEATED_calls": <int>
+  },
+  "compaction_events": [{"turn": N, "tokens_freed": <int>, "trigger": "..."}],
+  "subagent_dispatches": [{"turn": N, "agent_type": "...", "task_summary": "...", "child_session_id": "...", "tokens_used": <int>, "wallclock_s": <float>}],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": <float>,
+    "last_5_turns_avg_hit_pct": <float>,
+    "session_avg_hit_pct": <float>
+  },
+  "outcome": {
+    "completed": <bool>,
+    "stop_reason": "...",
+    "artifacts_valid": {"<file>": <bool>},
+    "max_turns_hit": <bool>,
+    "cost_cap_hit": <bool>
+  }
+}
+```
+
+**Source data** (already captured by v5 — just needs aggregation):
+- per-turn data → `MAIN/agent/audit_logs/<session_id>.jsonl` (each tool_dispatch + chat_response event has tokens + timing)
+- compaction_events → audit_logs has `compact` event entries
+- subagent_dispatches → audit_logs has `subagent_spawn` + `subagent_complete` events
+- raw turn-by-turn agent text → `r-tier-<TEST>-aws-call<N>.log` (raw stdout)
+
+**Aggregator script**: `compact_v5/_status/scripts/build_telemetry.py` — takes (test_name, call_num, audit_log_path, raw_log_path) and produces telemetry.json. Worker creates this script once, then runs it after every R-test AWS call before moving to next test.
+
+**Why this matters**: without per-turn telemetry, Block V's "v5 vs v4" comparison is too coarse. With it, comparison reads:
+- Total tokens (v4 vs v5)
+- Cache hit % per-turn trend (v4 vs v5) — v5 should be HIGHER (sectioned prompt)
+- Wallclock (v4 vs v5)
+- Tool call count + REPEATED calls (v5 should be LOWER, better selection)
+- Compaction triggered (v4 won't, v5 will at 80% context)
+- Sub-agent dispatch (v4 only `general`, v5 has 4 types — proves Block G/G2/G3 superiority)
+
+Updated MANDATORY OUTPUT count per test: was 8, now **9**:
+
 ### Files written for EACH real-AWS test (named after test ID, e.g. R1, R14, V2)
 
 | File | Purpose | When written | Example |
