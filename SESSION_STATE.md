@@ -37,6 +37,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block H (code commit; Codex pending)
+- memory/ package NEW (~450 LOC): extract.py + session_memory.py + compact.py.
+- 16 tests; 703 pass + 8 skip; verify_ship_zip PASS.
+- PORT_LOG #095-#098 + ADR-034.
+- H-13/H-15/H-16/H-17 + H-18/H-19/H-20 explicitly deferred per ADR-034 §4.
+
 ### Block G2 DONE — Codex iter-2 APPROVE (clean)
 - 9 total Block G2 tests + 1 T5 skip; PORT_LOG #094 + ADR-033.
 - 2-iter Codex cycle: APPROVE_WITH_FIXES (1 doc) → APPROVE.

@@ -1,6 +1,14 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block G2 DONE** — tag `v5.0.1-block-g2` at `4a7fd7e` (pending push); 687 pass + 8 skip; Codex iter-2 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block H IN_PROGRESS** — code + 16 tests green, 703 pass + 8 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block H entry (2026-05-03)
+- NEW `memory/` package (~450 LOC): memory/extract.py (MemoryExtractor + closure-scoped throttle state) + memory/session_memory.py (dedup + has_tool_calls_in_last_assistant_turn + count_tool_calls_since) + memory/compact.py (adjust_index_to_preserve_api_invariants H-11 MUST + calculate_messages_to_keep_index + has_text_blocks).
+- 16 new tests in `tests/integration/test_block_h.py`: 6 TEST_DESIGN-named (extract-and-append-v4-session-end / closure-scoped-state / dedup-before-write / adjust-index-preserves-api-invariants / handles-empty-session / compact-no-400-sequence) + 10 behavior locks (isolated-state / preserves-casing / no-op-when-safe / dangling-tool-use-handled / calc-keep-index / has-tool-calls-predicate / count-tool-calls-since / drain-pending / has-text-blocks / scan-memory-files).
+- PORT_LOG rows #095-#098 + ADR-034.
+- ADR-034 §4 explicitly defers H-13/H-15/H-16/H-17 (SM-compact config knobs) + H-18/H-19/H-20 (CLAUDE.md context aggregation, getSystemContext, onboarding) — NO silent scope narrowing; both groups have target blocks + rationale documented.
+- `verify_ship_zip.py`: PASS (125 files / 346.6 KB / 36%).
+- Pytest: **703 passed + 8 skipped** (was 687 + 8 at Block G2; +16 pass net).
 
 ## v5.0.1 Block G2 entry (2026-05-03)
 - NEW `subagent/fork.py` (~210 LOC): is_in_fork_child + build_child_message + build_forked_messages + serialize_for_cache_prefix + cache_prefix_match_length helpers + FORK_BOILERPLATE_TAG / FORK_PLACEHOLDER_RESULT verbatim from Runnable.

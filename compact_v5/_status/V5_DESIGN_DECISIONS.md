@@ -1124,6 +1124,116 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-034 — Block H (v5.0.1): Memory extraction + sessionMemory + compact-API-invariants
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block H
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block H lists 20 PORT_LOG rows (~945 LOC) covering
+Runnable's memory extraction subsystem + sessionMemory + sessionMemoryCompact.
+The critical correctness fix is **H-11 adjustIndexToPreserveAPIInvariants**:
+without it, sessionMemoryCompact picks a startIndex landing mid-pair
+(tool_use without tool_result), causing Bedrock to 400-reject the next
+API call.
+
+Source: extractMemories.ts + sessionMemory.ts + sessionMemoryCompact.ts +
+sessionMemoryUtils.ts + (deferred) context.ts + projectOnboardingState.ts.
+
+### Decisions
+
+#### 1. NEW `memory/` package (~450 LOC)
+- `memory/extract.py` — MemoryExtractor dataclass with closure-scoped
+  throttle state. Replaces v4's global racy state (a v5-vs-v4 win).
+  - has_memory_writes_since, count_model_visible_messages_since,
+    increment_turn, increment_tool_call, should_extract.
+  - extract_memories(messages, extract_fn, force) — H-1 in-flight guard +
+    H-2 cursor fallback + H-6 manifest pre-injection.
+  - drain_pending_extraction (H-3, pre-shutdown drain).
+  - scan_memory_files + format_memory_manifest (H-6).
+- `memory/session_memory.py` — sessionMemoryUtils.
+  - deduplicate_memory_entries (case-folded + whitespace-normalized).
+  - has_tool_calls_in_last_assistant_turn (H-9 predicate).
+  - count_tool_calls_since (H-7 helper).
+- `memory/compact.py` — sessionMemoryCompact correctness helpers.
+  - adjust_index_to_preserve_api_invariants (H-11 MUST).
+  - calculate_messages_to_keep_index (H-12).
+  - has_text_blocks (H-14 predicate).
+
+#### 2. Closure-scoped state (v5 vs v4 win)
+v4's `_extract_and_append_memories` uses module-global state
+(`_last_extracted_index`) which races when multiple agent instances
+share the same workspace. v5's MemoryExtractor is per-instance dataclass
++ per-instance lock — no cross-instance leakage. Lock test
+test_extract_memories_separate_extractors_have_isolated_state pins
+this contract.
+
+#### 3. H-11 algorithm: pull cut earlier
+When candidate_index would split a tool_use/tool_result pair, the
+adjustment direction is "earlier" — move the cut to the earlier of
+the two pair indices so BOTH halves of the pair land in the SAME side
+of the cut. This may sacrifice some compaction savings to preserve
+API validity. The alternative (drop the orphan) would corrupt the
+buffer.
+
+#### 4. Block H deferrals (declared, not silent)
+The following Block H rows are explicitly DEFERRED:
+- **H-18 getUserContext** (CLAUDE.md hierarchy walker, ~80 LOC) — DEFER
+  to Block N where dynamic-section + AGENTS.md infrastructure has
+  architectural fit.
+- **H-19 getSystemContext** (git-status injection memoized + parallel +
+  2K truncate, ~200 LOC) — DEFER to Block N (same reason).
+- **H-20 Onboarding step model + auto-suppress** (~60 LOC) — DEFER to
+  Block N (first-run UX).
+- **H-13 SessionMemoryCompactConfig** (~40 LOC) — DEFER to a future
+  iteration. Configuration polish for the SM-compact-vs-legacy-compact
+  integration that hasn't landed yet.
+- **H-15 truncateSessionMemoryForCompact** (~50 LOC) — DEFER.
+  Per-section + total token caps; depends on H-13.
+- **H-16 isSessionMemoryEmpty** (~10 LOC) — DEFER.
+- **H-17 shouldUseSessionMemoryCompaction env-override** (~20 LOC) —
+  DEFER.
+
+These deferrals are recorded in PORT_LOG #098 with explicit target
+blocks/iterations and rationale. NO silent scope narrowing.
+
+#### 5. Why this is acceptable
+Block A (PORT_LOG #066-#070) already shipped legacy Compactor (v4 prune
++ LLM summary). The SM-compact path (H-11..H-17) is a separate strategy
+that runs on top of session-memory state. Block H lands the
+correctness-critical helpers (H-11, H-12, H-14) that any future SM-
+compact integration MUST use; the configuration polish + integration
+wiring is a smaller follow-up that has clearer architectural fit
+post-Block-N.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/memory/__init__.py`
+- NEW: `compact_v5/MAIN/agent/memory/extract.py` (~250 LOC)
+- NEW: `compact_v5/MAIN/agent/memory/session_memory.py` (~80 LOC)
+- NEW: `compact_v5/MAIN/agent/memory/compact.py` (~110 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_h.py`
+  (16 tests covering 6 TEST_DESIGN rows + 10 behavior locks)
+
+### Linked port-log rows
+- #095 — H-1..H-7 memory extraction core
+- #096 — H-8/H-9/H-10 sessionMemoryUtils
+- #097 — H-11/H-12/H-14 compact API-invariants
+- #098 — H-13/H-15/H-16/H-17/H-18/H-19/H-20 explicit deferrals
+
+### Validation
+- 703 pass + 8 skipped (was 687 + 8 at end of Block G2; +16 net new).
+- verify_ship_zip.py: PASS (125 files / 346.6 KB / 36%).
+
+### Notes / not in scope here
+- SM-compact-vs-legacy-compact integration is the next architectural
+  decision: when CONFIG.use_session_memory_compaction is True, the
+  Compactor (Block A) consults H-11/H-12 to choose the cut-point. That
+  wiring is small (~20 LOC) but needs Block N's dynamic-section first
+  to have a clean home. Tracked in PORT_LOG #098.
+
+---
+
 ## ADR-033 — Block G2 (v5.0.1): forkSubagent cache-prefix replay
 
 **Date**: 2026-05-03
