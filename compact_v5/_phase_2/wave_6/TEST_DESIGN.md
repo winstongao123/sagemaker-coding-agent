@@ -190,7 +190,7 @@ Any single failure = stop, fix, re-test, re-Codex, re-approve.
 | `test_update_tokens_display_shows_pct` | T1 | token display shows `X / Y (Z%)` and `cache hit %` | $0 |
 | `test_update_mode_display_status_bar` | T1 | status bar shows model + active skills + phase + cost | $0 |
 | `test_dark_mode_toggle_swaps_theme` | T2 | dark-mode toggle swaps theme dict; chat re-renders | $0 |
-| `test_model_dropdown_lists_all_models` | T2 | dropdown contains Haiku-4.5 + Sonnet-4.6 + Opus options | $0 |
+| `test_model_dropdown_lists_all_models` | T2 | dropdown contains Haiku-4.5 + Sonnet-4.5 + Opus options | $0 |
 | `test_iteration_budget_widget_shows_used_total` | T1 | widget HTML shows `<progress>` + `used/total` + color cue (closes PS#2 visible UI) | $0 |
 | `test_thinking_budget_widget_shows_on_off` | T1 | widget HTML shows `thinking=ON\|OFF, budget=N tokens` (closes PS#4 visible UI) | $0 |
 | `test_session_dropdown_lists_saves` | T2 | session dropdown lists all `sessions/*.json` files | $0 |
@@ -425,7 +425,7 @@ These are end-to-end USER-SIMULATING scenarios run on real Bedrock. Each has a h
 | **R8** | Error recovery: mock Bedrock return malformed JSON tool args → multi-pass repair works → if irrecoverable, `{}` fallback used + agent continues | Block C JSON repair end-to-end | Haiku-4.5 (mocked) | $0.20 |
 | **R9** | Approval flow: write_file → diff_widget renders → user clicks Approve/Deny/Always → decision propagates to TOKENS + AUDIT + SNAPSHOTS | Block C+ approval flow end-to-end | Haiku-4.5 | $0.30 |
 | **R10** | Save/load: spend $1 in turns → `/save mytest` → restart kernel → `/load mytest` → verify `TOKENS.session_cost == $1.00` and chat history restored | PS#5 + PS#6 structural fix on real session | Haiku-4.5 | $1.00 |
-| **R11** | Sonnet end-to-end: same as R1 but on Sonnet-4.6. Catches model-specific behavior differences | Sonnet-4.6 | $1.50 |
+| **R11** | Sonnet end-to-end: same as R1 but on Sonnet-4.5. Catches model-specific behavior differences | Sonnet-4.5 | $1.50 |
 | **R12** | Multi-tool malformed args stress: model returns `{"path": "/tmp/", "content": "<UNCLOSED` → JSON repair fires; model returns surrogate-pair Unicode → sanitizer fires | Block L Bedrock error categories; H1 surrogate sanitize | Haiku-4.5 | $0.20 |
 
 **R-tier total cost cap: ~$7.00** (worst case all hit cost cap; realistic ~$3-5).

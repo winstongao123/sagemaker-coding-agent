@@ -1,5 +1,16 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-03 — Persistent worker docs added (WORKER_HINT + R_TIER_REVIEW_TEMPLATE)
+
+Main session committed:
+- `compact_v5/_phase_2/wave_6/WORKER_HINT_2026-05-03.md` (NEW, 11 sections)
+- `compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md` (NEW, 3 templates A/B/C)
+- `compact_v5/_status/RESUME.md` (updated reading order + Block sequence 22)
+- `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md` (sections 0 + 0a added)
+- 6 active files swept Sonnet 4.6 → Sonnet 4.5
+
+Worker on hold awaiting Codex reinstall verification, then resumes Block K → R-tier.
+
 ## 2026-05-03 — v5.0.1 Mode B autonomous resume — start of Block F2 → R-tier sweep
 
 Pre-flight (RESUME.md Step 2):

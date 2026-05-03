@@ -7,16 +7,21 @@ Use this checklist cold (zero prior context, after compaction, in a new session)
 ## Step 1 — Read in this EXACT order, do NOT skip or skim
 
 ```
-1. compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md            # the worker prompt — your job spec
-2. compact_v5/_status/V5_BUILD_STATUS.md                   # current state + next pickup
-3. compact_v5/_status/V5_DESIGN_DECISIONS.md               # ADR log (append-only)
-4. compact_v5/_status/V5_RUNNABLE_PORT_LOG.md              # PORT_LOG rows so far
-5. compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md     # canonical post-DEEP per-Block scope
-6. compact_v5/_phase_2/wave_6/PS_Plan_Edge_Cases_Thinking.md  # 111 user scenarios
-7. compact_v5/_phase_2/wave_6/TEST_DESIGN.md               # per-Block test catalogue
-8. compact_v5/_phase_2/synthesis/V5_PHASE_2_PLAN_v3.md     # Block-level scoping
-9. Last 3 commits: `git log -n 3 v5-build`
-10. Most recent Codex review: `_status/codex_reviews/block-<PREV>.md`
+1. compact_v5/_phase_2/wave_6/WORKER_HINT_2026-05-03.md    # ★ READ FIRST — supersedes BUILDER_PROMPT/SYNTHESIS_MASTER
+                                                            #   Sonnet 4.5 (no 4.6), web_fetch DROPPED, Block U (HTMLs),
+                                                            #   R13-R16 enhanced, Block V v4-vs-v5, R-tier 3-AWS-call cap,
+                                                            #   test→review→fix loop, R_TIER_REVIEW_TEMPLATE routing
+2. compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md            # ★ R-tier review prompts — TEMPLATE A/B/C for AWS tests
+3. compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md            # the worker prompt — your job spec
+4. compact_v5/_status/V5_BUILD_STATUS.md                   # current state + next pickup
+5. compact_v5/_status/V5_DESIGN_DECISIONS.md               # ADR log (append-only)
+6. compact_v5/_status/V5_RUNNABLE_PORT_LOG.md              # PORT_LOG rows so far
+7. compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md     # canonical post-DEEP per-Block scope
+8. compact_v5/_phase_2/wave_6/PS_Plan_Edge_Cases_Thinking.md  # 111 user scenarios
+9. compact_v5/_phase_2/wave_6/TEST_DESIGN.md               # per-Block test catalogue
+10. compact_v5/_phase_2/synthesis/V5_PHASE_2_PLAN_v3.md    # Block-level scoping
+11. Last 3 commits: `git log -n 3 v5-build`
+12. Most recent Codex review: `_status/codex_reviews/block-<PREV>.md`
 ```
 
 `MEMORY.md` (`~/.claude/projects/d--Github/memory/MEMORY.md`) is auto-loaded by Claude Code at session start and is the cross-session memory anchor.
@@ -104,11 +109,15 @@ NOW you can start the next Block (back to Step 1).
 
 ---
 
-## Block sequence (21 Blocks)
+## Block sequence (22 Blocks per WORKER_HINT_2026-05-03.md)
 
-`Block 0 → notebook smoke gate → B → B+ → C → C+ → D → A → E+F → F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K`
+`Block 0 → B → B+ → C → C+ → D → A → E+F → F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K → U`
 
-After all 21 + R1-R12 R-tier real-AWS scenarios pass + final user acceptance: **v5.0.1 SHIPS**.
+(Block U HTMLs added 2026-05-03 — see WORKER_HINT §3)
+
+After all 22 Blocks + R-tier (R1-R12 + R13-R16 enhanced) + Block V v4-vs-v5 head-to-head + final user acceptance: **v5.0.1 SHIPS**.
+
+Real-AWS test discipline (per WORKER_HINT §10): max 3 AWS calls per test, BOTH worker AND Codex must APPROVE before each call. Use R_TIER_REVIEW_TEMPLATE.md TEMPLATE A (pre-flight) / B (failed-test diagnosis) / C (post-pass sanity).
 
 ## Drift prevention checklist (every session)
 

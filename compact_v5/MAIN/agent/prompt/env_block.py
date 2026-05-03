@@ -64,8 +64,8 @@ _KNOWLEDGE_CUTOFFS: dict = {
     "claude-haiku-4-5-20251001": "October 2025",
     # Sonnet 4.5
     "anthropic.claude-sonnet-4-5-20250929-v1:0": "September 2025",
-    # Sonnet 4.6 (newest)
-    "anthropic.claude-sonnet-4-6-20260101-v1:0": "January 2026",
+    # Sonnet 4.5 (newest)
+    "anthropic.au.anthropic.claude-sonnet-4-5-20250929-v1:0": "January 2026",
     # Sonnet 3.5 baseline
     "anthropic.claude-3-5-sonnet-20241022-v2:0": "October 2024",
 }

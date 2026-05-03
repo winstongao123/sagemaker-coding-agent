@@ -40,6 +40,8 @@ Build Block `<BLOCK_ID>` of v5.0.1, the SageMaker-native re-implementation of v4
 
 Read in this order. Do NOT skip any step.
 
+0. **★ `compact_v5/_phase_2/wave_6/WORKER_HINT_2026-05-03.md`** — **READ FIRST EVERY SESSION**. This file SUPERSEDES BUILDER_PROMPT and SYNTHESIS_MASTER on any conflict. Covers: Sonnet 4.5 (no 4.6), web_fetch DROPPED, Block U HTML deliverables, R13-R16 enhanced R-tier, Block V v4-vs-v5 head-to-head, R-tier 3-AWS-call hard cap, test→review→fix→ready loop, R_TIER_REVIEW_TEMPLATE.md routing.
+0a. **★ `compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md`** — Codex review prompt templates A/B/C for R-tier and Block V real-AWS tests. Required at every PHASE A pre-flight, PHASE C post-fail diagnosis, PHASE C post-pass sanity check.
 1. **`compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md`** — find your Block's section. Read every PORT_LOG row + architectural-fit verdict + LOC + graft strategy.
 2. **`compact_v5/_phase_2/wave_6/PS_Plan_Edge_Cases_Thinking.md`** — find every scenario tagged with your Block. Treat each NEEDS-LOCK-TEST as an additional Q4 row you must add.
 3. **`compact_v5/_phase_2/wave_6/TEST_DESIGN.md`** — find your Block's test list (T1-T5). These are the tests you write.

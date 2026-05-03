@@ -200,11 +200,11 @@ def test_per_tool_cache_break_detection():
         {"name": "write_file", "description": "Write", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}}},
     ]
     # First call: establish baseline; no breaks.
-    breaks = detector.detect_breaks(tools_v1, model_id="anthropic.claude-sonnet-4-6")
+    breaks = detector.detect_breaks(tools_v1, model_id="anthropic.claude-sonnet-4-5")
     assert breaks == []
 
     # Same tools again → no breaks.
-    breaks = detector.detect_breaks(tools_v1, model_id="anthropic.claude-sonnet-4-6")
+    breaks = detector.detect_breaks(tools_v1, model_id="anthropic.claude-sonnet-4-5")
     assert breaks == []
 
     # read_file's schema changes; write_file unchanged.
@@ -212,7 +212,7 @@ def test_per_tool_cache_break_detection():
         {"name": "read_file", "description": "Read v2", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "encoding": {"type": "string"}}}},
         {"name": "write_file", "description": "Write", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}}},
     ]
-    breaks = detector.detect_breaks(tools_v2, model_id="anthropic.claude-sonnet-4-6")
+    breaks = detector.detect_breaks(tools_v2, model_id="anthropic.claude-sonnet-4-5")
     assert breaks == ["read_file"], f"Expected only read_file broken; got {breaks}"
 
 
@@ -229,17 +229,17 @@ def test_haiku_excluded_from_cache_break_3loc():
     assert is_cache_break_excluded("au.anthropic.claude-haiku-4-5-20251001-v1:0") is True
     assert is_cache_break_excluded("apac.anthropic.claude-haiku-4-5-20251001-v1:0") is True
     # Non-Haiku: not excluded.
-    assert is_cache_break_excluded("anthropic.claude-sonnet-4-6") is False
+    assert is_cache_break_excluded("anthropic.claude-sonnet-4-5") is False
     assert is_cache_break_excluded("") is False
 
     # Detector skip path: even when schemas change, Haiku model returns [].
     detector = PerToolCacheBreakDetector()
     tools_v1 = [{"name": "x", "description": "y", "input_schema": {"v": 1}}]
-    detector.detect_breaks(tools_v1, model_id="anthropic.claude-sonnet-4-6")  # establish baseline
+    detector.detect_breaks(tools_v1, model_id="anthropic.claude-sonnet-4-5")  # establish baseline
     tools_v2 = [{"name": "x", "description": "y", "input_schema": {"v": 2}}]  # schema changed
 
     # Sonnet sees the break.
-    breaks_sonnet = detector.detect_breaks(tools_v2, model_id="anthropic.claude-sonnet-4-6")
+    breaks_sonnet = detector.detect_breaks(tools_v2, model_id="anthropic.claude-sonnet-4-5")
     assert "x" in breaks_sonnet
 
     # Reset baseline + check Haiku gets [] regardless.
@@ -411,5 +411,5 @@ def test_notify_cache_deletion_skips_excluded_models():
         "anthropic.claude-haiku-4-5-20251001-v1:0", ["read_file"]
     ) is False
     assert notify_cache_deletion(
-        "anthropic.claude-sonnet-4-6", ["read_file"]
+        "anthropic.claude-sonnet-4-5", ["read_file"]
     ) is True

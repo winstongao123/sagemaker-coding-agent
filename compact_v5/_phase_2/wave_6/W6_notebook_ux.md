@@ -19,7 +19,7 @@
 - **What v5.0.1 plan provides**: Block B+ SessionManager port (`:2578-`), AGENT_STATUS auto-load (`_load_persistent_memory + _load_project_status ~:8700-8722`), Block B+ atexit cost flush (B+7 `costHook.ts:6-22`). New `Agent` is constructed empty; cell 3 launch must auto-call `SessionManager.load(latest)` if a recent session JSON exists.
 - **Verdict**: **NEEDS-LOCK-TEST** — Block B+ ports the mechanics but Block E+F doesn't have an explicit "auto-resume on cell-3 launch" lock test. Add Q4 row: kernel restart → re-run cells → last session restored without `/load`.
 
-## 2. Model dropdown switched mid-conversation (Sonnet 4.6 → Haiku 4.5)
+## 2. Model dropdown switched mid-conversation (Sonnet 4.5 → Haiku 4.5)
 
 - **What user does**: clicks model dropdown at `:10068-10208` mid-turn after 30 messages, picks Haiku 4.5 to save cost.
 - **What could go wrong**: A28 cache-invariant violation — toolset / system prompt rebuilt for new model mid-conversation invalidates cache; next Haiku call starts cold + emits constant cache-break warnings (Haiku 4.5 = `isExcludedModel` per L-14). Token estimator still uses Sonnet bytes-per-token ratio.
@@ -154,7 +154,7 @@
 
 ## 21. Cost-limit slider set to $0.50, agent blows through it mid-turn
 
-- **What user does**: drags cost slider to $0.50 in cell 2; one Sonnet 4.6 call costs $0.60.
+- **What user does**: drags cost slider to $0.50 in cell 2; one Sonnet 4.5 call costs $0.60.
 - **What could go wrong**: enforcement at `:3638-3652` warns at 80% / blocks at 100% — but it blocks the NEXT call, not the current one. EF-2 `maxBudgetUsd` hard-cap halt is the missing kill-switch.
 - **What v5.0.1 plan provides**: Block B TokenTracker session_cost_limit enforcement (`:3638-3652`); Block B+ cost runtime warning `:8787`; Block E+F row EF-2 `maxBudgetUsd hard-cap halt` (R7 N7, `QueryEngine.ts:972-1002`, 30 LOC, **MUST**).
 - **Verdict**: **HANDLED** post-EF-2 port. Lock test Block E+F Q4: "set cost_limit=$0.01, send any non-trivial query, expect immediate halt with explicit message".

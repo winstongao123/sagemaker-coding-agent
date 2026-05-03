@@ -3,7 +3,7 @@
 Verbatim port of v4's `TokenTracker` (compact_v4/MAIN/agent/sagemaker_agent.py
 lines 3565-3753) plus:
 - per-agent input/output/cost attribution (B-11 + Plan v3 §Block B)
-- MODEL_COSTS for Haiku 4.5 + Sonnet 4.6 (B-10, R8 #34/#68)
+- MODEL_COSTS for Haiku 4.5 + Sonnet 4.5 (B-10, R8 #34/#68)
 - EXCLUDED_MODELS_FOR_CACHE_BREAK Haiku set (R4 #14 MUST)
 - IMAGE_MAX_TOKEN_SIZE = 2000 (B-5, R4 #38)
 - bytesPerTokenForFileType (B-3, R4 #40)
@@ -51,7 +51,7 @@ class ToolResult:
 # ============================================================
 #
 # 2-row Bedrock pricing table per the user's deployment (Haiku 4.5 +
-# Sonnet 4.6). Cache pricing math: cache_read = 10% of base input,
+# Sonnet 4.5). Cache pricing math: cache_read = 10% of base input,
 # cache_write = 125% of base input. Output = full price. All values are
 # USD per 1K tokens, current as of 2026-04 Bedrock list pricing.
 #
