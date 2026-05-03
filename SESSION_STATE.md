@@ -37,7 +37,10 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block G2 (code commit; Codex pending)
+### Block G2 iter-2 doc fix (Codex iter-1 = APPROVE_WITH_FIXES)
+- PORT_LOG #094 Notes column now explicitly mentions Block L deferral for spawn_subagent fork-agent wiring (was only mentioning T5 R-tier deferral).
+
+### Block G2 (code commit; Codex iter-1 = APPROVE_WITH_FIXES)
 - subagent/fork.py NEW (~210 LOC): forkSubagent cache-prefix replay helpers (verbatim Runnable port).
 - 8 new tests + 1 T5 skip; 687 pass + 8 skip; verify_ship_zip PASS.
 - PORT_LOG #094 + ADR-033.
