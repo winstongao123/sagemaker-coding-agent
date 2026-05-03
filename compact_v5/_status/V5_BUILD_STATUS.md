@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block M IN_PROGRESS** — code + 11 tests green, 642 pass + 6 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block M DONE** — tag `v5.0.1-block-m` at `09b6114` (pending push); 642 pass + 6 skip; Codex iter-1 APPROVE clean)
 
 ## v5.0.1 Block M entry (2026-05-03)
 - EXTENDED `core/query_engine.py`: count_tool_calls() helper + 2 new QueryEngine ctor params (synthetic_output_tool_name, max_structured_output_retries; both default OFF) + per-turn retry-limit gate emitting stop_reason="error_max_structured_output_retries" + per-run discoveredSkillNames reset (skill_manager._pending_activations.clear() at run() entry; best-effort try/except).
@@ -391,8 +391,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 43d1ebe (v5/block-i: iter-3 fixes — Codex iter-2 APPROVE_WITH_FIXES) — pending push
-- Last tag: v5.0.1-block-i (Block I done, Codex 3-iter cycle ended APPROVE) — pending
+- Last commit: 09b6114 (v5/block-m: Phase 8 critical fixes) — pending push
+- Last tag: v5.0.1-block-m (Block M done, Codex iter-1 APPROVE clean) — pending
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
@@ -401,7 +401,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block M — Phase 8 critical fixes (per-turn discoveredSkillNames reset + countToolCalls retry-limit)** (after Block I tag).
+**Block G — AGENT_TYPES + worktree + handoff/env** (after Block M tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -412,7 +412,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block A status: DONE — tag `v5.0.1-block-a` at `c87a823`; pushed.
 - Block E+F status: DONE — tag `v5.0.1-block-e-f` at `2388e64`; pushed.
 - Block F2 status: DONE — tag `v5.0.1-block-f2` at `9d3cd50`; pushed.
-- Block I status: DONE — tag `v5.0.1-block-i` at `43d1ebe`; pending push.
+- Block I status: DONE — tag `v5.0.1-block-i` at `c46be09`; pushed.
+- Block M status: DONE — tag `v5.0.1-block-m` at `09b6114`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
