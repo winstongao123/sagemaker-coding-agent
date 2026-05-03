@@ -29,5 +29,16 @@ from .cache_break_detection import (  # noqa: F401
     hash_tool_schema,
     notify_cache_deletion,
 )
+from .parallel_dispatch import (  # noqa: F401
+    MAX_TOOL_WORKERS,
+    dedup_tool_calls,
+    detect_path_conflicts,
+    fuzzy_resolve_tool_name,
+    mark_ephemeral_block,
+    strip_ephemeral_blocks_for_persist,
+    inject_dynamic_tool_refs,
+    synthetic_tool_result_stub,
+    partial_tool_call_warning,
+)
 from .retry import RetryPolicy  # noqa: F401
 from .query_engine import QueryEngine, run_one_turn, count_tool_calls  # noqa: F401

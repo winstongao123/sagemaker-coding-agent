@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block N (code commit; Codex pending)
+- core/parallel_dispatch.py NEW (~150 LOC): parallel + dedup + fuzzy + ephemeral + dynamic-ref helpers.
+- 11 tests + 3 deferred; 743 pass + 14 skip; ship-zip PASS.
+- PORT_LOG #102 + ADR-037.
+
 ### Block L DONE — Codex iter-2 APPROVE (clean)
 - 12 total Block L tests + 2 T2 deferred; PORT_LOG #100-#101 + ADR-036.
 - 2-iter Codex cycle: APPROVE_WITH_FIXES (3 findings) → APPROVE.

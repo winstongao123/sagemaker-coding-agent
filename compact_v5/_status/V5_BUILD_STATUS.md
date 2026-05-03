@@ -1,6 +1,13 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block L DONE** — tag `v5.0.1-block-l` at `686a3d5` (pending push); 732 pass + 11 skip; Codex iter-2 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block N IN_PROGRESS** — code + 11 tests green (3 deferred), 743 pass + 14 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block N entry (2026-05-03)
+- NEW `core/parallel_dispatch.py` (~150 LOC): MAX_TOOL_WORKERS=4 + dedup_tool_calls + detect_path_conflicts + fuzzy_resolve_tool_name + mark_ephemeral_block + strip_ephemeral_blocks_for_persist + inject_dynamic_tool_refs + synthetic_tool_result_stub + partial_tool_call_warning.
+- EXTENDED core/__init__.py with re-exports.
+- 11 tests + 3 deferred (parallel-exec timing → Block J real-AWS, T5 real-Haiku → R-tier R3) per ADR-037.
+- PORT_LOG #102 + ADR-037.
+- 743 pass + 14 skip; verify_ship_zip PASS (128 files / 361.1 KB).
 
 ## v5.0.1 Block L entry (2026-05-03)
 - EXTENDED `core/errors.py` (~150 LOC): BedrockErrorCategory 9→18 categories + categorize_retryable + extract_nested_error_message (R4 #9 MUST) + parse_max_tokens_context_overflow_error (R4 #2 MUST) + get_retry_after_ms.

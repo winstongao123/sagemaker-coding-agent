@@ -1124,6 +1124,52 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-037 — Block N (v5.0.1): Parallel dispatch + dedup + fuzzy + ephemeral + dynamic-ref
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block N
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block N requests Hermes-style parallel tool dispatch
++ Runnable A36 dynamic-ref + ephemeral prompt + tool-call dedup + tool-
+name fuzzy resolution + Hermes H2 partial-tool-warning.
+
+### Decisions
+NEW `core/parallel_dispatch.py` (~150 LOC):
+- MAX_TOOL_WORKERS = 4 (Hermes parallel ceiling).
+- dedup_tool_calls(calls) → (kept, dropped). Same (name, args_hash) → keep first.
+- detect_path_conflicts(calls) → dict[path, calls]. Mutator tools only.
+- fuzzy_resolve_tool_name(query, names) → Optional[str]. difflib cutoff=0.7.
+- mark_ephemeral_block / strip_ephemeral_blocks_for_persist for session-
+  log ephemeral handling.
+- inject_dynamic_tool_refs(schemas, refs) — Hermes A36 cross-link injection.
+- synthetic_tool_result_stub(tool_use_id, reason) — Bedrock-shaped stub.
+- partial_tool_call_warning(ids) — Hermes H2 — emits warning + stubs.
+
+### Deferrals (Block J real-AWS + R-tier)
+- T2 test_parallel_exec_3_independent_reads — timing-sensitive; needs
+  ThreadPoolExecutor wired into core/query_engine.py with real Bedrock
+  latency. Block J integrates.
+- T2 test_parallel_exec_path_conflict_serializes_writes — same fit.
+- T5 test_n_real_3_parallel_reads_haiku — R-tier R3.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/core/parallel_dispatch.py` (~150 LOC)
+- EXTENDED: `compact_v5/MAIN/agent/core/__init__.py` (re-exports)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_n.py`
+  (11 tests + 3 deferred)
+
+### Linked port-log rows
+- #102 — Block N parallel dispatch helpers
+
+### Validation
+- 743 pass + 14 skipped (was 732 + 11 at end of Block L; +11 pass + 3
+  skip net new).
+- verify_ship_zip.py: PASS (128 files / 361.1 KB / 36%).
+
+---
+
 ## ADR-036 — Block L (v5.0.1): Error/retry/cache-break + Bedrock guardrails
 
 **Date**: 2026-05-03
