@@ -1124,6 +1124,103 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-030 — Block M (v5.0.1): Phase 8 critical fixes — discoveredSkillNames per-run reset + structured-output retry-limit guard
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block M
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block M lists 2 Phase-8 critical fixes carried over
+from Wave 2's QueryEngine review. Both are small (~30 LOC total) but
+prevent silent loop / state-leak bugs.
+
+#### Fix 1 — discoveredSkillNames per-run reset (M-1)
+Runnable's QueryEngine.ts:197+238 declares
+`private discoveredSkillNames = new Set<string>()` and clears it at the
+top of every query() call. v5's Block I added path/trigger-activated
+skills via `SkillManager._pending_activations: List[str]`, but the list
+was never reset per-run — meaning a skill activated on user message N
+would still be in `_pending_activations` on user message N+1, polluting
+auto-suggestion / observability surfaces.
+
+#### Fix 2 — structured-output retry-limit (M-2)
+Runnable's QueryEngine.ts:1004-1048 wraps the per-turn user-message
+gate with a retry-limit check: count how many times the model invoked
+the synthetic structured-output tool this run; if it exceeds
+MAX_STRUCTURED_OUTPUT_RETRIES (env-tunable, default 5), halt with
+`error_max_structured_output_retries`. v5 doesn't yet have a structured-
+output mode (no JSON-schema constraint surface), but the same mechanism
+generalizes: a caller that DOES use structured output via tool_use can
+opt in by passing a synthetic_output_tool_name. The mechanism is also
+useful as a generic retry-budget for any "synthetic" tool the agent
+might invoke repeatedly to coerce a specific output shape.
+
+### Decisions
+
+#### 1. New core helper
+- `core/query_engine.count_tool_calls(messages, tool_name) -> int` —
+  pure function. Iterates assistant messages, counts tool_use blocks
+  whose name matches.
+
+#### 2. QueryEngine ctor params (opt-in default-OFF)
+- `synthetic_output_tool_name: Optional[str] = None`
+- `max_structured_output_retries: int = 3`
+- When synthetic_output_tool_name is None (default) the retry-limit
+  guard is a no-op — preserves backwards compatibility with all
+  existing tests / users.
+
+#### 3. Per-run baseline capture
+At run() entry: `_initial_structured_output_calls = count_tool_calls(
+self.messages, synthetic_output_tool_name)`. The retry-limit check
+compares `count_now - baseline` so prior-session calls don't count.
+
+#### 4. Halt at top of for-loop turn
+The retry check fires BEFORE the budget gate at the top of each turn.
+If exceeded, stop_reason becomes `error_max_structured_output_retries`
+and the loop breaks. Output line is the human-readable error.
+
+#### 5. discoveredSkillNames reset
+At run() entry, BEFORE the for-loop:
+- Best-effort `skill_manager._pending_activations.clear()` (under the
+  manager's `_pending_lock`). Wrapped in try/except so a missing /
+  partial skill_manager never blocks run().
+
+#### 6. TEST_DESIGN naming reconciliation
+TEST_DESIGN §Block M lists the M-1 lock test as
+`test_discovered_tool_names_reset_per_turn`. v5's surface is skills
+(not tools), and the reset is per-run (not per-turn). The
+catalogue name is preserved verbatim in the test file; the docstring
++ PORT_LOG #085 explain the Runnable→v5 terminology mapping. This
+preserves traceability of TEST_DESIGN row → v5 lock test even when
+the underlying surface adapted between repos.
+
+### Affected files
+- EXTENDED: `compact_v5/MAIN/agent/core/query_engine.py`
+  (count_tool_calls helper + 2 ctor params + retry-limit gate +
+  discoveredSkillNames reset)
+- EXTENDED: `compact_v5/MAIN/agent/core/__init__.py`
+  (re-exports count_tool_calls)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_m.py`
+  (11 tests: 5 pure-function + 3 TEST_DESIGN-named + 3 behavior locks)
+
+### Linked port-log rows
+- #084 — Block M-2 retry-limit guard
+- #085 — Block M-1 discoveredSkillNames reset
+
+### Validation
+- 642 pass + 6 skipped (was 631 + 6 at end of Block I; +11 net new).
+- verify_ship_zip.py: PASS (115 files / 322.2 KB / 36%).
+- Existing test_query_engine.py / test_skill_manager.py / test_block_i.py
+  surface preserved: no regressions.
+
+### Notes / not in scope
+- Adding a full structured-output JSON-schema mode (Runnable's
+  jsonSchema config) is out of scope; M-2 ports the retry-counter
+  mechanism only. A future block (or v5.1) can layer the schema on top.
+
+---
+
 ## ADR-029 — Block I (v5.0.1): Skill name resolution + Hermes fuzzy + paths frontmatter + bundled debug/remember + scaffolders fold-in
 
 **Date**: 2026-05-03

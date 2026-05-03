@@ -37,6 +37,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block M (code commit; Codex pending)
+- core/query_engine.py: count_tool_calls helper + synthetic_output_tool_name + max_structured_output_retries ctor params + retry-limit halt + discoveredSkillNames reset.
+- 11 new tests (5 pure + 3 TEST_DESIGN + 3 behavior locks).
+- 642 pass + 6 skip; verify_ship_zip PASS.
+- PORT_LOG #084-#085 + ADR-030.
+
 ### Block I DONE — Codex iter-3 APPROVE (clean)
 - All 4 iter-1 + 2 iter-2 findings closed with covering lock tests.
 - 21 total Block I tests green (1 symlink skip on Windows); PORT_LOG #073-#083 + ADR-029.

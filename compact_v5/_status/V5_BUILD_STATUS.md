@@ -1,6 +1,14 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block I DONE** — tag `v5.0.1-block-i` at `43d1ebe` (pending push); 631 pass + 6 skip; Codex iter-3 APPROVE)
+Last updated: 2026-05-03 (**v5.0.1 Block M IN_PROGRESS** — code + 11 tests green, 642 pass + 6 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block M entry (2026-05-03)
+- EXTENDED `core/query_engine.py`: count_tool_calls() helper + 2 new QueryEngine ctor params (synthetic_output_tool_name, max_structured_output_retries; both default OFF) + per-turn retry-limit gate emitting stop_reason="error_max_structured_output_retries" + per-run discoveredSkillNames reset (skill_manager._pending_activations.clear() at run() entry; best-effort try/except).
+- EXTENDED `core/__init__.py`: re-exports count_tool_calls.
+- 11 new tests in `tests/integration/test_block_m.py`: 5 pure-function (count_tool_calls edge cases — empty / no-match / multi-match / ignores user-role / handles string content) + 3 TEST_DESIGN-named (discovered-tool-names-reset-per-turn / structured-output-retry-limit-3 / infinite-loop-blocked-at-retry-limit) + 3 behavior locks (default-off-no-halt / clamp-to-min-1 / baseline-captured-from-prior-session).
+- PORT_LOG rows #084-#085 + ADR-030.
+- `verify_ship_zip.py`: PASS (115 files / 322.2 KB / 36%).
+- Pytest: **642 passed + 6 skipped** (was 631 + 6 at Block I; +11 pass net).
 
 ## v5.0.1 Block I entry (2026-05-03)
 - EXTENDED `skills/manager.py` (~280 LOC): SkillInfo + paths/disable_model_invocation/enabled_when fields + discover() realpath dedup + new frontmatter parsing + activate_for_path() + resolve_name() (Hermes fuzzy) + list_model_invocable/list_user_invocable + substitute_skill_vars().

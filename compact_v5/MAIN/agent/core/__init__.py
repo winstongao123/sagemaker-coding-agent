@@ -17,4 +17,4 @@ from __future__ import annotations
 from .budget import IterationBudget  # noqa: F401
 from .errors import BedrockErrorCategory, ErrorClassifier  # noqa: F401
 from .retry import RetryPolicy  # noqa: F401
-from .query_engine import QueryEngine, run_one_turn  # noqa: F401
+from .query_engine import QueryEngine, run_one_turn, count_tool_calls  # noqa: F401

@@ -107,6 +107,36 @@ def _coerce_tool_result_to_text(value: Any) -> str:
     return str(value)
 
 
+def count_tool_calls(messages: List[Dict[str, Any]], tool_name: str) -> int:
+    """Count how many tool_use blocks for `tool_name` appear in `messages`.
+
+    Block M-2 (PORT_LOG #084) — verbatim port of Runnable's countToolCalls
+    at QueryEngine.ts:1004-1048. Used by the structured-output retry-limit
+    guard: when the model produces malformed structured output N times in
+    a row, the engine halts cleanly instead of looping.
+
+    Iterates assistant messages; each tool_use block with matching name
+    counts once.
+    """
+    if not tool_name:
+        return 0
+    count = 0
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") == tool_name
+            ):
+                count += 1
+    return count
+
+
 def _truncate_tool_result(text: str, max_chars: int) -> str:
     if max_chars <= 0 or len(text) <= max_chars:
         return text
@@ -139,6 +169,8 @@ class QueryEngine:
         skill_manager: Optional[Any] = None,
         agent_kind: str = "parent",
         session_id: Optional[str] = None,
+        synthetic_output_tool_name: Optional[str] = None,
+        max_structured_output_retries: int = 3,
     ):
         """Construct a QueryEngine.
 
@@ -174,6 +206,16 @@ class QueryEngine:
             import uuid as _uuid
             session_id = _uuid.uuid4().hex[:12]
         self.session_id = session_id
+
+        # Block M-2: structured-output retry guard (PORT_LOG #084 — Runnable
+        # QueryEngine.ts:1004-1048 countToolCalls + MAX_STRUCTURED_OUTPUT_RETRIES).
+        # When `synthetic_output_tool_name` is set, the engine counts how many
+        # times that tool appears in self.messages during this run() and
+        # halts with stop_reason="error_max_structured_output_retries" at the
+        # retry limit. Default name=None disables the check (v5 has no
+        # built-in structured-output mode; this is a hook for future support).
+        self.synthetic_output_tool_name = synthetic_output_tool_name
+        self.max_structured_output_retries = max(1, int(max_structured_output_retries))
 
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
@@ -230,6 +272,28 @@ class QueryEngine:
         # Block F2 — fresh BudgetTracker per run() so continuation state
         # never leaks across user messages.
         self._budget_tracker = None
+        # Block M-1 (PORT_LOG #085) — Runnable QueryEngine.ts:238 verbatim:
+        # discoveredSkillNames.clear() at run() entry. Prevents
+        # path/trigger-activated skills from contaminating the next user
+        # message's flow. Best-effort; never blocks run() on missing
+        # skill_manager.
+        try:
+            if self.skill_manager is not None and hasattr(
+                self.skill_manager, "_pending_activations"
+            ):
+                with self.skill_manager._pending_lock:
+                    self.skill_manager._pending_activations.clear()
+        except Exception:
+            pass
+        # Block M-2 (PORT_LOG #084) — capture the baseline structured-output
+        # tool-call count at run-entry. Calls THIS run = current_count -
+        # baseline. Initial count when the run starts may be non-zero if
+        # messages were carried over from a previous run() (continued
+        # session); the retry limit is per-run, not per-session.
+        self._initial_structured_output_calls = (
+            count_tool_calls(self.messages, self.synthetic_output_tool_name)
+            if self.synthetic_output_tool_name else 0
+        )
 
         # Block C+ — message rate limit (v4 :8731-8740). Lives on the
         # engine so per-session caps are tracked.
@@ -317,6 +381,25 @@ class QueryEngine:
                 output_fn("[Stopped by user]")
                 stop_reason = "user_stop"
                 break
+
+            # Block M-2 (PORT_LOG #084) — structured-output retry-limit
+            # guard. When `synthetic_output_tool_name` is configured, count
+            # how many times the model produced a malformed structured
+            # output (each tool_use of that synthetic tool counts). Halt
+            # cleanly at the retry limit instead of looping forever.
+            if self.synthetic_output_tool_name:
+                _calls_now = count_tool_calls(
+                    self.messages, self.synthetic_output_tool_name,
+                )
+                _calls_this_run = _calls_now - self._initial_structured_output_calls
+                if _calls_this_run >= self.max_structured_output_retries:
+                    output_fn(
+                        f"[error_max_structured_output_retries: "
+                        f"failed to provide valid structured output after "
+                        f"{self.max_structured_output_retries} attempts]"
+                    )
+                    stop_reason = "error_max_structured_output_retries"
+                    break
 
             # Budget gate — shared with sub-agents (Phase 9).
             if not self.budget.consume():
