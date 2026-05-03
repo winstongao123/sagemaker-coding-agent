@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G3 DONE — Codex iter-3 APPROVE (clean)
+- 15 total Block G3 tests + 1 T5 skip; PORT_LOG #092-#093 + ADR-032.
+- 3-iter Codex cycle: APPROVE_WITH_FIXES → APPROVE_WITH_FIXES → APPROVE.
+- Tag v5.0.1-block-g3 at 6a49879 pending push. Next: Block G2.
+
 ### Block G3 iter-3 fixes (Codex iter-2 = APPROVE_WITH_FIXES)
 - coordinator/system_prompt.py: Continue row example fixed (explore→explore for same-role; explore→build moved to Spawn-fresh phase-transition row).
 - tests/integration/test_block_g3.py: tightened v5-continue-semantics test with regex scanner that rejects cross-type arrows in Continue rows; tightened subagent absence test with full marker set (scratchpad-directory / worker-types / create_word / build,review).

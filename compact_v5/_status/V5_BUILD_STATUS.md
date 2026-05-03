@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block G3 IN_PROGRESS** — code + 11 tests green (1 T5 skip), 675 pass + 7 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block G3 DONE** — tag `v5.0.1-block-g3` at `6a49879` (pending push); 679 pass + 7 skip; Codex iter-3 APPROVE clean)
 
 ## v5.0.1 Block G3 entry (2026-05-03)
 - NEW `coordinator/` module (~250 LOC): coordinator/system_prompt.py (4-phase orchestrator block) + coordinator/user_context.py (worker-tools + scratchpad description) + __init__.py.
@@ -415,8 +415,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 0fe6454 (v5/block-g: iter-3 fixes — Codex iter-2 REJECT) — pending push
-- Last tag: v5.0.1-block-g (Block G done, Codex 3-iter cycle ended APPROVE) — pending
+- Last commit: 6a49879 (v5/block-g3: iter-3 fixes — Codex iter-2 APPROVE_WITH_FIXES) — pending push
+- Last tag: v5.0.1-block-g3 (Block G3 done, Codex 3-iter cycle ended APPROVE) — pending
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
@@ -425,7 +425,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block G3 — Coordinator System Prompt** (after Block G tag).
+**Block G2 — forkSubagent cache-prefix replay** (after Block G3 tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -438,7 +438,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block F2 status: DONE — tag `v5.0.1-block-f2` at `9d3cd50`; pushed.
 - Block I status: DONE — tag `v5.0.1-block-i` at `c46be09`; pushed.
 - Block M status: DONE — tag `v5.0.1-block-m` at `09b6114`; pushed.
-- Block G status: DONE — tag `v5.0.1-block-g` at `0fe6454`; pending push.
+- Block G status: DONE — tag `v5.0.1-block-g` at `0fe6454`; pushed.
+- Block G3 status: DONE — tag `v5.0.1-block-g3` at `6a49879`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
