@@ -1,6 +1,17 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block T IN_PROGRESS iter-2** — 19 Block T tests green / 764 pass + 14 skip total; web_fetch DROPPED per user 2026-05-03; pending Codex iter-3 APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block J IN_PROGRESS** — 4 T4 tests green + 3 T5 env-gated; 775 pass + 17 skip total; CAUGHT REAL packaging bug (Agent module split), ADR-039)
+
+## v5.0.1 Block J entry (2026-05-03)
+- THE SHIP GATE: 7 tests in `tests/integration/test_block_j_ship_gate.py` per TEST_DESIGN §Block J + 1 meta-count lock = 8 tests.
+- 4 T4 tests pass on every pytest invocation: zip rebuild + extract + python-c import (entry + sagemaker_agent shim).
+- 3 T5 tests env-gated `RUN_REAL_BEDROCK=1` (~$0.02 total): hello-world / tool-use round-trip / compact-then-continue.
+- **CAUGHT REAL BUG**: flat-zip layout couldn't import. `entry.py` does `from agent import Agent` but Agent class lived in `__init__.py` (invisible by that name in flat-zip cwd).
+- **FIX**: moved `Agent` class + `_load_agent_status_text` from `MAIN/agent/__init__.py` to `MAIN/agent/agent.py` (real module). `__init__.py` rewritten as thin re-export via `from .agent import Agent` (relative import).
+- Works in BOTH source layout (tests put `MAIN/agent` on sys.path → finds `agent.py` directly) AND flat-zip layout (`agent.py` at root).
+- PORT_LOG #104 + ADR-039.
+- 775 pass + 17 skip (was 770 + 14; +5 net pass for Block J T4 + 3 net skip for T5 env-gated).
+- verify_ship_zip PASS (133 files / 376.0 KB / 36%).
 
 ## v5.0.1 Block T entry (2026-05-03)
 - **10 of 11 v4 tools active** across 5 new files (constraint #5 minimum-file): tools/v4_documents.py (create_word/excel/markdown/notebook/chart/pdf, 6 tools consolidated) + tools/todo.py (todo_write + todo_read) + tools/semantic_search.py + tools/web_fetch.py (DISABLED — see below) + tools/ask_user.py.

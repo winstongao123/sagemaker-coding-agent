@@ -1124,6 +1124,86 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-039 — Block J (v5.0.1): real-AWS ship gate + Agent module split
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block J
+**Status**: ACCEPTED
+
+### Context
+TEST_DESIGN §Block J defines the SHIP GATE: 7 tests covering zip rebuild
++ extract + python -c import + 3 real-Bedrock T5 round-trips. Block J
+ships when 7/7 green; total AWS cost ~$0.02 when RUN_REAL_BEDROCK=1.
+
+### Decisions
+
+**1) Block J test file** at `tests/integration/test_block_j_ship_gate.py`:
+- 4 T4 tests run on every pytest invocation ($0):
+  - `test_zip_rebuild_succeeds` — runs _rebuild_zip.py + asserts zip
+    is produced at the correct path (next to compact_v5/, not inside).
+  - `test_zip_extract_in_tmpdir` — runs verify_ship_zip.py + extracts
+    in fresh tmpdir + asserts core files land.
+  - `test_zip_python_c_import_entry` — `python -c "import entry"`
+    against extracted ship (catches packaging gaps the source-tree
+    pytest misses).
+  - `test_zip_python_c_import_sagemaker_agent` — v4 chat.ipynb shim
+    test: `from sagemaker_agent import CONFIG, BEDROCK_MODELS,
+    create_chat_ui` must work in flat-zip layout.
+- 3 T5 tests env-gated by `RUN_REAL_BEDROCK=1`:
+  - `test_real_bedrock_hello_world` — Haiku-4.5 round-trip.
+  - `test_real_bedrock_tool_use_round_trip` — full tool-use loop:
+    user → tool_use → local exec → tool_result → final text.
+  - `test_real_bedrock_compact_then_continue` — long preamble +
+    follow-up call.
+- 1 meta-lock test — guarantees 7 named tests stay in module.
+
+**2) Agent module split** (caught by Block J — flat-zip import test):
+- BEFORE: Agent class lived in `MAIN/agent/__init__.py`. `entry.py`
+  imported it via `from agent import Agent`. This failed in the flat
+  ship-zip layout because there's no module named `agent` at the zip
+  root (only `__init__.py`). Source layout also broke when running
+  `python -c "import entry"` directly (worked only under pytest's
+  auto sys.path injection).
+- AFTER: Agent class moved to `MAIN/agent/agent.py` (a real module).
+  `MAIN/agent/__init__.py` rewritten as thin re-export:
+  `from .agent import Agent` (relative import — resolves to the
+  submodule, not the package itself).
+
+This dual-layout works in both modes:
+- Source layout: tests put `MAIN/agent` on sys.path; `from agent
+  import Agent` finds `MAIN/agent/agent.py` directly.
+- Flat-zip layout: extracted dir has `agent.py` and `__init__.py`
+  side-by-side at root; `from agent import Agent` finds `agent.py`
+  directly.
+
+**3) T5 real-Bedrock cost cap**: Block J's 3 T5 tests cost ~$0.02 in
+total when RUN_REAL_BEDROCK=1. Per-call max_tokens limited to 32-512.
+The compact-then-continue test uses ~5K tokens of preamble (NOT the
+80K from TEST_DESIGN §Block J row 3) to keep cost down — the lock
+tests for full 80K compaction live in test_block_h.py (mock-based).
+
+### Acceptance
+Block J ships when all 4 T4 tests pass on every push. The 3 T5 tests
+must pass when run on demand with RUN_REAL_BEDROCK=1 before final tag.
+The meta-count test ensures all 7 stay named.
+
+### Affected files
+- NEW: `tests/integration/test_block_j_ship_gate.py` (~270 LOC, 8 tests).
+- NEW: `MAIN/agent/agent.py` (~213 LOC; Agent class + _load_agent_status_text).
+- REWRITTEN: `MAIN/agent/__init__.py` (~30 LOC; thin re-export).
+
+### Linked port-log rows
+- #104 — Block J real-AWS ship gate.
+
+### Validation
+- 775 pass + 17 skipped (was 770 + 14 at end of Block T iter-6; +5 net
+  pass: +5 Block J T4 tests; +3 net skip: 3 Block J T5 env-gated tests).
+- verify_ship_zip.py: PASS.
+- `python -c "import entry"` and `python -c "import sagemaker_agent"`
+  both succeed in extracted flat-zip dir.
+
+---
+
 ## ADR-038 — Block T (v5.0.1): 11 missing v4 tools
 
 **Date**: 2026-05-03

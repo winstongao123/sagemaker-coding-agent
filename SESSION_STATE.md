@@ -46,6 +46,14 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block J (code commit; Codex pending) — THE SHIP GATE
+- NEW tests/integration/test_block_j_ship_gate.py (8 tests: 4 T4 zip rebuild/extract/import + 3 T5 real-Bedrock env-gated + 1 meta count lock).
+- **CAUGHT REAL BUG**: flat-zip couldn't import. entry.py does `from agent import Agent` but Agent class lived in `__init__.py` (invisible by that name in flat-zip cwd). Fix: moved Agent + _load_agent_status_text into NEW `MAIN/agent/agent.py`; `__init__.py` rewritten as thin re-export via `from .agent import Agent`.
+- Works in BOTH source layout (tests put MAIN/agent on path → finds agent.py directly) AND flat-zip layout (agent.py at root).
+- 4 T4 tests green; 3 T5 env-skip without RUN_REAL_BEDROCK.
+- 775 pass + 17 skip (was 770+14; +5 pass net, +3 skip net for env-gated T5); verify_ship_zip PASS (134 files / 376.9 KB / 36%).
+- PORT_LOG #104 + ADR-039.
+
 ### Block T DONE — Codex iter-6 = APPROVE (clean)
 - Iter-cycle: 1 REJECT → 2 REJECT → 3 APPROVE_WITH_FIXES → 4 APPROVE_WITH_FIXES → 5 APPROVE_WITH_FIXES → 6 APPROVE.
 - Active Block T tool count: 10 (web_fetch DECISION-DROP-PER-USER 2026-05-03 per PORT_LOG row 103-A).
