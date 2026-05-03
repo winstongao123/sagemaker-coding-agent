@@ -528,28 +528,121 @@ def test_f2_test_globals_snapshot_restore_pattern(reset_tokens):
     """Codex iter-1 finding #3 lock: tests must snapshot the prior CONFIG
     value and restore it (not assume a default), so a misconfigured global
     in another test doesn't bleed into this one.
+
+    Codex iter-2 finding #1 lock: this meta-lock test ITSELF must obey
+    the snapshot/restore pattern — it cannot clobber the outer CONFIG
+    to a hardcoded default.
     """
     from runtime.config import CONFIG
 
-    # Pre-state: simulate a prior test having flipped the flag.
-    CONFIG.enable_token_budget_continuation = True
-    _expected_post_state = True
+    # Outer snapshot: capture whatever state we entered the test with.
+    _outer_initial = CONFIG.enable_token_budget_continuation
 
-    # Inside a hypothetical test fixture: snapshot, mutate, restore.
-    _prev = CONFIG.enable_token_budget_continuation
-    CONFIG.enable_token_budget_continuation = False
     try:
-        assert CONFIG.enable_token_budget_continuation is False
-    finally:
-        CONFIG.enable_token_budget_continuation = _prev
+        # Pre-state: simulate a prior test having flipped the flag.
+        CONFIG.enable_token_budget_continuation = True
+        _expected_post_state = True
 
-    # Post-state: prior True is preserved, NOT clobbered to False.
-    assert CONFIG.enable_token_budget_continuation is _expected_post_state, (
-        "Tests must restore CONFIG to its prior value (Codex iter-1 #3), "
-        "not assume the dataclass default"
+        # Inside a hypothetical test fixture: snapshot, mutate, restore.
+        _prev = CONFIG.enable_token_budget_continuation
+        CONFIG.enable_token_budget_continuation = False
+        try:
+            assert CONFIG.enable_token_budget_continuation is False
+        finally:
+            CONFIG.enable_token_budget_continuation = _prev
+
+        # Post-state: prior True is preserved, NOT clobbered to False.
+        assert CONFIG.enable_token_budget_continuation is _expected_post_state, (
+            "Tests must restore CONFIG to its prior value (Codex iter-1 #3), "
+            "not assume the dataclass default"
+        )
+    finally:
+        # Outer restore: the meta-lock test must NOT leak state to
+        # downstream tests. Restore the pre-test value (Codex iter-2 #1).
+        CONFIG.enable_token_budget_continuation = _outer_initial
+
+
+# ============================================================
+# Codex iter-2 finding-lock tests
+# ============================================================
+
+def test_f2_completion_event_includes_pct_for_cost_cap(reset_tokens):
+    """Codex iter-2 finding #2 lock: cost-cap StopDecision.completion_event
+    must include `pct` so the audit row + tengu_token_budget_completed
+    analog captures iteration-utilization at the time of stop. Runnable's
+    event includes pct; v5 must too for telemetry parity.
+    """
+    from core.budget_continuation import (
+        check_iteration_budget,
+        create_budget_tracker,
+        StopDecision,
     )
-    # Cleanup for downstream tests.
-    CONFIG.enable_token_budget_continuation = False
+
+    tracker = create_budget_tracker()
+    decision = check_iteration_budget(
+        tracker,
+        iter_used=23,
+        iter_total=100,
+        session_cost=2.50,
+        session_cost_limit=2.00,
+    )
+    assert isinstance(decision, StopDecision)
+    assert decision.reason == "cost_cap"
+    ce = decision.completion_event
+    assert ce is not None
+    assert "pct" in ce, "cost-cap completion_event must include pct"
+    assert ce["pct"] == 23
+    assert ce["cost"] == 2.50
+
+
+def test_f2_completion_event_includes_pct_for_diminishing(reset_tokens):
+    """Codex iter-2 finding #2 lock: diminishing StopDecision.completion_event
+    must include `pct`."""
+    from core.budget_continuation import (
+        check_iteration_budget,
+        create_budget_tracker,
+        ContinueDecision,
+        StopDecision,
+    )
+
+    tracker = create_budget_tracker()
+    # Drive 3 continues then trigger diminishing.
+    for n in range(1, 4):
+        d = check_iteration_budget(tracker, iter_used=n, iter_total=100)
+        assert isinstance(d, ContinueDecision)
+    final = check_iteration_budget(tracker, iter_used=4, iter_total=100)
+    assert isinstance(final, StopDecision)
+    assert final.reason == "diminishing"
+    ce = final.completion_event
+    assert ce is not None
+    assert "pct" in ce, "diminishing completion_event must include pct"
+    assert ce["pct"] == 4
+    assert ce["diminishing"] is True
+
+
+def test_f2_completion_event_includes_pct_for_above_threshold(reset_tokens):
+    """Codex iter-2 finding #2 lock: above-threshold StopDecision (continued
+    but reached >= 90%) completion_event must include `pct`."""
+    from core.budget_continuation import (
+        check_iteration_budget,
+        create_budget_tracker,
+        ContinueDecision,
+        StopDecision,
+    )
+
+    tracker = create_budget_tracker()
+    # First continuation at 50%.
+    d1 = check_iteration_budget(tracker, iter_used=50, iter_total=100)
+    assert isinstance(d1, ContinueDecision)
+    # Then jump to 90% — above threshold, but continuation_count > 0
+    # → completion_event surfaced with above_threshold reason.
+    d2 = check_iteration_budget(tracker, iter_used=90, iter_total=100)
+    assert isinstance(d2, StopDecision)
+    assert d2.reason == "above_threshold"
+    ce = d2.completion_event
+    assert ce is not None
+    assert "pct" in ce
+    assert ce["pct"] == 90
 
 
 def test_f2_tracker_resets_between_runs(reset_tokens):

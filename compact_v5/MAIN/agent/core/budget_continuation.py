@@ -96,10 +96,16 @@ def check_iteration_budget(
     if is_subagent or iter_total <= 0:
         return StopDecision(reason="subagent" if is_subagent else "no_budget")
 
+    # Compute pct early so all completion events can carry it (Codex
+    # iter-2 finding #2: Runnable's tengu_token_budget_completed includes
+    # pct; v5's events must too for telemetry-shape parity).
+    pct = round((iter_used / iter_total) * 100)
+
     if session_cost_limit > 0 and session_cost >= session_cost_limit:
         return StopDecision(
             completion_event={
                 "continuation_count": tracker.continuation_count,
+                "pct": pct,
                 "iter_used": iter_used,
                 "iter_total": iter_total,
                 "cost": session_cost,
@@ -109,7 +115,6 @@ def check_iteration_budget(
             reason="cost_cap",
         )
 
-    pct = round((iter_used / iter_total) * 100)
     delta = iter_used - tracker.last_iter_used
 
     is_diminishing = (
@@ -134,6 +139,7 @@ def check_iteration_budget(
         return StopDecision(
             completion_event={
                 "continuation_count": tracker.continuation_count,
+                "pct": pct,
                 "iter_used": iter_used,
                 "iter_total": iter_total,
                 "diminishing": is_diminishing,

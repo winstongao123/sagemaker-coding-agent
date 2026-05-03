@@ -22,6 +22,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - tests/integration/test_block_f2.py: snapshot/restore CONFIG via _prev_flag + _prev_limit (Codex iter-1 finding #3) + 3 finding-lock tests added.
 - 607 pass + 5 skip (was 604; +3 finding-locks); verify_ship_zip PASS.
 
+### Block F2 iter-3 fixes (Codex iter-2 = APPROVE_WITH_FIXES)
+- core/budget_continuation.py: pct now computed before cost-cap return + included in BOTH cost_cap and diminishing/above_threshold completion_event dicts (Codex iter-2 finding #2 — Runnable telemetry parity).
+- tests/integration/test_block_f2.py: meta-lock test now itself snapshots+restores outer state (Codex iter-2 finding #1) + 3 lock tests for pct-in-completion_event added (cost_cap, diminishing, above_threshold).
+- 610 pass + 5 skip (was 607; +3 finding-locks); verify_ship_zip PASS.
+
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 
 **Foundation reconciled per Path A** — 78 Phase 2 files + status/RESUME/gitignore updated.
