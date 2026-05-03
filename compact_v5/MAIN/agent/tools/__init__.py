@@ -61,11 +61,16 @@ from . import tool_search as _tool_search     # noqa: F401  defines _register()
 # Phase 9 — task tool (sub-agent dispatch, ADR-015):
 from . import task as _task                   # noqa: F401  defines _register()
 #
+
 # Phase 10 — skill + skill_propose_patch (ADR-016):
 from . import skill as _skill                            # noqa: F401  defines _register()
 from . import skill_propose_patch as _skill_patch        # noqa: F401  defines _register()
-# Phases 11-13 will add: todo_*, semantic_search, create_word/excel/pdf/chart/markdown/notebook,
-#                        web_fetch, ask_user
+# Block T (v5.0.1) — 11 v4 tools restored (ADR-038):
+from . import v4_documents as _v4_documents              # noqa: F401  defines _register()
+from . import todo as _todo                              # noqa: F401  defines _register()
+from . import semantic_search as _semantic_search        # noqa: F401  defines _register()
+from . import web_fetch as _web_fetch                    # noqa: F401  defines _register()
+from . import ask_user as _ask_user                      # noqa: F401  defines _register()
 
 
 def bootstrap_built_ins():
@@ -98,7 +103,12 @@ def bootstrap_built_ins():
     # Phase 10 — skill + skill_propose_patch
     _skill._register()
     _skill_patch._register()
-    # Phases 11-13 will add their modules here as they land.
+    # Block T (v5.0.1) — 11 v4 tools (ADR-038)
+    _v4_documents._register()
+    _todo._register()
+    _semantic_search._register()
+    _web_fetch._register()
+    _ask_user._register()
     return all_registered()
 
 

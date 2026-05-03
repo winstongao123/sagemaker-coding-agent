@@ -1124,6 +1124,51 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-038 — Block T (v5.0.1): 11 missing v4 tools
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block T
+**Status**: ACCEPTED
+
+### Context
+Constraint #1 (v4.10.10 baseline): every v4 feature mapped + ported.
+v5 was missing 11 tools that v4 advertised. Block T restores them.
+
+### Decisions
+- NEW `tools/v4_documents.py` — 6 document creators consolidated into
+  one file (constraint #5 minimum-files): create_word / create_excel /
+  create_markdown / create_notebook / create_chart / create_pdf.
+- NEW `tools/todo.py` — todo_write + todo_read with process-global state.
+- NEW `tools/semantic_search.py` — TF-IDF index via sklearn (lazy import).
+- NEW `tools/web_fetch.py` — requests + lite HTML→markdown stripper.
+- NEW `tools/ask_user.py` — provider hook for tests, input() for live.
+- WIRED tools/__init__.py to register all 11.
+
+### Lazy-import pattern
+External libs (python-docx, openpyxl, matplotlib, requests, sklearn) are
+LAZY imported at execute time. Tool registration always succeeds; if a
+lib is missing the executor returns "Error: <lib> not installed". Tests
+use pytest.importorskip to skip when the lib isn't available.
+
+### create_html design note (Wave 6)
+There is intentionally NO create_html tool. Use write_file with a .html
+extension. HTML is text; write_file already works for it. Locked by
+test_tool_create_html_via_write_file_documented.
+
+### Affected files
+- NEW: 5 files under compact_v5/MAIN/agent/tools/
+- EXTENDED: tools/__init__.py (registration wiring)
+- NEW: tests/integration/test_block_t.py (15 tests)
+
+### Linked port-log rows
+- #103 — Block T 11 v4 tools
+
+### Validation
+- 760 pass + 14 skipped (was 745 + 14 at end of Block N; +15 net new).
+- verify_ship_zip.py: PASS (133 files / 370.9 KB / 36%).
+
+---
+
 ## ADR-037 — Block N (v5.0.1): Parallel dispatch + dedup + fuzzy + ephemeral + dynamic-ref
 
 **Date**: 2026-05-03

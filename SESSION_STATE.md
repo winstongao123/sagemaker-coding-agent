@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block T (code commit; Codex pending)
+- 11 v4 tools restored across 5 new files (consolidated by domain). Lazy-import pattern.
+- 15 tests; 760 pass + 14 skip; ship-zip PASS.
+- PORT_LOG #103 + ADR-038.
+
 ### Block N DONE — Codex iter-2 APPROVE (clean)
 - 13 tests + 3 deferred; PORT_LOG #102 + ADR-037.
 - 2-iter Codex cycle: REJECT (1 HIGH + 1 MEDIUM) → APPROVE.

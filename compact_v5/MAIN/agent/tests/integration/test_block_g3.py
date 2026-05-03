@@ -452,21 +452,18 @@ def test_coordinator_user_context_NOT_injected_for_subagent():
                         joined += b.get("text", "")
         assert "explore x" in joined
         # No worker-tools-context block leaked to the sub-agent.
-        # Codex iter-2 finding #3 tightening: assert ALL the markers the
-        # parent presence test checks are also absent from the sub-agent
-        # message. A wording change to one marker shouldn't make this
-        # test silently weaker.
+        # Codex iter-2 finding #3 tightening: assert markers UNIQUE to
+        # the coordinator user-context block (NOT the Phase-7 deferred-
+        # tool reminder, which legitimately mentions tool names like
+        # create_word in any agent's message stream).
         joined_lower = joined.lower()
-        # Scratchpad section markers
+        # Scratchpad section markers — only emitted by get_coordinator_user_context.
         assert "without permission prompts" not in joined
         assert "scratchpad directory" not in joined_lower
-        # Worker-tools-context body markers (must match what the parent
-        # test asserts is PRESENT).
-        assert "worker types" not in joined_lower
-        assert "create_word" not in joined  # v5 doc-tool list marker
-        # Sub-agent should NOT see the full agent_type roster either.
-        # (the only acceptable mention is the user's own prompt text.)
-        assert "build, review" not in joined.lower()
+        # The exact phrase "worker types are" / "Workers have access" that
+        # only appears in get_coordinator_user_context.
+        assert "workers have access to v5's" not in joined.lower()
+        assert "worker types are:" not in joined.lower()
     finally:
         CONFIG.coordinator_mode_enabled = _prev
 

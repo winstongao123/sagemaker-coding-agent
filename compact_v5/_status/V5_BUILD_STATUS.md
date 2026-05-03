@@ -1,6 +1,16 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block N DONE** — tag `v5.0.1-block-n` at `136f41b` (pending push); 745 pass + 14 skip; Codex iter-2 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block T IN_PROGRESS** — code + 15 tests green, 760 pass + 14 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block T entry (2026-05-03)
+- 11 v4 tools restored across 5 new files (constraint #5 minimum-file): tools/v4_documents.py (create_word/excel/markdown/notebook/chart/pdf, 6 tools consolidated) + tools/todo.py (todo_write + todo_read) + tools/semantic_search.py + tools/web_fetch.py + tools/ask_user.py.
+- Lazy-import pattern: external libs (python-docx / openpyxl / matplotlib / requests / sklearn) imported at execute time. Tool registration always succeeds; missing lib returns Error.
+- create_html intentionally NOT a separate tool — use write_file with .html ext (Wave 6 design note).
+- WIRED tools/__init__.py to register all 11 in bootstrap_built_ins.
+- 15 tests in tests/integration/test_block_t.py: 11 TEST_DESIGN-named + 4 behavior locks (todo-read-empty / web-fetch-rejects-non-http / ask-user-provider-exception / all-11-tools-registered).
+- Block G3 test test_coordinator_user_context_NOT_injected_for_subagent updated to use coordinator-specific markers (Phase-7 deferred-tool reminder legitimately mentions create_word now).
+- PORT_LOG #103 + ADR-038.
+- 760 pass + 14 skip (was 745 + 14; +15 pass net new).
 
 ## v5.0.1 Block N entry (2026-05-03)
 - NEW `core/parallel_dispatch.py` (~150 LOC): MAX_TOOL_WORKERS=4 + dedup_tool_calls + detect_path_conflicts + fuzzy_resolve_tool_name + mark_ephemeral_block + strip_ephemeral_blocks_for_persist + inject_dynamic_tool_refs + synthetic_tool_result_stub + partial_tool_call_warning.
