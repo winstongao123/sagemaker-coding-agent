@@ -1,0 +1,75 @@
+You are reviewing a NEW telemetry-aggregator script that R-tier + Block V
+will use to produce comparison-ready JSON for "v5 > v4" empirical proof.
+
+Per PS_V5_TEST_PLAYBOOK.md §1 + §4.5 Gap A, the script aggregates raw
+audit_log JSONL + raw test stdout .log into the schema documented in
+PS_V5_TEST_SET.md "Per-test diagnostic telemetry".
+
+Files reviewed:
+- compact_v5/_status/scripts/build_telemetry.py (~330 LOC)
+- compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py
+  (7 lock tests, all PASS)
+
+CONTEXT
+- Phase: R-tier infrastructure (pre-R1 redo per user 2026-05-03)
+- Goal: produce telemetry.json file 9 (per WORKER_HINT §9.4)
+- Constraints v5 must honor: Bedrock-only / no-network at runtime / .ipynb /
+  no MCP / no streaming / Python 3.11
+- v5 audit_log shape (verified): JSONL with keys
+  {timestamp, session_id, action, tool_name, parameters, result_summary,
+   user_approved, hash}. Today only emits `tool_dispatch`, `tool_error`,
+   `tool_unknown`, `plan_mode_blocked`, `budget_continuation_stop` action
+   types — NOT `chat_response` (so per-turn token + thinking data is
+   conditional on a future audit_log enrichment).
+
+PRODUCE 3-AXIS REVIEW.
+
+=== AXIS A — Script correctness / bugs / regressions ===
+- Does `build_telemetry()` correctly parse audit_log JSONL? Confirm
+  malformed-line tolerance + missing-file tolerance.
+- `_group_into_turns` uses a 30-second-gap heuristic. Is this defensible
+  for v5's per-Bedrock-turn boundary, given the lack of `chat_response`
+  events in the audit_log today? What's the failure mode on a slow
+  Bedrock call (>30s wallclock between dispatches within ONE turn)?
+- `_summarize_tool_calls` REPEATED count: my logic is
+  `sum(c) - sum(1) for c>1`. Re-derive: 2 read_file calls with same args
+  = 1 repeat (correct: one extra call beyond the first). Verify the
+  formula matches that semantics or flag.
+- `_parse_outcome_from_log`: regex matches `[Cost ...]` warning lines.
+  Does this correctly detect cost_cap_hit when the cap was 0 (e.g. v4
+  default)? My current logic treats final_cost >= final_cap as hit.
+- Validation: `_validate_telemetry()` only enforces top-level keys +
+  `outcome.completed in [True, False, None]`. Are there other invariants
+  the schema needs (e.g. `tool_call_summary.TOTAL_calls >= 0`)?
+- `_extract_compaction_events` filter is `"compact" in action.lower()`.
+  Could this false-positive on a tool named "compact_x" or an action
+  containing "compact" as substring? (E.g. `budget_continuation_stop`
+  doesn't contain compact.)
+
+=== AXIS B — Architecture fit ===
+- v5 audit_log doesn't currently emit `chat_response` events; per_turn
+  token + thinking fields will be null for R1-R16. Lock test
+  `test_build_telemetry_captures_thinking_when_audit_emits_chat_response`
+  verifies the script handles the FUTURE shape correctly. Acceptable?
+- Lock test path resolution: `_THIS.parents[4]` lands at compact_v5.
+  Compatible with both pytest (rootdir = compact_v5/MAIN/agent) AND
+  direct `python build_telemetry.py` invocation?
+- The `--audit-log` arg accepts BOTH a single .jsonl and a directory
+  (picks newest .jsonl). Useful, or footgun?
+- Side-channel JSON (e.g. _r1_metrics.json) populates outcome.cost_usd
+  etc. Is this an acceptable workaround for the audit_log gap, or should
+  the audit_log itself be enriched?
+
+=== AXIS C — Reference-repo coverage / gaps closed ===
+- Confirm PLAYBOOK §1 algorithm steps 1-8 are all implemented.
+- Confirm PLAYBOOK §4.5 Gap A (thinking_text + thinking_tokens per turn)
+  is implemented + lock-tested.
+- Schema completeness: are there fields PS_V5_TEST_SET.md / Block V
+  scoring rubric needs that aren't in the output?
+
+=== FINAL ===
+SCRIPT REVIEW VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
+
+Goal: APPROVE so build_telemetry.py can be used on R1.
+
+Be specific. Cite file:line for any finding.

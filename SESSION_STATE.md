@@ -57,6 +57,19 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### R-tier infrastructure (2026-05-03) — pre-R1-redo
+- AWS pre-flight clean: $0/$50 budget, IAM OK, Haiku 4.5 + Sonnet 4.5 AU profiles available.
+- Block J T5 fix: `au.` prefix for Haiku 4.5 (no on-demand throughput); 3/3 T5 PASS on real Bedrock at ~$0.007.
+- v5 architectural fix #1: Agent.run propagates CONFIG.max_tokens + CONFIG.temperature into QueryEngine.run (was ignored, defaulted to 4096). Lock test test_agent_max_tokens_propagation.py 2/2 PASS.
+- v5 architectural fix #2: TOKENS applies +10% geo-inference premium (`get_geo_multiplier()`) for au./us./eu./apac. profiles per AWS Bedrock model card + Anthropic pricing. Was undercounting AWS billing by 10%. Lock test test_geo_inference_premium.py 5/5 PASS. test_block_b.py au-prefix expected cost updated (0.0105 → 0.01155).
+- build_telemetry.py aggregator (~330 LOC) per PLAYBOOK §1 + §4.5 Gap A (thinking_text + thinking_tokens per turn). Codex iter-1 = APPROVE. 7/7 lock tests PASS.
+- R17 thinking-visibility test (Sonnet 4.5 AU, $0.30 cap) per PLAYBOOK §4.5 Gap B.
+- R1 hung on interactive ipywidget approval prompts (require_tool_approval=True default). Fixed: R-tier tests now set CONFIG.require_tool_approval=False during un-attended runs.
+- Block V DROPPED per user 2026-05-03 (auto mode, save $2). R-tier total cap $9.55.
+- Per-test discipline now 10 mandatory files (was 9): added quality.md per PLAYBOOK §4.5.
+- Mock test suite: 795 pass + 17 skip; verify_ship_zip PASS.
+- Next: redo R1 cleanly with all 10 mandatory files.
+
 ### R-tier pre-flight (2026-05-03) — AWS validated + Block J T5 model-id fix
 - AWS creds: account 903039434627 / IAM user winstonuser; Bedrock-Monthly-50 budget $0/$50 (full headroom).
 - Haiku 4.5 AU + Sonnet 4.5 AU both available in ap-southeast-2.

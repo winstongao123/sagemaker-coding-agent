@@ -160,6 +160,14 @@ class Agent:
         active_tools = list(tools) if tools is not None else all_registered()
 
         self._stop_requested = False  # reset between runs
+        # R-tier R1 PHASE A iter-2 fix: propagate CONFIG.max_tokens +
+        # CONFIG.temperature into the per-call Bedrock kwargs. Without
+        # this, R-tier tests that override CONFIG.max_tokens (to cap
+        # per-turn output cost) would have no effect because QueryEngine.run
+        # defaults to max_tokens=4096 / temperature=0.0.
+        from runtime.config import CONFIG as _CFG
+        _max_tokens = getattr(_CFG, "max_tokens", 4096)
+        _temperature = getattr(_CFG, "temperature", 0.0)
         result = self._engine.run(
             user_message=message,
             system_prompt=system_prompt,
@@ -168,6 +176,8 @@ class Agent:
             output_fn=output_fn,
             thinking_enabled=self._thinking_enabled,
             thinking_budget=self._thinking_budget,
+            max_tokens=_max_tokens,
+            temperature=_temperature,
         )
         return result
 

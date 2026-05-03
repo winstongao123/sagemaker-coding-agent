@@ -459,7 +459,14 @@ def test_canonicalize_model_id_strips_au_prefix():
 
 def test_au_prefixed_model_records_real_cost():
     """Lock test for Codex iter-1 finding #1 (HIGH): TOKENS.add against
-    `au.`-prefixed model id must record a non-zero cost (was $0 before fix)."""
+    `au.`-prefixed model id must record a non-zero cost (was $0 before fix).
+
+    R-tier R1 PHASE A iter-3 follow-up: au. carries +10% geo-inference
+    premium (per AWS Bedrock model card + Anthropic pricing). v5 applies
+    `get_geo_multiplier(raw_mid) = 1.10` so the recorded cost is now
+    1.10x the global base rate. See test_geo_inference_premium.py for
+    the dedicated lock tests on the multiplier itself.
+    """
     from runtime.tokens import TOKENS
 
     TOKENS.reset()
@@ -467,10 +474,13 @@ def test_au_prefixed_model_records_real_cost():
         {"input_tokens": 1000, "output_tokens": 500},
         model_id="au.anthropic.claude-sonnet-4-5-20250929-v1:0",
     )
-    # Sonnet 4.5 = $0.003/1k input, $0.015/1k output
-    # Expected: 1000/1000 * 0.003 + 500/1000 * 0.015 = 0.003 + 0.0075 = 0.0105
+    # Sonnet 4.5 = $0.003/1k input, $0.015/1k output (global base rates).
+    # Geo multiplier (au.) = 1.10.
+    # Expected: (1000/1000 * 0.003 + 500/1000 * 0.015) * 1.10
+    #         = (0.003 + 0.0075) * 1.10
+    #         = 0.0105 * 1.10 = 0.01155
     assert TOKENS.session_cost > 0
-    assert abs(TOKENS.session_cost - 0.0105) < 1e-6
+    assert abs(TOKENS.session_cost - 0.01155) < 1e-6
 
 
 def test_audit_log_on_unknown_tool_dispatch(tmp_path, monkeypatch):

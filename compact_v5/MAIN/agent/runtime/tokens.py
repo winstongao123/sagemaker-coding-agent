@@ -69,25 +69,75 @@ MODEL_COSTS: Dict[str, Dict[str, float]] = {
 _MODEL_PRICING = MODEL_COSTS
 
 
-def canonicalize_model_id(model_id: str) -> str:
-    """Strip Bedrock cross-region inference prefixes.
+# R-tier R1 PHASE A iter-3 fix: AWS Bedrock geo inference profiles
+# (au. / us. / eu. / apac.) carry a 10% premium over the global Anthropic
+# list price for Haiku 4.5 and Sonnet 4.5. The local cost tracker MUST
+# apply this multiplier to avoid undercounting actual AWS spend (which
+# would let R-tier tests "pass cap locally" while exceeding it in real
+# AWS billing).
+#
+# Sources (verified 2026-05-03):
+#   - AWS Bedrock model card for Haiku 4.5 documents au./us./eu./apac.
+#     as Geo Inference IDs.
+#   - Anthropic pricing docs
+#     (https://platform.claude.com/docs/en/about-claude/pricing) state
+#     regional/multi-region endpoints carry a 10% premium over global.
+#   - v5 internal corroboration: clara/prompts/HOW_TO_USE.md:31 prices
+#     Haiku (AU) at $1.10 confirming the premium.
+#
+# Global / standard prefix `anthropic.` = 1.0x.
+# Geo prefixes `au.` / `us.` / `eu.` / `apac.` = 1.10x.
+GEO_INFERENCE_PREMIUM = 1.10
+_GEO_PREFIXES = ("au.", "apac.", "us.", "eu.")
 
-    Per Runnable cost-tracker.ts:181-226 (R11 N9). v5 collapses
-    `apac.anthropic.claude-haiku-4-5-...` and
-    `anthropic.claude-haiku-4-5-...` to the same canonical key for
-    pricing lookup. Bedrock inference-profile prefixes covered:
+
+def get_geo_multiplier(model_id: str) -> float:
+    """Return the price multiplier for a Bedrock model id.
+
+    1.0  = global (`anthropic.<...>`)
+    1.10 = geo inference profile (`au.<...>`, `us.<...>`, `eu.<...>`, `apac.<...>`)
+
+    Source: AWS Bedrock model card for Haiku 4.5 documents au./us./eu./apac.
+    as Geo Inference IDs. Anthropic pricing
+    (https://platform.claude.com/docs/en/about-claude/pricing) states
+    regional/multi-region endpoints carry a 10% premium over global.
+    v5 internal: clara/prompts/HOW_TO_USE.md:31 prices Haiku (AU) at $1.10
+    confirming the premium.
+    """
+    if not model_id:
+        return 1.0
+    if any(model_id.startswith(p) for p in _GEO_PREFIXES):
+        return GEO_INFERENCE_PREMIUM
+    return 1.0
+
+
+def canonicalize_model_id(model_id: str) -> str:
+    """Strip Bedrock cross-region inference prefixes for pricing lookup.
+
+    Bedrock inference-profile prefixes covered:
         au.   — Australia (Sydney; ap-southeast-2 default)
         apac. — Asia-Pacific
         us.   — United States (legacy us-east-1 / us-west-2)
         eu.   — Europe (legacy eu-west-1 / eu-central-1)
 
+    Source: AWS Bedrock model card for Haiku 4.5 documents au./us./eu./apac.
+    as Geo Inference IDs. Anthropic pricing
+    (https://platform.claude.com/docs/en/about-claude/pricing) states
+    regional/multi-region endpoints carry a 10% premium over global.
+    v5 internal: clara/prompts/HOW_TO_USE.md:31 prices Haiku (AU) at $1.10
+    confirming the premium.
+
     Codex Block-B finding #1 (HIGH) lock: `au.` was missing originally,
     causing CONFIG.model_id="au.anthropic.claude-sonnet-4-5-..." to
     miss MODEL_COSTS entirely and TOKENS to record $0.
+
+    NOTE: stripping the prefix gets the BASE rate from MODEL_COSTS;
+    callers must additionally apply `get_geo_multiplier()` to charge the
+    +10% premium on geo-inference profiles. R-tier R1 iter-3 fix.
     """
     if not model_id:
         return model_id
-    for prefix in ("au.", "apac.", "us.", "eu."):
+    for prefix in _GEO_PREFIXES:
         if model_id.startswith(prefix):
             return model_id[len(prefix):]
     return model_id
@@ -351,19 +401,25 @@ class TokenTracker:
             # B-8 — record last usage so estimators can walk back.
             self._last_usage_record = dict(usage)
 
-            mid = canonicalize_model_id(model_id or self._config.model_id)
+            raw_mid = model_id or self._config.model_id
+            mid = canonicalize_model_id(raw_mid)
             if model_id:
                 self._model_id = model_id
             pricing = MODEL_COSTS.get(mid)
             cost = 0.0
             if pricing:
-                base_input = pricing["input"]
+                # R-tier R1 PHASE A iter-3 fix: apply geo-inference
+                # premium (1.10x) for au./us./eu./apac. profiles. Without
+                # this, local cost tracker undercounts AWS billing by 10%.
+                geo_mult = get_geo_multiplier(raw_mid)
+                base_input = pricing["input"] * geo_mult
+                base_output = pricing["output"] * geo_mult
                 regular_input = max(0, input_tokens - cache_read - cache_write)
                 cost = (
                     (regular_input / 1000) * base_input
                     + (cache_read / 1000) * base_input * 0.1
                     + (cache_write / 1000) * base_input * 1.25
-                    + (output_tokens / 1000) * pricing["output"]
+                    + (output_tokens / 1000) * base_output
                 )
                 self.session_cost += cost
                 self.last_cost = cost

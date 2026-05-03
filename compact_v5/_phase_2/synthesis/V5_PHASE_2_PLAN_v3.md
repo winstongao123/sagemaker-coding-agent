@@ -166,6 +166,7 @@ Plus standing rules: quality not rush, status/changelogs/PORT_LOG updated each B
 **Default-values update (user 2026-05-03)**:
 - `CONFIG.session_cost_limit = 20.0` (v5 default; visible budget for awareness, NOT a hard cap; v4 default was 0.0 = no limit)
 - `CONFIG.model_id = "au.anthropic.claude-sonnet-4-5-..."` (default Sonnet 4.5; carry v4.10.1+ preference forward)
+- **AU geo profile carries 10% premium over global per Anthropic pricing — TOKENS.py applies via get_geo_multiplier()** (R-tier R1 PHASE A iter-3 fix; lock tests at compact_v5/MAIN/agent/tests/integration/test_geo_inference_premium.py).
 - **Behavior matches v4**: warn at 80%, warn at 100% but agent CONTINUES. User decides whether to manually click Stop, raise budget, or let it run. NO hard halt at application level — that's deliberate, matches v4 UX, lets user overspend on critical tasks if they choose. The TRUE hard halt is at cloud level (AWS Budget Action $50/month + GCP Cloud Function $200/month) — those auto-stop without user intervention.
 - SessionManager: `:2578-...` (atomic save/load). Verbatim into `runtime/session.py` (extends Phase-1 stub).
 - session_cost_limit enforcement: TokenTracker has `:3638-3652` block (warns 80% / blocks 100%). Already wires from B.
