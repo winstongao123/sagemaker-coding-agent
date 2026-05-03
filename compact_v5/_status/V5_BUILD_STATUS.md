@@ -338,8 +338,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: 7a19715 (v5/block-d: slash-command dispatcher) — pushed 2026-05-03
-- Last tag: v5.0.1-block-d (Block D done, Codex 4-iter cycle ended APPROVE)
+- Last commit: c87a823 (v5/block-a: Compactor + auto-compact circuit breaker + cache_edits) — pushed 2026-05-03
+- Last tag: v5.0.1-block-a (Block A done, Codex 2-iter cycle ended APPROVE)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
