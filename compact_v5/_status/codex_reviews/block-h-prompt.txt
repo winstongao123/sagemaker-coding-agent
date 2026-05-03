@@ -1,0 +1,128 @@
+You are reviewing Block H of v5.0.1 — Memory extraction + sessionMemory
++ compact-API-invariants.
+
+Block H deliverable: NEW memory/ package with the Runnable extraction
++ sessionMemory + compact algorithm helpers. The critical fix is
+H-11 adjustIndexToPreserveAPIInvariants: without it, sessionMemoryCompact
+picks a startIndex landing mid-pair (tool_use without tool_result),
+causing Bedrock to 400-reject the next API call.
+
+Diff range: v5.0.1-block-g2..HEAD (Block H commit).
+
+Files changed:
+- NEW compact_v5/MAIN/agent/memory/__init__.py — re-exports.
+- NEW compact_v5/MAIN/agent/memory/extract.py (~250 LOC)
+  - MemoryExtractor dataclass with closure-scoped state:
+    + _last_extracted_message_index, _turns_since_last_extraction,
+      _tool_calls_since_last_extraction, _in_flight, _in_flight_lock.
+  - has_memory_writes_since(last_known_index) — H-1 race guard.
+  - count_model_visible_messages_since(messages, cursor) — H-2.
+  - increment_turn / increment_tool_call — H-4 / H-7 throttles.
+  - should_extract(messages) — combined trigger gate.
+  - extract_memories(messages, extract_fn, force) — main entry.
+  - drain_pending_extraction(timeout_s) — H-3 pre-shutdown drain.
+  - scan_memory_files / format_memory_manifest — H-6.
+- NEW compact_v5/MAIN/agent/memory/session_memory.py (~80 LOC)
+  - deduplicate_memory_entries — case-folded + whitespace-normalized,
+    preserves first-seen casing.
+  - has_tool_calls_in_last_assistant_turn — walks BACKWARDS to find the
+    last assistant; H-9.
+  - count_tool_calls_since — H-7 helper, supports tool_name filter.
+- NEW compact_v5/MAIN/agent/memory/compact.py (~110 LOC)
+  - adjust_index_to_preserve_api_invariants — H-11 MUST. Pulls cut
+    earlier when it would split a tool_use/tool_result pair.
+  - calculate_messages_to_keep_index — H-12 wrapper with max_keep_count.
+  - has_text_blocks — H-14 predicate.
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_h.py
+  - 16 tests: 6 TEST_DESIGN-named + 10 behavior locks.
+
+Reference paths:
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/services/
+  extractMemories.ts + sessionMemory.ts + sessionMemoryCompact.ts +
+  sessionMemoryUtils.ts.
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block H around line 258)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block H around line 290)
+- ADR-034: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 703 pass + 8 skip (was 687 + 8 at end of Block G2; +16 net new).
+verify_ship_zip.py: PASS (125 files / 346.6 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line.
+
+AXIS A — Errors / bugs / regressions
+- MemoryExtractor closure-scoped state:
+  - Verify _in_flight is reset in finally (extract.py).
+  - drain_pending_extraction polls _in_flight; verify it doesn't deadlock
+    when _in_flight_lock is held by the running extraction.
+  - should_extract gates: turns/tools/messages-since-cursor all must trip.
+  - extract_memories with force=True bypasses should_extract but still
+    honors _in_flight (else concurrent calls can corrupt memory.md).
+- adjust_index_to_preserve_api_invariants:
+  - When a tool_use/tool_result pair straddles candidate_index, pulls
+    earlier to the smaller of the two pair indices.
+  - Returns 0 when candidate_index <= 0.
+  - Returns len(msgs) when candidate_index >= len.
+  - Dangling tool_use (no tool_result yet) doesn't crash.
+  - Multiple pairs handled — algorithm finds the EARLIEST split, not
+    just the first.
+- calculate_messages_to_keep_index:
+  - Returns 0 when max_keep_count >= len.
+  - Computes naive candidate as len-max_keep_count then adjusts.
+- session_memory.deduplicate:
+  - Case-folded + whitespace-normalized. Preserves first-seen casing.
+  - Handles None/non-string entries gracefully.
+- has_tool_calls_in_last_assistant_turn:
+  - Walks BACKWARDS to find the LAST assistant.
+  - Returns False when last assistant has only text blocks.
+  - Returns False on empty messages.
+- 16 lock tests cover all 6 TEST_DESIGN rows + 10 behaviors.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Constraint #5 (minimum file structures): 1 new package with 3 files
+  + tests. Each file is one concern (extract / session_memory / compact).
+- Constraint #6 (architecture-first): closure-scoped state replaces v4's
+  global racy state. Documented in ADR-034 §2 as a v5-vs-v4 win.
+- Constraint #15 (quality, no rush): 16 lock tests; no real-LLM dispatch
+  needed for Block H (extract_fn injectable for tests).
+- Q3 axis 7 (long/complex coding): memory extraction + dedup + compact-
+  API-invariants is the foundation for cross-session memory.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+SYNTHESIS_MASTER §Block H lists 20 PORT_LOG rows. Block H ports:
+- H-1 (race guard): PORTED in #095
+- H-2 (cursor fallback): PORTED in #095
+- H-3 (drain): PORTED in #095
+- H-4 (turn throttle): PORTED in #095
+- H-5 (createAutoMemCanUseTool): ADVISORY ONLY (PORT_LOG #095) —
+  v5's unit-test mode doesn't dispatch a real LLM extractor; tests
+  inject extract_fn mock.
+- H-6 (scanMemoryFiles + manifest): PORTED in #095
+- H-7 (countToolCallsSince): PORTED in #095 + #096
+- H-8 (waitForSessionMemoryExtraction): drain-pending fits this contract;
+  PORTED in #095/#096.
+- H-9 (hasToolCallsInLastAssistantTurn): PORTED in #096
+- H-10 (createMemoryFileCanUseTool): same advisory note as H-5.
+- H-11 (adjustIndexToPreserveAPIInvariants MUST): PORTED in #097
+- H-12 (calculateMessagesToKeepIndex): PORTED in #097
+- H-14 (hasTextBlocks): PORTED in #097
+- H-13 (SessionMemoryCompactConfig): DEFERRED in #098.
+- H-15 (truncateSessionMemoryForCompact): DEFERRED in #098.
+- H-16 (isSessionMemoryEmpty): DEFERRED in #098.
+- H-17 (shouldUseSessionMemoryCompaction): DEFERRED in #098.
+- H-18 (getUserContext): DEFERRED to Block N in #098.
+- H-19 (getSystemContext): DEFERRED to Block N in #098.
+- H-20 (Onboarding): DEFERRED to Block N in #098.
+
+Verify each deferral has a target block + rationale (NO silent scope
+narrowing — this was v5.0.0's failure mode).
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.

@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block H DONE — Codex iter-2 APPROVE (clean)
+- 19 total Block H tests; PORT_LOG #095-#098 + ADR-034.
+- 2-iter Codex cycle: REJECT (2 BLOCKER + 1 LOW + 1 DOC) → APPROVE.
+- Tag v5.0.1-block-h at 9759c11 pending push. Next: Block H+.
+
 ### Block H iter-2 fixes (Codex iter-1 = REJECT)
 - compact.py: H-11 fixed-point loop — re-checks earlier pairs that get split when a later pair pulls the cut backward (Codex iter-1 #1 BLOCKER).
 - extract.py: drain_pending_extraction now uses threading.Event signaled in finally; old lock-based approach was a no-op (Codex iter-1 #2 BLOCKER).

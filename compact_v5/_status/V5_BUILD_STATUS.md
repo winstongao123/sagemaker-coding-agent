@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block H IN_PROGRESS** — code + 16 tests green, 703 pass + 8 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block H DONE** — tag `v5.0.1-block-h` at `9759c11` (pending push); 706 pass + 8 skip; Codex iter-2 APPROVE clean)
 
 ## v5.0.1 Block H entry (2026-05-03)
 - NEW `memory/` package (~450 LOC): memory/extract.py (MemoryExtractor + closure-scoped throttle state) + memory/session_memory.py (dedup + has_tool_calls_in_last_assistant_turn + count_tool_calls_since) + memory/compact.py (adjust_index_to_preserve_api_invariants H-11 MUST + calculate_messages_to_keep_index + has_text_blocks).
@@ -442,7 +442,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block H — Memory extraction + Hermes patterns (~945 LOC)** (after Block G2 tag).
+**Block H+ — Memory consolidation engine (manual /dream only)** (after Block H tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -457,7 +457,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block M status: DONE — tag `v5.0.1-block-m` at `09b6114`; pushed.
 - Block G status: DONE — tag `v5.0.1-block-g` at `0fe6454`; pushed.
 - Block G3 status: DONE — tag `v5.0.1-block-g3` at `6a49879`; pushed.
-- Block G2 status: DONE — tag `v5.0.1-block-g2` at `4a7fd7e`; pending push.
+- Block G2 status: DONE — tag `v5.0.1-block-g2` at `4a7fd7e`; pushed.
+- Block H status: DONE — tag `v5.0.1-block-h` at `9759c11`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
