@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block C DONE** — Codex 2-iter cycle ended APPROVE; 511 pass + 5 skip; pending tag + push)
+Last updated: 2026-05-03 (**v5.0.1 Block C DONE** — tag `v5.0.1-block-c` at `77c6eb4`, pushed; 511 pass + 5 skip)
 
 ## v5.0.1 Block C entry (2026-05-03)
 - 5 NEW security helper modules: json_repair (~115 LOC), injection_scanner (~100 LOC), scratchpad (~110 LOC), edit_file_safety (~190 LOC), bash_safety (~225 LOC).
@@ -302,8 +302,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Git
 - Branch: v5-build
-- Last commit: ff30e8d (v5/block-b-plus: SessionManager + cost-limit + AGENT_STATUS + FileCache + ADR-020 0-7/0-9) — pushed 2026-05-03
-- Last tag: v5.0.1-block-b-plus (Block B+ done, Codex 3-iter cycle ended APPROVE; gpt-5.3-codex throughout)
+- Last commit: 77c6eb4 (v5/block-c: runtime safety + JSON repair + injection scan + bash hardening + ADR-020 0-5/0-10) — pushed 2026-05-03
+- Last tag: v5.0.1-block-c (Block C done, Codex 2-iter cycle ended APPROVE)
 - Pushed to sageagent: 2026-05-02 (housekeeping commit)
 - HISTORICAL: Phase 0-13 commits 572e07dd93dc..469b390 (covered in compact_v5/MAIN/changelogs/)
 
