@@ -1124,6 +1124,64 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-024 — Block C+ (v5.0.1): Approval/diff dispatch + rate limits + ipywidgets fallback + Block-C UI remaps
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block C+
+**Status**: ACCEPTED
+
+### Context
+Block C shipped runtime safety helpers (destructive catalog, cd+git
+guard, multi-cd, pipe-segment, comment-label) but their UI-flow wiring
+was explicitly deferred to Block C+ per ADR-023's "Notes / known
+scope remaps" table. Block C+ also adds the approval gate (Phase 4
+ADR-010 commitment) + rate limiter (v4 :8731-8740) + per-tool
+always-allow + reason prompt + ipywidgets-headless fallback.
+
+### Decision
+Single `ui/approval_dialog.py` module with three exports:
+  - `PermissionDialog` — per-tool dialog, ipywidgets + text-mode paths.
+  - `ApprovalResult` — dataclass (approved / always_allow / reason / timed_out).
+  - `RateLimiter` — sliding-window message rate limit + per-session cap.
+
+Wire-in QueryEngine.run():
+  - Rate limit check at run() entry; on hit, return `stop_reason="rate_limited"`
+    without consuming budget.
+  - Approval gate before tool.execute(): when both flags set AND
+    `client.mock_mode is False`, prompt + block on user decision.
+
+### Key contracts (locked by tests)
+1. **mock_mode bypass.** When `client.mock_mode=True` (test runs), the
+   gate is silent — tests don't wedge on stdin. Verified via existing
+   525-test suite which constructs all clients with `mock_mode=True`.
+2. **Sticky always-allow.** First-time Always-allow stores
+   `CONFIG._always_allowed[tool_name] = True`; subsequent dialogs
+   short-circuit to ApprovalResult(approved=True, always_allow=True,
+   reason="sticky: ..."). Sticky check runs FIRST (before
+   `_override_decision`) so even tests with overrides honor it.
+3. **Headless watchdog.** ipywidgets-unavailable → text-mode prompt
+   with 60s timeout; non-TTY stdin → defaults to DENY (never silent
+   auto-approve).
+4. **Block-C helper integration.** PermissionDialog.render_warnings()
+   pulls from `security.bash_safety` for the four Block-C UI-only
+   helpers (C-11/C-12/C-13/C-14) and surfaces them in the dialog body.
+5. **Rate limit sliding window.** Drops timestamps older than 60s
+   before count; per-session cap separate from per-minute cap.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/ui/approval_dialog.py` (~280 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_c_plus.py` (14 tests)
+- MODIFIED: `compact_v5/MAIN/agent/core/query_engine.py` (gate + rate limiter wiring)
+
+### Linked port-log rows
+- #064 — PermissionDialog + RateLimiter + Block-C UI remap wiring
+
+### Validation
+- 525 pass + 5 skipped (was 511 + 5 at end of Block C; +14 net new).
+- verify_ship_zip.py: PASS (109 files / 292.8 KB / 37%).
+- Closes ADR-023 §Notes / known scope remaps for Block-C UI items
+  (C-11/C-12/C-13/C-14 lock-tested via test_approval_renders_*).
+
 ## ADR-023 — Block C (v5.0.1): Runtime safety + JSON repair + injection scan + bash hardening + ADR-020 0-5 / 0-10 remap
 
 **Date**: 2026-05-03

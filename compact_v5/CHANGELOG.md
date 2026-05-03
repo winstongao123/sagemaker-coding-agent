@@ -1,5 +1,42 @@
 # compact_v5 changelog
 
+## v5.0.1-block-c-plus — Approval/diff + rate limits + ipywidgets fallback (2026-05-03)
+
+Codex review: 2-iteration cycle (gpt-5.3-codex throughout):
+- iter 1 (3 files): REJECT with 3 findings (2 HIGH wiring, 1 MEDIUM
+  test coverage).
+- All 3 fixed; each has 1+ covering lock test (3 new lock tests added).
+- iter 2 (4 files): APPROVE — all 3 fixes verified clean.
+
+Fifth Block of the v5.0.1 21-Block build. Wires the approval/diff
+flow (Phase-4 ADR-010 commitment) + Block-C UI-only helpers
+(C-11/C-12/C-13/C-14 cd+git/multi-cd/pipe-segment/comment-label)
+through the new PermissionDialog. Closes ADR-023 §Notes / known scope
+remaps for Block-C UI items.
+
+NEW:
+- `ui/approval_dialog.py` (~280 LOC): PermissionDialog + RateLimiter +
+  ApprovalResult. Sticky always-allow (CONFIG._always_allowed), reason
+  prompt, ipywidgets-or-text-fallback, headless 60s watchdog, non-TTY
+  defaults-to-deny.
+
+WIRED:
+- `core/query_engine.py`: rate-limit gate at run() entry (returns
+  stop_reason="rate_limited" without consuming budget); approval gate
+  before tool.execute() (gated on require_tool_approval +
+  tool.requires_approval + NOT client.mock_mode); on deny, returns
+  user-denied tool_result so model can recover.
+
+TESTS: 14 new in `tests/integration/test_block_c_plus.py` covering all
+7 TEST_DESIGN §Block C+ items + 4 Block-C remap locks
+(test_approval_renders_*) + 3 lifecycle locks (sticky-flag,
+sliding-window expiry, run() entry wiring).
+
+PORT_LOG #064 + ADR-024.
+
+Pytest: 525 passed + 5 skipped (was 511 + 5 at Block C; +14 net new).
+verify_ship_zip.py: PASS (109 files / 292.8 KB / 37%).
+
 ## v5.0.1-block-c — Runtime safety + JSON repair + injection scan + bash hardening (2026-05-03)
 
 Codex review: 2-iteration cycle (gpt-5.3-codex throughout):

@@ -1,6 +1,17 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block C DONE** — tag `v5.0.1-block-c` at `77c6eb4`, pushed; 511 pass + 5 skip)
+Last updated: 2026-05-03 (**v5.0.1 Block C+ DONE** — Codex 2-iter cycle ended APPROVE; 528 pass + 5 skip; pending tag + push)
+
+## v5.0.1 Block C+ entry (2026-05-03)
+- NEW `ui/approval_dialog.py` (~280 LOC): PermissionDialog + RateLimiter + ApprovalResult.
+- WIRED `core/query_engine.py`: rate-limit gate at run() entry (returns stop_reason="rate_limited"); approval gate before tool.execute() (gated on require_tool_approval + tool.requires_approval + NOT client.mock_mode).
+- 17 new tests in `tests/integration/test_block_c_plus.py` (14 initial + 3 finding-locks for iter-1) covering all 7 TEST_DESIGN §Block C+ items + 4 Block-C remap locks (cd+git/multi-cd/pipe-segment/comment-label) + 3 lifecycle locks + 3 real-path locks (dispatch diff capture, Windows watchdog, non-TTY fallback).
+- Codex AXIS A/B/C 2-iter cycle (gpt-5.3-codex throughout):
+  - iter 1 (3 files): REJECT with 3 findings (2 HIGH wiring, 1 MEDIUM test coverage).
+  - iter 2 (4 files): APPROVE — all 3 fixes verified clean.
+- PORT_LOG row #064 + ADR-024. Closes ADR-023 §Notes / known scope remaps for Block-C UI items.
+- `verify_ship_zip.py`: PASS (109 files / 293.5 KB / 37%).
+- Pytest: **528 passed + 5 skipped** (was 511 + 5 at Block C; +17 pass net).
 
 ## v5.0.1 Block C entry (2026-05-03)
 - 5 NEW security helper modules: json_repair (~115 LOC), injection_scanner (~100 LOC), scratchpad (~110 LOC), edit_file_safety (~190 LOC), bash_safety (~225 LOC).
@@ -312,12 +323,13 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block C+ — Approval/diff dispatch + rate limits + ipywidgets fallback + PermissionDialog richer** (after Block C tag).
+**Block D — Slash commands (19 advertised + /auth + /simplify + /init + /init-verifiers + /skillify + /dream + /promote-to-skill)** (after Block C+ tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
 - Block B+ status: DONE — tag `v5.0.1-block-b-plus` at `ff30e8d`; pushed.
-- Block C status: DONE — tag `v5.0.1-block-c` (pending; tagging this commit); pushed.
+- Block C status: DONE — tag `v5.0.1-block-c` at `77c6eb4`; pushed.
+- Block C+ status: DONE — tag `v5.0.1-block-c-plus` (pending; tagging this commit); pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

@@ -223,6 +223,26 @@ class QueryEngine:
         self._exec_call_count = 0  # bash + python_exec only
         self._recent_tool_calls: list = []  # [(name, args_hash), ...]
 
+        # Block C+ — message rate limit (v4 :8731-8740). Lives on the
+        # engine so per-session caps are tracked.
+        if not hasattr(self, "_rate_limiter"):
+            from ui.approval_dialog import RateLimiter
+            from runtime.config import CONFIG as _CFG
+            self._rate_limiter = RateLimiter(
+                max_per_minute=getattr(_CFG, "max_user_messages_per_minute", 100),
+                max_per_session=getattr(_CFG, "max_user_messages_per_session", 1500),
+            )
+        _rate_msg = self._rate_limiter.check()
+        if _rate_msg is not None:
+            return QueryResult(
+                text=_rate_msg,
+                messages=list(self.messages),
+                stop_reason="rate_limited",
+                turns_used=0,
+                budget_used=self.budget.used(),
+                error=_rate_msg,
+            )
+
         # Append user turn (Bedrock requires alternation; merge into trailing
         # user if needed — matches v4 sagemaker_agent.py:8744).
         if self.messages and self.messages[-1].get("role") == "user":
@@ -530,6 +550,98 @@ class QueryEngine:
                         _repaired_input = repair_tool_call_arguments(call.input)
                     except Exception:
                         _repaired_input = {}
+
+                # Block C+ — approval gate. When CONFIG.require_tool_approval
+                # AND tool.requires_approval are BOTH True (and we're not
+                # in mock_mode for tests), surface a PermissionDialog
+                # and block until decided. always-allow decisions stick
+                # on CONFIG._always_allowed[tool.name]. Mock detection
+                # checks the BedrockClient instance (not CONFIG) because
+                # tests construct their own client without flipping the
+                # global CONFIG.mock_mode flag.
+                from runtime.config import CONFIG as _CFG_AT
+                _is_mock = bool(
+                    getattr(_CFG_AT, "mock_mode", False)
+                    or getattr(self.client, "mock_mode", False)
+                )
+                if (not _is_mock
+                        and getattr(_CFG_AT, "require_tool_approval", False)
+                        and getattr(tool, "requires_approval", False)):
+                    if not hasattr(_CFG_AT, "_always_allowed"):
+                        _CFG_AT._always_allowed = {}
+                    if not _CFG_AT._always_allowed.get(call.name):
+                        try:
+                            from ui.approval_dialog import PermissionDialog
+                            _model_reason = ""
+                            if isinstance(_repaired_input, dict):
+                                _model_reason = str(_repaired_input.get("reason", ""))
+                            # Block C+ Codex iter-1 finding #1 (HIGH) lock:
+                            # for edit_file / write_file, render an inline
+                            # diff for the approval body so users see the
+                            # actual change before approving (Phase-4
+                            # ADR-010 commitment).
+                            _diff_html = None
+                            if call.name in {"edit_file", "write_file"} and isinstance(_repaired_input, dict):
+                                try:
+                                    from ui.diff_widget import (
+                                        render_inline_diff,
+                                        render_new_file_diff,
+                                    )
+                                    import os as _os_diff
+                                    _fp = _repaired_input.get("file_path", "")
+                                    if call.name == "edit_file":
+                                        _old = _repaired_input.get("old_string", "")
+                                        _new = _repaired_input.get("new_string", "")
+                                        if _fp and _os_diff.path.isfile(_fp):
+                                            with open(_fp, "r", encoding="utf-8", errors="replace") as _f:
+                                                _before = _f.read()
+                                            _after = _before.replace(_old, _new, 1)
+                                            _diff_html = render_inline_diff(_fp, _before, _after)
+                                    else:  # write_file
+                                        _content = _repaired_input.get("content", "")
+                                        _mode = _repaired_input.get("mode", "write")
+                                        if _fp and _os_diff.path.isfile(_fp) and _mode == "write":
+                                            with open(_fp, "r", encoding="utf-8", errors="replace") as _f:
+                                                _before = _f.read()
+                                            _diff_html = render_inline_diff(_fp, _before, _content)
+                                        else:
+                                            _diff_html = render_new_file_diff(_fp, _content)
+                                except Exception:
+                                    _diff_html = None
+                            _dlg = PermissionDialog(
+                                tool_name=call.name,
+                                parameters=_repaired_input or {},
+                                reason=_model_reason,
+                                diff_html=_diff_html,
+                            )
+                            _result = _dlg.prompt()
+                            if not _result.approved:
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": call.id,
+                                    "content": (
+                                        f"User denied approval for "
+                                        f"`{call.name}`: {_result.reason}"
+                                    ),
+                                    "is_error": True,
+                                })
+                                continue
+                            # Approved — sticky if user clicked Always.
+                        except Exception as _approval_exc:
+                            logging.warning(
+                                f"approval gate failed: {_approval_exc}; "
+                                "defaulting to deny"
+                            )
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": call.id,
+                                "content": (
+                                    f"Approval gate error for `{call.name}`; "
+                                    f"defaulting to deny."
+                                ),
+                                "is_error": True,
+                            })
+                            continue
 
                 # Execute. Tool implementations may raise; we trap and surface
                 # the error to the model rather than the human user.
