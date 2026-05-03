@@ -18,6 +18,28 @@
 
 ---
 
+## SHELL ENVIRONMENT NOTE
+
+Repo is on Windows. All Bash-style commands below assume **Git Bash** (or PowerShell with `python` invoked as `py -3.11`). If using PowerShell directly:
+- `python -u -m pytest` → `py -3.11 -u -m pytest`
+- `tee -a file.log` → `Tee-Object -Append file.log`
+- `2>&1 | tee` → `2>&1 | Tee-Object`
+- `taskkill //F //IM codex.exe` → `taskkill /F /IM codex.exe` (single-slash)
+- `/tmp/out.json` → `$env:TEMP\out.json`
+- Heredoc `<<'EOF' ... EOF` → use `@'...'@` PowerShell here-string OR write prompt to temp file then `Get-Content`
+
+Worker should use Git Bash (already installed) for simplicity. If unavailable, translate per above.
+
+## CURRENT R1 STATUS (2026-05-04, BEFORE worker resumes)
+
+- auto_approve fix ALREADY APPLIED to R1 test (CONFIG.require_tool_approval=False)
+- Real bug found by worker: Unicode stdout encoding crash (cp1252 vs utf-8)
+- Unicode stdout fix LANDED (worker's fix already in tokens.py / agent.py earlier commits)
+- R1 needs: re-PHASE A on FIXED code → AWS call #2 (NOT #1, since iter-1 already ran)
+- Codex iter-4 PRE-FLIGHT verdict was APPROVE_FOR_AWS_CALL on the fixed code
+
+WORKER ACTION: do NOT redo R1 from scratch. Pull latest, verify R1 test code has both fixes, then proceed directly to AWS call (#2 in the sequence) per PER-TEST LOOP.
+
 ## PRE-FLIGHT (run in order, STOP if any fails)
 
 ```bash
@@ -123,20 +145,25 @@ CLOSE TEST:
 
 ---
 
-## 10 MANDATORY FILES PER TEST (incomplete = do NOT advance)
+## 10 EVIDENCE CATEGORIES PER TEST (7 always required + 3 conditional)
 
 ```
+ALWAYS REQUIRED (7):
 1.  _status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>-prompt.txt   # filled TEMPLATE A
 2.  _status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>.md           # Codex pre-flight verdict
 3.  _status/codex_reviews/r-tier-<TEST>-aws-call<N>.log             # raw Bedrock log
-4.  _status/codex_reviews/r-tier-<TEST>-phaseB-iter<N>.md           # Codex diagnosis (if FAIL)
-5.  _status/codex_reviews/r-tier-<TEST>-phaseC-iter<N>.md           # Codex post-pass sanity
 6.  _status/r_tier_metrics.jsonl                                    # JSONL row appended
-7.  _status/r_tier_review_log.md                                    # row appended
-8.  _status/codex_reviews/ESCALATION-<TEST>.md                      # IF cap/BUG/Codex crash
+7.  _status/r_tier_review_log.md                                    # row appended (this test's row)
 9.  _status/r-tier-<TEST>-aws-call<N>-telemetry.json                # build_telemetry.py output
-10. _status/r-tier-<TEST>-aws-call<N>-quality.md                    # PASS 1 + PASS 2 grade
+10. _status/r-tier-<TEST>-aws-call<N>-quality.md                    # PASS 1 + PASS 2 6-axis grade
+
+CONDITIONAL (only when triggered):
+4.  _status/codex_reviews/r-tier-<TEST>-phaseB-iter<N>.md           # Codex diagnosis — ONLY if AWS call FAILED
+5.  _status/codex_reviews/r-tier-<TEST>-phaseC-iter<N>.md           # Codex post-pass sanity — ONLY if AWS call PASSED
+8.  _status/codex_reviews/ESCALATION-<TEST>.md                      # ONLY if 3-call cap hit, SEMANTIC_BUG_DETECTED, or Codex CLI crash
 ```
+
+**Hard rule**: every always-required file (7) + the appropriate conditional file (PhaseB IF FAIL, PhaseC IF PASS, ESCALATION IF triggered) must exist before advancing. Do NOT create placeholder files for conditionals that didn't fire — that signals false state.
 
 ---
 
@@ -170,7 +197,7 @@ If you + Codex disagree by >1 point on any axis → flag in quality.md "RECONCIL
 
 ---
 
-## AFTER ALL 19 TESTS DONE
+## AFTER ALL 42 SCENARIOS DONE (R1-R19 groups; R18 has 15 sub-scenarios E1-E15, R19 has 10 U1-U10 — each must individually be READY)
 
 1. Final full-codebase Codex CLI AXIS A/B/C review
    Save: `_status/codex_reviews/FINAL-iter1.md`

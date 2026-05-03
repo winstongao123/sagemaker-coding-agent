@@ -59,8 +59,10 @@ AXIS A VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
 Findings: [severity] file:line — issue — fix
 
 === AXIS B — Cost-control soundness ===
-- Does the scenario fit within ${{COST_CAP}} on Haiku-4.5 at $1/MTok in /
-  $5/MTok out? Estimate token volume from the prompt + expected turn count.
+- Does the scenario fit within ${{COST_CAP}} on AU-Haiku-4.5 at **$1.10/MTok in /
+  $5.50/MTok out** (AU geo profile = base $1/$5 × 1.10 premium per Anthropic
+  pricing)? AU-Sonnet-4.5: **$3.30/MTok in / $16.50/MTok out**. Estimate token
+  volume from the prompt + expected turn count.
 - Is `session_cost_limit` actually enforced in the test? Cite the line.
 - Could a model loop (e.g. retries failing tool calls) blow the cap before halt?
 - Is there a hard turn-limit safeguard? (max_iterations or similar)
@@ -70,11 +72,14 @@ Output:
 AXIS B VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
 Findings: [cost-risk] specific scenario — mitigation
 
-=== AXIS C — Coverage of v5 vs Runnable vs v4 claim ===
-- What part of "v5 > Runnable > v4" does this test contribute evidence for?
+=== AXIS C — Coverage of v5 EMPIRICAL evidence ===
+- What part of v5's PRODUCTION-READINESS does this test contribute empirical
+  evidence for? (PS_problem fix / coding ability / sub-agent / memory /
+  context / tool use / UX edge / infra resilience)
 - Is the claim falsifiable from the test result, or is it just "ran without error"?
-- For Block V comparisons: are v4-side and v5-side runs using identical scenario?
-  Same prompt, same files, same model, same iteration limit?
+- v5-only: Block V (head-to-head v4) DROPPED per user 2026-05-03. v5 vs v4
+  vs Runnable comparison stays ARCHITECTURAL ONLY (PORT_LOG file:line refs).
+  Do NOT request side-by-side runs.
 
 Output:
 AXIS C VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
