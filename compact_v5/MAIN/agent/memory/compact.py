@@ -95,28 +95,29 @@ def adjust_index_to_preserve_api_invariants(
     use_to_index = indices["uses"]
     result_to_index = indices["results"]
 
-    # For each tool_use that lies AT or AFTER candidate_index, check
-    # whether its matching tool_result is BEFORE candidate_index — if so,
-    # the cut would orphan the use. Pull cut earlier to include the use.
-    # Symmetric check for tool_result without its use ahead.
+    # Codex iter-1 finding #1 BLOCKER fix: fixed-point loop.
+    # A single pass through use_to_index can leave earlier pairs split.
+    # Example: candidate=7 splits pair (5,8) → adjusted=5. But 5 splits
+    # an earlier pair (2,6) which we already visited. Iterate until no
+    # further pulls happen.
     adjusted = candidate_index
-    for tid, use_idx in use_to_index.items():
-        result_idx = result_to_index.get(tid)
-        if result_idx is None:
-            # Dangling tool_use (no result yet); the cut must NOT split
-            # it from any preceding tool_result-bearing context. Pull
-            # back to before the use to keep dispatch context intact.
-            if use_idx >= adjusted:
-                continue  # use is after the cut — still in keep-zone, fine
-            # use is before the cut: that's normal; nothing to do.
-            continue
-        # Pair: use at use_idx, result at result_idx. They must both be
-        # ≥ adjusted, OR both < adjusted. If split, pull adjusted to
-        # the earlier of the two.
-        if use_idx < adjusted <= result_idx:
-            adjusted = use_idx
-        elif result_idx < adjusted <= use_idx:
-            adjusted = result_idx
+    while True:
+        next_adjusted = adjusted
+        for tid, use_idx in use_to_index.items():
+            result_idx = result_to_index.get(tid)
+            if result_idx is None:
+                # Dangling tool_use (no result yet); the cut must NOT split
+                # it from any preceding tool_result-bearing context.
+                continue
+            lo = min(use_idx, result_idx)
+            hi = max(use_idx, result_idx)
+            # If the cut lands between lo and hi, the pair is split.
+            # Pull adjusted to lo so the whole pair lands AFTER the cut.
+            if lo < next_adjusted <= hi:
+                next_adjusted = min(next_adjusted, lo)
+        if next_adjusted == adjusted:
+            break
+        adjusted = next_adjusted
     return max(0, min(adjusted, len(msgs)))
 
 

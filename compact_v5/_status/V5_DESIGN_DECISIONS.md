@@ -1186,14 +1186,26 @@ The following Block H rows are explicitly DEFERRED:
   2K truncate, ~200 LOC) — DEFER to Block N (same reason).
 - **H-20 Onboarding step model + auto-suppress** (~60 LOC) — DEFER to
   Block N (first-run UX).
-- **H-13 SessionMemoryCompactConfig** (~40 LOC) — DEFER to a future
-  iteration. Configuration polish for the SM-compact-vs-legacy-compact
-  integration that hasn't landed yet.
-- **H-15 truncateSessionMemoryForCompact** (~50 LOC) — DEFER.
-  Per-section + total token caps; depends on H-13.
-- **H-16 isSessionMemoryEmpty** (~10 LOC) — DEFER.
+- **H-13 SessionMemoryCompactConfig** (~40 LOC) — DEFER to **Block A
+  SM-compact integration follow-up** (post-Block-N, pre-R-tier).
+  Configuration polish for the SM-compact-vs-legacy-compact integration.
+  When CONFIG.use_session_memory_compaction lands as a runtime knob,
+  this row gets ported alongside it.
+- **H-15 truncateSessionMemoryForCompact** (~50 LOC) — DEFER to
+  **Block A SM-compact integration follow-up**. Per-section + total
+  token caps; depends on H-13.
+- **H-16 isSessionMemoryEmpty** (~10 LOC) — DEFER to **Block A
+  SM-compact integration follow-up**.
 - **H-17 shouldUseSessionMemoryCompaction env-override** (~20 LOC) —
-  DEFER.
+  DEFER to **Block A SM-compact integration follow-up**.
+
+The "Block A SM-compact integration follow-up" is a concrete planned
+item: it lands as a small (~120 LOC total for H-13/H-15/H-16/H-17)
+extension to core/compactor.py after Block N's dynamic-section work
+makes the wiring point clean. It is NOT a vague "future iteration" —
+it has a target Block (A as the integration site, gated post-N) and
+a load-bearing reason (SM-compact strategy needs the compactor as
+its dispatch site).
 
 These deferrals are recorded in PORT_LOG #098 with explicit target
 blocks/iterations and rationale. NO silent scope narrowing.

@@ -27,8 +27,10 @@ def deduplicate_memory_entries(entries: List[str]) -> List[str]:
     for entry in entries:
         if not isinstance(entry, str):
             continue
-        # Normalize: lower-case + collapse whitespace.
-        key = " ".join(entry.lower().split())
+        # Normalize: case-folded (Unicode-aware, vs .lower() which is
+        # ASCII-only for some characters) + collapse whitespace.
+        # Codex iter-1 finding #3 fix: use str.casefold() not str.lower().
+        key = " ".join(entry.casefold().split())
         if not key:
             continue
         if key in seen_keys:

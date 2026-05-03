@@ -35,6 +35,13 @@ DEFAULT_TURNS_SINCE_LAST_EXTRACTION = 5
 DEFAULT_TOOL_CALL_THRESHOLD = 25
 
 
+def _make_set_event() -> threading.Event:
+    """Helper: create an Event that starts in the SET state (idle)."""
+    e = threading.Event()
+    e.set()
+    return e
+
+
 @dataclass
 class MemoryExtractor:
     """Per-session closure-scoped extraction state.
@@ -61,6 +68,12 @@ class MemoryExtractor:
     _tool_calls_since_last_extraction: int = 0
     _in_flight: bool = False
     _in_flight_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Codex iter-1 finding #2 BLOCKER fix: drain support requires an Event
+    # signaled when the in-flight extraction completes. _in_flight_lock alone
+    # is released the moment we set _in_flight=True, so a drain caller would
+    # see "lock free, _in_flight True" and exit immediately. The Event
+    # remains "unset" while in-flight and is set in the finally block.
+    _idle_event: threading.Event = field(default_factory=lambda: _make_set_event())
 
     def has_memory_writes_since(self, last_known_index: int) -> bool:
         """H-1 race guard: did anything happen between `last_known_index`
@@ -172,10 +185,14 @@ class MemoryExtractor:
 
         # H-1: in-flight guard. Set under lock so concurrent should_extract
         # callers see _in_flight=True before we start.
+        # Codex iter-1 fix (drain): clear the idle Event under the lock so
+        # drain_pending_extraction sees "in flight" reliably. Set the Event
+        # again in the finally block.
         with self._in_flight_lock:
             if self._in_flight:
                 return []
             self._in_flight = True
+            self._idle_event.clear()
 
         try:
             # H-2: only consider messages AFTER the last extraction cursor.
@@ -206,25 +223,30 @@ class MemoryExtractor:
             self._tool_calls_since_last_extraction = 0
             return new_entries
         finally:
-            self._in_flight = False
+            # Codex iter-1 fix: signal idle under lock so a concurrent
+            # drain_pending_extraction sees a consistent (in_flight,
+            # idle_event) state.
+            with self._in_flight_lock:
+                self._in_flight = False
+                self._idle_event.set()
 
     def drain_pending_extraction(self, timeout_s: float = 5.0) -> bool:
         """H-3: pre-shutdown drain. Block until any in-flight extraction
         completes, up to `timeout_s` seconds. Returns True iff drained
         cleanly (no in-flight at exit).
+
+        Codex iter-1 finding #2 fix: use a threading.Event signaled in
+        extract_memories' finally block. The previous lock-based approach
+        was a no-op because _in_flight_lock is released the moment we
+        set _in_flight=True — drain would acquire the free lock and
+        return immediately while extraction was still running.
         """
-        # Best-effort: poll _in_flight under the lock; if held, wait via
-        # the lock's blocking acquire with timeout (Python 3.2+ supports
-        # timeout on acquire).
-        if not self._in_flight:
+        # Fast-path: already idle.
+        if self._idle_event.is_set() and not self._in_flight:
             return True
-        acquired = self._in_flight_lock.acquire(timeout=timeout_s)
-        if not acquired:
-            return False
-        try:
-            return not self._in_flight
-        finally:
-            self._in_flight_lock.release()
+        # Wait for the event to be set (signaled in finally clause above).
+        # `wait` returns True if the event got set within timeout.
+        return self._idle_event.wait(timeout=timeout_s)
 
     def _append_to_memory_md(self, entries: List[str]) -> None:
         """Write `entries` to memory.md atomically (best-effort)."""

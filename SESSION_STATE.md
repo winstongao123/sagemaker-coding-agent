@@ -37,7 +37,15 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block H (code commit; Codex pending)
+### Block H iter-2 fixes (Codex iter-1 = REJECT)
+- compact.py: H-11 fixed-point loop — re-checks earlier pairs that get split when a later pair pulls the cut backward (Codex iter-1 #1 BLOCKER).
+- extract.py: drain_pending_extraction now uses threading.Event signaled in finally; old lock-based approach was a no-op (Codex iter-1 #2 BLOCKER).
+- session_memory.py: dedup uses str.casefold() for Unicode-aware folding instead of .lower() (Codex iter-1 #3 LOW).
+- ADR-034 + PORT_LOG #098: H-13/H-15/H-16/H-17 deferral target named concretely as "Block A SM-compact integration follow-up" instead of vague "future iteration" (Codex iter-1 doc finding).
+- 3 new lock tests (cascading-pair-pulls / drain-actually-blocks / casefold-unicode).
+- 706 pass + 8 skip.
+
+### Block H (code commit; Codex iter-1 = REJECT)
 - memory/ package NEW (~450 LOC): extract.py + session_memory.py + compact.py.
 - 16 tests; 703 pass + 8 skip; verify_ship_zip PASS.
 - PORT_LOG #095-#098 + ADR-034.

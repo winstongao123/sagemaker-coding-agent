@@ -378,6 +378,130 @@ def test_has_text_blocks():
     assert has_text_blocks(None) is False
 
 
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_h11_fixed_point_loop_handles_cascading_pair_pulls():
+    """Codex iter-1 finding #1 BLOCKER lock: when a later pair pulls
+    the cut backward, the algorithm must re-check earlier pairs that
+    might newly become split.
+
+    Buffer layout (indices in []):
+      [0] user "task"
+      [1] assistant: tool_use a (id=a)
+      [2] assistant: tool_use b (id=b)
+      [3] user: tool_result for a
+      [4] user: text "ok"
+      [5] user: tool_result for b
+      [6] assistant: text "done"
+
+    Pair a: (1, 3). Pair b: (2, 5).
+
+    candidate=4 splits pair b (2, 5). First-pass adjusts to 2.
+    But adjusted=2 also splits pair a (1, 3). Without fixed-point loop,
+    we'd return 2 (still split). With fixed-point: pull again to 1.
+
+    Lock: candidate=4 → final adjusted ≤ 1.
+    """
+    from memory import adjust_index_to_preserve_api_invariants
+
+    msgs = [
+        {"role": "user", "content": "task"},  # 0
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "a", "name": "x", "input": {}},
+        ]},  # 1
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "b", "name": "y", "input": {}},
+        ]},  # 2
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "a", "content": ""},
+        ]},  # 3
+        {"role": "user", "content": "ok"},  # 4
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "b", "content": ""},
+        ]},  # 5
+        {"role": "assistant", "content": [{"type": "text", "text": "done"}]},  # 6
+    ]
+    out = adjust_index_to_preserve_api_invariants(msgs, candidate_index=4)
+    assert out <= 1, (
+        f"Cascading pair pulls require fixed-point loop. Got {out}, "
+        f"expected ≤1 (both pairs (1,3) and (2,5) must end up on the "
+        f"same side of the cut)."
+    )
+
+
+def test_drain_pending_extraction_actually_blocks_until_complete(tmp_path):
+    """Codex iter-1 finding #2 BLOCKER lock: drain_pending_extraction
+    must BLOCK until the in-flight extraction completes, not return
+    immediately.
+
+    Setup: spawn an extraction in a background thread that holds for
+    ~50ms. Call drain from the main thread. drain must wait at least
+    ~40ms (the slower of: extraction duration, drain timeout) before
+    returning.
+    """
+    import threading
+    import time
+    from memory import create_memory_extractor
+
+    ext = create_memory_extractor(workspace=str(tmp_path))
+
+    def slow_extract(messages, manifest):
+        time.sleep(0.05)
+        return ["entry"]
+
+    msgs = [
+        {"role": "user", "content": "x"},
+        {"role": "assistant", "content": [{"type": "text", "text": "y"}]},
+    ]
+
+    started = threading.Event()
+    bg_done = threading.Event()
+
+    def bg():
+        started.set()
+        ext.extract_memories(msgs, extract_fn=slow_extract, force=True)
+        bg_done.set()
+
+    t = threading.Thread(target=bg)
+    t.start()
+    started.wait(timeout=2.0)
+    # Give the bg thread time to enter extract_memories' try block + clear
+    # the idle event before main calls drain.
+    time.sleep(0.005)
+
+    drain_start = time.monotonic()
+    ok = ext.drain_pending_extraction(timeout_s=2.0)
+    drain_elapsed = time.monotonic() - drain_start
+
+    t.join(timeout=2.0)
+    assert ok is True, "drain must return True after extraction finishes"
+    # Must have blocked at least ~30ms (the bg sleep was 50ms minus our 5ms head-start).
+    assert drain_elapsed > 0.020, (
+        f"drain returned in {drain_elapsed*1000:.1f}ms — must block "
+        "until in-flight extraction completes (Codex iter-1 #2)"
+    )
+    # And the bg extraction did finish.
+    assert bg_done.is_set()
+
+
+def test_dedup_uses_casefold_for_unicode():
+    """Codex iter-1 finding #3 LOW lock: dedup must use str.casefold(),
+    not str.lower(). casefold handles Unicode case-folding (e.g.
+    German ß → ss) where lower() is ASCII-only-ish.
+
+    Lock: 'ß' and 'ss' must be treated as equal under casefold.
+    """
+    from memory import deduplicate_memory_entries
+
+    out = deduplicate_memory_entries(["Straße", "STRASSE"])
+    # casefold('Straße') == 'strasse' == casefold('STRASSE') → dedup to 1.
+    assert len(out) == 1, (
+        f"casefold should dedup German ß↔ss; got {out!r}. Codex iter-1 #3."
+    )
+
+
 def test_scan_memory_files_lists_md_under_workspace(tmp_path):
     """H-6: scan_memory_files lists existing .md files under workspace."""
     from memory import create_memory_extractor
