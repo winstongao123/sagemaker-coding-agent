@@ -80,3 +80,18 @@ No additional AWS call should run unless:
 4. raw output is teed to `_status/codex_reviews/r-tier-<TEST>-aws-call<N>.log`,
 5. telemetry and quality files are generated immediately after the call,
 6. `r_tier_gate.py --test <TEST>` passes before moving on.
+
+## AWS Budget snapshot
+
+Checked on 2026-05-03 with:
+
+```bash
+aws budgets describe-budget --account-id 903039434627 --budget-name Bedrock-Monthly-50
+```
+
+Result:
+
+- budget limit: `$50.00`
+- actual spend: `$0.00`
+- forecasted spend: `$0.051`
+- health status: `HEALTHY`
