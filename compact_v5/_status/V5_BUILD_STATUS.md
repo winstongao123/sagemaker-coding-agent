@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block H+ IN_PROGRESS** — code + 11 tests green (1 T5 skip), 717 pass + 9 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block H+ DONE** — tag `v5.0.1-block-h-plus` at `d40493e` (pending push); 720 pass + 9 skip; Codex iter-4 APPROVE clean)
 
 ## v5.0.1 Block H+ entry (2026-05-03)
 - NEW `runtime/dream.py` (~250 LOC): DREAM_PROMPT_TEMPLATE (4 phases: Orient → Gather → Consolidate → Prune+Index) + DreamLock (file-based with stale-recovery >600s) + run_dream(workspace, consolidator) + get_dream_prompt + DreamResult + _backup_memory_md + _restore_from_backup. **MANUAL TRIGGER ONLY per user decision 2026-05-01** — daemon scheduler / asyncio / atexit / env auto-enable INTENTIONALLY DROPPED.
@@ -449,7 +449,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block H+ — Memory consolidation engine (manual /dream only)** (after Block H tag).
+**Block L — Error/retry/cache-break + Bedrock guardrails** (after Block H+ tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -465,7 +465,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block G status: DONE — tag `v5.0.1-block-g` at `0fe6454`; pushed.
 - Block G3 status: DONE — tag `v5.0.1-block-g3` at `6a49879`; pushed.
 - Block G2 status: DONE — tag `v5.0.1-block-g2` at `4a7fd7e`; pushed.
-- Block H status: DONE — tag `v5.0.1-block-h` at `9759c11`; pending push.
+- Block H status: DONE — tag `v5.0.1-block-h` at `9759c11`; pushed.
+- Block H+ status: DONE — tag `v5.0.1-block-h-plus` at `d40493e`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

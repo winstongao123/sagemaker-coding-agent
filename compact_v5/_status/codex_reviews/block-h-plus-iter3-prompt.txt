@@ -1,0 +1,80 @@
+You are reviewing Block H+ of v5.0.1 — ITER 3 (re-review after fixes).
+
+Iter-2 verdict was APPROVE_WITH_FIXES with:
+  - Finding #2 nonce-release was PARTIAL: read-then-unlink had a TOCTOU
+    race where B could reclaim between A's nonce-read and unlink.
+
+Verify the iter-3 fix lands correctly. Focus on iter-3 commit 8c357fc.
+
+Diff range: <prev>..HEAD (iter-3 commit 8c357fc).
+
+Iter-3 file changes:
+- MODIFIED compact_v5/MAIN/agent/runtime/dream.py
+  - DreamLock.release() now uses atomic rename:
+    1. os.rename(lock_path, lock_path + '.releasing.<nonce>') —
+       atomic. Returns/no-ops if file gone.
+    2. After rename, A has exclusive ownership of the renamed path
+       (no other worker can see it under the original name).
+    3. Verify nonce on the renamed file (defensive — should always
+       match since rename moves contents atomically).
+    4. Match → unlink. Mismatch → rename back to original so B's
+       lock isn't stranded.
+  - Eliminates the TOCTOU race entirely: between rename and unlink,
+    the original lock_path doesn't exist, so B's reclaim attempt would
+    have to recreate it via O_CREAT | O_EXCL, which would succeed
+    independently. A's unlink targets the renamed path, not the
+    reclaimed one.
+- MODIFIED compact_v5/MAIN/agent/tests/integration/test_block_h_plus.py
+  - 1 new lock test: test_dream_lock_release_atomic_rename_no_toctou —
+    verifies clean release with no .releasing.* tombstones.
+
+Tests: 720 pass + 9 skip (was 719 + 8 at iter-2; +1 finding-lock).
+
+Apply the 3-axis review template focused on iter-3 fix.
+
+AXIS A — Errors / bugs / regressions
+- atomic-rename release contract:
+  - os.rename is atomic on both POSIX and Windows for in-same-dir
+    rename (which is the case here — both paths are in workspace).
+  - rename failure → no-op (return early). Lock_path is gone or
+    moved; not ours to release.
+  - rename success → A owns the renamed path exclusively.
+  - Read+verify nonce on the renamed file. Should always match
+    (paranoid double-check — rename moves contents atomically).
+  - Match → os.unlink the renamed path. The original lock_path is
+    not touched.
+  - Mismatch → defensive rename-back to original so B's lock isn't
+    stranded (defensive; should never happen).
+- Verify NEW test passes:
+  - test_dream_lock_release_atomic_rename_no_toctou: A.acquire +
+    A.release; assert lock_path gone AND no .releasing.* tombstone.
+- Existing tests still pass:
+  - test_dream_lock_release_only_unlinks_own_nonce — should still
+    pass because in that test, B overwrites the file BEFORE A's
+    release; with atomic-rename, A's rename fails (file content was
+    overwritten but path same? Actually rename succeeds since path
+    still exists; then nonce check on renamed file returns mismatch;
+    rename back).
+- Cross-platform check: os.rename on Windows fails if destination
+  exists. We use a unique nonce in the destination filename, so
+  collision is essentially impossible.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- The atomic-rename pattern is a well-known cross-platform technique
+  for ownership-safe lock release. Stays within Python stdlib (os.rename).
+- No new dependencies; no new abstractions.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+PORT_LOG #099 + ADR-035 unchanged structurally. Iter-3 is a pure
+correctness fix to the lock contract.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if the TOCTOU fix is sound AND no new findings emerge.
+Be specific. Cite file:line.

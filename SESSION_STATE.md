@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block H+ DONE — Codex iter-4 APPROVE (clean)
+- 14 total Block H+ tests + 1 T5 skip; PORT_LOG #099 + ADR-035 (with concurrency trade-off section).
+- 4-iter Codex cycle: APPROVE_WITH_FIXES (1 main + 1 secondary) → APPROVE_WITH_FIXES (race partial) → APPROVE_WITH_FIXES (race partial) → APPROVE.
+- Tag v5.0.1-block-h-plus at d40493e pending push. Next: Block L.
+
 ### Block H+ iter-4 fix (Codex iter-3 = APPROVE_WITH_FIXES)
 - runtime/dream.py: revert release() to read-then-unlink pattern (iter-3 atomic-rename approach had its own race per Codex iter-3 review).
 - ADR-035 §Concurrency trade-off: explicit acceptance of the residual TOCTOU race window between read+unlink because v5's /dream is MANUAL TRIGGER ONLY, no daemons (lock-tested), single-user SageMaker, no multi-process scenarios in v5's deployment shape.

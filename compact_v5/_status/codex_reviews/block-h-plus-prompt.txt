@@ -1,0 +1,107 @@
+You are reviewing Block H+ of v5.0.1 — Memory Consolidation Engine
+(/dream MANUAL only).
+
+Block H+ deliverable: NEW runtime/dream.py implementing the 4-phase
+consolidation engine triggered by /dream. **MANUAL TRIGGER ONLY** per
+user decision 2026-05-01 — daemon / scheduler / auto-fire / env-auto-
+enable INTENTIONALLY DROPPED.
+
+Diff range: v5.0.1-block-h..HEAD (Block H+ commit).
+
+Files changed:
+- NEW compact_v5/MAIN/agent/runtime/dream.py (~250 LOC)
+  - DREAM_PROMPT_TEMPLATE: 4-phase prompt (Orient → Gather → Consolidate
+    → Prune+Index). Phase ordering is load-bearing.
+  - LOCK_FILENAME = "dream.lock"; BACKUP_SUFFIX = ".bak"
+  - DreamLock: file-based mutex (O_CREAT | O_EXCL atomic creation) with
+    stale-lock recovery (locks older than stale_after_s reclaimed).
+    Supports `with` context-manager pattern.
+  - DreamResult dataclass: success / new_content / backup_path / error /
+    phases_executed.
+  - run_dream(workspace, memory_filename, consolidator): main entry.
+    consolidator=None is dry-run (no LLM, no file mutation).
+  - get_dream_prompt(existing, manifest): renders the prompt.
+  - _backup_memory_md / _restore_from_backup helpers.
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_h_plus.py
+  (11 tests + 1 T5 skip):
+  + test_dream_4_phase_prompt_orient_gather_consolidate_prune
+  + test_dream_lock_file_prevents_concurrent_runs
+  + test_dream_lock_releases_on_normal_completion
+  + test_dream_rollback_on_failure
+  + test_dream_rollback_when_consolidator_returns_empty
+  + test_dream_no_daemon_no_auto_fire (grep-scans agent codebase)
+  + test_dream_real_consolidation_haiku (T5 skipped)
+  + test_dream_dry_run_when_no_consolidator
+  + test_dream_creates_backup_before_write
+  + test_dream_lock_stale_recovery
+  + test_dream_no_memory_md_handled
+  + test_dream_lock_contextmanager_pattern
+
+Reference paths:
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/services/autoDream/*
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block H+)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block H+)
+- ADR-035: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 717 pass + 9 skip (was 706 + 8 at end of Block H; +11 pass + 1 skip).
+verify_ship_zip.py: PASS (126 files / 350.6 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line.
+
+AXIS A — Errors / bugs / regressions
+- DreamLock contract:
+  - Atomic via O_CREAT | O_EXCL. Verify FileExistsError handled.
+  - Stale recovery checks mtime age; if older than stale_after_s, unlinks
+    and re-tries. Verify the unlink could itself race (multiple workers
+    trying to reclaim) — though in Block H+ context, only one user-
+    invoked /dream is realistic, the test exercises the path.
+  - release() is idempotent (if not _held, no-op).
+- run_dream contract:
+  - lock.acquire() failure → returns DreamResult(success=False) with
+    "lock" in error message.
+  - Dry-run (consolidator=None) returns success=True, new_content="",
+    phases_executed contains all 4 phases.
+  - Empty/whitespace consolidator output → success=False without
+    writing.
+  - Mid-run exception → restored from backup if backup_path exists; the
+    error string includes the exception type + name.
+  - Write-to-disk failure (OSError) → restored from backup; success=False.
+- _backup_memory_md / _restore_from_backup:
+  - Best-effort; never raise.
+  - Returns "" when no original file exists.
+- 4-phase prompt:
+  - Phase 1 → Phase 2 → Phase 3 → Phase 4 ordering verified by index() walk.
+- no-daemon test:
+  - grep-scans the agent codebase for forbidden patterns (Thread.target=*Dream,
+    asyncio.create_task, atexit.register, SAGEMAKER_AUTO_DREAM,
+    AUTO_DREAM_ENABLED). Verify the scan EXCLUDES test_block_h_plus.py
+    itself (the test file mentions those patterns in its assertion text;
+    excluding it prevents self-fail).
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Constraint #5 (minimum file structures): 1 new module under runtime/.
+  No new package.
+- Constraint #6 (architecture-first): /dream is a user-controlled cost
+  surface; no auto-fire reduces blast radius. Matches user decision.
+- Constraint #15 (quality, no rush): 11 lock tests; rollback on failure
+  exercised by 2 tests.
+- Q3 axis 7 (long/complex coding): /dream consolidates memory across
+  long sessions — pays down memory debt. Direct improvement.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+SYNTHESIS_MASTER §Block H+ has 1 PORT_LOG row (H+1, ~350 LOC):
+- PORTED in #099 with explicit drops (daemon, async, atexit, env auto-
+  enable). Drops declared in PORT_LOG #099 + ADR-035 §1 + the
+  no-daemon-no-auto-fire lock test.
+- T5 real-AWS test deferred to R-tier R6 (declared in ADR-035 §4).
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.
