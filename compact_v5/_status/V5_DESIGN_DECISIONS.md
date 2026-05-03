@@ -1124,6 +1124,61 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-027 — Block E+F (v5.0.1): env_block + ADR-020 0-2/0-4/0-6 remap closure
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block E+F
+**Status**: ACCEPTED
+
+### Context
+Phase 6 (sectioned prompt + cache-break detection) and Phase 11
+(notebook UX + thinking widget) shipped most of the v4-vs-Runnable
+Block E+F surface in v5.0.0. The remaining work tagged "Block E+F"
+in SYNTHESIS_MASTER and the ADR-020 remap table is:
+  - 0-2: getSessionStartDate / getLocalMonthYear (cache-stable date)
+  - 0-4: env block format (Windows shell hint, OS, Notes appendix)
+  - 0-6: getKnowledgeCutoff (model-specific cutoff)
+
+### Decision
+Single `prompt/env_block.py` module:
+- `get_session_start_date()` — lru_cached at first call.
+- `get_local_month_year()` — human "May 2026" form.
+- `_KNOWLEDGE_CUTOFFS` table — 5 entries covering current Bedrock models.
+- `get_knowledge_cutoff(model_id)` — strips cross-region prefixes
+  (au./apac./us./eu.) before lookup, falls back to "early 2025" for
+  unknown models.
+- `get_os_string()` / `get_shell_hint()` — platform-aware.
+- `render_env_block()` — assembles the markdown body. Notes appendix
+  always includes the no-streaming reminder (constraint #10) and a
+  Windows-shell hint when applicable.
+
+### Key contract: cache-stable dates
+The body uses month-year resolution intentionally — full ISO dates
+("2026-05-03") would bust the prompt-cache at midnight. Per Runnable
+constants/common.ts:1-34 (R8 #67) cache-stability rule.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/prompt/env_block.py` (~125 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_e_f.py` (12 tests)
+
+### Linked port-log rows
+- #071 — env_block formatter + helpers (ADR-020 0-2/0-4/0-6 remap closure)
+
+### Validation
+- 587 pass + 5 skipped (was 575 + 5 at end of Block A; +12 net new).
+- verify_ship_zip.py: PASS (112 files / 310.5 KB / 37%).
+- Phase 6/11 surface unchanged (no regressions in existing prompt
+  assembly tests).
+
+### Notes / not in scope here
+The `prompt/env_block.md` static placeholder + sections.py registration
+are intentionally NOT added in this Block. The dynamic env_block
+content lives in `env_block.py:render_env_block()`; integration with
+the section registry happens in Block N (Hermes AGENTS.md + dynamic
+ref) where the dynamic-section pattern lands. Pre-Block-N usage:
+callers can directly invoke `render_env_block()` and splice the
+returned string into the system prompt assembler when needed.
+
 ## ADR-026 — Block A (v5.0.1): Compactor + auto-compact circuit breaker + cache_edits + B-2/B+5 remaps
 
 **Date**: 2026-05-03

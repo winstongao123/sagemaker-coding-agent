@@ -1,6 +1,18 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block A DONE** — Codex 2-iter cycle ended APPROVE; 575 pass + 5 skip; pending tag + push)
+Last updated: 2026-05-03 (**v5.0.1 Block E+F DONE** — Codex 2-iter cycle ended APPROVE; 590 pass + 5 skip; pending tag + push)
+
+## v5.0.1 Block E+F entry (2026-05-03)
+- NEW `prompt/env_block.py` (~125 LOC): get_session_start_date (lru_cached) + get_local_month_year + get_knowledge_cutoff (5-model lookup + cross-region prefix strip) + get_os_string + get_shell_hint + render_env_block.
+- 15 new tests in `tests/integration/test_block_e_f.py` (12 initial + 3 finding-locks for iter-1) covering all 3 ADR-020 remap rows + integration into build_system_prompt + session-start memoization + POSIX shell hint.
+- WIRED `prompt/__init__.py` build_system_prompt: render_env_block now spliced into dynamic tail (with ctx["skip_env_block"] opt-out for tests).
+- Codex AXIS A/B/C 2-iter cycle (gpt-5.3-codex throughout):
+  - iter 1 (2 files): REJECT with 3 findings (HIGH integration gap, MEDIUM session-start mismatch, LOW POSIX shell test).
+  - iter 2 (3 files): APPROVE — all 3 fixes verified clean.
+- PORT_LOG row #071 + ADR-027. Closes ADR-020 §Notes / known scope remaps rows 0-2 + 0-4 + 0-6.
+- Phase 6/11 prompt surface unchanged (no regressions).
+- `verify_ship_zip.py`: PASS (112 files / 311.0 KB / 37%).
+- Pytest: **590 passed + 5 skipped** (was 575 + 5 at Block A; +15 pass net).
 
 ## v5.0.1 Block A entry (2026-05-03)
 - NEW `core/compactor.py` (~430 LOC): Compactor (v4 port lines 186-635) + AutoCompactCircuitBreaker + apply_cache_control_to_blocks + count_tokens_via_haiku_fallback (B-2 remap) + _summary_client advisor attribution (B+5 remap).
@@ -348,7 +360,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block E+F — Sectioned prompt + Cache surface + UI/Notebook combined** (after Block A tag).
+**Block F2 — Auto-continuation under iteration budget** (after Block E+F tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -356,7 +368,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block C status: DONE — tag `v5.0.1-block-c` at `77c6eb4`; pushed.
 - Block C+ status: DONE — tag `v5.0.1-block-c-plus` at `f9e4000`; pushed.
 - Block D status: DONE — tag `v5.0.1-block-d` at `7a19715`; pushed.
-- Block A status: DONE — tag `v5.0.1-block-a` (pending; tagging this commit); pushed.
+- Block A status: DONE — tag `v5.0.1-block-a` at `c87a823`; pushed.
+- Block E+F status: DONE — tag `v5.0.1-block-e-f` (pending; tagging this commit); pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

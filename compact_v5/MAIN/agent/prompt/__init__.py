@@ -100,6 +100,24 @@ def build_system_prompt(ctx: Optional[Dict[str, Any]] = None) -> str:
     static = build_static_prefix()
     dynamic_blocks: List[str] = list(ctx.get("dynamic_blocks") or [])
 
+    # Block E+F (PORT_LOG #071, Codex iter-1 finding #1 lock): wire
+    # render_env_block into the dynamic tail so every system prompt
+    # carries the OS / shell / model-cutoff / cache-stable date block.
+    # Best-effort — never break prompt assembly if env_block import
+    # fails. ctx["skip_env_block"]=True opts out (used by tests that
+    # pin a specific prompt).
+    if not ctx.get("skip_env_block"):
+        try:
+            from prompt.env_block import render_env_block
+            env_text = render_env_block(
+                workspace=ctx.get("workspace"),
+                model_id=ctx.get("model_id"),
+            )
+            if env_text and env_text not in dynamic_blocks:
+                dynamic_blocks.insert(0, env_text)
+        except Exception:
+            pass
+
     # Always include the boundary marker even if dynamic_blocks is empty.
     # BedrockClient handles "boundary present, no dynamic content" by caching
     # the full static prefix as one block.

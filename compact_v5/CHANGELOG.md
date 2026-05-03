@@ -1,5 +1,36 @@
 # compact_v5 changelog
 
+## v5.0.1-block-e-f — env_block + ADR-020 0-2/0-4/0-6 remap closure (2026-05-03)
+
+Codex review: 2-iter cycle (gpt-5.3-codex throughout):
+- iter 1 (2 files): REJECT with 3 findings (HIGH integration gap —
+  env_block helper orphaned; MEDIUM session-start mismatch using
+  non-memoized helper; LOW POSIX shell test no-op).
+- All 3 fixed; 3 finding-lock tests added.
+- iter 2 (3 files): APPROVE.
+
+Eighth Block of the v5.0.1 21-Block build. Phase 6 (sectioned prompt)
++ Phase 11 (notebook UX) already shipped most of the v4-vs-Runnable
+Block E+F surface in v5.0.0; this Block closes the 3 remaining
+ADR-020 remap rows for env-block content.
+
+NEW:
+- `prompt/env_block.py` (~125 LOC):
+  - `get_session_start_date()` lru_cached for cache-stable date
+  - `get_local_month_year()` human "May 2026" form
+  - `get_knowledge_cutoff(model_id)` 5-model lookup with cross-region
+    prefix stripping
+  - `get_os_string()` / `get_shell_hint()` platform-aware
+  - `render_env_block()` assembles markdown body with Notes appendix
+    (no-streaming reminder + Windows-shell hint when applicable)
+
+TESTS: 12 new in `tests/integration/test_block_e_f.py`.
+
+PORT_LOG #071 + ADR-027.
+
+Pytest: 587 passed + 5 skipped (was 575 + 5 at Block A; +12 net new).
+verify_ship_zip.py: PASS (112 files / 310.5 KB / 37%).
+
 ## v5.0.1-block-a — Compactor + auto-compact circuit breaker + cache_edits (2026-05-03)
 
 Codex review: 2-iter cycle (gpt-5.3-codex throughout):
