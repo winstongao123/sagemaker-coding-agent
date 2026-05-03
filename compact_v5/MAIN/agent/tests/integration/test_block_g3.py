@@ -63,14 +63,16 @@ def test_coordinator_prompt_continue_vs_spawn_table():
     prompt = get_coordinator_system_prompt()
     # The table header.
     assert "Continue vs Spawn" in prompt or "continue vs spawn" in prompt.lower()
-    # Major decision rows must be present (covers all 6 scenarios).
-    assert "research explored exactly the files" in prompt.lower()
-    assert "spawn fresh" in prompt.lower()
+    # Major decision rows must be present (covers the 6 scenarios).
+    plower = prompt.lower()
+    # Phase-transition / explore-findings-need-implementation row.
+    assert "phase transition" in plower or "implement" in plower
+    assert "spawn fresh" in plower
     # The verification scenario uses verify-specific wording in v5.
-    assert "verify" in prompt.lower()
+    assert "verify" in plower
     assert "subagent_type" in prompt
     # The wrong-approach anti-anchoring rule.
-    assert "anchoring" in prompt.lower() or "pollutes" in prompt.lower()
+    assert "anchoring" in plower or "pollutes" in plower
 
 
 # ============================================================
@@ -314,6 +316,31 @@ def test_coordinator_prompt_v5_continue_semantics_no_persistent_worker():
     assert "subagent_type" in prompt
     assert "restate" in prompt.lower()
 
+    # Codex iter-2 finding #2 tightening: the Continue row examples must
+    # NOT show a cross-type transition (e.g. explore→build). Cross-type
+    # is the Spawn-fresh case in v5. Search for any "X→Y" arrow inside
+    # a Continue row to catch contradictory examples.
+    import re as _re
+    # Find all rows that start with `| ... | Continue |` and check their
+    # third-column "What this means" content.
+    continue_rows = _re.findall(
+        r"\|[^|]*\|\s*Continue\s*\|\s*([^|\n]+)\|",
+        prompt,
+    )
+    assert continue_rows, "expected at least one Continue row in the table"
+    for row_content in continue_rows:
+        # Reject any cross-type arrow (explore→build, build→verify, etc.).
+        cross_type = _re.search(
+            r"\b(explore|plan|verify|build|review|general|fork)→(?!\1\b)"
+            r"(explore|plan|verify|build|review|general|fork)\b",
+            row_content,
+        )
+        assert cross_type is None, (
+            f"Continue row example uses a cross-type arrow "
+            f"({cross_type.group()}). v5's `Continue` is same-type "
+            f"only — cross-type belongs in Spawn fresh. Row: {row_content!r}"
+        )
+
 
 def test_coordinator_user_context_injected_into_first_user_message():
     """Codex iter-1 finding #3 MEDIUM lock: when coordinator_mode is on,
@@ -425,7 +452,21 @@ def test_coordinator_user_context_NOT_injected_for_subagent():
                         joined += b.get("text", "")
         assert "explore x" in joined
         # No worker-tools-context block leaked to the sub-agent.
-        assert "without permission prompts" not in joined  # scratchpad marker
+        # Codex iter-2 finding #3 tightening: assert ALL the markers the
+        # parent presence test checks are also absent from the sub-agent
+        # message. A wording change to one marker shouldn't make this
+        # test silently weaker.
+        joined_lower = joined.lower()
+        # Scratchpad section markers
+        assert "without permission prompts" not in joined
+        assert "scratchpad directory" not in joined_lower
+        # Worker-tools-context body markers (must match what the parent
+        # test asserts is PRESENT).
+        assert "worker types" not in joined_lower
+        assert "create_word" not in joined  # v5 doc-tool list marker
+        # Sub-agent should NOT see the full agent_type roster either.
+        # (the only acceptable mention is the user's own prompt text.)
+        assert "build, review" not in joined.lower()
     finally:
         CONFIG.coordinator_mode_enabled = _prev
 

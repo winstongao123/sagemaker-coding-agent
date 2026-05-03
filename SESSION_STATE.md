@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block G3 iter-3 fixes (Codex iter-2 = APPROVE_WITH_FIXES)
+- coordinator/system_prompt.py: Continue row example fixed (explore→explore for same-role; explore→build moved to Spawn-fresh phase-transition row).
+- tests/integration/test_block_g3.py: tightened v5-continue-semantics test with regex scanner that rejects cross-type arrows in Continue rows; tightened subagent absence test with full marker set (scratchpad-directory / worker-types / create_word / build,review).
+- 679 pass + 7 skip preserved.
+
 ### Block G3 iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
 - core/query_engine.py: skill-active branch now appends to effective_system_prompt (preserves coordinator block) instead of resetting to bare system_prompt + active_block (Codex iter-1 #1 HIGH).
 - coordinator/system_prompt.py: Continue-vs-Spawn matrix rewritten to v5's sync/fresh-buffer reality — "Continue = same subagent_type + restate findings"; explicit "Worker buffer NEVER persists" + "coordinator is the durable context" (Codex iter-1 #2 HIGH).

@@ -96,9 +96,9 @@ how much of that you restate in the next worker's prompt.
 
 | Situation | Mechanism | What this means in v5 |
 |-----------|-----------|-----------------------|
-| Research explored exactly the files that need editing | Continue | Same `subagent_type` (e.g., explore→build), restate file:line findings + add the spec |
-| Research was broad but implementation is narrow | Spawn fresh | Different `subagent_type`; brief the new worker with ONLY the relevant subset of findings |
-| Correcting a failure or extending recent work | Continue | Same `subagent_type` again, restating what was tried + what failed |
+| Continuing the same role (explore that needs more depth, build retry, etc.) | Continue | Same `subagent_type` (e.g., explore→explore), restate prior findings + add the next focus |
+| Phase transition — explore findings need to be implemented | Spawn fresh | Different `subagent_type` (explore→build); brief with ONLY the relevant subset of findings + a concrete spec |
+| Correcting a failure or extending recent work in the same role | Continue | Same `subagent_type` again, restating what was tried + what failed |
 | Verifying code a different worker just wrote | Spawn fresh | Always use `subagent_type="verify"` — its allowlist is read+bash and its prompt is verification-focused |
 | First implementation attempt used wrong approach entirely | Spawn fresh | New worker; do NOT restate the failed approach as context — anchoring on it pollutes the retry |
 | Completely unrelated task | Spawn fresh | New worker, brief it cleanly from scratch |
