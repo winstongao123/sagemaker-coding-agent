@@ -1,4 +1,4 @@
-# R-tier + Block V Codex Review Template (real-AWS scenarios)
+# R-tier Codex Review Template (real-AWS scenarios — v5-only; Block V DROPPED 2026-05-03)
 
 Used at every PHASE A (pre-flight) and PHASE C (diagnosis) per WORKER_HINT_2026-05-03.md §10. Fill `{{...}}` placeholders. Paste into `codex exec --full-auto -s read-only -m gpt-5.5 -c model_reasoning_effort="high" "<prompt>"`.
 
@@ -195,7 +195,7 @@ If NEEDS_RE_RUN → escalate to user (don't burn AWS automatically)
 
 ## Per-test review log
 
-Every R-tier + Block V test maintains a row in `compact_v5/_status/r_tier_review_log.md`:
+Every R-tier scenario (R1-R19; R18 has 15 sub-scenarios E1-E15, R19 has 10 U1-U10) maintains a row in `compact_v5/_status/r_tier_review_log.md`:
 
 | Test | PHASE A iters | AWS calls used | PHASE C iters | Final verdict | Cost |
 |------|---------------|----------------|---------------|---------------|------|

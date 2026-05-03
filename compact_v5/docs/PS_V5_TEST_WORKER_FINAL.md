@@ -33,12 +33,20 @@ Worker should use Git Bash (already installed) for simplicity. If unavailable, t
 ## CURRENT R1 STATUS (2026-05-04, BEFORE worker resumes)
 
 - auto_approve fix ALREADY APPLIED to R1 test (CONFIG.require_tool_approval=False)
-- Real bug found by worker: Unicode stdout encoding crash (cp1252 vs utf-8)
-- Unicode stdout fix LANDED (worker's fix already in tokens.py / agent.py earlier commits)
-- R1 needs: re-PHASE A on FIXED code → AWS call #2 (NOT #1, since iter-1 already ran)
-- Codex iter-4 PRE-FLIGHT verdict was APPROVE_FOR_AWS_CALL on the fixed code
+- Real bug found by worker: Unicode stdout encoding crash (cp1252 vs utf-8) DURING AWS call #1
+- Unicode stdout fix LANDED at:
+  - `compact_v5/MAIN/agent/core/query_engine.py:151` `_make_unicode_safe_output_fn`
+  - Lock test: `compact_v5/MAIN/agent/tests/integration/test_unicode_safe_output.py:4`
+- Codex iter-4 PRE-FLIGHT verdict (BEFORE Unicode bug discovery) = APPROVE_FOR_AWS_CALL
+- Codex iter-4 verdict is now STALE because the code changed AFTER the verdict
 
-WORKER ACTION: do NOT redo R1 from scratch. Pull latest, verify R1 test code has both fixes, then proceed directly to AWS call (#2 in the sequence) per PER-TEST LOOP.
+WORKER ACTION (mandatory order):
+1. Pull latest sageagent v5-build
+2. Verify both fixes in place: grep require_tool_approval test_r1; grep _make_unicode_safe_output_fn
+3. RE-RUN PHASE A pre-flight on FIXED code (filled TEMPLATE A → Codex CLI iter-5)
+4. ONLY after Codex returns APPROVE_FOR_AWS_CALL on iter-5 → run AWS call #2
+5. NEVER skip Phase A because "code looks the same as iter-4" — the Unicode fix
+   is a real diff that needs an explicit Codex APPROVE before spending AWS again
 
 ## PRE-FLIGHT (run in order, STOP if any fails)
 
