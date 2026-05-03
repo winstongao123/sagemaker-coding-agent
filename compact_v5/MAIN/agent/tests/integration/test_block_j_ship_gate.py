@@ -171,7 +171,7 @@ def test_zip_python_c_import_sagemaker_agent():
 # T5 — Real Bedrock single round-trips (env-gated)
 # ============================================================
 
-_HAIKU_45_MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0"
+_HAIKU_45_MODEL_ID = "au.anthropic.claude-haiku-4-5-20251001-v1:0"  # AU cross-region inference profile (Haiku 4.5 has no on-demand support; per WORKER_HINT §1)
 
 
 def _require_real_bedrock():

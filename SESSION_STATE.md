@@ -57,6 +57,15 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### R-tier pre-flight (2026-05-03) — AWS validated + Block J T5 model-id fix
+- AWS creds: account 903039434627 / IAM user winstonuser; Bedrock-Monthly-50 budget $0/$50 (full headroom).
+- Haiku 4.5 AU + Sonnet 4.5 AU both available in ap-southeast-2.
+- Block J T5 had hardcoded `anthropic.claude-haiku-4-5-20251001-v1:0` (no on-demand throughput); fixed to `au.anthropic.claude-haiku-4-5-20251001-v1:0` (AU cross-region inference profile per WORKER_HINT §1).
+- All 3 Block J T5 tests PASS on real Bedrock: hello-world / tool-use round-trip / compact-then-continue. Total smoke cost: ~$0.007.
+- Block J SHIP GATE now real-Bedrock-validated end-to-end (was T4-only before).
+- Block U DEFERRED-POST-SHIP per user 2026-05-03 (Path B): scaffold + archive landed; 4 HTMLs deferred.
+- Next: R-tier R1-R12 per WORKER_HINT §9.4 + R_TIER_REVIEW_TEMPLATE.
+
 ### Block K DONE — Codex iter-2 = APPROVE (clean, no findings)
 - Iter-cycle: 1 APPROVE_WITH_FIXES (3 major + 3 minor) → 2 APPROVE.
 - AXIS A PASS (6 iter-1 findings closed); AXIS B PASS (LF gate model matched); AXIS C PASS (env fix consistent with runtime).
