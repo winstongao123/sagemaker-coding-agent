@@ -1,5 +1,50 @@
 # compact_v5 changelog
 
+## v5.0.1-block-c — Runtime safety + JSON repair + injection scan + bash hardening (2026-05-03)
+
+Codex review: 2-iteration cycle (gpt-5.3-codex throughout):
+- iter 1 (6 files): APPROVE_WITH_FIXES with 4 findings (2 HIGH wiring,
+  2 MEDIUM correctness).
+- All 4 fixed; each has 1+ covering lock test (4 new lock tests added).
+- iter 2 (5 files): APPROVE — all 4 fixes verified clean.
+
+Fourth Block of the v5.0.1 21-Block build. Closes PS#7 (exec-limit) +
+9 Wave-5-DEEP findings + 2 ADR-020 remap rows (0-5 scratchpad, 0-10
+v4-native injection scanner).
+
+NEW security modules (all self-contained):
+- `security/json_repair.py` (~115 LOC) — Hermes-style malformed-JSON repair.
+- `security/injection_scanner.py` (~100 LOC) — 12 v4 patterns + invisible chars.
+- `security/scratchpad.py` (~110 LOC) — per-process scratchpad with GC.
+- `security/edit_file_safety.py` (~190 LOC) — quote norm + UTF-16 BOM + UNC
+  + CRLF round-trip + Windows staleness fallback.
+- `security/bash_safety.py` (~225 LOC) — exit-code semantics + 13-pattern
+  destructive catalog + cd+git + multi-cd + pipe-segment splitter.
+
+EXTENDED:
+- `security/manager.py` SECRET_PATTERNS: 13 → 38 (added 25 gitleaks patterns:
+  OpenAI sk-/sk-proj-, Google AIza/ya29, Mailchimp, Mailgun, Twilio, Square,
+  Stripe live/test, GitLab PAT, npm, Hugging Face, Replicate, Pinecone,
+  x-api-key, PGP, Heroku, Cloudflare).
+- `tools/edit_file.py`: wired UNC reject + UTF-16 BOM + quote norm + line-ending
+  round-trip.
+- `tools/bash.py`: wired interpret_command_result for non-zero exit codes.
+- `core/query_engine.py`: exec-limit gate (PS#7 fix; bash+python_exec only;
+  v4 verbatim "OTHER TOOLS STILL WORK" message) + repetition detector
+  (3rd identical call blocks with stuck-loop message) + JSON repair on
+  tool_use.input parsing.
+
+TESTS: 17 new in `tests/integration/test_block_c.py`. All 12 TEST_DESIGN
+§Block C tests + 2 ADR-020 remap lock tests + 3 helper-coverage tests.
+
+PS#7 STRUCTURALLY ADDRESSED: exec-limit gate + verbatim recovery message
+locked by test_exec_limit_200_then_201_blocked.
+
+PORT_LOG #057-#063 + ADR-023.
+
+Pytest: 507 passed + 5 skipped (was 490 + 5 at Block B+; +17 net new).
+verify_ship_zip.py: PASS (108 files / 286.8 KB / 37%).
+
 ## v5.0.1-block-b-plus — SessionManager + cost-limit + AGENT_STATUS + FileCache (2026-05-03)
 
 Codex review: 3-iteration cycle — gpt-5.3-codex throughout (gpt-5.5 was

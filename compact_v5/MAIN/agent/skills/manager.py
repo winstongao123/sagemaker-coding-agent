@@ -66,23 +66,38 @@ def _estimate_tokens(text: str) -> int:
 def _scan_for_prompt_injection(content: str, source_label: str) -> List[str]:
     """Defensive scan for prompt-injection markers in skill content. Returns
     a list of warning strings (advisory). Same advisory contract as v4
-    (sagemaker_agent.py uses _scan_for_prompt_injection at line 2802)."""
-    warnings: List[str] = []
-    markers = (
-        "ignore previous instructions",
-        "<system>",
-        "</system>",
-        "you are now",
-        "disregard the above",
-    )
-    low = (content or "").lower()
-    for m in markers:
-        if m in low:
-            warnings.append(
-                f"[skill-injection-scan] '{source_label}' contains marker '{m}' "
-                "(advisory; review skill content for prompt injection)."
-            )
-    return warnings
+    (sagemaker_agent.py uses _scan_for_prompt_injection at line 2802).
+
+    Block C (Codex iter-1 finding #1) lock: delegates to the v4-native
+    12-pattern scanner at security/injection_scanner.py (ADR-020 0-10
+    remap). Falls back to the local 5-marker contract if the security
+    helper is unavailable so skill loading never breaks on import error.
+    """
+    try:
+        from security.injection_scanner import scan_for_prompt_injection
+        prefixed = scan_for_prompt_injection(content, source_label)
+        # Wrap each hit with the legacy `[skill-injection-scan]` prefix so
+        # downstream callers (Hermes filter advisory, /skills inspector)
+        # still recognise the format.
+        return [f"[skill-injection-scan] {w} (advisory)" for w in prefixed]
+    except Exception:
+        # Conservative fallback to the 5-marker contract.
+        warnings: List[str] = []
+        markers = (
+            "ignore previous instructions",
+            "<system>",
+            "</system>",
+            "you are now",
+            "disregard the above",
+        )
+        low = (content or "").lower()
+        for m in markers:
+            if m in low:
+                warnings.append(
+                    f"[skill-injection-scan] '{source_label}' contains marker '{m}' "
+                    "(advisory; review skill content for prompt injection)."
+                )
+        return warnings
 
 
 # ============================================================

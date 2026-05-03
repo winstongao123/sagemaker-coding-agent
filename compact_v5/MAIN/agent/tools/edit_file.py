@@ -85,6 +85,18 @@ def _edit_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
     if old_string == new_string:
         return "Error: old_string and new_string are identical — nothing to change"
 
+    # Block C C-6 (R1 #123) — UNC path skip on Windows (NTLM credential leak).
+    try:
+        from security.edit_file_safety import is_unc_path_windows
+        if is_unc_path_windows(file_path):
+            return (
+                "Error: UNC paths (\\\\server\\share\\...) are not allowed on "
+                "Windows because reading them leaks NTLM credentials. Copy "
+                "the file locally first (e.g. via robocopy) and edit the copy."
+            )
+    except Exception:
+        pass
+
     ok, msg = path_security.validate_path(file_path)
     if not ok:
         return f"Error: {msg}"
@@ -101,15 +113,58 @@ def _edit_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
 
     is_stale, stale_msg = read_tracking.is_stale(abs_path)
     if is_stale:
-        return f"Error: {stale_msg}"
+        # Block C C-8 (R1 #111) — Windows OneDrive / AV touch can bump
+        # mtime without changing content. If the read tracker has a
+        # cached snapshot AND the file content is byte-identical to
+        # that snapshot, treat the staleness as a false positive.
+        try:
+            from security.edit_file_safety import is_staleness_false_positive
+            cached = read_tracking.get_last_read_snapshot(abs_path) \
+                if hasattr(read_tracking, "get_last_read_snapshot") else None
+            if cached is not None:
+                last_mtime = cached.get("mtime", 0.0)
+                last_text = cached.get("content")
+                if is_staleness_false_positive(abs_path, last_mtime, last_text):
+                    is_stale = False  # tolerate the touch
+        except Exception:
+            pass
+        if is_stale:
+            return f"Error: {stale_msg}"
+
+    # Block C C-5 (R1 #121) — detect UTF-16 / UTF-8-sig BOMs (Notepad-saved).
+    _file_encoding = "utf-8"
+    _eol = "\n"
+    try:
+        from security.edit_file_safety import (
+            detect_utf16_bom,
+            normalize_line_endings,
+            normalize_quotes,
+        )
+        _bom_enc = detect_utf16_bom(abs_path)
+        if _bom_enc:
+            _file_encoding = _bom_enc
+    except Exception:
+        pass
 
     try:
-        with open(abs_path, "r", encoding="utf-8") as f:
+        with open(abs_path, "r", encoding=_file_encoding, errors="replace") as f:
             content = f.read()
     except OSError as e:
         return f"Error: cannot read file: {e}"
 
-    count = content.count(old_string)
+    # Block C C-7 (R1 #122) — round-trip line endings: match in LF space,
+    # restore on write. Block C C-3 (R1 #115) — fold curly→straight quotes
+    # on BOTH file and search needle so smart-quote files match.
+    _content_lf = content
+    try:
+        _content_lf, _eol = normalize_line_endings(content)
+        _norm_content = normalize_quotes(_content_lf)
+        _norm_old = normalize_quotes(old_string)
+    except NameError:
+        _norm_content = _content_lf
+        _norm_old = old_string
+
+    count = _norm_content.count(_norm_old)
     if count == 0:
         return "Error: old_string not found in file. Must be EXACT match (check indentation, line endings, exact characters)."
     if count > 1 and not replace_all:
@@ -119,7 +174,33 @@ def _edit_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
             f"or pass replace_all=true to change every occurrence."
         )
 
-    new_content = content.replace(old_string, new_string) if replace_all else content.replace(old_string, new_string, 1)
+    # Apply replacement on the normalized (LF + straight-quote) content
+    # so the match works for smart-quote / CRLF files; then restore the
+    # original line endings before writing.
+    # Block C C-4 (R1 #116) lock: if the original content uses curly
+    # quotes (we detect by comparing the un-normalized vs normalized
+    # version), re-wrap new_string in the same curly variant so the
+    # file remains stylistically consistent post-edit.
+    if "_norm_old" in locals():
+        _norm_new = normalize_quotes(new_string)
+        try:
+            from security.edit_file_safety import preserve_quote_style
+            _norm_new = preserve_quote_style(content, _norm_new)
+        except Exception:
+            pass
+    else:
+        _norm_new = new_string
+    new_content = (
+        _norm_content.replace(_norm_old, _norm_new)
+        if replace_all
+        else _norm_content.replace(_norm_old, _norm_new, 1)
+    )
+    if _eol != "\n":
+        try:
+            from security.edit_file_safety import restore_line_endings
+            new_content = restore_line_endings(new_content, _eol)
+        except Exception:
+            pass
 
     # Block B (PORT_LOG #044): SnapshotManager.save snapshots the
     # current file before edit so /revert restores it. Best-effort —
@@ -130,8 +211,9 @@ def _edit_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
     except Exception:
         pass
 
+    # Write back in the same encoding we read with (preserves BOM).
     try:
-        with open(abs_path, "w", encoding="utf-8") as f:
+        with open(abs_path, "w", encoding=_file_encoding) as f:
             f.write(new_content)
     except OSError as e:
         return f"Error: cannot write file: {e}"

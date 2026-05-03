@@ -214,6 +214,14 @@ class QueryEngine:
         # warning once each (instead of staying silent for the lifetime
         # of the engine).
         self._warned_over_budget = False
+        # Block C — exec-limit gate (PS#7 fix) + repetition detector.
+        # Counters live on the QueryEngine. Codex iter-1 finding #3:
+        # unconditional reset at run() entry so counters DON'T leak
+        # across run() calls (the v4 contract; sub-agent dispatch is
+        # the only legitimate cross-run sharing path, handled via
+        # parent_engine forwarding).
+        self._exec_call_count = 0  # bash + python_exec only
+        self._recent_tool_calls: list = []  # [(name, args_hash), ...]
 
         # Append user turn (Bedrock requires alternation; merge into trailing
         # user if needed — matches v4 sagemaker_agent.py:8744).
@@ -452,12 +460,85 @@ class QueryEngine:
                         pass
                     continue
 
+                # Block C — exec-limit gate (PS#7 fix). Only bash +
+                # python_exec count toward this limit. v4 verbatim
+                # message at sagemaker_agent.py:9482-9489 — preserved
+                # so the model can recover by switching to non-counted
+                # tools.
+                if call.name in {"bash", "python_exec"}:
+                    from runtime.config import CONFIG as _CFG
+                    cap = getattr(_CFG, "max_exec_calls_per_session", 200)
+                    if self._exec_call_count >= cap:
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": call.id,
+                            "content": (
+                                f"Blocked: bash + python_exec call limit "
+                                f"reached ({cap}/session). "
+                                "OTHER TOOLS STILL WORK: read_file, grep, "
+                                "glob, edit_file, write_file, notebook_edit, "
+                                "task, ask_user, view_image, web_fetch are "
+                                "NOT counted by this limit."
+                            ),
+                            "is_error": True,
+                        })
+                        continue
+
+                # Block C — repetition detector. Same (tool_name,
+                # args_hash) appearing 3+ times in the last 6 calls is
+                # almost always a stuck loop. v4 sagemaker_agent.py:9156-9180
+                # threshold=2 (block on 3rd duplicate).
+                import hashlib as _hashlib
+                import json as _json
+                try:
+                    _args_hash = _hashlib.sha256(
+                        _json.dumps(call.input or {}, sort_keys=True, default=str).encode()
+                    ).hexdigest()[:12]
+                except Exception:
+                    _args_hash = ""
+                _key = (call.name, _args_hash)
+                _recent = self._recent_tool_calls[-6:]
+                if _recent.count(_key) >= 2:
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": (
+                            f"Blocked: same call to '{call.name}' with "
+                            f"identical arguments has been issued 3 times "
+                            "in a row. This is almost always a stuck loop. "
+                            "Try a different approach, different arguments, "
+                            "or use ask_user to clarify."
+                        ),
+                        "is_error": True,
+                    })
+                    continue
+                # Track this call (rolling window of last 12).
+                self._recent_tool_calls.append(_key)
+                if len(self._recent_tool_calls) > 12:
+                    self._recent_tool_calls = self._recent_tool_calls[-12:]
+
+                # Block C — JSON-repair tool args before dispatch. If
+                # Bedrock streamed back malformed JSON in tool_use.input,
+                # try to recover gracefully instead of falling through
+                # to a tool-side type error.
+                _repaired_input = call.input
+                if isinstance(call.input, str):
+                    # When tool_use.input arrives as a JSON string (some
+                    # Bedrock variants), parse + repair before dispatch.
+                    try:
+                        from security.json_repair import repair_tool_call_arguments
+                        _repaired_input = repair_tool_call_arguments(call.input)
+                    except Exception:
+                        _repaired_input = {}
+
                 # Execute. Tool implementations may raise; we trap and surface
                 # the error to the model rather than the human user.
                 # `parent_engine` is passed for Phase 9 task tool — the sub-agent
                 # spawn needs the parent's IterationBudget + BedrockClient (ADR-015).
                 try:
-                    raw = tool.execute(call.input, context={
+                    if call.name in {"bash", "python_exec"}:
+                        self._exec_call_count += 1
+                    raw = tool.execute(_repaired_input, context={
                         "active_tools": tools,
                         "plan_mode": plan_mode,
                         "parent_engine": self,

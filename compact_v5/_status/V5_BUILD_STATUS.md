@@ -1,6 +1,19 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block B+ DONE** — tag `v5.0.1-block-b-plus` at `ff30e8d`, pushed; 490 pass + 5 skip)
+Last updated: 2026-05-03 (**v5.0.1 Block C DONE** — Codex 2-iter cycle ended APPROVE; 511 pass + 5 skip; pending tag + push)
+
+## v5.0.1 Block C entry (2026-05-03)
+- 5 NEW security helper modules: json_repair (~115 LOC), injection_scanner (~100 LOC), scratchpad (~110 LOC), edit_file_safety (~190 LOC), bash_safety (~225 LOC).
+- EXTENDED `security/manager.py` SECRET_PATTERNS 13→38 (R5 A1, 25 gitleaks patterns added).
+- WIRED `tools/edit_file.py` (UNC reject + UTF-16 BOM detection + quote norm + line-ending round-trip), `tools/bash.py` (exit-code semantics annotation), `core/query_engine.py` (exec-limit gate PS#7 fix + repetition detector + JSON repair on tool_use.input).
+- 21 new tests in `tests/integration/test_block_c.py` (17 initial + 4 finding-locks for iter-1) covering all 12 TEST_DESIGN §Block C items + 2 ADR-020 remap lock tests + 3 helper-coverage tests + 4 finding-locks.
+- Codex AXIS A/B/C 2-iteration cycle (gpt-5.3-codex throughout):
+  - iter 1 (6 files): APPROVE_WITH_FIXES with 4 findings (2 HIGH wiring, 2 MEDIUM correctness).
+  - iter 2 (5 files): APPROVE — all 4 fixes verified clean.
+- PS#7 STRUCTURALLY ADDRESSED: exec-limit gate emits v4 verbatim "OTHER TOOLS STILL WORK" message; lock test test_exec_limit_200_then_201_blocked.
+- PORT_LOG rows #057-#063 + ADR-023. Closes Block 0 ADR-020 remap rows 0-5 (scratchpad) + 0-10 (v4-native injection scanner).
+- `verify_ship_zip.py`: PASS (108 files / 286.8 KB / 37%).
+- Pytest: **511 passed + 5 skipped** (was 490 + 5 at Block B+; +21 pass net).
 Updated by: Mode B autonomous build (Codex-only-gate; user reviews FINAL product after Block K + R-tier)
 
 ## v5.0.1 Block B+ entry (2026-05-03)
@@ -299,11 +312,12 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block C — Runtime safety + secret scanner + JSON repair + injection scan + bash hardening** (after Block B+ tag).
+**Block C+ — Approval/diff dispatch + rate limits + ipywidgets fallback + PermissionDialog richer** (after Block C tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
 - Block B+ status: DONE — tag `v5.0.1-block-b-plus` at `ff30e8d`; pushed.
+- Block C status: DONE — tag `v5.0.1-block-c` (pending; tagging this commit); pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

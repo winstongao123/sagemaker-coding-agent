@@ -154,7 +154,38 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         if result.stderr:
             output += f"\n[stderr]\n{result.stderr}"
         if result.returncode != 0:
-            output += f"\n[exit code: {result.returncode}]"
+            # Block C C-9 (R1 #49) — interpret well-known non-zero
+            # exit codes (grep 1 = no match, diff 1 = files differ, etc.)
+            # so the model doesn't misread them as errors.
+            try:
+                from security.bash_safety import interpret_command_result
+                _semantic = interpret_command_result(command, result.returncode)
+            except Exception:
+                _semantic = None
+            if _semantic:
+                output += f"\n[exit code: {result.returncode} — {_semantic}]"
+            else:
+                output += f"\n[exit code: {result.returncode}]"
+
+        # Block C C-10 (R1 #50) — destructive-command catalog warning.
+        # Annotate the output if the command matched a destructive
+        # pattern; the warning is informational here (Block C+ wires
+        # the same catalog into the approval flow before exec).
+        try:
+            from security.bash_safety import (
+                destructive_command_warning,
+                pipe_segment_permission_check,
+            )
+            _w = destructive_command_warning(command)
+            if _w:
+                output += f"\n[!destructive-pattern] {_w}"
+            else:
+                # C-13 — also probe per-pipe-segment for safety.
+                _pipe_warns = pipe_segment_permission_check(command)
+                if _pipe_warns:
+                    output += "\n[!destructive-pipe-segment] " + " | ".join(_pipe_warns)
+        except Exception:
+            pass
 
         if not output:
             return "(no output)"

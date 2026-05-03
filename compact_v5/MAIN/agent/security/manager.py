@@ -51,6 +51,7 @@ from .dangerous_python import (
 # ============================================================
 
 SECRET_PATTERNS: List[Tuple[str, str]] = [
+    # v4 baseline patterns (13)
     (r"(?i)(api[_-]?key|apikey)\s*[=:]\s*[\"']?[\w-]{20,}", "API Key"),
     (r"(?i)(secret|password|passwd|pwd)\s*[=:]\s*[\"']?[^\s\"']{8,}", "Password/Secret"),
     (r"(?i)(aws[_-]?access[_-]?key[_-]?id)\s*[=:]\s*[\"']?[A-Z0-9]{20}", "AWS Access Key"),
@@ -64,6 +65,33 @@ SECRET_PATTERNS: List[Tuple[str, str]] = [
     (r"sk-ant-[A-Za-z0-9_\-]{20,}", "Anthropic API Key"),
     (r"AKIA[A-Z0-9]{16}", "AWS Access Key ID (bare)"),
     (r"(?i)(ANTHROPIC_API_KEY)\s*[=:]\s*[\"']?\S+", "Anthropic API Key assignment"),
+    # Block C C-2 (R5 A1) — 25 NEW gitleaks patterns ported from
+    # Runnable services/teamMemorySync/secretScanner.ts. Total: 38.
+    (r"sk-[A-Za-z0-9]{32,}", "OpenAI API Key (sk-)"),
+    (r"sk-proj-[A-Za-z0-9_\-]{40,}", "OpenAI Project Key (sk-proj-)"),
+    (r"AIza[0-9A-Za-z\-_]{35}", "Google API Key (AIza)"),
+    (r"ya29\.[0-9A-Za-z\-_]+", "Google OAuth Access Token (ya29)"),
+    (r"[a-z0-9]{32}-us[0-9]{1,2}", "Mailchimp API Key"),
+    (r"key-[a-zA-Z0-9]{32}", "Mailgun API Key"),
+    (r"SK[a-z0-9]{32}", "Twilio Auth Token"),
+    (r"AC[a-z0-9]{32}", "Twilio Account SID"),
+    (r"sq0atp-[0-9A-Za-z\-_]{22}", "Square OAuth Token"),
+    (r"sq0csp-[0-9A-Za-z\-_]{43}", "Square Access Token"),
+    (r"access_token,production\$[0-9a-z]{161}[0-9a-f]{32}", "Square OAuth Production Secret"),
+    (r"(?i)(stripe[_-]?(api[_-]?)?key)\s*[=:]\s*[\"']?(sk|pk|rk)_(live|test)_[A-Za-z0-9]{24,}", "Stripe API Key"),
+    (r"sk_live_[0-9a-zA-Z]{24,}", "Stripe Live Secret Key"),
+    (r"rk_live_[0-9a-zA-Z]{24,}", "Stripe Restricted Live Key"),
+    (r"pk_live_[0-9a-zA-Z]{24,}", "Stripe Live Publishable Key"),
+    (r"glpat-[A-Za-z0-9\-_]{20,}", "GitLab Personal Access Token"),
+    (r"npm_[A-Za-z0-9]{36}", "npm Access Token"),
+    (r"(?i)hf_[A-Za-z0-9]{32,}", "Hugging Face Token"),
+    (r"r8_[A-Za-z0-9]{32,}", "Replicate API Token"),
+    (r"pcsk_[A-Za-z0-9_]{20,}", "Pinecone API Key"),
+    (r"(?i)x-api-key\s*[:=]\s*[\"']?[A-Za-z0-9_\-]{20,}", "Generic x-api-key header"),
+    (r"-----BEGIN PGP PRIVATE KEY BLOCK-----", "PGP Private Key Block"),
+    (r"-----BEGIN ENCRYPTED PRIVATE KEY-----", "Encrypted Private Key (PEM)"),
+    (r"(?i)heroku[_-]?api[_-]?key\s*[=:]\s*[\"']?[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", "Heroku API Key"),
+    (r"(?i)cloudflare[_-]?api[_-]?(token|key)\s*[=:]\s*[\"']?[A-Za-z0-9_\-]{30,}", "Cloudflare API Token"),
 ]
 
 

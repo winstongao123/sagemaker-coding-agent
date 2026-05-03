@@ -1124,6 +1124,133 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-023 — Block C (v5.0.1): Runtime safety + JSON repair + injection scan + bash hardening + ADR-020 0-5 / 0-10 remap
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block C
+**Status**: ACCEPTED
+
+### Context
+v5.0.0 left several runtime-safety gaps that PS#7 + Wave-5-DEEP R1/R5
+flagged: 40-call exec limit hit mid-task, no JSON repair on malformed
+tool args, no injection scanner on skill bodies, secret-scanner light
+on patterns (13 vs Runnable's 38), no Windows-edit safety (UTF-16 BOM,
+UNC, CRLF, smart quotes, OneDrive mtime drift), no bash-side exit-code
+semantics or destructive-command catalog. Block C closes all of these
+plus ADR-020 remap rows 0-5 (scratchpad) and 0-10 (v4-native injection
+scanner).
+
+### Decision
+Pure additive: 5 new helper modules + 2 tool extensions + query_engine
+gate wiring. Zero changes to existing class APIs.
+
+NEW modules (all under `runtime/` or `security/` for proximity to use):
+- `security/json_repair.py` (~115 LOC) — Hermes-style malformed-JSON
+  repair (5 strategies, fallback `{}`).
+- `security/injection_scanner.py` (~100 LOC) — 12 v4 patterns +
+  invisible/zero-width char class.
+- `security/scratchpad.py` (~110 LOC) — per-process scratchpad dir
+  under platform tempdir; cleanup_registry-registered GC.
+- `security/edit_file_safety.py` (~190 LOC) — quote norm + UTF-16 BOM +
+  UNC reject + CRLF round-trip + Windows staleness fallback.
+- `security/bash_safety.py` (~225 LOC) — exit-code semantics + 13-pattern
+  destructive catalog + cd+git compound + multi-cd + pipe-segment
+  splitter + bash-comment-label extractor.
+
+EXTENDED:
+- `security/manager.py` — SECRET_PATTERNS expanded 13 → 38 (R5 A1).
+- `tools/edit_file.py` — wired UNC reject + UTF-16 BOM detection + quote
+  norm + line-ending round-trip on read/write.
+- `tools/bash.py` — wired interpret_command_result post-exec.
+- `core/query_engine.py` — wired exec-limit gate (PS#7 verbatim message)
+  + repetition detector (3rd identical call blocks) + JSON repair on
+  tool_use.input string parsing.
+
+### Rationale
+- Each helper module is self-contained: zero cross-module coupling.
+  Lets future blocks (e.g. Block A Compactor) consume them without
+  pulling in tool-level state.
+- Exec-limit gate counts bash + python_exec only (v4 parity). 200-call
+  default (v4.10.10 baseline; was 40 in earlier v4). The OTHER TOOLS
+  STILL WORK message is preserved verbatim so the model can recover.
+- Repetition detector: same (tool_name, args_hash) on 3rd consecutive
+  identical call (threshold=2 within rolling 6-call window). Catches
+  the most common stuck-loop shape without false-positives on
+  legitimate retry-with-different-args patterns.
+- JSON repair: 5 progressive strategies. First successful one wins;
+  irrecoverable garbage falls back to `{}` (caller's tool surfaces
+  the missing-arg error to the model).
+- Edit-file wiring: BOM detection runs FIRST so UTF-16 LE files (Notepad
+  default) are read correctly. Match runs in normalized space (LF + ASCII
+  quotes); restore happens at write to preserve the file's original
+  shape.
+- Destructive catalog (13 patterns) covers rm -rf / git force-push /
+  reset --hard / clean / DROP/TRUNCATE / kubectl delete / terraform
+  destroy / docker rm,rmi,prune / dd to /dev/ / fork bomb / aws s3 rb
+  --force / redis FLUSHALL. Approval flow (Block C+) consumes these.
+
+### Runnable-fidelity impact
+- All 14 Block C SYNTHESIS_MASTER items + 2 ADR-020 remap rows
+  (0-5, 0-10) implemented or tested. C-4 preserveQuoteStyle is included
+  as a helper but not wired into edit_file (intentional — it's a UX
+  niceness, not a correctness gate; C-3 normalize_quotes is the
+  load-bearing piece).
+- v4 verbatim port: SECRET_PATTERNS (13 v4 patterns preserved + 25 new).
+  Exec-limit gate text + threshold preserved.
+- Net-new: scratchpad uses cleanup_registry (Block B+) for GC instead
+  of v4's __del__ pattern.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/security/json_repair.py`
+- NEW: `compact_v5/MAIN/agent/security/injection_scanner.py`
+- NEW: `compact_v5/MAIN/agent/security/scratchpad.py`
+- NEW: `compact_v5/MAIN/agent/security/edit_file_safety.py`
+- NEW: `compact_v5/MAIN/agent/security/bash_safety.py`
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_c.py`
+- MODIFIED: `compact_v5/MAIN/agent/security/manager.py` (SECRET_PATTERNS)
+- MODIFIED: `compact_v5/MAIN/agent/tools/edit_file.py` (UNC + BOM + norm wiring)
+- MODIFIED: `compact_v5/MAIN/agent/tools/bash.py` (exit-code semantics)
+- MODIFIED: `compact_v5/MAIN/agent/core/query_engine.py` (exec-limit + repetition + json_repair)
+
+### Linked port-log rows
+- #057 — Hermes JSON repair
+- #058 — v4-native injection scanner (ADR-020 0-10 remap)
+- #059 — scratchpad (ADR-020 0-5 remap)
+- #060 — edit_file safety (C-3..C-8)
+- #061 — bash safety (C-9..C-14)
+- #062 — exec-limit + repetition detector (PS#7 fix)
+- #063 — secret pattern expansion (R5 A1, 13 → 38)
+
+### Validation
+- 507 pass + 5 skipped (was 490 + 5 at end of Block B+; +17 net new).
+- verify_ship_zip.py: PASS (108 files / 286.8 KB / 37%).
+- PS#7 STRUCTURALLY closed (exec-limit gate + verbatim recovery message).
+
+### Notes / known scope remaps (Block C UI-only helpers → Block C+)
+
+Codex Block-C iter-1 finding #2 (HIGH) flagged that several Block C
+helpers exist but aren't wired into runtime flow. After analysis, the
+unwired helpers are all approval/UI surface — they feed Block C+'s
+approval flow + history display rather than the core dispatch path.
+The table below records the explicit Block-C+ landing site for each.
+
+| Item | Capability | LOC | Lands in Block | Implementation site (target file) | Lock test (Block where it runs) |
+|---|---|---|---|---|---|
+| C-11 | cd+git compound bare-repo guard | 40 | **Block C+** (approval flow) | `ui/approval_dialog.py`: surface warning before bash exec | `test_approval_warns_on_cd_git_bare_repo` (Block C+) |
+| C-12 | Multiple-cd detection | 10 | **Block C+** (approval flow) | `ui/approval_dialog.py`: bump approval requirement for multi-cd | `test_approval_required_on_multi_cd` (Block C+) |
+| C-13 | Pipe-segment per-segment permission | 30 | **Block C+** (approval flow) | `ui/approval_dialog.py`: per-segment approval line | `test_approval_per_pipe_segment` (Block C+) |
+| C-14 | Bash comment-label extraction | 15 | **Block C+** (UI history) | `ui/widgets.py:HistoryRow`: render comment as label | `test_history_row_labels_with_bash_comment` (Block C+) |
+
+All four helpers are already in `security/bash_safety.py` (Block C)
+with 100% test coverage. Block C+ wiring is API-stable — no helper
+changes needed.
+
+Block C iter-1 finding #2 also flagged C-13 (pipe-segment) and the
+bash destructive-warning catalog as unwired. **Both are now wired in
+tools/bash.py** post-iter-1 (the warning is annotated to output;
+Block C+ adds the pre-exec approval surface). Lock coverage already
+exists via test_destructive_command_warning + test_pipe_segment_permission_check.
+
 ## ADR-022 — Block B+ (v5.0.1): SessionManager + cost-limit + AGENT_STATUS + FileCache + ADR-020 0-7/0-9 remap
 
 **Date**: 2026-05-03
