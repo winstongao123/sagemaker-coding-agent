@@ -1124,6 +1124,129 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-028 — Block F2 (v5.0.1, NEW): Auto-continuation under iteration budget
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block F2
+**Status**: ACCEPTED
+
+### Context
+Phase 11 (notebook UX) shipped the IterationBudget *visibility* widget,
+addressing PS Issue #2's "budget is invisible until exhausted." But
+visibility is only half of Runnable's tokenBudget feature: the other
+half is *auto-continuation*, which detects "model said done early"
+and nudges it to keep working until ~90% of the user-reserved budget
+is consumed. v5.0.0 has no such nudge — the model can emit end_turn
+at 30% used and 70% of the user's reserved iterations sits on the
+floor.
+
+Wave 5-DEEP §Block F2 surfaces this as a HIGH NEEDS-ADAPTATION
+porting target:
+- Source: Runnable `query/tokenBudget.ts:1-93` + `query.ts:1308-1355`
+  + `utils/tokenBudget.ts:66-73`.
+- Verdict: NEEDS-ADAPTATION (Runnable measures token deltas; v5
+  measures iteration deltas — the IterationBudget surface that
+  already exists).
+
+Wave 6 row #21 marks this NLT (NEEDS-LOCK-TEST) with two contract
+requirements: (a) must respect cost cap, (b) must be opt-in.
+
+### Options considered
+1. Port verbatim (token-counted budget parsed from user message).
+   Rejected: would introduce a parallel budget surface, violating
+   constraint #5 "minimum file structures." v5 already has
+   IterationBudget; users already understand it (Phase 11 widget).
+2. Hybrid (count tokens internally, gate on iteration budget).
+   Rejected: more complex than the user-visible value.
+3. **Iteration-counted adaptation (chosen).** Reuse IterationBudget
+   directly; same auto-continuation semantic, fewer surfaces, matches
+   scenario #21 wording ("F2 auto-continuation under iteration
+   budget") exactly.
+
+### Decision
+- NEW `compact_v5/MAIN/agent/core/budget_continuation.py` (~140 LOC):
+  - `BudgetTracker` dataclass (continuation_count / last_delta_iters
+    / last_iter_used / started_at_ms).
+  - `create_budget_tracker()` factory.
+  - `check_iteration_budget(tracker, iter_used, iter_total,
+    is_subagent=False, session_cost=0.0, session_cost_limit=0.0)` →
+    `ContinueDecision | StopDecision`.
+  - `get_budget_continuation_message(pct, iter_used, iter_total)`
+    — verbatim port of `getBudgetContinuationMessage` shape, adapted
+    to iterations.
+  - `COMPLETION_THRESHOLD = 0.9` (Runnable verbatim).
+  - `DIMINISHING_THRESHOLD = 2` iterations (Runnable: 500 tokens;
+    iteration-adapted — 3+ consecutive nudges with delta<2 each
+    means the model is stuck).
+- EXTEND `runtime/config.py`:
+  - `enable_token_budget_continuation: bool = False` (default OFF
+    per Wave 6 row #21 opt-in contract).
+  - Added to `_SCALAR_FIELDS` validation table.
+- WIRE `core/query_engine.py`:
+  - At the no-tool_calls (end_turn) branch, BEFORE
+    `stop_reason = "end_turn"; break`:
+    - If CONFIG flag is on, lazy-create `BudgetTracker` per run().
+    - Sub-agent check: `is_subagent = self.agent_kind != "parent"`.
+    - Read `TOKENS.session_cost` + `CONFIG.session_cost_limit`
+      best-effort.
+    - If `ContinueDecision`: surface assistant text, append nudge
+      as user turn, `continue` the for-loop.
+    - Else: fall through to existing end_turn break.
+  - F2 wiring is wrapped in try/except — never block normal end_turn
+    on F2 bugs.
+  - `self._budget_tracker = None` reset at run() entry (parallel to
+    `_discovered_tool_names`, `_exec_call_count`,
+    `_recent_tool_calls`).
+
+### Key contracts (Wave 6 row #21 NLT)
+1. **Default OFF**: `enable_token_budget_continuation: bool = False`.
+   Lock test: `test_f2_default_off_no_continuation_when_disabled`.
+2. **Cost-cap halt has priority**: cost-cap check BEFORE the
+   under-90% check inside `check_iteration_budget()`. Lock test:
+   `test_f2_respects_cost_cap` + `test_check_respects_cost_cap_even_under_90pct`.
+3. **Sub-agents always halt**: parent-only auto-continuation. Lock
+   test: `test_f2_subagent_does_not_auto_continue`.
+4. **Tracker resets per run()**: state must not leak across user
+   messages. Lock test: `test_f2_tracker_resets_between_runs`.
+5. **Diminishing-returns guard**: 3+ consecutive nudges with delta<2
+   → halt. Lock test: `test_f2_diminishing_returns_halts_after_3_continuations`.
+
+### Rationale
+- Reusing IterationBudget keeps the user-visible surface single
+  (constraint #5).
+- Cost-cap priority ensures scenario #21's "respects cost cap"
+  contract holds even when iter_used << 90%.
+- Default-OFF lets v5 ship without behavior change for existing
+  users; opt-in path is one CONFIG flag away.
+- Best-effort try/except wrapping protects the agent loop from F2
+  bugs — F2 is a strict superset of "do nothing" when disabled.
+
+### Runnable-fidelity impact
+- FAITHFUL-WITH-JUSTIFIED-ADAPTATION: the COMPLETION_THRESHOLD,
+  diminishing-returns shape, and continuation-message text all
+  match Runnable. The only adaptation is iterations-vs-tokens, and
+  the iteration adaptation is named in scenario #21 wording so it
+  matches user intent for v5.
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/core/budget_continuation.py` (~140 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_f2.py` (14 tests)
+- EXTENDED: `compact_v5/MAIN/agent/runtime/config.py`
+  (`enable_token_budget_continuation` + `_SCALAR_FIELDS` row)
+- WIRED: `compact_v5/MAIN/agent/core/query_engine.py`
+  (end_turn branch + tracker reset)
+
+### Linked port-log rows
+- #072 — Block F2 budget_continuation + opt-in flag + engine wiring
+
+### Validation
+- 604 pass + 5 skipped (was 590 + 5 at Block E+F; +14 net new).
+- verify_ship_zip.py: PASS (113 files / 313.8 KB / 36%).
+- Phase 11 IterationBudget widget surface unchanged (no regressions
+  in existing test_query_engine.py / test_subagent.py).
+
+---
+
 ## ADR-027 — Block E+F (v5.0.1): env_block + ADR-020 0-2/0-4/0-6 remap closure
 
 **Date**: 2026-05-03

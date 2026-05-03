@@ -177,11 +177,16 @@ class QueryEngine:
 
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
-        # Their schemas are added to per-turn `tools=` API payload until the
+        # Their schemas are added to per-turn `tools=` API param until the
         # run ends. v5 does NOT persist discovery across `run()` calls — the
         # set is fresh each user message (matches Runnable's per-message
         # discovered set).
         self._discovered_tool_names: Set[str] = set()
+        # Block F2 — per-run BudgetTracker for iteration-budget auto-continuation.
+        # Created lazily inside run() when CONFIG.enable_token_budget_continuation
+        # is True; reset each run() so continuation state never leaks across
+        # user messages.
+        self._budget_tracker: Optional[Any] = None
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -222,6 +227,9 @@ class QueryEngine:
         # parent_engine forwarding).
         self._exec_call_count = 0  # bash + python_exec only
         self._recent_tool_calls: list = []  # [(name, args_hash), ...]
+        # Block F2 — fresh BudgetTracker per run() so continuation state
+        # never leaks across user messages.
+        self._budget_tracker = None
 
         # Block C+ — message rate limit (v4 :8731-8740). Lives on the
         # engine so per-session caps are tracked.
@@ -432,6 +440,50 @@ class QueryEngine:
 
             # Stop conditions: end_turn / no tool_use blocks → final answer.
             if not response.tool_calls:
+                # Block F2 — auto-continuation under iteration budget. Only
+                # parent agents (not sub-agents) and only when CONFIG flag
+                # is opt-in (default OFF per Wave 6 NLT row #21). Cost-cap
+                # halt has priority inside check_iteration_budget().
+                try:
+                    from runtime.config import CONFIG as _CFG_F2
+                    if getattr(_CFG_F2, "enable_token_budget_continuation", False):
+                        from core.budget_continuation import (
+                            check_iteration_budget,
+                            create_budget_tracker,
+                            ContinueDecision,
+                        )
+                        if self._budget_tracker is None:
+                            self._budget_tracker = create_budget_tracker()
+                        _is_sub = self.agent_kind != "parent"
+                        _sc = 0.0
+                        try:
+                            from runtime.tokens import TOKENS as _TOKENS_F2
+                            _sc = float(getattr(_TOKENS_F2, "session_cost", 0.0))
+                        except Exception:
+                            _sc = 0.0
+                        _scl = float(getattr(_CFG_F2, "session_cost_limit", 0.0))
+                        decision = check_iteration_budget(
+                            self._budget_tracker,
+                            iter_used=self.budget.used(),
+                            iter_total=self.budget.total(),
+                            is_subagent=_is_sub,
+                            session_cost=_sc,
+                            session_cost_limit=_scl,
+                        )
+                        if isinstance(decision, ContinueDecision):
+                            # Surface the assistant's interim text + nudge to keep
+                            # working. Continuing the for-loop re-invokes Bedrock.
+                            if response.text:
+                                output_fn(response.text)
+                            self.messages.append({
+                                "role": "user",
+                                "content": decision.nudge_message,
+                            })
+                            continue
+                except Exception:
+                    # F2 is best-effort wiring; never block end_turn on its bugs.
+                    pass
+
                 stop_reason = "end_turn"
                 if response.text:
                     output_fn(response.text)

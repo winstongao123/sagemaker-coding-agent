@@ -129,6 +129,13 @@ class Config:
     # V4.10.4: control sub-agent handoff block
     enable_subagent_handoff: bool = True
 
+    # Block F2: opt-in auto-continuation under iteration budget. Default OFF
+    # (Wave 6 NLT row #21 — explicit opt-in contract). When True, a parent
+    # agent loop that emits end_turn while iter_used < 90% of iteration
+    # budget AND not diminishing-returns AND session_cost < session_cost_limit
+    # auto-continues with a "Keep working — do not summarize." nudge.
+    enable_token_budget_continuation: bool = False
+
     # Custom commands
     custom_commands: Dict = field(default_factory=dict)
 
@@ -228,6 +235,7 @@ def _apply_config_file(config: Config) -> None:
         "enable_skill_patching": bool,
         "enforce_verify_contract": bool,
         "enable_subagent_handoff": bool,
+        "enable_token_budget_continuation": bool,
     }
     for key, expected_type in _SCALAR_FIELDS.items():
         if key not in ext:

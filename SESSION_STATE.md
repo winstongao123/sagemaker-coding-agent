@@ -11,6 +11,11 @@ Pre-flight (RESUME.md Step 2):
 
 Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K → R1-R12.
 
+### Block F2 done (code commit; Codex pending)
+- core/budget_continuation.py NEW (~140 LOC), runtime/config.py opt-in flag, core/query_engine.py end_turn wiring, tests/integration/test_block_f2.py 14 tests.
+- 604 pass + 5 skip; verify_ship_zip PASS.
+- PORT_LOG #072 + ADR-028.
+
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 
 **Foundation reconciled per Path A** — 78 Phase 2 files + status/RESUME/gitignore updated.

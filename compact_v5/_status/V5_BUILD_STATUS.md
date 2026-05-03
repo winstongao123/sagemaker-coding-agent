@@ -1,6 +1,18 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block E+F DONE** — tag `v5.0.1-block-e-f` at `2388e64`, pushed; 590 pass + 5 skip)
+Last updated: 2026-05-03 (**v5.0.1 Block F2 IN_PROGRESS** — code + 14 tests green, 604 pass + 5 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block F2 entry (2026-05-03)
+- NEW `core/budget_continuation.py` (~140 LOC): BudgetTracker + check_iteration_budget + get_budget_continuation_message + COMPLETION_THRESHOLD=0.9 + DIMINISHING_THRESHOLD=2 (iteration-adapted from Runnable's 500 tokens).
+- EXTENDED `runtime/config.py`: `enable_token_budget_continuation: bool = False` (default OFF per Wave 6 NLT row #21 opt-in contract) + `_SCALAR_FIELDS` row.
+- WIRED `core/query_engine.py`: at the no-tool_calls (end_turn) branch, before `stop_reason = "end_turn"; break`. Best-effort try/except so F2 never blocks normal end_turn. Sub-agents always halt (parent-only auto-continuation). Cost-cap halt has priority over under-90% check. `self._budget_tracker = None` reset at run() entry.
+- 14 new tests in `tests/integration/test_block_f2.py`:
+  - 7 pure-function tests (continue-under-90 / stop-at-90 / cost-cap / subagent / diminishing-after-3 / no-budget / message-format).
+  - 3 TEST_DESIGN-named tests: test_f2_auto_continue_at_under_90pct / test_f2_blocks_at_90pct / test_f2_respects_cost_cap.
+  - 4 behavioral lock tests: default-off-no-continuation, diminishing-returns-end-to-end, subagent-no-auto-continue, tracker-resets-between-runs.
+- PORT_LOG row #072 + ADR-028. Closes Wave 6 NLT row #21 (cost-cap + opt-in contracts).
+- `verify_ship_zip.py`: PASS (113 files / 313.8 KB / 36%).
+- Pytest: **604 passed + 5 skipped** (was 590 + 5 at Block E+F; +14 pass net).
 
 ## v5.0.1 Block E+F entry (2026-05-03)
 - NEW `prompt/env_block.py` (~125 LOC): get_session_start_date (lru_cached) + get_local_month_year + get_knowledge_cutoff (5-model lookup + cross-region prefix strip) + get_os_string + get_shell_hint + render_env_block.
