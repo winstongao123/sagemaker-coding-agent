@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block N IN_PROGRESS** — code + 11 tests green (3 deferred), 743 pass + 14 skip; pending Codex APPROVE + tag)
+Last updated: 2026-05-03 (**v5.0.1 Block N DONE** — tag `v5.0.1-block-n` at `136f41b` (pending push); 745 pass + 14 skip; Codex iter-2 APPROVE clean)
 
 ## v5.0.1 Block N entry (2026-05-03)
 - NEW `core/parallel_dispatch.py` (~150 LOC): MAX_TOOL_WORKERS=4 + dedup_tool_calls + detect_path_conflicts + fuzzy_resolve_tool_name + mark_ephemeral_block + strip_ephemeral_blocks_for_persist + inject_dynamic_tool_refs + synthetic_tool_result_stub + partial_tool_call_warning.
@@ -465,7 +465,7 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block N — Hermes critical patterns (~673 LOC)** (after Block L tag).
+**Block T — 11 missing v4 tools (~780 LOC)** (after Block N tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
@@ -483,7 +483,8 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 - Block G2 status: DONE — tag `v5.0.1-block-g2` at `4a7fd7e`; pushed.
 - Block H status: DONE — tag `v5.0.1-block-h` at `9759c11`; pushed.
 - Block H+ status: DONE — tag `v5.0.1-block-h-plus` at `d40493e`; pushed.
-- Block L status: DONE — tag `v5.0.1-block-l` at `686a3d5`; pending push.
+- Block L status: DONE — tag `v5.0.1-block-l` at `686a3d5`; pushed.
+- Block N status: DONE — tag `v5.0.1-block-n` at `136f41b`; pending push.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):
