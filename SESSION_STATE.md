@@ -37,6 +37,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block H+ (code commit; Codex pending)
+- runtime/dream.py NEW (~250 LOC): MANUAL-only /dream consolidation engine + 4-phase prompt + DreamLock + rollback safety.
+- 11 new tests + 1 T5 skip; 717 pass + 9 skip; verify_ship_zip PASS.
+- PORT_LOG #099 + ADR-035.
+- "no-daemon" lock test grep-scans agent codebase for forbidden auto-fire patterns.
+
 ### Block H DONE — Codex iter-2 APPROVE (clean)
 - 19 total Block H tests; PORT_LOG #095-#098 + ADR-034.
 - 2-iter Codex cycle: REJECT (2 BLOCKER + 1 LOW + 1 DOC) → APPROVE.

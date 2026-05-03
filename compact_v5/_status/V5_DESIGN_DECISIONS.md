@@ -1124,6 +1124,88 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-035 — Block H+ (v5.0.1, NEW): Memory Consolidation Engine — `/dream` MANUAL ONLY
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block H+
+**Status**: ACCEPTED
+
+### Context
+SYNTHESIS_MASTER §Block H+ ports Runnable's autoDream consolidation
+engine — but with a critical user decision (2026-05-01): **MANUAL
+TRIGGER ONLY**. No daemon, no auto-fire, no env-auto-enable, no
+scheduler. Fires only when user invokes `/dream`.
+
+This is a deliberate v5 vs Runnable divergence. Runnable's autoDream
+runs on a background scheduler with 3-gate auto-trigger; v5 considers
+that a violation of "agents should not surprise the user with cost".
+
+### Decisions
+
+#### 1. NEW `runtime/dream.py` (~250 LOC)
+- DREAM_PROMPT_TEMPLATE — 4-phase prompt (Orient → Gather → Consolidate →
+  Prune+Index). Phase ordering is load-bearing.
+- `DreamLock` class — file-based mutex at `<workspace>/dream.lock`.
+  Acquired via O_CREAT | O_EXCL atomic creation. Released by unlink.
+  Stale-lock recovery: locks older than 600s are reclaimed.
+- `run_dream(workspace, consolidator)` — main entry. consolidator=None
+  means dry-run (no file mutation, no LLM call). Tests inject mock.
+- Safety rails: memory.md.bak snapshot BEFORE write; rollback on any
+  error.
+- `DreamResult` dataclass — success / new_content / backup_path / error
+  / phases_executed.
+
+#### 2. NO daemon, NO auto-fire (test_dream_no_daemon_no_auto_fire)
+The `test_dream_no_daemon_no_auto_fire` test scans the entire
+`compact_v5/MAIN/agent/` tree for forbidden patterns:
+- `Thread(target=*Dream*)` — no thread spawning dream.
+- `asyncio.create_task(*Dream*)` — no async dispatch.
+- `atexit.register(*Dream*)` — no shutdown auto-fire.
+- `SAGEMAKER_AUTO_DREAM` env var — not allowed.
+- `AUTO_DREAM_ENABLED` symbol — not allowed.
+
+If any of these appear in v5 source, the test fails. This is the
+codified user decision — preventing future drift toward auto-fire.
+
+#### 3. `/dream` slash command wiring
+Block D's `cmd_dream` (commands.py) is the user-facing trigger. It
+prints a status message and emits `side_effect="dream_invoked"`. The
+chat surface (Block C+ / Phase 11) consumes that side-effect to
+synchronously call `runtime.dream.run_dream(...)` with the parent
+agent's BedrockClient as the LLM consolidator.
+
+The Block D dispatch was already in place pre-Block-H+ (commands.py:557
+cmd_dream); this Block lands the engine that the side-effect ultimately
+invokes.
+
+#### 4. T5 real-AWS deferral to R-tier R6
+TEST_DESIGN row 5 (real-Haiku consolidation, ~$0.05) is gated by
+`RUN_REAL_BEDROCK=1` and SKIP'd with a deferral note pointing to R-tier
+R6 (memory consolidation /dream).
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/runtime/dream.py` (~250 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_h_plus.py`
+  (11 tests + 1 T5 skip)
+
+### Linked port-log rows
+- #099 — Block H+ Memory Consolidation Engine
+
+### Validation
+- 717 pass + 9 skipped (was 706 + 8 at end of Block H; +11 pass + 1
+  skip net new).
+- verify_ship_zip.py: PASS (126 files / 350.6 KB / 36%).
+
+### Notes / not in scope here
+- The actual LLM-driven consolidation (Phase 3 work) is gated by the
+  consolidator function the caller passes. Block D's cmd_dream binding
+  to a Bedrock-client-backed consolidator is a small follow-up wiring
+  in Phase 11's chat surface.
+- USER_GUIDE.md update documenting `/dream` usage is a Block K
+  documentation item.
+
+---
+
 ## ADR-034 — Block H (v5.0.1): Memory extraction + sessionMemory + compact-API-invariants
 
 **Date**: 2026-05-03

@@ -1,6 +1,13 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block H DONE** — tag `v5.0.1-block-h` at `9759c11` (pending push); 706 pass + 8 skip; Codex iter-2 APPROVE clean)
+Last updated: 2026-05-03 (**v5.0.1 Block H+ IN_PROGRESS** — code + 11 tests green (1 T5 skip), 717 pass + 9 skip; pending Codex APPROVE + tag)
+
+## v5.0.1 Block H+ entry (2026-05-03)
+- NEW `runtime/dream.py` (~250 LOC): DREAM_PROMPT_TEMPLATE (4 phases: Orient → Gather → Consolidate → Prune+Index) + DreamLock (file-based with stale-recovery >600s) + run_dream(workspace, consolidator) + get_dream_prompt + DreamResult + _backup_memory_md + _restore_from_backup. **MANUAL TRIGGER ONLY per user decision 2026-05-01** — daemon scheduler / asyncio / atexit / env auto-enable INTENTIONALLY DROPPED.
+- 11 new tests + 1 T5 skip in `tests/integration/test_block_h_plus.py`: 4 TEST_DESIGN-named (4-phases-prompt / lock-prevents-concurrent / rollback-on-failure / no-daemon-no-auto-fire) + 1 T5 skip + 6 behavior locks. The "no-daemon-no-auto-fire" test grep-scans the entire agent codebase for forbidden patterns — fails if any leak in.
+- PORT_LOG row #099 + ADR-035.
+- `verify_ship_zip.py`: PASS (126 files / 350.6 KB / 36%).
+- Pytest: **717 passed + 9 skipped** (was 706 + 8 at Block H; +11 pass + 1 skip net new).
 
 ## v5.0.1 Block H entry (2026-05-03)
 - NEW `memory/` package (~450 LOC): memory/extract.py (MemoryExtractor + closure-scoped throttle state) + memory/session_memory.py (dedup + has_tool_calls_in_last_assistant_turn + count_tool_calls_since) + memory/compact.py (adjust_index_to_preserve_api_invariants H-11 MUST + calculate_messages_to_keep_index + has_text_blocks).
