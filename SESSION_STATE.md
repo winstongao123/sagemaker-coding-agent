@@ -57,6 +57,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block K DONE — Codex iter-2 = APPROVE (clean, no findings)
+- Iter-cycle: 1 APPROVE_WITH_FIXES (3 major + 3 minor) → 2 APPROVE.
+- AXIS A PASS (6 iter-1 findings closed); AXIS B PASS (LF gate model matched); AXIS C PASS (env fix consistent with runtime).
+- 781 pass + 17 skip. verify_ship_zip PASS (134 files / 377.1 KB / 36%).
+- Tag `v5.0.1-block-k` to be created. Next: Block U HTMLs per WORKER_HINT §3.
+
 ### Block K iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES — 3 major + 3 minor)
 - **major #1**: V5_BUILD_STATUS.md was stale (Block J IN_PROGRESS / 775 pass). Updated: Block K IN_PROGRESS / 781 pass / Phase ID + last commit sha / next pickup = Block U HTMLs / DONE rows added for Block N (push), Block T, Block J.
 - **major #2**: test_state_resume_anchor_per_block strengthened — now parses real "Block <TOKEN> status: DONE — tag `...` at `<sha>`" lines + verifies recorded sha matches actual git tag sha (per TEST_DESIGN §Block K row 2). Token regex accepts digit (Block 0), letter, plus (B+/H+/E+F), and digit-suffix (G2/G3/F2) forms.
