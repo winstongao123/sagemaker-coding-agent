@@ -46,6 +46,13 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block J DONE — Codex iter-2 = APPROVE (clean)
+- Iter-cycle: 1 APPROVE_WITH_FIXES → 2 APPROVE.
+- 4 T4 tests pass on every pytest invocation. 3 T5 real-Bedrock tests env-skip without RUN_REAL_BEDROCK=1 (verified working when run on demand).
+- Real bug caught + fixed: Agent class now lives in `MAIN/agent/agent.py` (was in `__init__.py` — invisible by `from agent import Agent` in flat-zip cwd).
+- PORT_LOG #104 + ADR-039.
+- Tag `v5.0.1-block-j` to be created. Next: Block K — process/policy.
+
 ### Block J iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES — 2 HIGH + 1 LOW)
 - HIGH #1: tool_call.args → tool_call.input (ToolCall dataclass uses `input`); assistant content now mirrors _build_assistant_content (omit empty text blocks).
 - HIGH #2: rescoped test_real_bedrock_compact_then_continue — was calling BedrockClient.chat directly (bypasses QueryEngine auto-compact), now uses Agent.run() across two turns. Full 80K compaction is covered by test_block_h.py (mock-based H-11) + R-tier R2 (real Bedrock at full scale). Documented in ADR-039 §iter-2 update.
