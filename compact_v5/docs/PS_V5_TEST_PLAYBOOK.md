@@ -238,6 +238,44 @@ If ANY checkbox missed → test INCOMPLETE → do NOT advance.
 
 ---
 
+## Section 4.5 — Gap closures 2026-05-03 (user "100%" pushback)
+
+### Gap A: Bedrock `thinking` blocks NOT in telemetry schema
+
+ADD to telemetry.json schema (per_turn array each item):
+
+```json
+{
+  "turn": N,
+  ...existing fields...,
+  "thinking_text": "<full thinking block text if extended thinking enabled, else null>",
+  "thinking_tokens": <int or 0>
+}
+```
+
+`build_telemetry.py` reads `chat_response.thinking` from audit_logs (v5 BedrockClient should already log thinking blocks if the model returned any with `thinking_enabled=True`). If field missing in audit log, set null + 0.
+
+### Gap B: PS#4 (thinking visibility) needs explicit R-tier scenario
+
+ADD R17 scenario:
+
+| # | Scenario | Catches | Cost cap | Model |
+|---|---|---|---|---|
+| **R17 — Thinking visibility** | Send hard-reasoning prompt ("Solve 2-step math problem with extended thinking enabled, max_tokens=4096"). Verify agent thinking block is captured + returned to chat history + visible in telemetry.json `per_turn[].thinking_text`. | PS#4 fix end-to-end on real Bedrock | $0.30 | Sonnet 4.5 (only Sonnet supports extended thinking reliably) |
+
+R-tier total: $11.25 → $11.55 (negligible cost increase, closes the gap).
+
+Add R17 test file: `compact_v5/MAIN/agent/tests/r_tier/test_r17_thinking_visibility.py`. Same review discipline as R1-R16.
+
+### Gap C: v5 > Runnable EMPIRICAL — DEFER decision to user
+
+OPTION 1 (current): architectural argument only — Runnable patterns ported with file:line refs in PORT_LOG. Defensible but not empirical.
+OPTION 2: add Block V-extended (v5 vs Runnable) — +$2-3 cost + Runnable TS runtime setup overhead (~30 min worker time).
+
+User decides at F5 verification gate. Worker proceeds with Option 1 by default (architectural). If user requests at F5, worker schedules Block V-extended as separate session.
+
+---
+
 ## Section 5 — Trigger phrases worker recognizes
 
 | User says | Worker action |
