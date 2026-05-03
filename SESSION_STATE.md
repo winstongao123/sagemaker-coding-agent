@@ -46,6 +46,15 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block K (code commit; Codex ON HOLD per user 2026-05-03)
+- 5 TEST_DESIGN-named + 1 meta-count = 6 tests in `tests/integration/test_block_k_process.py`.
+- Added AXIS C section to `_status/CODEX_REVIEW_TEMPLATE.md` (errors+bugs / Runnable-fidelity / reference-repo coverage gaps with MUST/DEFER/DROP/N/A categories).
+- RESUME.md FORBIDDEN-on-CHANGES_REQUESTED gate language already present (verified by K-3).
+- A44 no-change-detector audit (K-4): targeted regex catches `assert "X" in MODELS|TOOLS|COMMANDS|BEDROCK_MODELS` + `assert len(UPPER_GLOBAL) == N` + `assert *_COUNT == N`. Allowlist for legitimate v4-baseline-coverage locks.
+- lint_phase_id.py (K-5): already present; lock test verifies it compiles + has expected check structure.
+- 781 pass + 17 skip (was 775+17; +6 net for Block K); verify_ship_zip PASS (134 files / 377.1 KB / 36%).
+- ON HOLD: per user request, Codex review for Block K paused.
+
 ### Block J DONE — Codex iter-2 = APPROVE (clean)
 - Iter-cycle: 1 APPROVE_WITH_FIXES → 2 APPROVE.
 - 4 T4 tests pass on every pytest invocation. 3 T5 real-Bedrock tests env-skip without RUN_REAL_BEDROCK=1 (verified working when run on demand).

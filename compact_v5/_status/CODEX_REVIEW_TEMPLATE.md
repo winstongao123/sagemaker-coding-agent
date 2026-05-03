@@ -56,6 +56,38 @@ Auto-reject rule: if `constraint=none` AND verdict=`FAITHFUL-WITH-JUSTIFIED-ADAP
 
 If you find a pattern in the code NOT listed in the table, flag it as `UNDECLARED_PATTERN` under AXIS B with severity BLOCKER.
 
+=== AXIS C — Reference-repo coverage gaps ===
+
+**Constraint #1** (v4.10.10 baseline): every v4 advertised feature must
+either land in v5 or be explicitly DROPPED in PORT_LOG with
+DECISION-DROP-PER-USER (NOT silent narrowing).
+
+For each Block, AXIS C asks: looking at the matching v4 (and where
+relevant Runnable / Hermes / Learning Factory) sources, what features
+or behaviors are STILL missing in v5? Cite each gap with file:line in
+the reference repo.
+
+Categorize each gap:
+- **MUST**: blocks v5.0.1 ship — must land in this Block or a follow-up
+  Block tagged before v5.0.1 SHIP.
+- **DEFER**: explicit deferral with named target Block + rationale
+  (acceptable; document in PORT_LOG as DEFER row).
+- **DROP**: user-approved drop (acceptable; document in PORT_LOG as
+  DECISION-DROP-PER-USER row).
+- **N/A**: feature is not in scope for this Block (e.g., Block 0
+  ships scaffolding only).
+
+Also confirm:
+- No SILENT scope narrowing — every gap has a labeled disposition.
+- v4 schema parity for advertised tool fields (Block T, Block I).
+- Runnable / Hermes / Learning Factory advertised patterns adopted by
+  this Block all appear in the AXIS B table.
+
+Output:
+AXIS C VERDICT: PASS | CHANGES_REQUESTED | BLOCKER
+Gaps: [category: MUST|DEFER|DROP|N/A] reference_file:line — description
+— disposition (target Block | DECISION-DROP-PER-USER row | N/A reason)
+
 === FINAL ===
 PHASE {{ID}} OVERALL: APPROVE | APPROVE_WITH_FIXES | REJECT
 A-axis: <one-line>
