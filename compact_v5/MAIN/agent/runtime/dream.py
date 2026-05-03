@@ -156,27 +156,64 @@ class DreamLock:
     def release(self) -> None:
         """Release the lock if held — only if the file still carries OUR
         nonce. Otherwise, someone else now owns the lock and we must NOT
-        unlink it. Codex iter-1 hardening.
+        unlink it.
+
+        Codex iter-2 hardening: read-then-unlink had a TOCTOU race where
+        worker B could reclaim between our nonce read and our unlink call.
+        Fixed via atomic rename: rename the lock file to a unique temp
+        path; if rename fails, the file's gone or moved (someone else has
+        it) — abort. After rename, we have exclusive ownership of the
+        renamed path; verify nonce + unlink. If nonce mismatches (which
+        is impossible post-atomic-rename since contents move with the
+        file), rename back.
         """
         if not self._held:
             return
+        if not self._nonce:
+            self._held = False
+            return
+
+        releasing_path = self.lock_path + f".releasing.{self._nonce}"
         try:
-            # Check file content still has our nonce before unlinking.
+            # Atomic rename. Fails if the source file doesn't exist OR
+            # someone else moved/deleted it between our acquire and now.
+            try:
+                os.rename(self.lock_path, releasing_path)
+            except OSError:
+                # File gone or moved — not ours to release; no-op.
+                return
+
+            # Now we have exclusive ownership of the renamed path.
+            # Verify the nonce (paranoia: should always match since
+            # rename moves contents atomically, but be safe).
             owner_match = False
             try:
-                with open(self.lock_path, "r", encoding="utf-8") as f:
+                with open(releasing_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if data.get("nonce") == self._nonce:
                     owner_match = True
             except (OSError, json.JSONDecodeError):
-                # Lock file gone or corrupt; treat as not-our-lock.
                 owner_match = False
+
             if owner_match:
-                os.unlink(self.lock_path)
-        except OSError:
-            pass
-        self._held = False
-        self._nonce = None
+                try:
+                    os.unlink(releasing_path)
+                except OSError:
+                    pass
+            else:
+                # Defensive: nonce mismatch on a file we just renamed
+                # atomically. Try to rename it back so we don't strand
+                # someone else's lock.
+                try:
+                    os.rename(releasing_path, self.lock_path)
+                except OSError:
+                    # If rename-back fails, leave the renamed file as a
+                    # tombstone; the next acquire's stale-recovery will
+                    # ignore it (different filename).
+                    pass
+        finally:
+            self._held = False
+            self._nonce = None
 
     def __enter__(self):
         if not self.acquire():

@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block H+ iter-3 fix (Codex iter-2 = APPROVE_WITH_FIXES)
+- runtime/dream.py: release() now atomically renames the lock file to a unique .releasing.<nonce> path BEFORE reading the nonce + unlinking. Eliminates the TOCTOU race where worker B could reclaim between A's nonce-read and unlink. After atomic rename, A has exclusive ownership of the renamed path; verify+unlink. If nonce mismatches (defensive — impossible after atomic rename), rename back so B's lock isn't stranded.
+- 1 new lock test (release-atomic-rename-no-toctou): verifies clean release with no .releasing.* tombstones.
+- 720 pass + 9 skip.
+
 ### Block H+ iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
 - ui/chat_ui.py: NEW _invoke_dream() helper + ConsoleChatUI.send + WidgetChatUI._on_send now consume cr.side_effect=="dream_invoked" and actually call runtime.dream.run_dream() with a real-LLM consolidator built from agent.client.chat() (Codex iter-1 main finding — was a doc claim with no code consumer).
 - runtime/dream.py: per-acquire nonce on DreamLock; release() only unlinks if file still carries our nonce — prevents stale-recovery race where worker A's release() could clobber worker B's freshly acquired lock (Codex iter-1 secondary risk).

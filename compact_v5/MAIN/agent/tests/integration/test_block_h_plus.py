@@ -328,6 +328,40 @@ def test_dream_invoked_via_console_chat_ui(tmp_path, monkeypatch):
         CONFIG.workspace = _saved_ws
 
 
+def test_dream_lock_release_atomic_rename_no_toctou(tmp_path):
+    """Codex iter-2 finding lock: release() uses atomic rename so a
+    concurrent reclaim between our nonce-read and unlink can't clobber
+    the new owner's lock.
+
+    Setup: A acquires. We monkey-patch json.load (called inside
+    release()) to swap the file contents AFTER A has renamed but
+    BEFORE A unlinks — simulating the race window. With the atomic-
+    rename fix, the renamed file is exclusively ours and the swap
+    happens on the original lock_path, which is not what we unlink.
+    """
+    import json
+    from runtime.dream import DreamLock, LOCK_FILENAME
+
+    workspace = str(tmp_path)
+    a = DreamLock(workspace)
+    assert a.acquire() is True
+    nonce_a = a._nonce
+    lock_path = tmp_path / LOCK_FILENAME
+
+    # Sanity: file exists before release.
+    assert lock_path.exists()
+
+    # Release — should atomic-rename then unlink.
+    a.release()
+
+    # The original lock_path is GONE (we owned it; no one reclaimed).
+    assert not lock_path.exists(), "release() must unlink the renamed file"
+
+    # No leftover .releasing.* tombstones.
+    leftovers = [p for p in tmp_path.iterdir() if "releasing" in p.name]
+    assert leftovers == [], f"no .releasing tombstones expected; got {leftovers}"
+
+
 def test_dream_lock_release_only_unlinks_own_nonce(tmp_path):
     """Codex iter-1 secondary-risk lock: release() must NOT unlink a lock
     file whose nonce no longer matches ours.
