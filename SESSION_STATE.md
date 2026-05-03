@@ -1043,3 +1043,4 @@ Added `.env.*`, `*.pem`, `*.key`, `credentials*.json`,
 <!-- Block D done 2026-05-03 -->
 
 <!-- Block D pushed at 7a19715 -->
+<!-- Block A finalised 2026-05-03 -->

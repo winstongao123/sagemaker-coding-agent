@@ -1124,6 +1124,58 @@ After Phase 13 lands:
 
 ## (Append future ADRs below this line — keep numerical order 020, 021, ...)
 
+## ADR-026 — Block A (v5.0.1): Compactor + auto-compact circuit breaker + cache_edits + B-2/B+5 remaps
+
+**Date**: 2026-05-03
+**Phase ID**: v5.0.1 Block A
+**Status**: ACCEPTED
+
+### Context
+Block A is the load-bearing piece for context-window management.
+v5.0.0 shipped with no compactor, so long sessions hit Bedrock's
+prompt-too-long limit. Block A ports v4's full Compactor + adds
+auto-compact circuit breaker (Hermes pattern) + Runnable cache_edits
+adaptation + closes the B-2 + B+5 deferrals from ADR-021/ADR-022.
+
+### Decision
+Single `core/compactor.py` module:
+- `Compactor` class (verbatim port of v4:186-635) — multi-mode
+  compaction (prune + summarize + replace).
+- `AutoCompactCircuitBreaker` class — cooldown + session cap; session
+  cap checked FIRST so exhausted runs fail fast.
+- `apply_cache_control_to_blocks` — Bedrock equivalent of
+  Runnable's cache_edits.
+- `count_tokens_via_haiku_fallback` — closes B-2 deferral from
+  ADR-021 (consumer is Compactor, which lives in Block A).
+- `Compactor._summary_client` — closes B+5 deferral from ADR-022
+  (auxiliary-model invoked only via Compactor).
+
+### Key adaptations
+- `estimate_tokens` delegates to `runtime/tokens.estimate_message_tokens`
+  + `rough_token_count_for_message` (drops tiktoken dependency for
+  SageMaker-native deployment; v4 had a tiktoken probe).
+- `create_llm_summary` uses v5 BedrockClient.chat() shape.
+- TOKENS.add() uses agent_kind="advisor" when summary runs through
+  the aux client; agent_kind="parent" otherwise — so /cost shows
+  per-bucket cost.
+- PROTECTED_TOOLS = {todo_write, todo_read, semantic_search} — v4
+  invariant preserved (these tool results are never pruned).
+
+### Affected files
+- NEW: `compact_v5/MAIN/agent/core/compactor.py` (~430 LOC)
+- NEW: `compact_v5/MAIN/agent/tests/integration/test_block_a.py` (21 tests)
+
+### Linked port-log rows
+- #066 — Compactor port
+- #067 — AutoCompactCircuitBreaker
+- #068 — apply_cache_control_to_blocks (cache_edits adaptation)
+- #069 — count_tokens_via_haiku_fallback (B-2 remap)
+- #070 — _summary_client + advisor attribution (B+5 remap)
+
+### Validation
+- 571 pass + 5 skipped (was 550 + 5 at end of Block D; +21 net new).
+- verify_ship_zip.py: PASS (111 files / 307.1 KB / 37%).
+
 ## ADR-025 — Block D (v5.0.1): Slash-command dispatcher (20 v4 + /auth + 6 LF)
 
 **Date**: 2026-05-03

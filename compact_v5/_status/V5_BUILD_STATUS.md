@@ -1,6 +1,17 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block D DONE** — Codex 4-iter cycle ended APPROVE; 550 pass + 5 skip; pending tag + push)
+Last updated: 2026-05-03 (**v5.0.1 Block A DONE** — Codex 2-iter cycle ended APPROVE; 575 pass + 5 skip; pending tag + push)
+
+## v5.0.1 Block A entry (2026-05-03)
+- NEW `core/compactor.py` (~430 LOC): Compactor (v4 port lines 186-635) + AutoCompactCircuitBreaker + apply_cache_control_to_blocks + count_tokens_via_haiku_fallback (B-2 remap) + _summary_client advisor attribution (B+5 remap).
+- 25 new tests in `tests/integration/test_block_a.py` (21 initial + 4 finding-locks for iter-1) covering estimate / prune / should_compact / compact / create_llm_summary / run end-to-end + circuit-breaker cooldown + cache_control + B-2 fallback + B+5 advisor cost attribution + 4 finding-locks (PTL user-first, PRUNE_MIN_SAVINGS rollback, CB atomic try_attempt, query_engine wiring).
+- WIRED `core/query_engine.py`: per-turn auto-compact gate (Compactor.should_compact + AUTO_COMPACT.try_attempt + Compactor.run when allowed; emits "[auto-compact] saved N tokens; continuing." or "[auto-compact skipped: <reason>]").
+- Codex AXIS A/B/C 2-iter cycle (gpt-5.3-codex throughout):
+  - iter 1 (3 files): REJECT with 4 findings (HIGH PTL retry user-first; MEDIUM PRUNE_MIN_SAVINGS rollback lost; MEDIUM CB atomicity; MEDIUM helpers unwired).
+  - iter 2 (4 files): APPROVE — all 4 fixes verified clean.
+- PORT_LOG rows #066-#070 + ADR-026. Closes B-2 (Block B deferred → Block A) + B+5 (Block B+ deferred → Block A).
+- `verify_ship_zip.py`: PASS (111 files / 308.1 KB / 37%).
+- Pytest: **575 passed + 5 skipped** (was 550 + 5 at Block D; +25 pass net).
 
 ## v5.0.1 Block D entry (2026-05-03)
 - NEW `commands.py` (~450 LOC): 27-command dispatch table + handler functions + CommandResult shape.
@@ -337,14 +348,15 @@ Original V5_PLAN.md success metric #1 (functional parity with v4.10.10) is NOT M
 
 ## Next session: pick up at
 
-**Block A — Compactor + auto-compact circuit breaker + Runnable cache_edits** (after Block D tag).
+**Block E+F — Sectioned prompt + Cache surface + UI/Notebook combined** (after Block A tag).
 
 - Block 0 status: DONE — tag `v5.0.1-block-0` at `19e7823`; pushed.
 - Block B status: DONE — tag `v5.0.1-block-b` at `ee01142`; pushed.
 - Block B+ status: DONE — tag `v5.0.1-block-b-plus` at `ff30e8d`; pushed.
 - Block C status: DONE — tag `v5.0.1-block-c` at `77c6eb4`; pushed.
 - Block C+ status: DONE — tag `v5.0.1-block-c-plus` at `f9e4000`; pushed.
-- Block D status: DONE — tag `v5.0.1-block-d` (pending; tagging this commit); pushed.
+- Block D status: DONE — tag `v5.0.1-block-d` at `7a19715`; pushed.
+- Block A status: DONE — tag `v5.0.1-block-a` (pending; tagging this commit); pushed.
 - Mode: B (Codex-only-gate, autonomous; user reviews FINAL product only).
 - Worker prompt: `compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md`.
 - Pre-Block-0 gates ALL MET (2026-05-02 reconciliation):

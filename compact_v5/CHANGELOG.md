@@ -1,5 +1,38 @@
 # compact_v5 changelog
 
+## v5.0.1-block-a — Compactor + auto-compact circuit breaker + cache_edits (2026-05-03)
+
+Codex review: 2-iter cycle (gpt-5.3-codex throughout):
+- iter 1 (3 files): REJECT with 4 findings (1 HIGH PTL retry user-first
+  bug, 3 MEDIUM: PRUNE_MIN_SAVINGS rollback lost, CB check+record TOCTOU,
+  helpers unwired into runtime).
+- All 4 fixed; 4 finding-lock tests added.
+- iter 2 (4 files): APPROVE.
+
+Seventh Block of the v5.0.1 21-Block build. The load-bearing piece for
+long-session context-window management. Closes B-2 + B+5 deferrals
+from ADR-021/ADR-022.
+
+NEW:
+- `core/compactor.py` (~430 LOC):
+  - `Compactor` class — verbatim port of v4 sagemaker_agent.py:186-635
+    (multi-mode compaction: prune + summarize + replace). estimate_tokens
+    delegates to runtime/tokens helpers (drops tiktoken). PROTECTED_TOOLS
+    invariant preserved (todo_write/todo_read/semantic_search never pruned).
+  - `AutoCompactCircuitBreaker` + `AUTO_COMPACT` singleton — Hermes
+    cooldown + session-cap pattern. Session cap checked first.
+  - `apply_cache_control_to_blocks` — Bedrock equivalent of Runnable's
+    Anthropic-direct cache_edits.
+  - `count_tokens_via_haiku_fallback` — closes B-2 deferral.
+  - `_summary_client` + advisor attribution — closes B+5 deferral.
+
+TESTS: 21 new in `tests/integration/test_block_a.py`.
+
+PORT_LOG #066-#070 + ADR-026.
+
+Pytest: 571 passed + 5 skipped (was 550 + 5 at Block D; +21 net new).
+verify_ship_zip.py: PASS (111 files / 307.1 KB / 37%).
+
 ## v5.0.1-block-d — Slash-command dispatcher (2026-05-03)
 
 Codex review: 4-iteration cycle (gpt-5.3-codex throughout):

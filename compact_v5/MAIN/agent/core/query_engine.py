@@ -405,6 +405,31 @@ class QueryEngine:
             if response.text:
                 last_text = response.text
 
+            # Block A — auto-compact gate. Per-turn check: if the
+            # message buffer has crossed the 80% threshold AND the
+            # circuit breaker allows another attempt, run Compactor.
+            try:
+                from core.compactor import Compactor, AUTO_COMPACT
+                from runtime.config import CONFIG as _CFG_AC
+                _max_ctx = getattr(_CFG_AC, "context_max_tokens", 200_000)
+                if Compactor.should_compact(self.messages, _max_ctx):
+                    _ok, _why = AUTO_COMPACT.try_attempt()
+                    if _ok:
+                        _result = Compactor.run(self.client, self.messages, _max_ctx)
+                        if _result.success:
+                            output_fn(
+                                f"[auto-compact] saved "
+                                f"{_result.tokens_before - _result.tokens_after:,} "
+                                f"tokens; continuing."
+                            )
+                            self.messages = _result.messages_after
+                    else:
+                        # Cooldown / cap message — log once per turn, no
+                        # spam since try_attempt returns reason text.
+                        output_fn(f"[auto-compact skipped: {_why}]")
+            except Exception:
+                pass
+
             # Stop conditions: end_turn / no tool_use blocks → final answer.
             if not response.tool_calls:
                 stop_reason = "end_turn"
