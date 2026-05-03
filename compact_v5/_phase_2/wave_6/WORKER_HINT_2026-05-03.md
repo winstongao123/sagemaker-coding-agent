@@ -108,6 +108,105 @@ Output: scoring table in `v5_complete.html` "v5 vs Runnable vs v4" tab. Without 
 
 **R-tier + Block V combined**: ~$25-35. Gets EMPIRICAL "v5 > Runnable > v4" with screenshot-able evidence.
 
+## 9.4. MANDATORY OUTPUTS PER R-TIER OR BLOCK V TEST (audit trail — DO NOT SKIP)
+
+User directive 2026-05-03 — MUST persist every test action so stakeholder can audit. Worker MUST produce all 8 file types per test, no exceptions. Missing any = test is INCOMPLETE; do NOT advance to next test.
+
+For each real-AWS test (R1-R16, Block V V1-V3), worker MUST produce:
+
+| # | File | When | Content | Example |
+|---|---|---|---|---|
+| 1 | `compact_v5/_status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>-prompt.txt` | BEFORE first AWS call | Filled-in TEMPLATE A from R_TIER_REVIEW_TEMPLATE.md (all `{{...}}` placeholders replaced with this test's specifics) | `r-tier-R1-phaseA-iter1-prompt.txt` |
+| 2 | `compact_v5/_status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>.md` | After Codex pre-flight | Codex AXIS A/B/C verdict + final APPROVE_FOR_AWS_CALL or REJECT | `r-tier-R1-phaseA-iter1.md` |
+| 3 | `compact_v5/_status/codex_reviews/r-tier-<TEST>-aws-call<N>.log` | DURING AWS call (capture stdout+stderr) | Raw Bedrock log: every turn, tool calls, tokens, errors. Use `python -u test_X.py 2>&1 \| tee compact_v5/_status/codex_reviews/r-tier-<TEST>-aws-call<N>.log` pattern | `r-tier-R1-aws-call1.log` (~50-500KB) |
+| 4 | `compact_v5/_status/codex_reviews/r-tier-<TEST>-phaseB-iter<N>.md` | ONLY if call#N failed — diagnosis review | Codex review of root-cause + proposed fix (TEMPLATE B verdict) | `r-tier-R2-phaseB-iter1.md` |
+| 5 | `compact_v5/_status/codex_reviews/r-tier-<TEST>-phaseC-iter<N>.md` | ONLY if call#N passed — sanity review | Codex post-pass verdict (TEMPLATE C — GENUINE_PASS or LIKELY_FALSE_POSITIVE) | `r-tier-R1-phaseC-iter1.md` |
+| 6 | One JSONL row in `compact_v5/_status/r_tier_metrics.jsonl` | After each AWS call | One JSON object per AWS call. Format below. | (one row per AWS call) |
+| 7 | One row in `compact_v5/_status/r_tier_review_log.md` | After test READY or ESCALATED | Master test summary row. Format below. | (one row per test) |
+| 8 | `compact_v5/_status/codex_reviews/ESCALATION-<TEST>.md` | ONLY if 3 AWS calls hit cap or any ESCALATE trigger fires | Why escalating + last-known state + question for user | `ESCALATION-R6.md` |
+
+### File 6 format (r_tier_metrics.jsonl, append-only, one line per AWS call)
+
+```jsonl
+{"test":"R1","call":1,"date":"2026-05-04T10:23:11Z","model":"claude-haiku-4-5","tokens_in":12500,"tokens_out":3800,"cache_hit_pct":0.72,"wallclock_s":142,"tool_calls":18,"completed":true,"cost_usd":0.42,"verdict":"GENUINE_PASS"}
+```
+
+Required keys: `test, call, date, model, tokens_in, tokens_out, cache_hit_pct, wallclock_s, tool_calls, completed, cost_usd, verdict`. Optional: `error` (only on failure).
+
+### File 7 format (r_tier_review_log.md, append-only Markdown table)
+
+```markdown
+| Test | Date | Block(s) | PRE-FLIGHT iters | AWS calls used | DIAGNOSIS iters | POST-PASS verdict | Final | Cost spent | Cost cap | What was tested | Problems found | What changed | Reviewer file refs |
+|------|------|----------|------------------|----------------|-----------------|-------------------|-------|-----------|----------|-----------------|----------------|--------------|---------------------|
+| R1 | 2026-05-04 | composite | 1 (APPROVE) | 1 | 0 | GENUINE_PASS | READY | $0.42 | $1.00 | 50-turn dashboard build | none | nothing | r-tier-R1-phaseA-iter1.md, r-tier-R1-phaseC-iter1.md |
+```
+
+If file doesn't exist when R1 starts, worker creates it with the header row + R1's row.
+
+### File 8 format (ESCALATION-<TEST>.md, one per escalated test)
+
+```markdown
+# ESCALATION — <TEST_NAME>
+
+Date: <ISO timestamp>
+Trigger: <one of: 3-AWS-calls-exhausted | cost-cap-hit | Codex-BLOCKER | reviewer-disagree-3-rounds | Bedrock-infra-error | 2-consecutive-test-fails>
+
+## What we tried
+- AWS call #1: <result, cost, error>
+- AWS call #2: <result, cost, fix attempted>
+- AWS call #3: <result, cost, fix attempted>
+
+## Last-known state
+- Code at commit: <sha>
+- Test code at: <path>
+- Cost spent on this test: $<X> of $<cap>
+- Total R-tier cost so far: $<Y>
+
+## Worker hypothesis
+<what worker thinks the root cause is>
+
+## Codex hypothesis
+<what Codex's TEMPLATE B reviews concluded>
+
+## Question for user
+- Option A: skip this test, mark NEEDS-USER-DECISION, continue R-tier
+- Option B: spend more (need user approval to bypass 3-call cap)
+- Option C: investigate offline, fix code, re-run
+- Option D: test design flawed, modify test scenario
+
+WORKER HALTS HERE. Do NOT proceed to next R-test until user replies.
+```
+
+### Worker checklist for EACH real-AWS test (use this verbatim)
+
+```
+Before AWS call:
+  [ ] File 1 created (filled-in pre-flight prompt)
+  [ ] File 2 created (Codex APPROVE_FOR_AWS_CALL recorded)
+  [ ] Worker self-review noted in commit msg
+
+During AWS call:
+  [ ] File 3 capture started (tee to .log)
+
+After AWS call:
+  [ ] File 3 closed (.log saved)
+  [ ] File 6 row appended (r_tier_metrics.jsonl)
+  PASS path:
+    [ ] File 5 created (Codex POST-PASS sanity review)
+  FAIL path:
+    [ ] File 4 created (Codex DIAGNOSIS review)
+    [ ] If APPROVE_FIX_AND_RETRY: apply fix, commit, re-run from "Before AWS call"
+    [ ] If 3 AWS calls exhausted: File 8 created (ESCALATION), STOP
+
+After test READY or ESCALATED:
+  [ ] File 7 row appended (r_tier_review_log.md)
+  [ ] git add all 7-8 files for this test + git commit "v5/r-tier-<TEST>: <verdict>"
+  [ ] git push sageagent v5-build
+  [ ] ONLY now move to next test
+```
+
+If ANY checklist item is skipped, the test is INCOMPLETE. Do NOT advance.
+
 ## 9.5. Codex review prompt files — WHICH TEMPLATE TO USE WHEN
 
 Two review-prompt files exist. Use the right one for the right job:
