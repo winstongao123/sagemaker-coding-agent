@@ -37,6 +37,11 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
+### Block I iter-3 fixes (Codex iter-2 = APPROVE_WITH_FIXES)
+- tests/integration/test_block_i.py: tightened test_paths_first_match_wins_per_adr029 — now asserts `activated == ["alpha"]` and `active_skill == "alpha"` (was loose `in {alpha, beta}`).
+- _status/V5_RUNNABLE_PORT_LOG.md: row #072 Notes column restored (F2 NEEDS-ADAPTATION text was lost when commit sha was edited; row was 9 fields instead of 10). Row #083 Notes trimmed to end at "ADR-029."
+- 631 pass + 6 skip preserved; verify_ship_zip PASS.
+
 ### Block I iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
 - skills/manager.py activate_for_path: directory-root pattern matching (`src/**` activates on `src/foo/bar.py`) + first-match-wins return (Codex finding #1 + #4).
 - skills/manager.py discover_relevant: skip skills with disable_model_invocation:true (Codex finding #2).

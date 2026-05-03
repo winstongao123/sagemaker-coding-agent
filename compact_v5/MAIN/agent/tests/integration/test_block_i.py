@@ -472,6 +472,10 @@ def test_paths_first_match_wins_per_adr029(fresh_skills_dir):
     the edited file, only the FIRST match (by SkillManager._cache order)
     activates. ADR-029 §1 documents first-match-wins; without the fix
     a later-match would silently overwrite active_skill.
+
+    Codex iter-2 finding #1 tightening: pin the expected winner to
+    `alpha` (sorted-rglob order puts alpha before beta) so this test
+    catches an implementation that activates ONLY beta as well.
     """
     from skills.manager import SkillManager
 
@@ -488,14 +492,16 @@ def test_paths_first_match_wins_per_adr029(fresh_skills_dir):
     })
     sm = SkillManager(workspace=str(workspace), skills_dir=str(skills_dir))
     sm.discover()
+    # Sanity: cache order matches the alphabetical rglob output that
+    # discover() iterates, so alpha is "first".
+    assert list(sm._cache.keys()) == ["alpha", "beta"]
     activated = sm.activate_for_path("foo.py")
-    # Exactly ONE skill activated (first wins). _cache iteration order
-    # follows insertion order in Python 3.7+, and discover() inserts
-    # in sorted-rglob order: alpha before beta.
-    assert len(activated) == 1
-    assert activated[0] in {"alpha", "beta"}
-    # active_skill must equal the single activated entry — no overwrite.
-    assert sm.active_skill == activated[0]
+    # Exactly ONE skill activated AND it must be alpha (first in cache
+    # order). A loose assert (`activated[0] in {"alpha","beta"}`) would
+    # accept an implementation that activates ONLY beta — that's the
+    # silent-overwrite bug the iter-2 fix was supposed to close.
+    assert activated == ["alpha"]
+    assert sm.active_skill == "alpha"
 
 
 def test_disable_model_invocation_filters_discover_relevant(fresh_skills_dir):
