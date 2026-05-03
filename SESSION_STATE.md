@@ -32,10 +32,20 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 20 total F2 tests green; PORT_LOG #072 verdict APPROVE/dd33507; ADR-028 final.
 - Tag v5.0.1-block-f2 pushed. Next: Block I.
 
-### Block I (code commit; Codex pending)
+### Block I (code commit; Codex iter-1 = APPROVE_WITH_FIXES)
 - skills/manager.py extended ~280 LOC, commands.py + edit_file.py + query_engine.py wired, 2 new skill dirs (debug, remember), 16+1 tests.
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
+
+### Block I iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
+- skills/manager.py activate_for_path: directory-root pattern matching (`src/**` activates on `src/foo/bar.py`) + first-match-wins return (Codex finding #1 + #4).
+- skills/manager.py discover_relevant: skip skills with disable_model_invocation:true (Codex finding #2).
+- tools/skill.py: list uses list_model_invocable; read/activate reject disable_model_invocation:true skills with clear error (Codex finding #2).
+- skills/manager.py get_active_skill_prompt(session_id) now substitutes ${CLAUDE_SKILL_DIR} + ${CLAUDE_SESSION_ID} (Codex finding #3).
+- core/query_engine.py passes self.session_id into get_active_skill_prompt.
+- PORT_LOG #083 added: Axis C closure (I-12 deferred / verify-skill remap to PORT_LOG #029 / Wave 6 gap #8 tool-vs-skill precedence).
+- 5 new lock tests (paths-directory-root-descendants / paths-first-match-wins / disable-model-invocation-discover_relevant / disable-model-invocation-blocks-skill-tool / get_active_skill_prompt-substitutes).
+- 631 pass + 6 skip (was 626; +5 finding-locks); verify_ship_zip PASS.
 
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 

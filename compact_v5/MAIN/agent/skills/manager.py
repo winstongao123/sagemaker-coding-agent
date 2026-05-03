@@ -396,13 +396,26 @@ class SkillManager:
         except Exception as e:
             return False, f"Failed reading skill: {e}"
 
-    def get_active_skill_prompt(self) -> str:
+    def get_active_skill_prompt(self, session_id: str = "") -> str:
+        """Return the active skill's body for prompt injection.
+
+        Codex iter-1 finding #3 fix: I-6 ${CLAUDE_SKILL_DIR} /
+        ${CLAUDE_SESSION_ID} substitution is now applied here so the
+        prompt actually carries the resolved values, not literal vars.
+        Caller (query_engine) passes its session_id; an empty string
+        leaves ${CLAUDE_SESSION_ID} in place (deliberate — see
+        substitute_skill_vars docstring).
+        """
         if not self.active_skill:
             return ""
         ok, content = self.read_skill(self.active_skill)
         if not ok:
             return ""
         skill = self._cache.get(self.active_skill)
+        # Apply Block I-6 substitution.
+        content = self.substitute_skill_vars(
+            content, self.active_skill, session_id=session_id,
+        )
         return (
             f"\n\n## Active Skill: {self.active_skill}\n"
             f"Base directory: {skill.base_dir if skill else 'unknown'}\n\n"
@@ -483,7 +496,18 @@ class SkillManager:
                 continue
             for pattern in skill.paths:
                 pat_norm = pattern.replace("\\", "/")
-                if any(fnmatch.fnmatch(c, pat_norm) for c in candidates):
+                # Codex iter-1 finding #1 fix: stripped directory pattern
+                # ("src" from "src/**") must match descendants. fnmatch alone
+                # doesn't recognize a directory root — augment with explicit
+                # equality + prefix-with-separator match.
+                root = pat_norm.rstrip("/")
+                matched = any(
+                    fnmatch.fnmatch(c, pat_norm)
+                    or c == root
+                    or c.startswith(root + "/")
+                    for c in candidates
+                )
+                if matched:
                     with self._pending_lock:
                         self.active_skill = name
                         self._pending_activations.append(name)
@@ -492,7 +516,12 @@ class SkillManager:
                         f"[skill-paths] auto-activated '{name}' "
                         f"on edit of '{file_path}' (pattern={pattern!r})"
                     )
-                    break
+                    # Codex iter-1 finding #4 fix: first-match-wins per
+                    # ADR-029 §1. v5 has a single active_skill; iterating
+                    # all skills lets a later match silently overwrite
+                    # the first. Return after the first activation so the
+                    # documented contract holds.
+                    return activated
         return activated
 
     # ------------------------------------------------------------
@@ -648,6 +677,13 @@ class SkillManager:
         relevant: List[str] = []
         for name, skill in self._cache.items():
             if name == self.active_skill:
+                continue
+            # Codex iter-1 finding #2 fix: disable_model_invocation
+            # must hide the skill from this model-facing surface too.
+            # Without this filter, a `remember`-style skill that opted
+            # out of model invocation would still be auto-suggested by
+            # discover_relevant when its triggers fired.
+            if skill.disable_model_invocation:
                 continue
             if not skill.triggers:
                 continue

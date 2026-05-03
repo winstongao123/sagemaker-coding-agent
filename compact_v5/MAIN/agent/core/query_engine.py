@@ -283,7 +283,9 @@ class QueryEngine:
         effective_system_prompt = system_prompt
         if self.skill_manager is not None:
             try:
-                active_block = self.skill_manager.get_active_skill_prompt()
+                active_block = self.skill_manager.get_active_skill_prompt(
+                    session_id=self.session_id,
+                )
                 if active_block:
                     effective_system_prompt = system_prompt + active_block
                 visible_tool_names = {t.name for t in tools}

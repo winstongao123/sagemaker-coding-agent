@@ -440,6 +440,166 @@ def test_skill_debug_and_remember_skills_load(fresh_skills_dir):
     assert "debug" in model_invocable
 
 
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_paths_directory_root_pattern_activates_descendants(fresh_skills_dir):
+    """Codex iter-1 finding #1 lock: `paths: src/**` strips to `src` at
+    discover-time and must auto-activate when the user edits ANY file
+    under src/, including descendants. fnmatch alone wouldn't match
+    `src` against `src/x.py`; the activate_for_path logic adds an
+    explicit prefix check.
+    """
+    from skills.manager import SkillManager
+
+    workspace, skills_dir = fresh_skills_dir
+    _write_skill(skills_dir, "src-skill", {
+        "name": "src-skill",
+        "description": "Use under src/.",
+        "paths": ["src/**"],   # → normalizes to "src"
+    })
+    sm = SkillManager(workspace=str(workspace), skills_dir=str(skills_dir))
+    sm.discover()
+    # Editing src/foo/bar.py → must activate src-skill.
+    activated = sm.activate_for_path(str(workspace / "src" / "foo" / "bar.py"))
+    assert activated == ["src-skill"]
+    assert sm.active_skill == "src-skill"
+
+
+def test_paths_first_match_wins_per_adr029(fresh_skills_dir):
+    """Codex iter-1 finding #4 lock: when two skills' paths both match
+    the edited file, only the FIRST match (by SkillManager._cache order)
+    activates. ADR-029 §1 documents first-match-wins; without the fix
+    a later-match would silently overwrite active_skill.
+    """
+    from skills.manager import SkillManager
+
+    workspace, skills_dir = fresh_skills_dir
+    _write_skill(skills_dir, "alpha", {
+        "name": "alpha",
+        "description": "First.",
+        "paths": ["*.py"],
+    })
+    _write_skill(skills_dir, "beta", {
+        "name": "beta",
+        "description": "Second.",
+        "paths": ["*.py"],
+    })
+    sm = SkillManager(workspace=str(workspace), skills_dir=str(skills_dir))
+    sm.discover()
+    activated = sm.activate_for_path("foo.py")
+    # Exactly ONE skill activated (first wins). _cache iteration order
+    # follows insertion order in Python 3.7+, and discover() inserts
+    # in sorted-rglob order: alpha before beta.
+    assert len(activated) == 1
+    assert activated[0] in {"alpha", "beta"}
+    # active_skill must equal the single activated entry — no overwrite.
+    assert sm.active_skill == activated[0]
+
+
+def test_disable_model_invocation_filters_discover_relevant(fresh_skills_dir):
+    """Codex iter-1 finding #2 lock: discover_relevant() must skip
+    skills with disable_model_invocation:true even when triggers fire.
+    Otherwise the model would still see remember/-style user-only
+    skills as auto-suggestions.
+    """
+    from skills.manager import SkillManager
+
+    workspace, skills_dir = fresh_skills_dir
+    _write_skill(skills_dir, "user-only", {
+        "name": "user-only",
+        "description": "Use when user runs it.",
+        "auto_trigger": "true",
+        "triggers": ["save"],
+        "disable_model_invocation": "true",
+    })
+    _write_skill(skills_dir, "open-skill", {
+        "name": "open-skill",
+        "description": "Use anytime.",
+        "auto_trigger": "true",
+        "triggers": ["save"],
+    })
+    sm = SkillManager(
+        workspace=str(workspace),
+        skills_dir=str(skills_dir),
+        enable_auto_trigger=True,
+    )
+    sm.discover()
+    relevant = sm.discover_relevant("please save this file")
+    assert "open-skill" in relevant
+    assert "user-only" not in relevant
+
+
+def test_disable_model_invocation_blocks_skill_tool_read_and_activate(fresh_skills_dir, monkeypatch):
+    """Codex iter-1 finding #2 lock: the model-facing skill TOOL
+    (subcommand read / activate) must reject disable_model_invocation
+    skills with a clear error pointing the user to /skill use.
+    """
+    from skills.manager import SkillManager
+    from tools import bootstrap_built_ins
+    from tools.registry import find_tool_by_name, all_registered, _reset_registry_for_tests
+    from tools import skill as _skill_tool_mod
+
+    workspace, skills_dir = fresh_skills_dir
+    _write_skill(skills_dir, "user-only", {
+        "name": "user-only",
+        "description": "Use when user runs it.",
+        "disable_model_invocation": "true",
+    })
+    sm = SkillManager(workspace=str(workspace), skills_dir=str(skills_dir))
+    monkeypatch.setattr(_skill_tool_mod, "_get_skill_manager", lambda ctx: sm)
+
+    _reset_registry_for_tests()
+    bootstrap_built_ins()
+    skill_tool = find_tool_by_name(all_registered(), "skill")
+    assert skill_tool is not None
+
+    # list MUST omit user-only.
+    listed = skill_tool.execute({"subcommand": "list"}, context={})
+    assert "user-only" not in listed
+
+    # read MUST reject.
+    r_read = skill_tool.execute(
+        {"subcommand": "read", "name": "user-only"}, context={},
+    )
+    assert "user-invocable only" in r_read.lower()
+
+    # activate MUST reject.
+    r_act = skill_tool.execute(
+        {"subcommand": "activate", "name": "user-only"}, context={},
+    )
+    assert "user-invocable only" in r_act.lower()
+
+
+def test_get_active_skill_prompt_substitutes_skill_dir_and_session(fresh_skills_dir):
+    """Codex iter-1 finding #3 lock: get_active_skill_prompt() must
+    apply substitute_skill_vars() so ${CLAUDE_SKILL_DIR} and
+    ${CLAUDE_SESSION_ID} resolve in the injected prompt body.
+    """
+    from skills.manager import SkillManager
+
+    workspace, skills_dir = fresh_skills_dir
+    _write_skill(skills_dir, "vartest2", {
+        "name": "vartest2",
+        "description": "Test substitution wiring.",
+    }, body="Helpers live at ${CLAUDE_SKILL_DIR}/run.sh under session ${CLAUDE_SESSION_ID}.")
+
+    sm = SkillManager(workspace=str(workspace), skills_dir=str(skills_dir))
+    sm.discover()
+    sm.active_skill = "vartest2"
+
+    out = sm.get_active_skill_prompt(session_id="sess-XYZ")
+    assert "${CLAUDE_SKILL_DIR}" not in out, (
+        "get_active_skill_prompt must substitute ${CLAUDE_SKILL_DIR} "
+        "(Codex iter-1 finding #3)"
+    )
+    assert "${CLAUDE_SESSION_ID}" not in out
+    assert "sess-XYZ" in out
+    # The skill dir is forward-slashed cross-platform.
+    assert "vartest2" in out.replace("\\", "/")
+
+
 def test_skill_realpath_dedup_state_isolated_between_discover_calls(fresh_skills_dir):
     """The seen_realpaths set must be local to discover() (not instance
     state) so multiple discover() calls behave identically."""

@@ -106,7 +106,11 @@ def _skill_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = No
 
     if sub == "list":
         sm.discover()
-        records = sm.list_skills()
+        # Block I-2 (Codex iter-1 finding #2 fix): the skill TOOL is the
+        # model-facing surface, so it must use list_model_invocable() to
+        # hide skills with disable_model_invocation:true. Users still see
+        # them via /skill use (commands.py routes through resolve_name()).
+        records = sm.list_model_invocable()
         if not records:
             return "(no skills discovered)"
         return "\n".join(
@@ -118,6 +122,17 @@ def _skill_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = No
         name = str(args.get("name", "")).strip()
         if not name:
             return "Error: 'name' is required for `read` subcommand"
+        # Block I-2 (Codex iter-1 finding #2 fix): reject model-invoked
+        # read of disable_model_invocation:true skills. Users can still
+        # see the body via /skill use <name> (commands.py path).
+        sm.discover()
+        skill = sm._cache.get(name)
+        if skill is not None and skill.disable_model_invocation:
+            return (
+                f"Error: skill '{name}' is user-invocable only "
+                "(disable_model_invocation: true). The user must run "
+                f"`/skill use {name}` directly."
+            )
         ok, payload = sm.read_skill(name)
         if not ok:
             return f"Error: {payload}"
@@ -127,6 +142,16 @@ def _skill_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = No
         name = str(args.get("name", "")).strip()
         if not name:
             return "Error: 'name' is required for `activate` subcommand"
+        # Block I-2 (Codex iter-1 finding #2 fix): same reject-on-model
+        # path for activate. Skill must be user-activated via /skill use.
+        sm.discover()
+        skill = sm._cache.get(name)
+        if skill is not None and skill.disable_model_invocation:
+            return (
+                f"Error: skill '{name}' is user-invocable only "
+                "(disable_model_invocation: true). The user must run "
+                f"`/skill use {name}` to activate it."
+            )
         ok, msg = sm.activate(name)
         return msg
 
