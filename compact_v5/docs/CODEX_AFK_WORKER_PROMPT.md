@@ -38,12 +38,14 @@ aws budgets describe-budget --account-id 903039434627 --budget-name Bedrock-Mont
 Read these before editing:
 
 1. `compact_v5/_status/R_TIER_GATE_STATUS.md`
-2. `compact_v5/docs/CODEX_CONTEXT_v5_R_TIER.md`
-3. `compact_v5/docs/PS_V5_TEST_PLAYBOOK.md`
-4. `compact_v5/docs/PS_V5_TEST_SET.md`
-5. `compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md`
-6. `compact_v5/_status/V5_BUILD_STATUS.md`
-7. `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md`
+2. `compact_v5/_status/r_tier_test_matrix.json`
+3. `compact_v5/_status/R_TIER_PENDING_TESTS.md`
+4. `compact_v5/docs/CODEX_CONTEXT_v5_R_TIER.md`
+5. `compact_v5/docs/PS_V5_TEST_PLAYBOOK.md`
+6. `compact_v5/docs/PS_V5_TEST_SET.md`
+7. `compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md`
+8. `compact_v5/_status/V5_BUILD_STATUS.md`
+9. `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md`
 
 ## Current truth at prompt creation
 
@@ -57,6 +59,8 @@ Read these before editing:
   - `compact_v5/_status/r_tier_metrics.jsonl`
   - `compact_v5/_status/r_tier_review_log.md`
 - `r_tier_gate.py` is the local fail-closed guard.
+- `r_tier_test_matrix.json` is the canonical list of all 42 required scenarios,
+  cost caps, benefits, and ready criteria. Do not silently add/drop tests.
 
 ## Autonomy contract
 
@@ -86,6 +90,8 @@ commit it, push it, then stop.
 Update and commit/push after each meaningful step:
 
 - `_status/R_TIER_GATE_STATUS.md`
+- `_status/R_TIER_PENDING_TESTS.md` if a test status changes
+- `_status/r_tier_test_matrix.json` if a test status changes
 - `_status/r_tier_metrics.jsonl`
 - `_status/r_tier_review_log.md`
 - `_status/V5_BUILD_STATUS.md` when high-level state changes

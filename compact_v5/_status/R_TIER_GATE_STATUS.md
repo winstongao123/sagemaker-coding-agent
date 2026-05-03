@@ -29,6 +29,8 @@ aws budgets describe-budget --account-id 903039434627 --budget-name Bedrock-Mont
 
 The local gate enforces:
 
+- `r_tier_test_matrix.json` exists, contains all 42 required scenarios, and
+  totals exactly `$14.25`
 - the 42 v5-only scenarios are materialized as executable R-tier tests
 - `_status/r_tier_metrics.jsonl` exists and total local recorded spend stays
   at or below `$14.25`
@@ -54,6 +56,11 @@ worker session. It contains:
 AFK is allowed only under that prompt. The worker may continue test by test
 while all gates pass, but must stop on any escalation trigger.
 
+Canonical test queue:
+
+- machine-readable: `compact_v5/_status/r_tier_test_matrix.json`
+- human-readable: `compact_v5/_status/R_TIER_PENDING_TESTS.md`
+
 ## Current status
 
 The gate currently fails, intentionally:
@@ -62,6 +69,9 @@ The gate currently fails, intentionally:
 - R2-R16, R18-E1..E15, and R19-U1..U10 are not yet materialized as test code
 - `_status/r_tier_metrics.jsonl` is initialized at `$0.00` local recorded spend
 - `_status/r_tier_review_log.md` is initialized with its table header
+- `_status/r_tier_test_matrix.json` is initialized and totals `$14.25`
+- `_status/R_TIER_PENDING_TESTS.md` lists every pending test, benefit, and
+  ready criterion
 
 Do not claim all 42 tests are ready until this gate passes.
 

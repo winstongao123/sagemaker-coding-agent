@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 
 TOTAL_COST_CAP_USD = 14.25
+MATRIX_REL_PATH = Path("compact_v5") / "_status" / "r_tier_test_matrix.json"
 
 # 42 v5-only scenarios: R1-R17, R18 E1-E15, R19 U1-U10.
 EXPECTED_SCENARIOS: Tuple[str, ...] = tuple(
@@ -43,6 +43,70 @@ PER_SCENARIO_CAPS: Dict[str, float] = {
         start=1,
     )},
 }
+
+
+def _load_matrix(repo_root: Path) -> List[dict]:
+    matrix_path = repo_root / MATRIX_REL_PATH
+    if not matrix_path.is_file():
+        return []
+    try:
+        data = json.loads(_read_text(matrix_path))
+    except json.JSONDecodeError:
+        return [{"_malformed_matrix": str(matrix_path)}]
+    return data if isinstance(data, list) else [{"_malformed_matrix": str(matrix_path)}]
+
+
+def _expected_from_matrix(repo_root: Path) -> Tuple[Tuple[str, ...], Dict[str, float]]:
+    matrix = _load_matrix(repo_root)
+    valid = [row for row in matrix if isinstance(row, dict) and row.get("id")]
+    if not valid:
+        return EXPECTED_SCENARIOS, PER_SCENARIO_CAPS
+    ids = tuple(str(row["id"]) for row in valid)
+    caps: Dict[str, float] = {}
+    for row in valid:
+        try:
+            caps[str(row["id"])] = float(row.get("cost_cap_usd", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            caps[str(row["id"])] = 0.0
+    return ids, caps
+
+
+def check_matrix(repo_root: Path) -> List[str]:
+    """Verify the canonical matrix is present, complete, and cost-capped."""
+    errors: List[str] = []
+    matrix_path = repo_root / MATRIX_REL_PATH
+    if not matrix_path.is_file():
+        return [f"missing test matrix: {matrix_path}"]
+    matrix = _load_matrix(repo_root)
+    if any("_malformed_matrix" in row for row in matrix if isinstance(row, dict)):
+        return [f"malformed test matrix JSON: {matrix_path}"]
+    ids = [str(row.get("id", "")) for row in matrix if isinstance(row, dict)]
+    missing = [sid for sid in EXPECTED_SCENARIOS if sid not in ids]
+    extra = [sid for sid in ids if sid and sid not in EXPECTED_SCENARIOS]
+    if missing:
+        errors.append(f"test matrix missing IDs: {', '.join(missing)}")
+    if extra:
+        errors.append(f"test matrix has unexpected IDs: {', '.join(extra)}")
+    if len(ids) != len(set(ids)):
+        errors.append("test matrix contains duplicate IDs")
+    for row in matrix:
+        if not isinstance(row, dict):
+            errors.append("test matrix contains non-object row")
+            continue
+        for key in ("id", "title", "kind", "model", "cost_cap_usd", "status", "benefit", "ready_criteria"):
+            if key not in row or row.get(key) in ("", None):
+                errors.append(f"{row.get('id', '<unknown>')}: matrix missing {key}")
+    total = 0.0
+    for row in matrix:
+        if not isinstance(row, dict):
+            continue
+        try:
+            total += float(row.get("cost_cap_usd", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            errors.append(f"{row.get('id', '<unknown>')}: invalid cost_cap_usd")
+    if round(total, 2) != TOTAL_COST_CAP_USD:
+        errors.append(f"test matrix cap total ${total:.2f} != expected ${TOTAL_COST_CAP_USD:.2f}")
+    return errors
 
 
 def _read_text(path: Path) -> str:
@@ -79,7 +143,8 @@ def check_suite_materialized(repo_root: Path) -> List[str]:
         return [f"missing R-tier directory: {r_tier}"]
 
     all_text = "\n".join(_read_text(p) for p in r_tier.glob("test_*.py"))
-    for scenario in EXPECTED_SCENARIOS:
+    expected, _caps = _expected_from_matrix(repo_root)
+    for scenario in expected:
         if scenario.startswith("R18-"):
             marker = scenario.split("-", 1)[1]
             if "R18" not in all_text or marker not in all_text:
@@ -117,8 +182,9 @@ def check_costs(repo_root: Path) -> List[str]:
         by_test[test] = by_test.get(test, 0.0) + cost
     if total > TOTAL_COST_CAP_USD:
         errors.append(f"total R-tier cost ${total:.4f} exceeds cap ${TOTAL_COST_CAP_USD:.2f}")
+    _expected, caps = _expected_from_matrix(repo_root)
     for test, cost in sorted(by_test.items()):
-        cap = PER_SCENARIO_CAPS.get(test)
+        cap = caps.get(test)
         if cap is not None and cost > cap + 1e-9:
             errors.append(f"{test} cost ${cost:.4f} exceeds scenario cap ${cap:.2f}")
     return errors
@@ -190,6 +256,7 @@ def main() -> int:
 
     repo_root = args.repo_root.resolve()
     errors: List[str] = []
+    errors.extend(check_matrix(repo_root))
     if not args.skip_suite:
         errors.extend(check_suite_materialized(repo_root))
     errors.extend(check_costs(repo_root))

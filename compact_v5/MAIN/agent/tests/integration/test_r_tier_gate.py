@@ -30,6 +30,13 @@ def test_r_tier_gate_script_exists_and_compiles():
     py_compile.compile(str(_SCRIPT_PATH), doraise=True)
 
 
+def test_r_tier_gate_matrix_is_complete_and_costed():
+    gate = _load_gate()
+    repo_root = _V5_ROOT.parent
+
+    assert gate.check_matrix(repo_root) == []
+
+
 def test_r_tier_gate_detects_missing_suite(tmp_path):
     gate = _load_gate()
     r_tier = tmp_path / "compact_v5" / "MAIN" / "agent" / "tests" / "r_tier"
