@@ -148,7 +148,7 @@ DO NOT read compact_v4/MAIN/agent/sagemaker_agent.py directly.
 Save the prompt to `_status/codex_reviews/block-<BLOCK_ID>-prompt.txt`. Run:
 ```bash
 cd D:/Github/sagemaker-coding-agent
-codex exec --full-auto -s read-only -m gpt-5.3-codex --skip-git-repo-check \
+codex exec --full-auto -s read-only -m gpt-5.5 -c model_reasoning_effort="high" --skip-git-repo-check \
   "$(cat _status/codex_reviews/block-<BLOCK_ID>-prompt.txt)" \
   > _status/codex_reviews/block-<BLOCK_ID>.md
 ```
@@ -228,10 +228,10 @@ taskkill //F //IM codex.exe 2>&1 | tail -5
 tasklist | grep -i codex | wc -l
 ```
 
-**Both models (gpt-5.5 and gpt-5.3-codex) work correctly when no zombies**:
+**Both models (gpt-5.5 and gpt-5.5 -c model_reasoning_effort="high") work correctly when no zombies**:
 - gpt-5.5 baseline: 3 sec
 - gpt-5.5 5-file 162-KB read prompt: 25 sec ✓
-- gpt-5.3-codex 5-file prompt: 65 sec ✓
+- gpt-5.5 -c model_reasoning_effort="high" 5-file prompt: 65 sec ✓
 
 Both also handle 100+ KB single files fine (Test 3 read 106 KB ADR file in 14 sec, returned correct count).
 
@@ -253,7 +253,7 @@ If Codex iter-(N+1) hangs >15 min with 0 bytes output OR fails with network erro
 |---|---|---|
 | **1. Verify connectivity** | `curl -sf https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY" \| head -5` (5 sec). If fails → wait 60s and retry once. | Go to stage 2 |
 | **2. Retry with backoff** | Kill stuck task. Wait 5 min. Re-run Codex with same prompt + model. | If hangs again, go to stage 3 |
-| **3. Fallback model** | Re-run with `-m gpt-5.4` (older but more stable). If returns clean APPROVE → tag. If returns APPROVE_WITH_FIXES → fix → loop back to stage 2 with gpt-5.3-codex. | If gpt-5.4 also hangs → stage 4 |
+| **3. Fallback model** | Re-run with `-m gpt-5.4` (older but more stable). If returns clean APPROVE → tag. If returns APPROVE_WITH_FIXES → fix → loop back to stage 2 with gpt-5.5 -c model_reasoning_effort="high". | If gpt-5.4 also hangs → stage 4 |
 | **4. ESCALATE** | STOP. Do NOT tag. Do NOT skip. Document state in `_status/codex_reviews/block-X-blocked.md`. Update V5_BUILD_STATUS "Blockers" section. Report to user with: (a) what was tried, (b) Codex output bytes per attempt, (c) error messages, (d) recommended next action. User decides: try later, manual override (with explicit "I accept the risk" note in PORT_LOG), or different recovery path. |
 
 **The build PAUSES on stage 4 escalation — no autonomous skip. User explicitly unblocks.**

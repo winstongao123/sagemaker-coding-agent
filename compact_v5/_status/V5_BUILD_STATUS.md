@@ -1,6 +1,6 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block E+F DONE** — Codex 2-iter cycle ended APPROVE; 590 pass + 5 skip; pending tag + push)
+Last updated: 2026-05-03 (**v5.0.1 Block E+F DONE** — tag `v5.0.1-block-e-f` at `2388e64`, pushed; 590 pass + 5 skip)
 
 ## v5.0.1 Block E+F entry (2026-05-03)
 - NEW `prompt/env_block.py` (~125 LOC): get_session_start_date (lru_cached) + get_local_month_year + get_knowledge_cutoff (5-model lookup + cross-region prefix strip) + get_os_string + get_shell_hint + render_env_block.

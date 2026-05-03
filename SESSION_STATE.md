@@ -1,5 +1,16 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-03 — v5.0.1 Mode B autonomous resume — start of Block F2 → R-tier sweep
+
+Pre-flight (RESUME.md Step 2):
+- 7 zombie codex.exe killed → 0
+- pytest 590 pass + 5 skip (matches V5_BUILD_STATUS Block E+F line)
+- verify_ship_zip PASS (112 files / 311.0 KB / 37%)
+- Last tag v5.0.1-block-e-f at 2388e64 ✓ ; v5-build at 46984c1 (one doc-only backfill commit ahead)
+- Doc edits in BUILDER_PROMPT.md + V5_BUILD_STATUS.md captured user directive: switch Codex review model to gpt-5.5 -c model_reasoning_effort=high.
+
+Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H → H+ → L → N → T → J → K → R1-R12.
+
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 
 **Foundation reconciled per Path A** — 78 Phase 2 files + status/RESUME/gitignore updated.
