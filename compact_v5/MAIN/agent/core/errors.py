@@ -18,6 +18,8 @@ re-imports these names for backwards compatibility (no chat() change).
 """
 from __future__ import annotations
 
+from typing import Any
+
 
 class BedrockErrorCategory:
     """Categories of Bedrock invoke errors. Used by ErrorClassifier + RetryPolicy.
@@ -92,11 +94,32 @@ def extract_nested_error_message(exc_or_text) -> str:
     if not text.strip():
         return "(empty error)"
 
-    # Try JSON first.
+    # Try JSON first. Codex iter-1 finding #2: Runnable extracts nested
+    # API JSON shapes — `error.error.message` and deeper. Walk up to 3
+    # levels deep extracting the deepest "message" / "error" string.
     try:
         data = _json.loads(text)
         if isinstance(data, dict):
-            for key in ("message", "Message", "error", "Error"):
+            # Walk nested .error.message / .error.error.message paths.
+            for path in (
+                ("error", "error", "message"),
+                ("error", "error", "Message"),
+                ("error", "message"),
+                ("error", "Message"),
+                ("message",),
+                ("Message",),
+            ):
+                cur: Any = data
+                for key in path:
+                    if isinstance(cur, dict):
+                        cur = cur.get(key)
+                    else:
+                        cur = None
+                        break
+                if isinstance(cur, str) and cur.strip():
+                    return cur.strip()[:200]
+            # Fallback: top-level "error" / "Error" if it's a string.
+            for key in ("error", "Error"):
                 v = data.get(key)
                 if isinstance(v, str) and v.strip():
                     return v.strip()[:200]
@@ -167,8 +190,15 @@ def get_retry_after_ms(exc) -> int:
             return int(m.group(1)) * 1000
         except (ValueError, TypeError):
             return 0
-    # Match HTTP-date.
-    m = re.search(r"retry-after\s*:?\s*([A-Z][a-z]{2},\s*\d.+\d{4}.+GMT)", s)
+    # Match HTTP-date. Codex iter-1 finding #1: accept both RFC-1123
+    # tail forms — `GMT` and `±0000` — since email.utils.format_datetime
+    # produces the latter on Python 3.x. parsedate_to_datetime parses
+    # either.
+    m = re.search(
+        r"retry-after\s*:?\s*([A-Za-z]{3},\s*\d.+\d{4}\s+\d{2}:\d{2}:\d{2}\s+(?:GMT|[+-]\d{4}))",
+        s,
+        re.IGNORECASE,
+    )
     if m:
         try:
             dt = parsedate_to_datetime(m.group(1))
@@ -206,8 +236,19 @@ class ErrorClassifier:
             return BedrockErrorCategory.PAYLOAD_TOO_LARGE, "compact_retry", str(exc)[:200]
         if "409" in msg_lower or "conflictexception" in msg_lower:
             return BedrockErrorCategory.CONFLICT_409, "no_retry", str(exc)[:200]
-        if "request_timeout" in msg_lower or "request-timeout" in msg_lower or (
-            "408" in msg_lower
+        # Codex iter-1 finding #3: broaden timeout matching to common shapes
+        # ReadTimeout / ConnectTimeout / APIConnectionTimeoutError / "timed out".
+        # Note: Phase 8 NETWORK pattern still catches connect/read timeouts
+        # as cls_name matches; this REQUEST_TIMEOUT branch must run BEFORE
+        # the NETWORK branch to differentiate them. Both are retryable.
+        if (
+            "request_timeout" in msg_lower
+            or "request-timeout" in msg_lower
+            or "408" in msg_lower
+            or "request timed out" in msg_lower
+            or "timed out" in msg_lower
+            or "timeout" in cls_name
+            or "apiconnectiontimeout" in cls_name
         ):
             return BedrockErrorCategory.REQUEST_TIMEOUT, "backoff", str(exc)[:200]
         if "malformed" in msg_lower or "could not parse response" in msg_lower or "decode" in cls_name:

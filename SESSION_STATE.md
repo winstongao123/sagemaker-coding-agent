@@ -37,7 +37,14 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 626 pass + 6 skip; verify_ship_zip PASS.
 - PORT_LOG #073-#082 + ADR-029.
 
-### Block L (code commit; Codex pending)
+### Block L iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
+- get_retry_after_ms: HTTP-date regex now accepts both "GMT" and "±0000" forms (email.utils.format_datetime emits the latter on Python 3) + case-insensitive header matching (Codex iter-1 #1).
+- extract_nested_error_message: now walks nested .error.message and .error.error.message JSON paths (Codex iter-1 #2 — Bedrock + Anthropic API actually return these shapes).
+- ErrorClassifier.classify: REQUEST_TIMEOUT branch broadened to recognize ReadTimeout / ConnectTimeout / APIConnectionTimeoutError class names + "request timed out" / "timed out" / "timeout" message patterns (Codex iter-1 #3).
+- 3 new lock tests (http-date-retry-after / extract-nested-api-json / classifier-recognizes-timeout-shapes).
+- 732 pass + 11 skip.
+
+### Block L (code commit; Codex iter-1 = APPROVE_WITH_FIXES)
 - core/errors.py extended (9→18 categories + categorize_retryable + extract_nested_error_message + parse_max_tokens_overflow + get_retry_after_ms).
 - core/cache_break_detection.py NEW (per-tool detector + Haiku exclusion).
 - 9 new tests + 2 T2 deferred to Block J; 729 pass + 11 skip.

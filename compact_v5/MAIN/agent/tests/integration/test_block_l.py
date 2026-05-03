@@ -314,6 +314,95 @@ def test_hash_tool_schema_deterministic():
     assert hash_tool_schema(a) != hash_tool_schema(c)
 
 
+# ============================================================
+# Codex iter-1 finding-lock tests
+# ============================================================
+
+def test_get_retry_after_ms_parses_http_date():
+    """Codex iter-1 finding #1 lock: get_retry_after_ms must parse the
+    HTTP-date format used in Retry-After headers (case-insensitive
+    header matching).
+    """
+    import time
+    from email.utils import format_datetime
+    from datetime import datetime, timezone, timedelta
+    from core import get_retry_after_ms
+
+    # Future date: ~10 seconds from now.
+    future = datetime.now(timezone.utc) + timedelta(seconds=10)
+    http_date = format_datetime(future)  # produces "Wed, ... GMT"
+
+    out = get_retry_after_ms(f"HTTP 429: Retry-After: {http_date}")
+    # Should return ~10000ms (allow some slack).
+    assert 5000 <= out <= 15000, (
+        f"HTTP-date Retry-After parsing failed; got {out}ms, "
+        f"expected ~10000ms (Codex iter-1 #1)"
+    )
+
+    # Lower-case header name still works (RFC says case-insensitive).
+    out_lower = get_retry_after_ms(f"retry-after: {http_date}")
+    assert 5000 <= out_lower <= 15000
+
+
+def test_extract_nested_error_message_extracts_nested_api_json():
+    """Codex iter-1 finding #2 lock: extract_nested_error_message must
+    walk nested .error.message and .error.error.message JSON paths
+    (the shape Bedrock + Anthropic API actually return).
+    """
+    import json as _json
+    from core import extract_nested_error_message
+
+    # Single-nested .error.message.
+    body1 = _json.dumps(
+        {"error": {"message": "AccessDenied: principal lacks permission"}}
+    )
+    out1 = extract_nested_error_message(body1)
+    assert "AccessDenied" in out1, (
+        f"single-nested .error.message must be extracted; got {out1!r}"
+    )
+
+    # Double-nested .error.error.message.
+    body2 = _json.dumps(
+        {"error": {"error": {"message": "ThrottlingException: rate exceeded"}}}
+    )
+    out2 = extract_nested_error_message(body2)
+    assert "ThrottlingException" in out2, (
+        f"double-nested .error.error.message must be extracted; got {out2!r}"
+    )
+
+
+def test_classifier_recognizes_common_timeout_shapes():
+    """Codex iter-1 finding #3 lock: classifier must catch common
+    timeout exception shapes (ReadTimeout, ConnectTimeout,
+    APIConnectionTimeoutError, "request timed out").
+    """
+    from core import BedrockErrorCategory, ErrorClassifier
+
+    # Class-name shapes (cls_name match).
+    class ReadTimeout(Exception):
+        pass
+
+    class ConnectTimeout(Exception):
+        pass
+
+    class APIConnectionTimeoutError(Exception):
+        pass
+
+    cases = [
+        ReadTimeout("read timed out"),
+        ConnectTimeout("connect timed out"),
+        APIConnectionTimeoutError("connection timeout"),
+        Exception("Request timed out after 30s"),
+    ]
+    for exc in cases:
+        cat, recovery, _ = ErrorClassifier.classify(exc)
+        assert cat == BedrockErrorCategory.REQUEST_TIMEOUT, (
+            f"{type(exc).__name__}({exc!r}) → got {cat}, "
+            f"expected REQUEST_TIMEOUT (Codex iter-1 #3)"
+        )
+        assert recovery == "backoff"
+
+
 def test_notify_cache_deletion_skips_excluded_models():
     """notify_cache_deletion returns False for Haiku (R4 #14 MUST)."""
     from core import notify_cache_deletion
