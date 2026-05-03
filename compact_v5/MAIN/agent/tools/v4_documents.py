@@ -132,9 +132,17 @@ _CREATE_WORD_SCHEMA = {
 def _create_excel_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> str:
     filepath = str(args.get("filepath") or args.get("file_path") or "").strip()
     # Codex iter-1/2 HIGH: accept both v4 advertised `data` and v5 `rows`.
-    raw_data = args.get("data") if args.get("data") is not None else args.get("rows")
+    has_data = args.get("data") is not None
+    has_rows = args.get("rows") is not None
+    raw_data = args.get("data") if has_data else args.get("rows")
     if raw_data is None:
         raw_data = []
+    # Codex iter-3 MEDIUM: v4 required `data`. Reject empty payload instead
+    # of silently writing an empty workbook.
+    if not has_data and not has_rows:
+        return "Error: data or rows is required (list of rows or list of dicts)"
+    if not (isinstance(raw_data, list) and raw_data):
+        return "Error: data/rows must be a non-empty list"
     chart_type = args.get("chart_type") or ""
     sheet_name = str(args.get("sheet_name") or "Sheet1")
     chart_title = args.get("chart_title")
@@ -354,11 +362,27 @@ _CREATE_NOTEBOOK_SCHEMA = {
 # create_chart — matplotlib .png
 # ============================================================
 
+_CHART_TYPES_V4 = (
+    "bar", "grouped_bar", "stacked_bar", "line", "pie",
+    "scatter", "horizontal_bar", "combo",
+)
+
+
 def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> str:
     filepath = str(args.get("filepath") or args.get("file_path") or "").strip()
     chart_type = (args.get("chart_type") or "bar").lower()
-    data = args.get("data") or {}
+    data = args.get("data")
     title = args.get("title") or ""
+    xlabel = args.get("xlabel")
+    ylabel = args.get("ylabel")
+    colors = args.get("colors") or None
+    dpi = args.get("dpi")
+    width = args.get("width")
+    height = args.get("height")
+    style = args.get("style")
+    # Codex iter-3 MEDIUM: v4 required `data`. Reject missing payload.
+    if data is None:
+        return "Error: data is required ({labels:[],values:[]} or {x:[],y:[]} or {labels:[],series:[{name,values}]})"
     if not filepath:
         return "Error: filepath is required"
     if not filepath.endswith(".png"):
@@ -373,34 +397,120 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
     except ImportError:
         return "Error: matplotlib not installed; install via `pip install matplotlib`"
     try:
-        # Codex iter-1 HIGH fix: accept BOTH v4 shapes:
-        # - data = {label: value, ...}  (v5 dict shape)
-        # - data = {labels: [...], values: [...]}  (v4 advertised shape)
+        if style:
+            try:
+                plt.style.use(str(style))
+            except Exception:
+                pass  # silently fall back to default style on bad name
+        # Codex iter-1/3 HIGH: accept v4 shapes:
+        # - {label: value} (v5 dict shape)
+        # - {labels: [...], values: [...]} (v4 simple shape)
+        # - {x: [...], y: [...]} (v4 scatter shape)
+        # - {labels: [...], series: [{name, values}, ...]} (v4 grouped/stacked/combo)
         labels: List[Any] = []
         values: List[Any] = []
+        x_vals: List[Any] = []
+        y_vals: List[Any] = []
+        series: List[Dict[str, Any]] = []
         if isinstance(data, dict):
-            if "labels" in data and "values" in data:
-                # v4 explicit shape.
+            if "x" in data and "y" in data:
+                x_vals = list(data.get("x") or [])
+                y_vals = list(data.get("y") or [])
+                labels = [str(x) for x in x_vals]
+                values = list(y_vals)
+            elif "labels" in data and "series" in data:
+                labels = list(data.get("labels") or [])
+                series_raw = data.get("series") or []
+                series = [
+                    {"name": str(s.get("name") or f"series{i}"),
+                     "values": list(s.get("values") or [])}
+                    for i, s in enumerate(series_raw) if isinstance(s, dict)
+                ]
+                if series:
+                    values = series[0]["values"]
+            elif "labels" in data and "values" in data:
                 labels = list(data.get("labels") or [])
                 values = list(data.get("values") or [])
             else:
                 labels = list(data.keys())
                 values = list(data.values())
-        if not labels or not values:
-            # Default to a tiny demo chart for tests.
-            labels = ["A", "B", "C"]
-            values = [1, 2, 3]
-        fig, ax = plt.subplots()
+        fig_kwargs: Dict[str, Any] = {}
+        if width and height:
+            try:
+                fig_kwargs["figsize"] = (float(width), float(height))
+            except Exception:
+                pass
+        fig, ax = plt.subplots(**fig_kwargs)
+        n_labels = len(labels)
+        # Render based on chart type.
         if chart_type == "line":
-            ax.plot(labels, values)
+            if series:
+                for s in series:
+                    ax.plot(labels[:len(s["values"])], s["values"], label=s["name"])
+                ax.legend()
+            else:
+                ax.plot(labels, values, color=(colors[0] if colors else None))
         elif chart_type == "pie":
-            ax.pie(values, labels=labels)
-        else:
-            ax.bar(labels, values)
+            ax.pie(values, labels=labels, colors=colors)
+        elif chart_type == "scatter":
+            ax.scatter(x_vals or labels, y_vals or values,
+                       c=(colors[0] if colors else None))
+        elif chart_type == "horizontal_bar":
+            ax.barh(labels, values, color=colors)
+        elif chart_type == "grouped_bar" and series:
+            # Grouped bar: each series is one bar per label, offset within group.
+            try:
+                import numpy as np  # numpy ships with matplotlib
+                x = np.arange(n_labels)
+                width_per = 0.8 / max(1, len(series))
+                for i, s in enumerate(series):
+                    ax.bar(x + i * width_per, s["values"], width_per,
+                           label=s["name"],
+                           color=(colors[i] if colors and i < len(colors) else None))
+                ax.set_xticks(x + width_per * (len(series) - 1) / 2)
+                ax.set_xticklabels(labels)
+                ax.legend()
+            except Exception:
+                ax.bar(labels, values, color=colors)
+        elif chart_type == "stacked_bar" and series:
+            try:
+                bottom = [0.0] * n_labels
+                for i, s in enumerate(series):
+                    vals = list(s["values"]) + [0] * max(0, n_labels - len(s["values"]))
+                    ax.bar(labels, vals[:n_labels], bottom=bottom, label=s["name"],
+                           color=(colors[i] if colors and i < len(colors) else None))
+                    bottom = [b + v for b, v in zip(bottom, vals[:n_labels])]
+                ax.legend()
+            except Exception:
+                ax.bar(labels, values, color=colors)
+        elif chart_type == "combo" and series:
+            # Combo: first series as bar, rest as line.
+            try:
+                first = series[0]
+                ax.bar(labels[:len(first["values"])], first["values"], label=first["name"],
+                       color=(colors[0] if colors else None))
+                for i, s in enumerate(series[1:], start=1):
+                    ax.plot(labels[:len(s["values"])], s["values"], label=s["name"],
+                            color=(colors[i] if colors and i < len(colors) else None))
+                ax.legend()
+            except Exception:
+                ax.bar(labels, values, color=colors)
+        else:  # bar (default + fallback)
+            ax.bar(labels, values, color=colors)
         if title:
             ax.set_title(title)
+        if xlabel:
+            ax.set_xlabel(str(xlabel))
+        if ylabel:
+            ax.set_ylabel(str(ylabel))
         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
-        fig.savefig(abs_path)
+        save_kwargs: Dict[str, Any] = {}
+        if dpi:
+            try:
+                save_kwargs["dpi"] = int(dpi)
+            except Exception:
+                pass
+        fig.savefig(abs_path, **save_kwargs)
         plt.close(fig)
         return f"Wrote {abs_path}"
     except Exception as exc:  # noqa: BLE001
@@ -411,11 +521,29 @@ _CREATE_CHART_SCHEMA = {
     "type": "object",
     "properties": {
         "filepath": {"type": "string"},
-        "chart_type": {"type": "string", "enum": ["bar", "line", "pie"], "default": "bar"},
-        "data": {"type": "object", "description": "Mapping of label → value."},
+        "chart_type": {
+            "type": "string",
+            "enum": list(_CHART_TYPES_V4),
+            "default": "bar",
+            "description": "v4 advertised chart types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo.",
+        },
+        "data": {
+            "type": "object",
+            "description": "Required. Shapes: {labels:[],values:[]} or {x:[],y:[]} or {labels:[],series:[{name,values}]}",
+        },
         "title": {"type": "string"},
+        "xlabel": {"type": "string", "description": "X-axis label (v4 parity)."},
+        "ylabel": {"type": "string", "description": "Y-axis label (v4 parity)."},
+        "colors": {
+            "type": "array", "items": {"type": "string"},
+            "description": "Per-series/bar colors (v4 parity).",
+        },
+        "dpi": {"type": "integer", "description": "Resolution in DPI; use 150 for reports (v4 parity)."},
+        "width": {"type": "number", "description": "Figure width in inches (v4 parity)."},
+        "height": {"type": "number", "description": "Figure height in inches (v4 parity)."},
+        "style": {"type": "string", "description": "matplotlib style name (v4 parity)."},
     },
-    "required": ["filepath"],
+    "required": ["data"],
 }
 
 
@@ -434,9 +562,17 @@ _PAGE_SIZES = {
 def _create_pdf_executor(args: Dict[str, Any], context: Optional[Dict] = None) -> str:
     filepath = str(args.get("filepath") or args.get("file_path") or "").strip()
     # Codex iter-2 HIGH: accept v4 `data` AND v5 `content` for the block list.
-    content_blocks = args.get("data") if args.get("data") is not None else args.get("content")
+    has_data = args.get("data") is not None
+    has_content = args.get("content") is not None
+    content_blocks = args.get("data") if has_data else args.get("content")
     if content_blocks is None:
         content_blocks = []
+    # Codex iter-3 MEDIUM: v4 required `content`. Reject empty payload
+    # instead of silently writing a blank PDF.
+    if not has_data and not has_content:
+        return "Error: data or content is required (list of blocks)"
+    if not (isinstance(content_blocks, list) and content_blocks):
+        return "Error: data/content must be a non-empty list of blocks"
     doc_title = args.get("title")
     page_size = str(args.get("page_size") or "letter").lower()
     if not filepath:

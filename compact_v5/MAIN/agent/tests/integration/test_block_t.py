@@ -182,6 +182,82 @@ def test_tool_create_chart_png(workspace_tmp):
         assert f.read(4) == b"\x89PNG"
 
 
+def test_tool_create_chart_v4_advertised_types_and_fields(workspace_tmp):
+    """Codex iter-3 HIGH lock: create_chart now supports v4 advertised
+    types (grouped_bar/stacked_bar/scatter/horizontal_bar/combo) and
+    v4 advertised fields (xlabel/ylabel/colors/dpi/width/height/style).
+    """
+    pytest.importorskip("matplotlib")
+    tool = _find_tool("create_chart")
+    # grouped_bar with series + colors + axis labels + dpi + width/height.
+    fp1 = str(workspace_tmp / "grouped.png")
+    out1 = tool.execute({
+        "filepath": fp1,
+        "chart_type": "grouped_bar",
+        "data": {
+            "labels": ["Q1", "Q2", "Q3"],
+            "series": [
+                {"name": "Sales", "values": [10, 20, 30]},
+                {"name": "Cost", "values": [5, 15, 25]},
+            ],
+        },
+        "title": "Quarterly",
+        "xlabel": "Quarter",
+        "ylabel": "Amount ($)",
+        "colors": ["#1f77b4", "#ff7f0e"],
+        "dpi": 150,
+        "width": 8,
+        "height": 5,
+    }, context={})
+    assert out1.startswith("Wrote "), out1
+    # scatter shape with x/y data.
+    fp2 = str(workspace_tmp / "scat.png")
+    out2 = tool.execute({
+        "filepath": fp2,
+        "chart_type": "scatter",
+        "data": {"x": [1, 2, 3, 4], "y": [2, 4, 6, 8]},
+    }, context={})
+    assert out2.startswith("Wrote "), out2
+    # horizontal_bar.
+    fp3 = str(workspace_tmp / "hbar.png")
+    out3 = tool.execute({
+        "filepath": fp3,
+        "chart_type": "horizontal_bar",
+        "data": {"labels": ["X", "Y"], "values": [10, 20]},
+    }, context={})
+    assert out3.startswith("Wrote "), out3
+
+
+def test_tool_create_chart_rejects_missing_data(workspace_tmp):
+    """Codex iter-3 MEDIUM lock: missing data rejected (v4 required it)."""
+    pytest.importorskip("matplotlib")
+    tool = _find_tool("create_chart")
+    out = tool.execute({
+        "filepath": str(workspace_tmp / "bad.png"),
+        "chart_type": "bar",
+    }, context={})
+    assert out.startswith("Error"), out
+    assert "data" in out.lower()
+
+
+def test_tool_create_excel_rejects_empty_payload(workspace_tmp):
+    """Codex iter-3 MEDIUM lock: missing data+rows rejected."""
+    pytest.importorskip("openpyxl")
+    tool = _find_tool("create_excel")
+    out = tool.execute({"filepath": str(workspace_tmp / "empty.xlsx")}, context={})
+    assert out.startswith("Error"), out
+    assert "data" in out.lower() or "rows" in out.lower()
+
+
+def test_tool_create_pdf_rejects_empty_payload(workspace_tmp):
+    """Codex iter-3 MEDIUM lock: missing data+content rejected."""
+    pytest.importorskip("matplotlib")
+    tool = _find_tool("create_pdf")
+    out = tool.execute({"filepath": str(workspace_tmp / "empty.pdf")}, context={})
+    assert out.startswith("Error"), out
+    assert "data" in out.lower() or "content" in out.lower()
+
+
 def test_tool_create_pdf_sections(workspace_tmp):
     pytest.importorskip("matplotlib")
     fp = str(workspace_tmp / "doc.pdf")

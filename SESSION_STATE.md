@@ -46,6 +46,13 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### Block T iter-4 fixes (Codex iter-3 = APPROVE_WITH_FIXES — 1 HIGH + 2 MEDIUM + 1 LOW)
+- v4_documents.py HIGH fix: create_chart now ports v4 advertised types (grouped_bar/stacked_bar/scatter/horizontal_bar/combo + bar/line/pie) and v4 fields (xlabel/ylabel/colors/dpi/width/height/style). data shape now also handles {x,y} (scatter) and {labels, series:[{name, values}]} (grouped/stacked/combo). required=[data] (not [filepath]) per v4 schema.
+- v4_documents.py MEDIUM fix: create_excel + create_pdf now reject empty payload (was: silently writes empty workbook/blank PDF). Match v4 required-field semantics.
+- test_block_t.py: +4 lock tests (chart v4 types-and-fields / chart-rejects-missing-data / excel-rejects-empty-payload / pdf-rejects-empty-payload).
+- LOW: doc cleanup — V5_BUILD_STATUS + PORT_LOG row 103-A now explicitly note SSRF active test removed (logic retained as unreachable code in tools/web_fetch.py).
+- 768 pass + 14 skip (was 764+14; +4 net for iter-3 lock tests); verify_ship_zip PASS (133 files / 375.5 KB / 36%).
+
 ### Block T iter-3 fixes (Codex iter-2 = REJECT — 1 CRITICAL + 1 HIGH + user directive)
 **User directive 2026-05-03**: disable web_fetch — SageMaker single-user typically VPC-isolated; ship disabled vs ship+leave dead code.
 
