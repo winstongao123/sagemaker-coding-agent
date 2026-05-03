@@ -14,13 +14,18 @@ layout (where `agent.py` sits at root next to `entry.py`) works too:
   - Source layout (test-time): pytest puts `MAIN/agent` on sys.path.
     `from agent import Agent` finds `MAIN/agent/agent.py` directly.
     No package __init__ is involved on this path.
-  - Source layout (package import): when something does `from agent
-    import Agent` with `MAIN` on sys.path, Python imports the `agent`
-    package, runs THIS __init__.py, which re-exports via the relative
-    `from .agent import Agent`.
   - Flat-zip layout: `agent.py` is at root next to `__init__.py`.
     `from agent import Agent` finds `agent.py` directly. __init__.py
     is irrelevant in this mode.
+
+  Codex Block J iter-1 LOW: importing `agent` AS A PACKAGE with only
+  `MAIN` on sys.path will run THIS __init__.py, but `agent.py` itself
+  uses absolute imports (`from core ...`, `from tools ...`, etc.) that
+  require `MAIN/agent` on sys.path too. So the package-import mode
+  works only when BOTH `MAIN` and `MAIN/agent` are on path, which is
+  exactly the pytest scenario. The flat-zip and source-layout direct
+  contracts that actually ship are both fine; package-only-import
+  from MAIN is explicitly out-of-contract and not a regression.
 
 PORT_LOG: see #031 (original) + Block J ship-gate row.
 """

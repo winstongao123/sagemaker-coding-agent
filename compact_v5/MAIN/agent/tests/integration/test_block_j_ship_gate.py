@@ -219,6 +219,10 @@ def test_real_bedrock_tool_use_round_trip():
     3. We execute list_dir locally.
     4. We send tool_result back.
     5. Bedrock returns a final text answer.
+
+    Codex Block J iter-1 HIGH fix: ToolCall exposes `input` (not `args`),
+    and the assistant content must mirror QueryEngine's _build_assistant_content
+    pattern (omit empty text blocks).
     """
     _require_real_bedrock()
     from runtime.bedrock_client import BedrockClient
@@ -255,25 +259,23 @@ def test_real_bedrock_tool_use_round_trip():
     tool_call = response.tool_calls[0]
     assert tool_call.name == "list_dir", f"wrong tool: {tool_call.name}"
 
-    # Execute the tool locally.
-    tool_result = list_dir_tool.execute(tool_call.args, context={})
+    # Execute the tool locally — ToolCall.input is the args dict.
+    tool_result = list_dir_tool.execute(tool_call.input, context={})
     assert isinstance(tool_result, str), f"list_dir returned non-string: {type(tool_result)}"
 
     # Round-trip 2: send tool_result, get final text.
-    # Bedrock requires the assistant tool_use turn first, then a user
-    # turn with tool_result; we reconstruct the assistant content shape.
-    messages.append({
-        "role": "assistant",
-        "content": [
-            {"type": "text", "text": response.text or ""},
-            {
-                "type": "tool_use",
-                "id": tool_call.id,
-                "name": tool_call.name,
-                "input": tool_call.args,
-            },
-        ],
+    # Build assistant content like QueryEngine._build_assistant_content:
+    # omit empty text blocks (Bedrock rejects them).
+    assistant_blocks: list = []
+    if response.text:
+        assistant_blocks.append({"type": "text", "text": response.text})
+    assistant_blocks.append({
+        "type": "tool_use",
+        "id": tool_call.id,
+        "name": tool_call.name,
+        "input": tool_call.input,
     })
+    messages.append({"role": "assistant", "content": assistant_blocks})
     messages.append({
         "role": "user",
         "content": [{
@@ -295,55 +297,45 @@ def test_real_bedrock_tool_use_round_trip():
 
 
 def test_real_bedrock_compact_then_continue():
-    """Real call with a large preamble → compact fires → next call
-    succeeds with reduced prefix. ~$0.01 per call.
+    """Real two-call Bedrock smoke (RENAMED scope per Codex Block J iter-1
+    HIGH #2): drive QueryEngine end-to-end across TWO turns, verify the
+    second call succeeds with the assistant turn from call 1 in history.
 
-    Validates that v5's Compactor (Block A) and Bedrock-side caching
-    interact correctly under near-context-limit pressure: a follow-up
-    call after compaction should not 400 / max_tokens-overflow because
-    H-11 (preserve API invariants) cuts at safe boundaries.
+    ~$0.01 per call.
 
-    NOTE: This test is intentionally LIGHT-WEIGHT — the goal is to send
-    enough preamble that compaction FIRES, then verify the next message
-    succeeds. We don't validate the full compact algorithm here; lock
-    tests for that live in test_block_h.py and test_block_a.py.
+    SCOPE NOTE: TEST_DESIGN §Block J row 3 originally specified
+    "80K-token preamble → compact fires → next call succeeds". Block J
+    iter-1 (Codex HIGH #2) corrected: hitting 80K on Bedrock here would
+    cost more than Block J's $0.02 cap, AND auto-compaction is wired in
+    QueryEngine — calling BedrockClient.chat() directly skips that path.
+
+    Per ADR-039 §iter-2 update: this test is now scoped to:
+      - real two-call Bedrock smoke (validates Bedrock auth + state),
+      - using Agent.run() (QueryEngine) which exercises the SAME compaction
+        decision path that R-tier R2 will exercise at full 80K scale,
+      - costs ~$0.01.
+
+    Full 80K-token compaction lock tests live in:
+      - tests/integration/test_block_h.py (mock-based H-11 invariant)
+      - R-tier R2 (real Bedrock at full scale, separately budgeted ~$0.50).
     """
     _require_real_bedrock()
     from runtime.bedrock_client import BedrockClient
+    from agent import Agent
 
     region = os.getenv("AWS_REGION", "ap-southeast-2")
     client = BedrockClient(model_id=_HAIKU_45_MODEL_ID, region=region, mock_mode=False)
+    agent = Agent(client=client, max_turns=3)
 
-    # Build a moderately large preamble — not 80K (too costly on Block J),
-    # but enough to exercise the cache path. ~5K tokens of innocuous prose.
-    long_preamble = (
-        "The following is a brief recap of prior conversation context. "
-        + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 200
-    )
-    messages = [
-        {"role": "user", "content": long_preamble + "\n\nNow, just say 'OK' please."},
-    ]
-    response = client.chat(
-        messages=messages,
-        system="You are a terse assistant.",
-        tools=None,
-        max_tokens=32,
-    )
-    assert response.text, f"empty text in compact-then-continue: {response}"
+    # Turn 1.
+    result1 = agent.run("Say 'OK' and stop.", tools=[])
+    assert result1.text, f"empty text on turn 1: {result1}"
 
-    # Follow-up call with a short message; the previous turn stays in
-    # history. Bedrock will compute prompt cache against the cached prefix.
-    messages.append({"role": "assistant", "content": response.text})
-    messages.append({"role": "user", "content": "Now say 'DONE' and stop."})
-    response2 = client.chat(
-        messages=messages,
-        system="You are a terse assistant.",
-        tools=None,
-        max_tokens=32,
-    )
-    assert response2.text, f"follow-up call returned empty: {response2}"
-    assert response2.stop_reason == "end_turn", (
-        f"unexpected stop_reason: {response2.stop_reason}"
+    # Turn 2 — same Agent instance, history preserved.
+    result2 = agent.run("Now say 'DONE' and stop.", tools=[])
+    assert result2.text, f"empty text on turn 2: {result2}"
+    assert result2.stop_reason == "end_turn", (
+        f"unexpected stop_reason on turn 2: {result2.stop_reason}"
     )
 
 

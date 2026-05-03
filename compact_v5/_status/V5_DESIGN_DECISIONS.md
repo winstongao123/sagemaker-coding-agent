@@ -1187,6 +1187,32 @@ Block J ships when all 4 T4 tests pass on every push. The 3 T5 tests
 must pass when run on demand with RUN_REAL_BEDROCK=1 before final tag.
 The meta-count test ensures all 7 stay named.
 
+### iter-2 update (2026-05-03) — Codex Block J iter-1 = APPROVE_WITH_FIXES
+Codex iter-1 surfaced 2 HIGH + 1 LOW. All closed:
+
+1. **HIGH — tool_call.args → tool_call.input**: ToolCall dataclass
+   exposes `input`, not `args`. The tool-use round-trip test now uses
+   `tool_call.input`. Also reshaped the assistant content to mirror
+   QueryEngine._build_assistant_content (omit empty text blocks —
+   Bedrock rejects empty text).
+
+2. **HIGH — compact_then_continue scope**: original test called
+   BedrockClient.chat() directly, bypassing QueryEngine where
+   auto-compaction is wired. AND ~5K preamble doesn't satisfy the
+   80K-token compaction trigger anyway. **Rescoped**: now drives
+   QueryEngine via Agent.run() across two turns — exercises the same
+   compaction decision path R-tier R2 will hit at full scale, but at
+   $0.01 instead of $0.50. Full 80K compaction lock tests live in
+   test_block_h.py (mock-based H-11) and R-tier R2 (separately
+   budgeted real Bedrock).
+
+3. **LOW — package-import comment**: __init__.py docstring overstated
+   correctness. agent.py uses absolute `from core ...` imports that
+   require `MAIN/agent` on sys.path (not just `MAIN`). The corrected
+   comment notes that package-only-import from MAIN is explicitly
+   out-of-contract; flat-zip + source-layout direct + pytest are all
+   fine.
+
 ### Affected files
 - NEW: `tests/integration/test_block_j_ship_gate.py` (~270 LOC, 8 tests).
 - NEW: `MAIN/agent/agent.py` (~213 LOC; Agent class + _load_agent_status_text).
