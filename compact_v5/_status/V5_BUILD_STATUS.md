@@ -1,9 +1,24 @@
 # V5 Build Status
 
-Last updated: 2026-05-03 (**v5.0.1 Block K DONE + tagged** — 781 pass + 17 skip; **Block U DEFERRED-POST-SHIP per user 2026-05-03**; next pickup = R-tier R1-R12 real-AWS validation)
+Last updated: 2026-05-04 (**R-tier R1+R2 READY NEAR_IDEAL** — PAUSED per user option (c); resume R3 next session)
 
 Phase ID: R-tier (PHASE 3 of post-Block-K plan)
-Last commit sha: d89067c (Block K iter-2 APPROVE)
+Last commit sha: a73befc (R2 GENUINE_PASS NEAR_IDEAL 5.00/5 — READY) — pushed sageagent/v5-build
+
+## R-tier progress (2026-05-04 — PAUSED)
+
+**STATUS: PAUSED per user (option c) after R2 NEAR_IDEAL.** Resumable from R3 next session per `compact_v5/docs/PS_V5_TEST_WORKER_FINAL.md`.
+
+| Test | Status | Spend | Notes |
+|------|--------|-------|-------|
+| R1 | READY (NEAR_IDEAL) | $0.0632 | Composite dashboard build (CSV→summary→chart→docx, 50-turn cap, AU geo). 4 real architectural bugs caught + fixed during PRE-FLIGHT iter1-3: Windows cp1252 Unicode stdout crash, Agent.run not propagating CONFIG.max_tokens/temperature into QueryEngine, AU geo +10% premium under-counted in tokens.py, R-tests blocked by require_tool_approval. AWS calls used: 2 (call#1 $0.03 wasted on Unicode crash, call#2 $0.0332 PASS). |
+| R2 | READY (NEAR_IDEAL 5.00/5) | $0.222 | Compactor + auto-compact: 78K-token preamble crosses CONFIG.context_max_tokens=100K threshold; T2 recalls original question via injected [CONVERSATION SUMMARY] block. Strong PASS, no bugs found. AWS calls used: 1 (PASS first call). |
+| R3-R17 | pending | — | Resume next session. R3 is next per matrix (multi-file refactor / parallel coordination depending on slot order). |
+
+- **Cumulative R-tier spend: $0.2852 / $14.25 cap (2.0%).**
+- HEAD: `a73befc` — `v5/r-tier-R2: GENUINE_PASS NEAR_IDEAL 5.00/5 — READY` (pushed sageagent/v5-build).
+- Discipline working: 4 architectural bugs caught during R1 PRE-FLIGHT BEFORE burning AWS — proves the "BOTH worker AND Codex APPROVE before each AWS call" gate is correct.
+- Next session resume command: `Read compact_v5/docs/PS_V5_TEST_WORKER_FINAL.md and continue R-tier from R3 (R1+R2 already READY at HEAD a73befc).`
 
 ## Block U status (2026-05-03)
 

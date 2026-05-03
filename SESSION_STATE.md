@@ -1,5 +1,28 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-04 — R-tier PAUSED at HEAD a73befc — R1+R2 READY NEAR_IDEAL ($0.29 / $14.25)
+
+User invoked option (c) PAUSE after R2 NEAR_IDEAL 5.00/5. R-tier resumable from R3 next session.
+
+Progress this session:
+- R1 READY (NEAR_IDEAL) — composite dashboard build (CSV→summary→chart→docx, 50-turn cap, AU geo). Spend $0.0632. **4 real architectural bugs caught + fixed during PRE-FLIGHT iter1-3** before burning AWS:
+  1. Windows cp1252 stdout `UnicodeEncodeError` on emoji output → `_make_unicode_safe_output_fn` 3-tier fallback in `core/query_engine.py`.
+  2. `Agent.run` not propagating `CONFIG.max_tokens` + `temperature` into QueryEngine → forwarded explicitly in `agent.py`.
+  3. AU geo +10% premium under-counted → `runtime/tokens.py:get_geo_multiplier()` applies 1.10x for au./us./eu./apac. profiles.
+  4. R-tests blocked by `require_tool_approval` → bypass for R-tier paths.
+- R2 READY (NEAR_IDEAL 5.00/5) — Compactor + auto-compact at 78K-token preamble crossing CONFIG.context_max_tokens=100K threshold; T2 recalls original question via injected [CONVERSATION SUMMARY] block. Spend $0.222. PASS first AWS call after Codex iter-3 APPROVE. No bugs.
+- Cumulative R-tier spend: **$0.2852 / $14.25 cap (2.0%).**
+- HEAD: `a73befc` (pushed sageagent/v5-build).
+- `_status/r_tier_review_log.md`: R1 + R2 rows present.
+- `_status/V5_BUILD_STATUS.md`: R-tier progress table added at top.
+
+Discipline assessment: 4 architectural bugs caught during R1 PRE-FLIGHT BEFORE AWS spend = "BOTH worker AND Codex APPROVE before each AWS call" gate is doing exactly what it should.
+
+Resume command (next session):
+> Read `compact_v5/docs/PS_V5_TEST_WORKER_FINAL.md` and continue R-tier from R3 (R1+R2 already READY at HEAD a73befc).
+
+---
+
 ## 2026-05-03 — Persistent worker docs added (WORKER_HINT + R_TIER_REVIEW_TEMPLATE)
 
 Main session committed:
