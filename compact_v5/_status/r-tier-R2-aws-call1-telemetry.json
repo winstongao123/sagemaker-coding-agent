@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "test": "R2",
+  "call": 1,
+  "audit_log_path": "compact_v5\\MAIN\\agent\\audit_logs\\2026-05-04_6d4fcf78c7e9.jsonl",
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R2-aws-call1.log",
+  "side_channel_path": null,
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [],
+      "wallclock_s": 4.775,
+      "tokens_in": 103613,
+      "tokens_out": 17,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cache_hit_pct": 0.0,
+      "agent_text_chars": 15,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 0,
+    "REPEATED_calls": 0,
+    "per_tool": {},
+    "unique_calls": 0
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": null,
+    "last_5_turns_avg_hit_pct": null,
+    "session_avg_hit_pct": null
+  },
+  "outcome": {
+    "completed": true,
+    "stop_reason": null,
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 201003,
+    "tokens_out_total": 156,
+    "cost_usd": 0.222,
+    "wallclock_s_total": 9.78,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 2,
+  "turns_seen": 1
+}

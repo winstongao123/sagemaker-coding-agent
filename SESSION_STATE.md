@@ -57,6 +57,16 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - test_block_t.py: web_fetch test mock updated for iter_content/status_code/kwargs + new SSRF-block test added (16 Block T tests, +1).
 - 761 pass + 14 skip (was 760+14; +1 SSRF lock); verify_ship_zip PASS (133 files / 372.8 KB / 36%).
 
+### R-tier R2 = READY (NEAR_IDEAL 5.00/5) — 2026-05-04
+- AWS call #1 PASSED. Cost $0.222 of $0.50 cap.
+- Compaction PROVEN: `[auto-compact] saved 149,897 tokens` log + [CONVERSATION SUMMARY] in agent.messages.
+- T1 answer "5" (tight regex matched). T2 recall "What is 2 + 3?" (perfect — proves summary preserves question semantics).
+- T2 input dropped to 1.6% of T1 input (3,251 / 197,752 tokens) — strong compaction evidence.
+- 3 API calls (T1 + auto-compact summary + T2). 9.78s wallclock total.
+- Codex iter1-2 REJECT (weak compaction proof) → iter3 APPROVE. 3 PHASE-A iters total.
+- Cumulative R-tier spend: $0.0632 (R1) + $0.222 (R2) = $0.2852 of $14.25 cap.
+- Next: R3 (3 parallel sub-agents, $0.50 cap).
+
 ### R-tier R1 = READY (NEAR_IDEAL) — 2026-05-04
 - AWS call #2 PASSED (call#1 surfaced + fixed Unicode stdout bug).
 - Cost: $0.0632 cumulative for R1 ($0.03 wasted call#1 + $0.0332 call#2). Cap $1.00.
