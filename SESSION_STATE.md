@@ -16,6 +16,12 @@ Mode B sequence to run autonomously: F2 → I → M → G → G3 → G2 → H �
 - 604 pass + 5 skip; verify_ship_zip PASS.
 - PORT_LOG #072 + ADR-028.
 
+### Block F2 iter-2 fixes (Codex iter-1 = APPROVE_WITH_FIXES)
+- core/query_engine.py: StopDecision telemetry now logged + AUDIT.log("budget_continuation_stop") (Codex iter-1 finding #1).
+- core/query_engine.py: F2 except branch now logs warning instead of pass (Codex iter-1 finding #2).
+- tests/integration/test_block_f2.py: snapshot/restore CONFIG via _prev_flag + _prev_limit (Codex iter-1 finding #3) + 3 finding-lock tests added.
+- 607 pass + 5 skip (was 604; +3 finding-locks); verify_ship_zip PASS.
+
 ## 2026-05-02 — v5.0.1 housekeeping commit (Phase 2 + plan v4 + Wave 5-DEEP + Wave 6 + BUILDER_PROMPT)
 
 **Foundation reconciled per Path A** — 78 Phase 2 files + status/RESUME/gitignore updated.

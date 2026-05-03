@@ -451,6 +451,7 @@ class QueryEngine:
                             check_iteration_budget,
                             create_budget_tracker,
                             ContinueDecision,
+                            StopDecision,
                         )
                         if self._budget_tracker is None:
                             self._budget_tracker = create_budget_tracker()
@@ -480,9 +481,42 @@ class QueryEngine:
                                 "content": decision.nudge_message,
                             })
                             continue
-                except Exception:
-                    # F2 is best-effort wiring; never block end_turn on its bugs.
-                    pass
+                        # Codex iter-1 finding #1 lock: surface StopDecision
+                        # telemetry. Runnable logs the equivalent completion
+                        # event at query.ts:1343-1354. v5 routes through the
+                        # AUDIT singleton so /diffs / /regression forensics
+                        # can observe budget-driven stops; stderr-style
+                        # logging.info also surfaces it for headless runs.
+                        if isinstance(decision, StopDecision):
+                            _ce = decision.completion_event
+                            _reason = decision.reason or ""
+                            if _ce is not None or _reason in {"cost_cap", "diminishing", "above_threshold"}:
+                                logging.info(
+                                    "[budget-continuation] stop reason=%s event=%s",
+                                    _reason, _ce,
+                                )
+                                try:
+                                    from runtime.audit import AUDIT as _AUDIT_F2
+                                    _AUDIT_F2.log(
+                                        session_id=self.session_id,
+                                        action="budget_continuation_stop",
+                                        tool_name="(engine)",
+                                        parameters={"reason": _reason},
+                                        result_summary=str(_ce or ""),
+                                        user_approved=False,
+                                    )
+                                except Exception:
+                                    pass
+                except Exception as _f2_exc:
+                    # Codex iter-1 finding #2 lock: best-effort wrap MUST
+                    # surface a diagnostic when F2 is opt-in enabled — silent
+                    # fail-closed makes opt-in users see "no auto-continue"
+                    # with zero clue why. logging.warning matches the
+                    # cost-runtime warning pattern at [Cost ...] above.
+                    logging.warning(
+                        "[budget-continuation] %s: %s",
+                        type(_f2_exc).__name__, _f2_exc,
+                    )
 
                 stop_reason = "end_turn"
                 if response.text:

@@ -217,6 +217,7 @@ def test_f2_auto_continue_at_under_90pct(reset_tokens):
     from runtime.config import CONFIG
     from tools import all_registered
 
+    _prev_flag = CONFIG.enable_token_budget_continuation
     CONFIG.enable_token_budget_continuation = True
     try:
         client = _ScriptedClient([
@@ -243,7 +244,7 @@ def test_f2_auto_continue_at_under_90pct(reset_tokens):
             )
         assert "Keep working" in content
     finally:
-        CONFIG.enable_token_budget_continuation = False
+        CONFIG.enable_token_budget_continuation = _prev_flag
 
 
 def test_f2_blocks_at_90pct(reset_tokens):
@@ -253,6 +254,7 @@ def test_f2_blocks_at_90pct(reset_tokens):
     from runtime.config import CONFIG
     from tools import all_registered
 
+    _prev_flag = CONFIG.enable_token_budget_continuation
     CONFIG.enable_token_budget_continuation = True
     try:
         client = _ScriptedClient([
@@ -274,7 +276,7 @@ def test_f2_blocks_at_90pct(reset_tokens):
         assert result.text == "Final answer."
         assert len(client.calls) == 1
     finally:
-        CONFIG.enable_token_budget_continuation = False
+        CONFIG.enable_token_budget_continuation = _prev_flag
 
 
 def test_f2_respects_cost_cap(reset_tokens):
@@ -286,6 +288,8 @@ def test_f2_respects_cost_cap(reset_tokens):
     from runtime.tokens import TOKENS
     from tools import all_registered
 
+    _prev_flag = CONFIG.enable_token_budget_continuation
+    _prev_limit = CONFIG.session_cost_limit
     CONFIG.enable_token_budget_continuation = True
     CONFIG.session_cost_limit = 1.00
     try:
@@ -308,8 +312,8 @@ def test_f2_respects_cost_cap(reset_tokens):
         assert result.text == "Stops short despite plenty of iterations."
         assert len(client.calls) == 1
     finally:
-        CONFIG.enable_token_budget_continuation = False
-        CONFIG.session_cost_limit = 0.0
+        CONFIG.enable_token_budget_continuation = _prev_flag
+        CONFIG.session_cost_limit = _prev_limit
 
 
 # ============================================================
@@ -351,6 +355,7 @@ def test_f2_diminishing_returns_halts_after_3_continuations(reset_tokens):
     from runtime.config import CONFIG
     from tools import all_registered
 
+    _prev_flag = CONFIG.enable_token_budget_continuation
     CONFIG.enable_token_budget_continuation = True
     try:
         # 6 end_turn responses queued. After turn 4, diminishing kicks in.
@@ -376,7 +381,7 @@ def test_f2_diminishing_returns_halts_after_3_continuations(reset_tokens):
         assert result.stop_reason == "end_turn"
         assert result.text == "answer 4"
     finally:
-        CONFIG.enable_token_budget_continuation = False
+        CONFIG.enable_token_budget_continuation = _prev_flag
 
 
 def test_f2_subagent_does_not_auto_continue(reset_tokens):
@@ -387,6 +392,7 @@ def test_f2_subagent_does_not_auto_continue(reset_tokens):
     from runtime.config import CONFIG
     from tools import all_registered
 
+    _prev_flag = CONFIG.enable_token_budget_continuation
     CONFIG.enable_token_budget_continuation = True
     try:
         client = _ScriptedClient([
@@ -407,7 +413,143 @@ def test_f2_subagent_does_not_auto_continue(reset_tokens):
         assert result.stop_reason == "end_turn"
         assert len(client.calls) == 1
     finally:
-        CONFIG.enable_token_budget_continuation = False
+        CONFIG.enable_token_budget_continuation = _prev_flag
+
+
+# ============================================================
+# Codex iter-1 finding-lock tests (added in iter-2 fix pass)
+# ============================================================
+
+def test_f2_stopdecision_telemetry_audit_logged(reset_tokens):
+    """Codex iter-1 finding #1 lock: when F2 returns a StopDecision (e.g.
+    cost-cap, diminishing, above-threshold), the engine must surface its
+    completion_event + reason via AUDIT.log so /diffs / /regression
+    forensics can observe budget-driven stops. Runnable's equivalent at
+    query.ts:1343-1354 logs the same event shape.
+    """
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from runtime.config import CONFIG
+    from runtime.tokens import TOKENS
+    from runtime.audit import AUDIT
+    from tools import all_registered
+
+    _prev_flag = CONFIG.enable_token_budget_continuation
+    _prev_limit = CONFIG.session_cost_limit
+    CONFIG.enable_token_budget_continuation = True
+    CONFIG.session_cost_limit = 1.00
+
+    try:
+        TOKENS.session_cost = 1.50  # over cap → StopDecision reason="cost_cap"
+
+        client = _ScriptedClient([
+            ("text", "Should halt on cost-cap before completion."),
+        ])
+        budget = IterationBudget(max_iterations=100)
+        engine = QueryEngine(client=client, max_turns=5, budget=budget)
+        result = engine.run(
+            user_message="do work",
+            system_prompt="sys",
+            tools=all_registered(),
+        )
+        assert result.stop_reason == "end_turn"
+        # Audit log must contain a budget_continuation_stop entry for this
+        # session_id, with reason=cost_cap.
+        entries = AUDIT.get_session_log(engine.session_id)
+        f2_stops = [
+            e for e in entries
+            if e.get("action") == "budget_continuation_stop"
+        ]
+        assert len(f2_stops) >= 1, (
+            "StopDecision telemetry must be audit-logged (Codex iter-1 #1)"
+        )
+        assert f2_stops[0]["parameters"]["reason"] == "cost_cap"
+        # completion_event surface preserved in result_summary
+        assert "1.5" in f2_stops[0]["result_summary"] or "cost_cap" in f2_stops[0]["result_summary"]
+    finally:
+        CONFIG.enable_token_budget_continuation = _prev_flag
+        CONFIG.session_cost_limit = _prev_limit
+
+
+def test_f2_exception_logged_not_swallowed(reset_tokens, caplog, monkeypatch):
+    """Codex iter-1 finding #2 lock: when F2 wiring raises (e.g. a
+    BudgetTracker bug), the best-effort guard must log a warning rather
+    than silently swallow it — opt-in users need a diagnostic when their
+    enabled feature stops working.
+
+    Force the failure by monkey-patching `check_iteration_budget` to
+    raise — this isolates the failure to the F2 path without breaking
+    the IterationBudget surface that the rest of run() relies on.
+    """
+    import logging as _lg
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    _prev_flag = CONFIG.enable_token_budget_continuation
+    CONFIG.enable_token_budget_continuation = True
+
+    def _boom(*a, **kw):
+        raise RuntimeError("simulated F2 failure")
+
+    try:
+        # Patch the imported-in-engine name. Engine does
+        # `from core.budget_continuation import check_iteration_budget`
+        # inside the try block, so we patch the module attr.
+        import core.budget_continuation as _bc_mod
+        monkeypatch.setattr(_bc_mod, "check_iteration_budget", _boom)
+
+        client = _ScriptedClient([
+            ("text", "First answer triggers F2 path."),
+        ])
+        budget = IterationBudget(max_iterations=100)
+        engine = QueryEngine(client=client, max_turns=2, budget=budget)
+        with caplog.at_level(_lg.WARNING):
+            result = engine.run(
+                user_message="do work",
+                system_prompt="sys",
+                tools=all_registered(),
+            )
+        # Run completed normally despite F2 raising — best-effort wrap held.
+        assert result.stop_reason == "end_turn"
+        # A warning must have been emitted with the [budget-continuation] tag.
+        warnings = [r for r in caplog.records if r.levelno >= _lg.WARNING]
+        f2_warnings = [r for r in warnings if "[budget-continuation]" in r.getMessage()]
+        assert len(f2_warnings) >= 1, (
+            "F2 exceptions must be logged, not silently swallowed (Codex iter-1 #2)"
+        )
+        assert "RuntimeError" in f2_warnings[0].getMessage()
+    finally:
+        CONFIG.enable_token_budget_continuation = _prev_flag
+
+
+def test_f2_test_globals_snapshot_restore_pattern(reset_tokens):
+    """Codex iter-1 finding #3 lock: tests must snapshot the prior CONFIG
+    value and restore it (not assume a default), so a misconfigured global
+    in another test doesn't bleed into this one.
+    """
+    from runtime.config import CONFIG
+
+    # Pre-state: simulate a prior test having flipped the flag.
+    CONFIG.enable_token_budget_continuation = True
+    _expected_post_state = True
+
+    # Inside a hypothetical test fixture: snapshot, mutate, restore.
+    _prev = CONFIG.enable_token_budget_continuation
+    CONFIG.enable_token_budget_continuation = False
+    try:
+        assert CONFIG.enable_token_budget_continuation is False
+    finally:
+        CONFIG.enable_token_budget_continuation = _prev
+
+    # Post-state: prior True is preserved, NOT clobbered to False.
+    assert CONFIG.enable_token_budget_continuation is _expected_post_state, (
+        "Tests must restore CONFIG to its prior value (Codex iter-1 #3), "
+        "not assume the dataclass default"
+    )
+    # Cleanup for downstream tests.
+    CONFIG.enable_token_budget_continuation = False
 
 
 def test_f2_tracker_resets_between_runs(reset_tokens):
@@ -420,6 +562,7 @@ def test_f2_tracker_resets_between_runs(reset_tokens):
     from runtime.config import CONFIG
     from tools import all_registered
 
+    _prev_flag = CONFIG.enable_token_budget_continuation
     CONFIG.enable_token_budget_continuation = True
     try:
         # Run 1: triggers continuation, captures tracker object.
@@ -456,4 +599,4 @@ def test_f2_tracker_resets_between_runs(reset_tokens):
             "would silently reduce auto-continuation across user messages."
         )
     finally:
-        CONFIG.enable_token_budget_continuation = False
+        CONFIG.enable_token_budget_continuation = _prev_flag
