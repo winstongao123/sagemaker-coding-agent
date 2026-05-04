@@ -63,10 +63,38 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
 
+def split_markdown_row(line: str) -> list[str]:
+    """Split a markdown table row, ignoring pipes inside inline code spans."""
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|"):
+        text = text[:-1]
+
+    cells: list[str] = []
+    current: list[str] = []
+    in_code = False
+    for char in text:
+        if char == "`":
+            in_code = not in_code
+            current.append(char)
+        elif char == "|" and not in_code:
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    cells.append("".join(current).strip())
+    return cells
+
+
 def row_belongs_to_block(row_id: str, block: str) -> bool:
     if block in {"B+", "C+", "H+"}:
         return bool(re.fullmatch(re.escape(block) + r"\d+", row_id))
-    if block in {"F2", "G2", "G3", "E+F"}:
+    if block == "E+F":
+        return row_id.startswith("EF-")
+    if block == "G2":
+        return row_id == "G2" or row_id.startswith("G2-")
+    if block in {"F2", "G3"}:
         return row_id.startswith(block + "-")
     return row_id.startswith(block + "-")
 
@@ -77,7 +105,7 @@ def parse_synthesis_rows(block: str) -> list[dict[str, str]]:
     for line_no, line in enumerate(text.splitlines(), start=1):
         if not line.startswith("|"):
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = split_markdown_row(line)
         if len(cells) < 2:
             continue
         row_id = cells[0]
@@ -110,7 +138,7 @@ def parse_markdown_table(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = split_markdown_row(line)
         if not cells:
             continue
         if header is None and "row_id" in cells:

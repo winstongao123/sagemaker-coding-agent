@@ -20,11 +20,15 @@ PORT_LOG: see #066-#070.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from enum import Enum
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 
 # ============================================================
@@ -41,6 +45,50 @@ class CompactionResult:
     tokens_before: int = 0
     tokens_after: int = 0
     error: str = ""
+
+
+@dataclass
+class TokenWarningState:
+    """A-4 token warning state for compact UI/status surfaces."""
+
+    tokens_used: int
+    context_window: int
+    percent_used: float
+    should_microcompact: bool
+    should_auto_compact: bool
+    warning: bool
+    error: bool
+
+
+@dataclass
+class ContentReplacementEntry:
+    """A-42 persisted replacement metadata for compacted content."""
+
+    original_ref: str
+    replacement_ref: str
+    original_tokens: int
+    replacement_tokens: int
+    reason: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "original_ref": self.original_ref,
+            "replacement_ref": self.replacement_ref,
+            "original_tokens": self.original_tokens,
+            "replacement_tokens": self.replacement_tokens,
+            "reason": self.reason,
+        }
+
+
+class TransitionReason(str, Enum):
+    """A-34 transition reasons shared by compact/query state."""
+
+    COMPACT_SUCCESS = "compact_success"
+    COMPACT_SKIPPED = "compact_skipped"
+    CONTEXT_OVERFLOW_PRE_API = "context_overflow_pre_api"
+    API_ERROR = "api_error"
+    USER_ABORT = "user_abort"
+    END_TURN = "end_turn"
 
 
 # ============================================================
@@ -68,6 +116,8 @@ class AutoCompactCircuitBreaker:
         self._lock = threading.Lock()
         self._last_attempt: float = 0.0
         self._session_count = 0
+        self._consecutive_failures = 0
+        self._disabled = False
 
     def should_attempt(self) -> Tuple[bool, str]:
         """True iff a compact attempt is allowed right now.
@@ -78,6 +128,11 @@ class AutoCompactCircuitBreaker:
         no further attempts make sense regardless of cooldown.
         """
         with self._lock:
+            if self._disabled:
+                return False, (
+                    "auto-compact disabled after "
+                    f"{self._consecutive_failures} consecutive failures"
+                )
             if self._session_count >= self.max_per_session:
                 return False, (
                     f"auto-compact session cap reached "
@@ -101,10 +156,35 @@ class AutoCompactCircuitBreaker:
             self._last_attempt = time.time()
             self._session_count += 1
 
+    def record_success(self) -> None:
+        """Reset consecutive-failure state after a successful compact."""
+        with self._lock:
+            self._consecutive_failures = 0
+            self._disabled = False
+
+    def record_failure(self) -> Tuple[bool, str]:
+        """Record a failed compact attempt.
+
+        Returns (disabled, reason). A-3 disables auto-compact after three
+        consecutive failures so the agent does not spin on an expensive
+        compact path.
+        """
+        with self._lock:
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= Compactor.MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES:
+                self._disabled = True
+                return True, (
+                    "auto-compact disabled after "
+                    f"{self._consecutive_failures} consecutive failures"
+                )
+            return False, ""
+
     def reset(self) -> None:
         with self._lock:
             self._last_attempt = 0.0
             self._session_count = 0
+            self._consecutive_failures = 0
+            self._disabled = False
 
     def try_attempt(self) -> Tuple[bool, str]:
         """Atomic check+record: if allowed, record the attempt and
@@ -115,6 +195,11 @@ class AutoCompactCircuitBreaker:
         finding #3 (MEDIUM) flagged.
         """
         with self._lock:
+            if self._disabled:
+                return False, (
+                    "auto-compact disabled after "
+                    f"{self._consecutive_failures} consecutive failures"
+                )
             if self._session_count >= self.max_per_session:
                 return False, (
                     f"auto-compact session cap reached "
@@ -154,13 +239,45 @@ class Compactor:
 
     PRUNE_PROTECT_TOKENS = 40_000
     PRUNE_MIN_SAVINGS = 10_000
+    MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000
+    AUTOCOMPACT_BUFFER = 13_000
+    AUTOCOMPACT_WARNING_TOKENS = 20_000
+    AUTOCOMPACT_ERROR_TOKENS = 20_000
+    MANUAL_COMPACT_BUFFER = 3_000
+    MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3
+    MICROCOMPACT_TRIGGER_PERCENT = 0.70
+    MICROCOMPACT_MIN_SAVINGS = 5_000
+    COLD_CACHE_THRESHOLD_SECONDS = 30 * 60
+    MICROCOMPACT_MARKER = "[Tool output cleared to save context - re-run if needed]"
+    KEEP_LAST_N_PER_TOOL = 3
+    KEEP_LAST_N_COLD_CACHE = 1
+    COMPACTABLE_TOOLS = {
+        "read_file",
+        "bash",
+        "grep",
+        "glob",
+        "list_dir",
+        "python_exec",
+        "create_chart",
+        "semantic_search",
+    }
+    MICROCOMPACT_TOOLS = COMPACTABLE_TOOLS
     SUMMARY_TRIGGER_PERCENT = 0.80
+    CONTEXT_COLLAPSE_TRIGGER_PERCENT = 0.85
     KEEP_LAST_MESSAGES = 3
     MAX_PTL_RETRIES = 3
+    PTL_RETRY_BACKOFF_SECONDS = 0.0
 
     SUMMARY_TOOL_RESULT_THRESHOLD = 8_000
     SUMMARY_TOOL_RESULT_HEAD = 2_000
     SUMMARY_TOOL_RESULT_TAIL = 1_000
+    POST_COMPACT_FILE_TOKEN_BUDGET = 12_000
+    POST_COMPACT_SKILL_TOKEN_BUDGET = 4_000
+    POST_COMPACT_EXCLUDED_BASENAMES = {
+        "claude.md",
+        "memory.md",
+        "agent_status.md",
+    }
 
     PROTECTED_TOOLS = {"todo_write", "todo_read", "semantic_search"}
 
@@ -168,6 +285,282 @@ class Compactor:
 
     # Aux client cache (per-process); built lazily.
     _aux_client_cache: Dict[str, Any] = {}
+    _transition_reason: str = ""
+    _last_session_activity: float = 0.0
+    _compact_warning_suppressed_until: float = 0.0
+    _last_content_replacements: List[ContentReplacementEntry] = []
+
+    # --------------------------------------------------------
+    # Microcompact
+    # --------------------------------------------------------
+
+    @classmethod
+    def get_effective_context_window_size(
+        cls,
+        model_id: str = "",
+        configured_max: int = 200_000,
+    ) -> int:
+        """A-1 context window after reserving summary output tokens."""
+        model = (model_id or "").lower()
+        base = int(configured_max or 200_000)
+        if "haiku" in model or "sonnet" in model or "opus" in model:
+            base = max(base, 200_000)
+        return max(1, base - cls.MAX_OUTPUT_TOKENS_FOR_SUMMARY)
+
+    @classmethod
+    def _context_usage(cls, messages: List[Dict[str, Any]], max_tokens: int) -> int:
+        try:
+            from runtime.tokens import TOKENS
+            overhead = TOKENS.final_context_tokens_from_last_response()
+            if overhead == 0:
+                overhead = cls.FIXED_OVERHEAD_TOKENS
+        except Exception:
+            overhead = cls.FIXED_OVERHEAD_TOKENS
+        return cls.estimate_tokens(messages) + overhead
+
+    @classmethod
+    def calculate_token_warning_state(
+        cls,
+        messages: List[Dict[str, Any]],
+        max_tokens: int,
+    ) -> TokenWarningState:
+        """A-4 five-flag token warning state used by UI/status code."""
+        window = max(1, int(max_tokens))
+        used = cls._context_usage(messages, window)
+        percent = used / window
+        return TokenWarningState(
+            tokens_used=used,
+            context_window=window,
+            percent_used=percent,
+            should_microcompact=percent >= cls.MICROCOMPACT_TRIGGER_PERCENT,
+            should_auto_compact=percent >= cls.SUMMARY_TRIGGER_PERCENT,
+            warning=used >= window - cls.AUTOCOMPACT_WARNING_TOKENS,
+            error=used >= window - cls.AUTOCOMPACT_ERROR_TOKENS,
+        )
+
+    @staticmethod
+    def should_auto_compact(query_source: str = "user") -> bool:
+        """A-5/A-19 recursion guard for compact/session-memory turns."""
+        return (query_source or "user") not in {"compact", "session_memory"}
+
+    @staticmethod
+    def has_exact_error_message(exc: Exception, text: str) -> bool:
+        """A-23 exact abort/error matching helper."""
+        return str(exc) == text
+
+    @staticmethod
+    def is_user_abort_error(exc: Exception) -> bool:
+        """A-23 compact aborts should not be logged as model/API errors."""
+        return str(exc).strip().lower() in {
+            "user aborted",
+            "user abort",
+            "aborted by user",
+            "operation cancelled",
+            "operation canceled",
+        }
+
+    @staticmethod
+    def _is_stale_round_trip(messages: List[Dict[str, Any]]) -> bool:
+        """A-24 detect a dangling assistant tool_use without tool_result."""
+        pending: set[str] = set()
+        for msg in messages:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_use" and block.get("id"):
+                    pending.add(str(block["id"]))
+                elif block.get("type") == "tool_result" and block.get("tool_use_id"):
+                    pending.discard(str(block["tool_use_id"]))
+        return bool(pending)
+
+    @classmethod
+    def _sleep_between_ptl_retries(cls, should_abort: Optional[Callable[[], bool]] = None) -> bool:
+        """A-20 abortable retry sleep. Returns False when aborted."""
+        if should_abort and should_abort():
+            return False
+        if cls.PTL_RETRY_BACKOFF_SECONDS > 0:
+            end = time.time() + cls.PTL_RETRY_BACKOFF_SECONDS
+            while time.time() < end:
+                if should_abort and should_abort():
+                    return False
+                time.sleep(min(0.05, end - time.time()))
+        return True
+
+    @classmethod
+    def set_transition_reason(cls, reason: str) -> None:
+        """A-34 transition.reason equivalent for compact state changes."""
+        cls._transition_reason = reason
+
+    @classmethod
+    def transition_reason(cls) -> str:
+        return cls._transition_reason
+
+    @classmethod
+    def reset_retry_counters(cls) -> None:
+        """A-30 reset post-compression retry counters tracked by compactor."""
+        try:
+            auto_compact = globals().get("AUTO_COMPACT")
+            if auto_compact is not None:
+                auto_compact.record_success()
+        except Exception:
+            pass
+        cls._transition_reason = "post_compact_retry_counters_reset"
+
+    @classmethod
+    def touch_session_activity(cls) -> float:
+        """A-18 keep a live activity heartbeat during compaction."""
+        cls._last_session_activity = time.time()
+        return cls._last_session_activity
+
+    @classmethod
+    def last_session_activity(cls) -> float:
+        return cls._last_session_activity
+
+    @classmethod
+    def suppress_compact_warning_state(cls, seconds: float = 30.0) -> None:
+        """A-15 suppress bogus warning immediately after compaction."""
+        cls._compact_warning_suppressed_until = time.time() + max(0.0, float(seconds))
+
+    @classmethod
+    def compact_warning_suppressed(cls) -> bool:
+        return time.time() < cls._compact_warning_suppressed_until
+
+    @classmethod
+    def gc_compact_boundary_preserved_segments(
+        cls,
+        messages: List[Dict[str, Any]],
+        tail_keep: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """A-38 compact-boundary GC for repeated preservedSegment metadata.
+
+        Keep normal messages unchanged, keep the tail untouched, and dedupe
+        older preserved segments by id so long sessions do not accumulate
+        stale compact-boundary metadata.
+        """
+        if not messages:
+            return []
+        keep = cls.KEEP_LAST_MESSAGES if tail_keep is None else max(0, int(tail_keep))
+        if keep <= 0 or len(messages) <= keep:
+            head = list(messages)
+            tail: List[Dict[str, Any]] = []
+        else:
+            head = list(messages[:-keep])
+            tail = list(messages[-keep:])
+
+        latest_by_id: Dict[str, int] = {}
+        for idx, msg in enumerate(head):
+            seg_id = cls._preserved_segment_id(msg)
+            if seg_id:
+                latest_by_id[seg_id] = idx
+
+        out: List[Dict[str, Any]] = []
+        for idx, msg in enumerate(head):
+            seg_id = cls._preserved_segment_id(msg)
+            if seg_id and latest_by_id.get(seg_id) != idx:
+                continue
+            out.append(msg)
+        return out + tail
+
+    @staticmethod
+    def _preserved_segment_id(msg: Dict[str, Any]) -> str:
+        raw = (
+            msg.get("preservedSegment")
+            or msg.get("preserved_segment")
+            or msg.get("preserved_segment_id")
+        )
+        if raw is True:
+            return "default"
+        if isinstance(raw, dict):
+            return str(raw.get("id") or raw.get("name") or "default")
+        if raw:
+            return str(raw)
+        if msg.get("compact_boundary") and msg.get("is_meta"):
+            return str(msg.get("id") or "compact_boundary")
+        return ""
+
+    @classmethod
+    def _find_tool_name(cls, messages: List[Dict[str, Any]], tool_use_id: str) -> str:
+        """Return the tool name that created a given tool_use id."""
+        if not tool_use_id:
+            return ""
+        for msg in messages:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "tool_use"
+                    and block.get("id") == tool_use_id
+                ):
+                    return str(block.get("name", ""))
+        return ""
+
+    @classmethod
+    def microcompact(
+        cls,
+        messages: List[Dict[str, Any]],
+        keep_n_override: Optional[int] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Clear old compactable tool_result bodies without changing turns."""
+        keep_n = (
+            int(keep_n_override)
+            if keep_n_override is not None
+            else cls.KEEP_LAST_N_PER_TOOL
+        )
+        keep_n = max(1, keep_n)
+        tokens_before = cls.estimate_tokens(messages)
+        keep_counts: Dict[str, int] = {}
+        any_read_file_cleared = False
+        result_msgs: List[Dict[str, Any]] = []
+
+        for msg in reversed(messages):
+            content = msg.get("content")
+            if not isinstance(content, list):
+                result_msgs.append(msg)
+                continue
+            changed = False
+            new_content_reversed: List[Any] = []
+            for block in reversed(content):
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    tool_use_id = str(block.get("tool_use_id", ""))
+                    tool_name = cls._find_tool_name(messages, tool_use_id)
+                    if tool_name in cls.MICROCOMPACT_TOOLS:
+                        keep_counts[tool_name] = keep_counts.get(tool_name, 0) + 1
+                        already_cleared = block.get("content") == cls.MICROCOMPACT_MARKER
+                        if keep_counts[tool_name] > keep_n and not already_cleared:
+                            block = dict(block)
+                            block["content"] = cls.MICROCOMPACT_MARKER
+                            changed = True
+                            if tool_name == "read_file":
+                                any_read_file_cleared = True
+                new_content_reversed.append(block)
+            if changed:
+                msg = dict(msg)
+                msg["content"] = list(reversed(new_content_reversed))
+            result_msgs.append(msg)
+
+        result_msgs = list(reversed(result_msgs))
+        tokens_saved = max(0, tokens_before - cls.estimate_tokens(result_msgs))
+        if tokens_saved < cls.MICROCOMPACT_MIN_SAVINGS:
+            return messages, 0
+
+        if any_read_file_cleared:
+            try:
+                from runtime.file_cache import FILE_CACHE
+                FILE_CACHE.clear_context()
+            except Exception:
+                pass
+        return result_msgs, tokens_saved
+
+    @classmethod
+    def should_microcompact(cls, messages: List[Dict[str, Any]], max_tokens: int) -> bool:
+        """True iff token estimate crosses the 70% microcompact threshold."""
+        total = cls._context_usage(messages, max_tokens)
+        return total > max_tokens * cls.MICROCOMPACT_TRIGGER_PERCENT
 
     # --------------------------------------------------------
     # Token estimation
@@ -279,15 +672,31 @@ class Compactor:
     @classmethod
     def should_compact(cls, messages: List[Dict[str, Any]], max_tokens: int) -> bool:
         """True iff token estimate > 80% of max_tokens (with overhead)."""
-        try:
-            from runtime.tokens import TOKENS
-            overhead = TOKENS.final_context_tokens_from_last_response()
-            if overhead == 0:
-                overhead = cls.FIXED_OVERHEAD_TOKENS
-        except Exception:
-            overhead = cls.FIXED_OVERHEAD_TOKENS
-        total = cls.estimate_tokens(messages) + overhead
+        total = cls._context_usage(messages, max_tokens)
         return total > max_tokens * cls.SUMMARY_TRIGGER_PERCENT
+
+    @classmethod
+    def would_exceed_context_limit(
+        cls,
+        messages: List[Dict[str, Any]],
+        max_tokens: int,
+        tool_schema_tokens: int = 0,
+    ) -> bool:
+        """A-35 pre-API context guard, including A-29 tool schema tokens."""
+        total = cls._context_usage(messages, max_tokens) + max(0, int(tool_schema_tokens))
+        return total >= max_tokens - cls.AUTOCOMPACT_ERROR_TOKENS
+
+    @classmethod
+    def estimate_tool_schema_tokens(cls, tools: Iterable[Dict[str, Any]]) -> int:
+        """A-29 include tool schemas in pre-compression estimates."""
+        total = 0
+        for tool in tools or []:
+            try:
+                payload = json.dumps(tool, sort_keys=True, separators=(",", ":"))
+            except Exception:
+                payload = str(tool)
+            total += cls.estimate_tokens(payload)
+        return total
 
     # --------------------------------------------------------
     # Auxiliary-model routing (B+5 — recursive advisor sub-cost)
@@ -332,6 +741,84 @@ class Compactor:
     # --------------------------------------------------------
 
     @classmethod
+    def strip_images_from_messages(
+        cls,
+        messages: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """A-6 remove image blocks from compact-summary input."""
+        out: List[Dict[str, Any]] = []
+        for msg in messages:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                out.append(msg)
+                continue
+            new_content = [
+                block for block in content
+                if not (
+                    isinstance(block, dict)
+                    and (
+                        block.get("type") == "image"
+                        or block.get("source", {}).get("type") == "base64"
+                    )
+                )
+            ]
+            if len(new_content) == len(content):
+                out.append(msg)
+            else:
+                clone = dict(msg)
+                clone["content"] = new_content
+                out.append(clone)
+        return out
+
+    @classmethod
+    def strip_reinjected_attachments(
+        cls,
+        messages: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """A-7 remove post-compact reinjected attachment blocks before summary."""
+        out: List[Dict[str, Any]] = []
+        for msg in messages:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                out.append(msg)
+                continue
+            new_content = [
+                block for block in content
+                if not (
+                    isinstance(block, dict)
+                    and (
+                        block.get("is_reinjected_attachment")
+                        or block.get("name") in {"skill_discovery", "skill_listing"}
+                    )
+                )
+            ]
+            if len(new_content) == len(content):
+                out.append(msg)
+            else:
+                clone = dict(msg)
+                clone["content"] = new_content
+                out.append(clone)
+        return out
+
+    @classmethod
+    def group_messages_by_api_round(
+        cls,
+        messages: List[Dict[str, Any]],
+    ) -> List[List[Dict[str, Any]]]:
+        """A-9 group conversation messages into Bedrock API rounds."""
+        rounds: List[List[Dict[str, Any]]] = []
+        current: List[Dict[str, Any]] = []
+        for msg in messages:
+            if msg.get("role") == "user" and current:
+                rounds.append(current)
+                current = [msg]
+            else:
+                current.append(msg)
+        if current:
+            rounds.append(current)
+        return rounds
+
+    @classmethod
     def create_llm_summary(
         cls,
         client: Any,
@@ -343,9 +830,13 @@ class Compactor:
         - Optionally route through CONFIG.compaction_model (advisor).
         - Attribute advisor tokens via TOKENS.add(agent_kind='advisor').
         """
+        cls.touch_session_activity()
         from runtime.tokens import TOKENS
 
-        pruned_messages = cls._prune_tool_results_for_summary(messages)
+        summary_messages = cls.strip_reinjected_attachments(
+            cls.strip_images_from_messages(messages)
+        )
+        pruned_messages = cls._prune_tool_results_for_summary(summary_messages)
         summary_client = cls._summary_client(client)
 
         SUMMARY_SYSTEM_PROMPT = (
@@ -378,6 +869,7 @@ class Compactor:
         attempts = 0
         while attempts <= cls.MAX_PTL_RETRIES:
             try:
+                cls.touch_session_activity()
                 response = summary_client.chat(
                     messages=summary_input,
                     system=SUMMARY_SYSTEM_PROMPT,
@@ -398,6 +890,7 @@ class Compactor:
                         agent_kind=agent_kind,
                     )
                 if response and response.text:
+                    cls.touch_session_activity()
                     return response.text
                 return None
             except Exception as exc:  # noqa: BLE001
@@ -408,6 +901,9 @@ class Compactor:
                     logging.warning(f"[COMPACT] LLM summary failed: {exc}")
                     return None
                 attempts += 1
+                if not cls._sleep_between_ptl_retries():
+                    logging.info("[COMPACT] PTL retry aborted by user")
+                    return None
                 summary_input = cls._truncate_head_for_ptl_retry(summary_input)
                 if not summary_input:
                     logging.warning("[COMPACT] PTL retries exhausted")
@@ -496,6 +992,20 @@ class Compactor:
             return messages
         keep_last = cls.KEEP_LAST_MESSAGES
         recent = messages[-keep_last:] if len(messages) > keep_last else []
+        replacement_id = cls.generate_temp_file_path(
+            summary,
+            prefix="compact-summary",
+            suffix=".txt",
+        )
+        cls._last_content_replacements = [
+            ContentReplacementEntry(
+                original_ref="conversation-prefix",
+                replacement_ref=replacement_id,
+                original_tokens=cls.estimate_tokens(messages[:-keep_last]),
+                replacement_tokens=cls.estimate_tokens(summary),
+                reason="compact",
+            )
+        ]
         summary_msg = {
             "role": "user",
             "content": (
@@ -503,7 +1013,305 @@ class Compactor:
                 "[END SUMMARY — Continuing from here]"
             ),
         }
-        return [summary_msg] + recent
+        summary_msg["content"] = (
+            f"{summary_msg['content']}\n"
+            f"[marble-origami-commit: {replacement_id}]"
+        )
+        summary_msg["is_meta"] = True
+        summary_msg["compact_metadata"] = {
+            "marble-origami-commit": replacement_id,
+            "content_replacements": [
+                entry.to_dict() for entry in cls._last_content_replacements
+            ],
+        }
+        post_messages = [summary_msg] + recent
+        todo_msg = cls.build_todo_restoration_message()
+        if todo_msg:
+            post_messages.append(todo_msg)
+        return cls.inject_missing_tool_result_stubs(post_messages)[0]
+
+    @classmethod
+    def build_cache_sharing_fork_after_compact(
+        cls,
+        parent_messages: List[Dict[str, Any]],
+        parent_assistant_message: Dict[str, Any],
+        directive: str,
+        summary: str,
+    ) -> List[Dict[str, Any]]:
+        """A-13 compacted parent history plus G2 cache-sharing fork replay."""
+        from subagent.fork import build_forked_messages, is_in_fork_child
+
+        if is_in_fork_child(parent_messages):
+            raise ValueError("fork children cannot create nested cache-sharing forks")
+        compacted_parent = cls.compact(parent_messages, summary) if summary else list(parent_messages)
+        return build_forked_messages(compacted_parent, parent_assistant_message, directive)
+
+    @classmethod
+    def flush_memories_before_compact(
+        cls,
+        messages: List[Dict[str, Any]],
+        extractor: Optional[Any] = None,
+        extract_fn: Optional[Callable[[List[Dict], str], List[str]]] = None,
+        workspace: Optional[str] = None,
+    ) -> List[str]:
+        """A-27 force a memory-only extraction turn before compression."""
+        if extractor is None:
+            if extract_fn is None:
+                return []
+            try:
+                from memory import create_memory_extractor
+                from runtime.config import CONFIG
+                extractor = create_memory_extractor(
+                    workspace=workspace or getattr(CONFIG, "workspace", ".")
+                )
+            except Exception:
+                return []
+        try:
+            return list(extractor.extract_memories(
+                messages,
+                extract_fn=extract_fn,
+                force=True,
+            ))
+        except Exception as exc:
+            logging.warning("[COMPACT] pre-compact memory flush failed: %s", exc)
+            return []
+
+    @classmethod
+    def build_todo_restoration_message(cls) -> Optional[Dict[str, Any]]:
+        """A-28 re-inject current todos after compaction."""
+        try:
+            from tools.todo import _todo_read_executor
+            todos = _todo_read_executor({}, context={})
+        except Exception:
+            return None
+        if not todos or "no todos" in todos.lower():
+            return None
+        return {
+            "role": "user",
+            "content": "[TODO RESTORATION]\n" + todos,
+            "is_meta": True,
+        }
+
+    @classmethod
+    def create_post_compact_file_attachments(
+        cls,
+        paths: Optional[Iterable[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """A-11 rebuild bounded file attachments after compaction."""
+        if paths is None:
+            try:
+                from runtime.file_cache import FILE_CACHE
+                paths = list(getattr(FILE_CACHE, "_in_context", set()))
+            except Exception:
+                paths = []
+        attachments: List[Dict[str, Any]] = []
+        used = 0
+        for path in paths or []:
+            base = os.path.basename(str(path)).lower()
+            if base in cls.POST_COMPACT_EXCLUDED_BASENAMES:
+                continue
+            try:
+                text = open(path, "r", encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            tokens = cls.estimate_tokens(text)
+            if used + tokens > cls.POST_COMPACT_FILE_TOKEN_BUDGET:
+                remaining = max(0, cls.POST_COMPACT_FILE_TOKEN_BUDGET - used)
+                text = text[: remaining * 3]
+                tokens = cls.estimate_tokens(text)
+            if tokens <= 0:
+                continue
+            used += tokens
+            attachments.append({
+                "type": "text",
+                "text": f"[POST-COMPACT FILE: {path}]\n{text}",
+                "is_reinjected_attachment": True,
+            })
+            if used >= cls.POST_COMPACT_FILE_TOKEN_BUDGET:
+                break
+        return attachments
+
+    @classmethod
+    def create_skill_attachment_if_needed(
+        cls,
+        skill_manager: Optional[Any],
+    ) -> Optional[Dict[str, Any]]:
+        """A-12 re-inject the active skill body after compaction."""
+        if skill_manager is None:
+            return None
+        try:
+            if not getattr(skill_manager, "active_skill", None):
+                return None
+            body = skill_manager.get_active_skill_prompt(session_id="post-compact")
+        except Exception:
+            return None
+        if not body:
+            return None
+        return {
+            "type": "text",
+            "text": "[POST-COMPACT ACTIVE SKILL]\n"
+            + body[: cls.POST_COMPACT_SKILL_TOKEN_BUDGET * 3],
+            "is_reinjected_attachment": True,
+        }
+
+    @classmethod
+    def last_content_replacements(cls) -> List[ContentReplacementEntry]:
+        return list(cls._last_content_replacements)
+
+    @staticmethod
+    def generate_temp_file_path(
+        content: str,
+        prefix: str = "tmp",
+        suffix: str = "",
+        root: Optional[str] = None,
+    ) -> str:
+        """A-43 content-hash temp path helper."""
+        digest = hashlib.sha256((content or "").encode("utf-8")).hexdigest()[:16]
+        safe_prefix = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in prefix)
+        root_dir = root or ".agent_tmp"
+        return os.path.join(root_dir, f"{safe_prefix}-{digest}{suffix}")
+
+    @classmethod
+    def normalize_for_prefix_cache(cls, value: Any) -> str:
+        """A-32 stable JSON/string normalization for cache-prefix reuse."""
+        if isinstance(value, str):
+            return "\n".join(line.rstrip() for line in value.strip().splitlines())
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+    @classmethod
+    def sanitize_messages_surrogates(cls, value: Any) -> Any:
+        """A-26 recursively replace lone surrogate codepoints before Bedrock."""
+        if isinstance(value, str):
+            return value.encode("utf-8", "replace").decode("utf-8")
+        if isinstance(value, list):
+            return [cls.sanitize_messages_surrogates(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(cls.sanitize_messages_surrogates(item) for item in value)
+        if isinstance(value, dict):
+            return {
+                cls.sanitize_messages_surrogates(k): cls.sanitize_messages_surrogates(v)
+                for k, v in value.items()
+            }
+        return value
+
+    @classmethod
+    def run_post_compact_cleanup(cls, skill_manager: Optional[Any] = None) -> Dict[str, bool]:
+        """Invalidate context-sensitive caches after successful compaction."""
+        cleared = {
+            "file_read_tracking": False,
+            "file_cache": False,
+            "skill_listing_cache": False,
+            "prompt_section_cache": False,
+        }
+
+        try:
+            from tools import _file_read_tracking
+            _file_read_tracking.clear_tracked_reads()
+            cleared["file_read_tracking"] = True
+        except Exception:
+            pass
+
+        try:
+            from runtime.file_cache import FILE_CACHE
+            FILE_CACHE.clear_all()
+            cleared["file_cache"] = True
+        except Exception:
+            pass
+
+        if skill_manager is not None:
+            try:
+                if hasattr(skill_manager, "clear_listing_cache"):
+                    skill_manager.clear_listing_cache()
+                elif hasattr(skill_manager, "_cache"):
+                    skill_manager._cache.clear()
+                cleared["skill_listing_cache"] = True
+            except Exception:
+                pass
+
+        try:
+            from prompt.sections import clear_section_cache
+            clear_section_cache()
+            cleared["prompt_section_cache"] = True
+        except Exception:
+            pass
+
+        return cleared
+
+    @classmethod
+    def inject_missing_tool_result_stubs(
+        cls,
+        messages: List[Dict[str, Any]],
+        reason: str = "post-compact orphaned tool_use repaired",
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Insert synthetic tool_result stubs for orphaned tool_use blocks."""
+        try:
+            from core.parallel_dispatch import synthetic_tool_result_stub
+        except Exception:
+            def synthetic_tool_result_stub(tool_use_id: str, reason: str = "") -> Dict[str, Any]:
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": f"[synthetic stub: {reason}]",
+                    "is_error": False,
+                }
+
+        repaired: List[Dict[str, Any]] = []
+        inserted = 0
+        idx = 0
+        while idx < len(messages):
+            msg = messages[idx]
+            repaired.append(msg)
+            content = msg.get("content")
+            if msg.get("role") != "assistant" or not isinstance(content, list):
+                idx += 1
+                continue
+
+            tool_ids = [
+                str(block.get("id", ""))
+                for block in content
+                if isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("id")
+            ]
+            if not tool_ids:
+                idx += 1
+                continue
+
+            next_msg = messages[idx + 1] if idx + 1 < len(messages) else None
+            next_content = next_msg.get("content") if isinstance(next_msg, dict) else None
+            present: set[str] = set()
+            if isinstance(next_content, list):
+                present = {
+                    str(block.get("tool_use_id", ""))
+                    for block in next_content
+                    if isinstance(block, dict) and block.get("type") == "tool_result"
+                }
+            missing = [tool_id for tool_id in tool_ids if tool_id not in present]
+            if missing:
+                stubs = [
+                    synthetic_tool_result_stub(tool_id, reason=reason)
+                    for tool_id in missing
+                ]
+                if isinstance(next_msg, dict) and next_msg.get("role") == "user":
+                    patched_next = dict(next_msg)
+                    if isinstance(next_content, list):
+                        patched_next["content"] = stubs + list(next_content)
+                    elif isinstance(next_content, str):
+                        patched_next["content"] = stubs + [
+                            {"type": "text", "text": next_content}
+                        ]
+                    else:
+                        patched_next["content"] = stubs
+                    repaired.append(patched_next)
+                    idx += 2
+                else:
+                    repaired.append({"role": "user", "content": stubs})
+                    idx += 1
+                inserted += len(stubs)
+            else:
+                idx += 1
+
+        return repaired, inserted
 
     @classmethod
     def run(
@@ -511,10 +1319,15 @@ class Compactor:
         client: Any,
         messages: List[Dict[str, Any]],
         max_tokens: int = 200_000,
+        skill_manager: Optional[Any] = None,
+        memory_extractor: Optional[Any] = None,
+        memory_extract_fn: Optional[Callable[[List[Dict], str], List[str]]] = None,
     ) -> CompactionResult:
         """End-to-end: prune → summarize → compact. Single entry point."""
+        cls.touch_session_activity()
         before_tokens = cls.estimate_tokens(messages)
         if not cls.should_compact(messages, max_tokens):
+            cls.set_transition_reason(TransitionReason.COMPACT_SKIPPED.value)
             return CompactionResult(
                 success=False,
                 error="compact not needed (under 80% trigger)",
@@ -522,6 +1335,11 @@ class Compactor:
                 tokens_after=before_tokens,
                 messages_after=list(messages),
             )
+        cls.flush_memories_before_compact(
+            messages,
+            extractor=memory_extractor,
+            extract_fn=memory_extract_fn,
+        )
         pruned, _saved = cls.prune_tool_outputs(messages, max_tokens)
         summary = cls.create_llm_summary(client, pruned)
         if not summary:
@@ -533,6 +1351,21 @@ class Compactor:
                 messages_after=pruned,
             )
         new_messages = cls.compact(pruned, summary)
+        post_blocks: List[Dict[str, Any]] = []
+        post_blocks.extend(cls.create_post_compact_file_attachments())
+        skill_block = cls.create_skill_attachment_if_needed(skill_manager)
+        if skill_block is not None:
+            post_blocks.append(skill_block)
+        if post_blocks:
+            new_messages.append({
+                "role": "user",
+                "content": post_blocks,
+                "is_meta": True,
+            })
+        cls.reset_retry_counters()
+        cls.set_transition_reason(TransitionReason.COMPACT_SUCCESS.value)
+        cls.suppress_compact_warning_state()
+        cls.run_post_compact_cleanup(skill_manager=skill_manager)
         after_tokens = cls.estimate_tokens(new_messages)
         return CompactionResult(
             success=True,
@@ -629,6 +1462,9 @@ AUTO_COMPACT = AutoCompactCircuitBreaker()
 __all__ = [
     "Compactor",
     "CompactionResult",
+    "TokenWarningState",
+    "ContentReplacementEntry",
+    "TransitionReason",
     "AutoCompactCircuitBreaker",
     "AUTO_COMPACT",
     "apply_cache_control_to_blocks",

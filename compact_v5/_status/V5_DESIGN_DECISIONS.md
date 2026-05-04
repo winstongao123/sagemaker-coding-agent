@@ -3028,3 +3028,273 @@ honored, (b) the lock test exists, and (c) the SYNTHESIS_MASTER §3 row
 for that item references the implementing Block. Plan-level cross-link
 added to `_phase_2/wave_5_deep/SYNTHESIS_MASTER.md` Block 0 table head
 note.
+
+## ADR-040 - Block A redo: A-16/A-17 microcompact, A-21 cleanup, and A-25 post-compact stub injection
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block A completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+The completion audit found that prior Block A closure was reviewed against a narrowed prompt. Two critical rows had to land first:
+
+- A-16: time-based microcompact for cold prompt-cache resume.
+- A-17: explicit compactable-tool allowlist.
+- A-21: post-compact cleanup of context-sensitive caches.
+- A-25: synthetic `tool_result` stubs when post-compact history contains orphaned `tool_use` blocks.
+
+### Decision
+
+Implement both in the existing Block A runtime path:
+
+- `core/compactor.py` now owns microcompact constants, compactable-tool clearing, keep-last-N behavior, and a 70% microcompact predicate.
+- `core/compactor.py` exposes `COMPACTABLE_TOOLS` as the microcompact allowlist and excludes document/excel/pdf creator tools.
+- `core/query_engine.py` tracks the last main Bedrock call time and runs cold-cache microcompact before the next API call when the idle gap exceeds the threshold.
+- `core/compactor.py` runs post-compact cleanup after successful compaction, invalidating read-before-edit tracking, FileCache state, skill-listing cache, and prompt-section memoization.
+- `Compactor.compact()` now repairs its summary-plus-recent output with `inject_missing_tool_result_stubs()` before returning messages to the engine.
+- `tests/r_tier/test_r4_cold_cache.py` materializes the R4 marker, but remains skipped unless explicit real-AWS env vars are set.
+
+### Rationale
+
+Runnable's time-based microcompact defaults to a disabled 60-minute feature flag. v4 has an active 30-minute cold-cache path that directly matches PS#3 and the R4 scenario. v5 adopts the Runnable pre-call shape but uses the v4/SageMaker threshold by default so the promised 30-minute idle contract is testable and user-visible.
+
+For A-25, Block N already provided the generic `synthetic_tool_result_stub()` helper, but helper existence was not enough. The compactor itself must repair its output because the summary-plus-recent cut can remove the original tool result while retaining the assistant tool call.
+
+For A-21, compaction changes what the model can legitimately rely on. Clearing read markers and prompt/file/skill caches prevents stale context from authorizing edits or replaying obsolete prompt attachments after the summary boundary.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+- Time-based microcompact: TS feature-flag config becomes a Python runtime default with optional `CONFIG.cold_cache_threshold_seconds` override.
+- Cached microcompact/cache_edits server-side deletion is not used for this path because the cache is already cold; v5 mutates message content before the call, matching Runnable's direct time-based clearing path.
+- Post-compact cleanup maps Runnable's memory-cache invalidation to v5's prompt-section memoization and skill listing cache, because those are the v5 caches that feed post-compact prompt construction.
+- Stub repair reuses the Block N/Hermes helper rather than duplicating a second stub format.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/compactor.py`
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/skills/manager.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_a.py`
+- `compact_v5/MAIN/agent/tests/r_tier/test_r4_cold_cache.py`
+- `compact_v5/MAIN/agent/tools/_file_read_tracking.py`
+- `compact_v5/_status/v5_completion_audit/blocks/A/*`
+
+### Linked port-log rows
+
+- #105 - A-16 cold-cache time-based microcompact.
+- #106 - A-25 post-compact stub injection.
+- #107 - A-17 compactable-tool allowlist.
+- #108 - A-21 post-compact cleanup.
+
+### Validation
+
+- `py -3.11 -m pytest tests/integration/test_block_a.py -q`
+- Result: 30 passed.
+- `py -3.11 -m pytest tests/tools/test_phase4_mutating_tools.py -q`
+- Result: 39 passed.
+
+No AWS/R-tier test was run.
+
+## ADR-043 - Block A iter10 LOW-finding fixes
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block A completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+Claude iter10 returned `APPROVE_WITH_FIXES` and
+`SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, with 0 ship-blocking rows and
+three LOW findings:
+
+- A-22 test coverage did not pin the post-compact ordering invariant.
+- A-30 retry reset evidence was misleading because `reset_retry_counters()`
+  only set a transition reason.
+- A-37 `cache_ttl` existed as config but was not consumed at runtime.
+
+### Decision
+
+Fix all three LOW findings inside Block A:
+
+- Strengthen the compactor test so it asserts summary first, recent messages in
+  the middle, and todo restoration last.
+- Make `Compactor.reset_retry_counters()` clear the `AUTO_COMPACT` consecutive
+  failure state via `record_success()` when the singleton is available.
+- Wire `CONFIG.cache_ttl` into Bedrock cache-control payloads for both system
+  prompt cache blocks and last-message cache blocks. Supported TTL values are
+  `5m` and `1h`; invalid values fall back to `5m`.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+The TTL knob now changes the Bedrock request body rather than existing only as
+configuration. The reset fix preserves v5's existing transition reason surface
+while making the retry reset behavior real.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/compactor.py`
+- `compact_v5/MAIN/agent/runtime/bedrock_client.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_a.py`
+- `compact_v5/_status/v5_completion_audit/blocks/A/*`
+
+### Linked port-log rows
+
+- #111 - Block A iter10 LOW-finding fixes.
+
+### Validation
+
+- `py -3.11 -m py_compile core/compactor.py core/query_engine.py runtime/bedrock_client.py runtime/config.py`
+- Result: PASS.
+- `py -3.11 -m pytest tests/integration/test_block_a.py -q`
+- Result: 53 passed.
+
+No AWS/R-tier test was run.
+
+## ADR-042 - Block A remaining completion-audit blockers
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block A completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+After ADR-041, Block A still had five ship-blocking rows: A-13, A-27,
+A-33, A-34, and A-38. These rows crossed compaction, fork cache-prefix
+reuse, session memory, prompt-cache invariants, transition accounting, and
+long-session message GC.
+
+### Decision
+
+Close the remaining rows with v5-native synchronous adaptations:
+
+- A-13: `Compactor.build_cache_sharing_fork_after_compact()` compacts parent
+  history and delegates to Block G2 `build_forked_messages()` so fork children
+  preserve the cache-sharing replay contract. Streaming remains banned by v5
+  constraints, so the adaptation is synchronous/no-streaming.
+- A-27: `Compactor.flush_memories_before_compact()` forces a memory extraction
+  hook before pruning and summary generation. `Compactor.run()` accepts
+  optional memory extractor/function hooks so Block H memory infrastructure can
+  participate without making compaction depend on a real AWS call in tests.
+- A-33: QueryEngine freezes the active prompt-cache invariant state for
+  continued sessions: model id, system prompt hash, and toolset. Changes are
+  deferred until the next session unless `prompt_cache_now=True` explicitly
+  opts into an immediate cache break.
+- A-34: `TransitionReason` records compact skip/success, user abort, pre-API
+  context overflow, API error, and end-turn transitions. API errors return
+  immediately, before post-response stop hooks.
+- A-38: `gc_compact_boundary_preserved_segments()` removes older duplicate
+  preservedSegment metadata before each model-visible turn while keeping the
+  recent tail intact.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+Runnable streaming fallback is intentionally not ported because v5.0.1 forbids
+streaming. The cache-prefix, memory-flush, prompt-cache invariant, transition,
+and preserved-segment semantics are preserved in synchronous Bedrock-only form.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/compactor.py`
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_a.py`
+- `compact_v5/_status/v5_completion_audit/blocks/A/*`
+
+### Linked port-log rows
+
+- #110 - Block A remaining completion-audit blockers.
+
+### Validation
+
+- `py -3.11 -m py_compile core/compactor.py core/query_engine.py runtime/bedrock_client.py runtime/config.py`
+- Result: PASS.
+- `py -3.11 -m pytest tests/integration/test_block_a.py -q`
+- Result: 53 passed.
+
+No AWS/R-tier test was run.
+
+## ADR-041 - Block A completion-audit broad helper slice
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block A completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+Claude iter7 approved only the first local Block A implementation batch
+(A-16, A-17, A-21, A-25). The canonical `SYNTHESIS_MASTER.md` Block A
+scope still had 37 ship-blocking ledger rows. The next worker slice therefore
+implemented the remaining compact/runtime helper surface that fits the current
+v5 architecture without AWS/R-tier spend.
+
+### Decision
+
+Land the broad helper slice in the existing compact/query/runtime modules:
+
+- `core/compactor.py` owns effective context budgeting, named warning/manual
+  compact budgets, token warning state, auto-compact source guards, summary
+  input sanitizers, API-round grouping, post-compact file/skill reinjection,
+  memory/status file exclusions, warning suppression, session activity
+  heartbeat, abort-aware PTL retry backoff, user-abort/stale-round helpers,
+  recursive surrogate sanitization, compact metadata, todo restoration,
+  content replacement metadata, tool-schema token estimation, pre-API context
+  limit checks, retry counter reset, prefix-stable normalization, and
+  content-hash temp paths.
+- `core/query_engine.py` accepts a `query_source`, applies source-aware
+  auto-compact guards, marks persisted messages with `is_meta`, applies the
+  pre-API context guard before Bedrock, sanitizes outbound turn messages, and
+  standardizes Bedrock/tool diagnostics with `error_during_execution`.
+- `runtime/bedrock_client.py` applies Bedrock `cache_control` blocks to the
+  last three text-bearing message blocks when prompt caching is active.
+- `runtime/config.py` adds `cold_cache_threshold_seconds` and `cache_ttl`.
+
+### Remaining Block A blockers
+
+This ADR does not claim full Block A closure. The ledger intentionally leaves
+these rows ship-blocking:
+
+- A-13: cache-sharing fork coordination for compaction is not wired; streaming
+  remains forbidden by v5 constraints and still needs an explicit adaptation.
+- A-27: `flush_memories` pre-compression memory-only turn is not implemented.
+- A-33: only the query-source portion of the A28 prompt-cache invariant policy
+  is covered; model/tool/memory toggle policy remains incomplete.
+- A-34: transition/error reason handling is improved, but no complete enum plus
+  skip-stop-hooks-on-API-error policy is implemented.
+- A-38: compact-boundary preservedSegment GC pattern is not implemented.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+The helper semantics map to the v5 Bedrock-only, no-streaming, no-MCP runtime.
+Where Runnable relies on browser/React or Anthropic-direct state surfaces, v5
+keeps the equivalent state inside `Compactor`, `QueryEngine`, and the Bedrock
+client. The adaptation is intentionally local and testable without AWS spend.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/compactor.py`
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/runtime/bedrock_client.py`
+- `compact_v5/MAIN/agent/runtime/config.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_a.py`
+- `compact_v5/_status/v5_completion_audit/blocks/A/*`
+
+### Linked port-log rows
+
+- #109 - Block A broad completion-audit helper slice.
+
+### Validation
+
+- `py -3.11 -m pytest tests/integration/test_block_a.py -q`
+- Result: 48 passed.
+- `py -3.11 -m py_compile core/compactor.py core/query_engine.py runtime/bedrock_client.py runtime/config.py`
+- Result: PASS.
+
+No AWS/R-tier test was run.

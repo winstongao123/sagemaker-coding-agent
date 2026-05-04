@@ -38,6 +38,7 @@ concurrent `run()` calls on the same engine are NOT supported (matches v4).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
@@ -70,6 +71,15 @@ class QueryResult:
     turns_used: int = 0
     budget_used: int = 0
     error: Optional[str] = None
+
+
+@dataclass
+class PromptCacheInvariantState:
+    """A-33 frozen prompt-cache boundary state for an active conversation."""
+
+    model_id: str
+    system_prompt_hash: str
+    tool_names: Tuple[str, ...]
 
 
 # ============================================================
@@ -265,6 +275,13 @@ class QueryEngine:
         # is True; reset each run() so continuation state never leaks across
         # user messages.
         self._budget_tracker: Optional[Any] = None
+        # Block A A-16: timestamp of the last main Bedrock call. A long idle
+        # gap means prompt cache is cold, so the next request can microcompact
+        # old tool_result bodies before paying to re-upload them.
+        self._last_api_call_time: float = 0.0
+        self._prompt_cache_state: Optional[PromptCacheInvariantState] = None
+        self._frozen_system_prompt: Optional[str] = None
+        self._frozen_tool_names: Tuple[str, ...] = ()
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -281,6 +298,8 @@ class QueryEngine:
         thinking_budget: int = 4096,
         max_tokens: int = 4096,
         temperature: float = 0.0,
+        query_source: str = "user",
+        prompt_cache_now: bool = False,
     ) -> QueryResult:
         """Execute the agent loop until a stop condition is reached.
 
@@ -358,6 +377,8 @@ class QueryEngine:
                 error=_rate_msg,
             )
 
+        had_prior_messages = bool(self.messages)
+
         # Append user turn (Bedrock requires alternation; merge into trailing
         # user if needed — matches v4 sagemaker_agent.py:8744).
         if self.messages and self.messages[-1].get("role") == "user":
@@ -368,9 +389,9 @@ class QueryEngine:
             elif isinstance(prev_content, list):
                 prev_content.append({"type": "text", "text": user_message})
             else:
-                self.messages.append({"role": "user", "content": user_message})
+                self.messages.append({"role": "user", "content": user_message, "is_meta": False})
         else:
-            self.messages.append({"role": "user", "content": user_message})
+            self.messages.append({"role": "user", "content": user_message, "is_meta": False})
 
         # Defer-import to avoid circular import at module-load.
         from tools.registry import (
@@ -456,6 +477,16 @@ class QueryEngine:
             except Exception as exc:  # noqa: BLE001 — skill machinery never raises into agent loop
                 logging.warning("[skill-wiring] %s: %s", type(exc).__name__, exc)
 
+        effective_system_prompt, tools, _cache_policy_warnings = (
+            self._enforce_prompt_cache_invariants(
+                effective_system_prompt,
+                tools,
+                allow_now=prompt_cache_now or not had_prior_messages,
+            )
+        )
+        for _warning in _cache_policy_warnings:
+            output_fn(f"[prompt-cache invariant] {_warning}")
+
         last_text = ""
         stop_reason = ""
         turns_used = 0
@@ -465,6 +496,11 @@ class QueryEngine:
             if self.on_stop_check and self.on_stop_check():
                 output_fn("[Stopped by user]")
                 stop_reason = "user_stop"
+                try:
+                    from core.compactor import Compactor, TransitionReason
+                    Compactor.set_transition_reason(TransitionReason.USER_ABORT.value)
+                except Exception:
+                    pass
                 break
 
             # Block M-2 (PORT_LOG #084) — structured-output retry-limit
@@ -496,6 +532,16 @@ class QueryEngine:
                 stop_reason = "budget_exhausted"
                 break
 
+            # A-38: compact-boundary preservedSegment GC before building the
+            # model-visible turn, while keeping the recent tail untouched.
+            try:
+                from core.compactor import Compactor, TransitionReason
+                self.messages = Compactor.gc_compact_boundary_preserved_segments(
+                    self.messages
+                )
+            except Exception:
+                pass
+
             # Phase 7 wiring contract: per-turn deferral + discovery merge.
             visible_tools, deferred_names = apply_tool_search_deferral(
                 tools, enabled=True,
@@ -517,6 +563,75 @@ class QueryEngine:
             if deferred_names:
                 turn_messages = self._inject_deferred_reminder(turn_messages, deferred_names)
 
+            # Block A A-16: time-based microcompact BEFORE the next API call.
+            # If the main loop has been idle long enough for the server-side
+            # prompt cache to be cold, clear old compactable tool_result
+            # bodies so the miss re-uploads less context.
+            try:
+                import time as _time
+                from core.compactor import Compactor
+                from runtime.config import CONFIG as _CFG_MC
+                if (
+                    self.agent_kind == "parent"
+                    and self._last_api_call_time > 0
+                    and Compactor.should_auto_compact(query_source)
+                ):
+                    threshold = float(
+                        getattr(
+                            _CFG_MC,
+                            "cold_cache_threshold_seconds",
+                            Compactor.COLD_CACHE_THRESHOLD_SECONDS,
+                        )
+                    )
+                    now = _time.time()
+                    if now - self._last_api_call_time > threshold:
+                        mc_messages, mc_saved = Compactor.microcompact(
+                            self.messages,
+                            keep_n_override=Compactor.KEEP_LAST_N_COLD_CACHE,
+                        )
+                        if mc_saved >= Compactor.MICROCOMPACT_MIN_SAVINGS:
+                            self.messages = mc_messages
+                            turn_messages = mc_messages
+                            if deferred_names:
+                                turn_messages = self._inject_deferred_reminder(
+                                    turn_messages,
+                                    deferred_names,
+                                )
+                            gap_min = (now - self._last_api_call_time) / 60.0
+                            output_fn(
+                                f"[i] Cold cache detected ({gap_min:.0f}min gap) - "
+                                f"proactive microcompact freed ~{mc_saved:,} tokens"
+                            )
+            except Exception:
+                pass
+
+            try:
+                from core.compactor import Compactor
+                tool_schema_tokens = Compactor.estimate_tool_schema_tokens(
+                    _build_tools_api_payload(visible_tools)
+                )
+                if Compactor.would_exceed_context_limit(
+                    turn_messages,
+                    getattr(__import__("runtime.config", fromlist=["CONFIG"]).CONFIG, "context_max_tokens", 200_000),
+                    tool_schema_tokens=tool_schema_tokens,
+                ):
+                    stop_reason = "context_overflow"
+                    Compactor.set_transition_reason(
+                        TransitionReason.CONTEXT_OVERFLOW_PRE_API.value
+                    )
+                    output_fn("[context_overflow: estimated prompt would exceed context limit before API call]")
+                    return QueryResult(
+                        text=last_text,
+                        messages=list(self.messages),
+                        stop_reason=stop_reason,
+                        turns_used=turns_used,
+                        budget_used=self.budget.used(),
+                        error="context_overflow: pre-api guard",
+                    )
+                turn_messages = Compactor.sanitize_messages_surrogates(turn_messages)
+            except Exception:
+                pass
+
             # Bedrock invocation.
             try:
                 response = self.client.chat(
@@ -530,7 +645,12 @@ class QueryEngine:
                 )
             except Exception as exc:  # noqa: BLE001 — classify and surface
                 category, recovery, debug = ErrorClassifier.classify(exc)
-                output_fn(f"[Bedrock {category}: {debug}]")
+                try:
+                    from core.compactor import Compactor, TransitionReason
+                    Compactor.set_transition_reason(TransitionReason.API_ERROR.value)
+                except Exception:
+                    pass
+                output_fn(f"[error_during_execution][Bedrock {category}: {debug}]")
                 if category == BedrockErrorCategory.CONTEXT_OVERFLOW:
                     stop_reason = "context_overflow"
                 else:
@@ -544,6 +664,11 @@ class QueryEngine:
                     error=f"{category}: {debug}",
                 )
 
+            try:
+                import time as _time
+                self._last_api_call_time = _time.time()
+            except Exception:
+                pass
             turns_used += 1
 
             # Block B (PORT_LOG #039+#040): record token usage + per-agent
@@ -611,7 +736,11 @@ class QueryEngine:
 
             # Append assistant turn (text + tool_use blocks, plus thinking).
             assistant_content = self._build_assistant_content(response)
-            self.messages.append({"role": "assistant", "content": assistant_content})
+            self.messages.append({
+                "role": "assistant",
+                "content": assistant_content,
+                "is_meta": False,
+            })
 
             if response.text:
                 last_text = response.text
@@ -623,17 +752,30 @@ class QueryEngine:
                 from core.compactor import Compactor, AUTO_COMPACT
                 from runtime.config import CONFIG as _CFG_AC
                 _max_ctx = getattr(_CFG_AC, "context_max_tokens", 200_000)
-                if Compactor.should_compact(self.messages, _max_ctx):
+                if (
+                    Compactor.should_auto_compact(query_source)
+                    and Compactor.should_compact(self.messages, _max_ctx)
+                ):
                     _ok, _why = AUTO_COMPACT.try_attempt()
                     if _ok:
-                        _result = Compactor.run(self.client, self.messages, _max_ctx)
+                        _result = Compactor.run(
+                            self.client,
+                            self.messages,
+                            _max_ctx,
+                            skill_manager=self.skill_manager,
+                        )
                         if _result.success:
+                            AUTO_COMPACT.record_success()
                             output_fn(
                                 f"[auto-compact] saved "
                                 f"{_result.tokens_before - _result.tokens_after:,} "
                                 f"tokens; continuing."
                             )
                             self.messages = _result.messages_after
+                        else:
+                            _disabled, _reason = AUTO_COMPACT.record_failure()
+                            if _disabled:
+                                output_fn(f"[{_reason}]")
                     else:
                         # Cooldown / cap message — log once per turn, no
                         # spam since try_attempt returns reason text.
@@ -722,6 +864,11 @@ class QueryEngine:
                     )
 
                 stop_reason = "end_turn"
+                try:
+                    from core.compactor import Compactor, TransitionReason
+                    Compactor.set_transition_reason(TransitionReason.END_TURN.value)
+                except Exception:
+                    pass
                 if response.text:
                     output_fn(response.text)
                 break
@@ -736,7 +883,7 @@ class QueryEngine:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": call.id,
-                        "content": f"Error: unknown tool '{call.name}'",
+                        "content": f"error_during_execution: unknown tool '{call.name}'",
                         "is_error": True,
                     })
                     # Block B (Codex finding #2 HIGH lock): every dispatch
@@ -1010,7 +1157,7 @@ class QueryEngine:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": call.id,
-                        "content": f"Error: {type(exc).__name__}: {exc}",
+                        "content": f"error_during_execution: {type(exc).__name__}: {exc}",
                         "is_error": True,
                     })
                     # Audit the failed dispatch too so forensics can see what
@@ -1029,7 +1176,7 @@ class QueryEngine:
                         pass
 
             # Append the tool_results as a user turn (Bedrock convention).
-            self.messages.append({"role": "user", "content": tool_results})
+            self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
 
         else:  # for-loop fell through without break
             stop_reason = "max_turns"
@@ -1042,6 +1189,49 @@ class QueryEngine:
             turns_used=turns_used,
             budget_used=self.budget.used(),
         )
+
+    # ------------------------------------------------------------
+    # Internal: A-33 prompt-cache invariant policy
+    # ------------------------------------------------------------
+
+    def _enforce_prompt_cache_invariants(
+        self,
+        system_prompt: str,
+        tools: List[Any],
+        allow_now: bool = False,
+    ) -> Tuple[str, List[Any], List[str]]:
+        """Freeze model/system/toolset for an active prompt-cache session.
+
+        Tool/model/system changes are deferred unless `allow_now` is explicit.
+        This preserves the cache-prefix invariant across continued sessions.
+        """
+        model_id = str(getattr(self.client, "model_id", ""))
+        prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
+        tool_names = tuple(t.name for t in tools)
+        current = PromptCacheInvariantState(
+            model_id=model_id,
+            system_prompt_hash=prompt_hash,
+            tool_names=tool_names,
+        )
+        if self._prompt_cache_state is None or allow_now:
+            self._prompt_cache_state = current
+            self._frozen_system_prompt = system_prompt
+            self._frozen_tool_names = tool_names
+            return system_prompt, tools, []
+
+        warnings: List[str] = []
+        frozen_prompt = self._frozen_system_prompt or system_prompt
+        frozen_tools = list(tools)
+        if current.model_id != self._prompt_cache_state.model_id:
+            warnings.append("model change deferred until next session")
+        if current.system_prompt_hash != self._prompt_cache_state.system_prompt_hash:
+            warnings.append("system prompt change deferred until next session")
+            frozen_prompt = self._frozen_system_prompt or system_prompt
+        if current.tool_names != self._prompt_cache_state.tool_names:
+            warnings.append("toolset change deferred until next session")
+            frozen = set(self._frozen_tool_names)
+            frozen_tools = [t for t in tools if t.name in frozen]
+        return frozen_prompt, frozen_tools, warnings
 
     # ------------------------------------------------------------
     # Internal: assemble assistant turn content from a Bedrock Response

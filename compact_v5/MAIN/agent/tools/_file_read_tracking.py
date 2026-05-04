@@ -81,8 +81,17 @@ def is_stale(abs_path: str) -> Tuple[bool, str]:
     return False, ""
 
 
-def reset_for_tests() -> None:
-    """Clear all tracked state. Tests only — do not call in production."""
+def clear_tracked_reads() -> None:
+    """Clear read-before-edit tracking after context compaction.
+
+    Once file contents have been removed or summarized out of the model
+    context, old read markers are no longer a reliable basis for edits.
+    """
     with _LOCK:
         _FILES_READ.clear()
         _FILE_READ_TIMES.clear()
+
+
+def reset_for_tests() -> None:
+    """Clear all tracked state. Tests only — do not call in production."""
+    clear_tracked_reads()

@@ -118,6 +118,8 @@ class Config:
 
     # V4.9.4: optional auxiliary model for compaction summaries
     compaction_model: str = ""
+    cold_cache_threshold_seconds: int = 30 * 60
+    cache_ttl: str = "5m"
 
     # V4.9.5: opt-in self-patching skills
     enable_skill_patching: bool = False

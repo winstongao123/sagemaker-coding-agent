@@ -368,6 +368,10 @@ class SkillManager:
                         continue
         return self._cache
 
+    def clear_listing_cache(self) -> None:
+        """Clear cached skill listings while preserving active skill choice."""
+        self._cache.clear()
+
     # ------------------------------------------------------------
     # Public read surface
     # ------------------------------------------------------------

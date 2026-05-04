@@ -1,9 +1,20 @@
 # V5 Build Status
 
-Last updated: 2026-05-04 (**R-tier R1+R2 READY NEAR_IDEAL** — PAUSED per user option (c); resume R3 next session)
+Last updated: 2026-05-04 (**v5 completion audit redo active**; Block A clean close reached; no AWS/R-tier resumed)
 
 Phase ID: R-tier (PHASE 3 of post-Block-K plan)
 Last commit sha: a73befc (R2 GENUINE_PASS NEAR_IDEAL 5.00/5 — READY) — pushed sageagent/v5-build
+
+## v5 Completion Audit Redo (2026-05-04)
+
+Status: ACTIVE. The prior R-tier state remains historical evidence, but final readiness is paused while the row-level completion audit continues block-by-block.
+
+- Block A closure: 43/43 canonical rows are in the Block A ledger, all 43 are `SHIPPED`, and 0 ship-blocking rows remain.
+- Claude closure review: iter11 returned `VERDICT: APPROVE` and `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW` after LOW A-22/A-30/A-37 fixes.
+- Local gates: `py -3.11 -m py_compile core\compactor.py core\query_engine.py runtime\bedrock_client.py runtime\config.py` passed; `py -3.11 -m pytest tests\integration\test_block_a.py -q` reported `53 passed`.
+- Scope gate: `scope_audit.py --block A` passed with verdict `READY_TO_REVIEW_CLOSE`; latest saved log is `compact_v5/_status/v5_completion_audit/logs/block-a-scope-audit-final-before-git.log`.
+- Git checkpoint: required next using only specific staged files, pushed to `sageagent v5-build`, with no tag unless explicitly approved.
+- No AWS/R-tier spend has resumed and no final ready-for-testing approval has been given.
 
 ## R-tier progress (2026-05-04 — PAUSED)
 

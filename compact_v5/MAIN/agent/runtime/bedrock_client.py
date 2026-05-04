@@ -219,6 +219,7 @@ class BedrockClient:
         # via cache_control blocks in content. No anthropic_beta header needed.
         # Haiku 4.5: min 4096 tokens/checkpoint. Sonnet 4.5: min 1024.
         cache_active = CONFIG.enable_prompt_cache and self.prompt_cache_supported
+        cache_control = self._cache_control()
         if cache_active and isinstance(system, list):
             # Already formatted as cache blocks by caller — pass as-is
             system_field = system
@@ -234,7 +235,7 @@ class BedrockClient:
                         {
                             "type": "text",
                             "text": static_part,
-                            "cache_control": {"type": "ephemeral"},
+                            "cache_control": cache_control,
                         },
                         {"type": "text", "text": dynamic_part},
                     ]
@@ -243,7 +244,7 @@ class BedrockClient:
                         {
                             "type": "text",
                             "text": static_part,
-                            "cache_control": {"type": "ephemeral"},
+                            "cache_control": cache_control,
                         },
                     ]
             else:
@@ -252,7 +253,7 @@ class BedrockClient:
                     {
                         "type": "text",
                         "text": system,
-                        "cache_control": {"type": "ephemeral"},
+                        "cache_control": cache_control,
                     },
                 ]
             use_cache = True
@@ -260,11 +261,18 @@ class BedrockClient:
             system_field = system
             use_cache = False
 
+        messages_field = messages
+        if cache_active:
+            messages_field = self._apply_cache_control_to_last_messages(
+                messages,
+                cache_control=cache_control,
+            )
+
         body: Dict[str, Any] = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": max_tokens,
             "system": system_field,
-            "messages": messages,
+            "messages": messages_field,
         }
         # Note: Bedrock prompt caching is activated by cache_control blocks in
         # content. No anthropic_beta header needed (that header is for the direct
@@ -340,6 +348,44 @@ class BedrockClient:
         return self._parse(result)
 
     # ---------- response parsing ----------
+
+    @staticmethod
+    def _cache_control() -> Dict[str, str]:
+        """A-37 cache_control payload, including configured prompt-cache TTL."""
+        from runtime.config import CONFIG
+
+        ttl = getattr(CONFIG, "cache_ttl", "5m")
+        if ttl not in {"5m", "1h"}:
+            ttl = "5m"
+        return {"type": "ephemeral", "ttl": ttl}
+
+    @staticmethod
+    def _apply_cache_control_to_last_messages(
+        messages: List[Dict],
+        cache_control: Optional[Dict[str, str]] = None,
+    ) -> List[Dict]:
+        """A-31 apply Bedrock cache_control to the last three text blocks."""
+        out = json.loads(json.dumps(messages, ensure_ascii=False))
+        cc = cache_control or BedrockClient._cache_control()
+        marked = 0
+        for msg in reversed(out):
+            content = msg.get("content")
+            if isinstance(content, str):
+                msg["content"] = [{
+                    "type": "text",
+                    "text": content,
+                    "cache_control": dict(cc),
+                }]
+                marked += 1
+            elif isinstance(content, list):
+                for block in reversed(content):
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        block["cache_control"] = dict(cc)
+                        marked += 1
+                        break
+            if marked >= 3:
+                break
+        return out
 
     def _parse(self, result: dict) -> Response:
         """Parse Bedrock response into Response value type (v4 verbatim)."""
