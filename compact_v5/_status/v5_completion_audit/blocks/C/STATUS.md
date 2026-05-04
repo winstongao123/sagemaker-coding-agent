@@ -1,6 +1,6 @@
 # Block C Status
 
-Status: CLOSED_PUSHED_EVIDENCE_UPDATE_PENDING
+Status: CLOSED_PUSHED_TRANSITIONING_TO_BLOCK_B
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 19
@@ -9,15 +9,15 @@ Current blocking-row count: 0
 
 Current phase: UPDATING_ARTIFACTS
 
-Current task: Commit and push Block C checkpoint evidence update.
+Current task: Commit/push Block C transition artifacts, then start Block B.
 
-Last completed action: Close commit `18fb3dc14e9e33f3d233f50c8bcde9d14f36558e` was pushed to `sageagent/v5-build`; ledger and PORT_LOG git evidence placeholders were replaced with that SHA.
+Last completed action: Ran `scope_audit.py --all --summary` after Block C; it reports `TOTAL_SHIP_BLOCKING_ROWS: 96`. `BLOCK_ORDER_AND_COVERAGE.md` now marks Block C closed/pushed and confirms Block B is next.
 
 Next 3 todo items:
 
-1. Update `GIT_CLOSE_PLAN.md` with close commit/push evidence.
-2. Commit evidence update with specific files only.
-3. Push evidence commit to `sageagent/v5-build`.
+1. Commit/push Block C transition artifacts with a specific file list.
+2. Reconstruct Block B from `SYNTHESIS_MASTER.md`.
+3. Initialize/update Block B ledger/status/tests/changelog/decisions artifacts and run baseline scope audit.
 
 Next Claude review state: latest usable review saved at `compact_v5/_status/v5_completion_audit/reviews/block-c-claude-review-iter3.md`; no further Claude review pending.
 

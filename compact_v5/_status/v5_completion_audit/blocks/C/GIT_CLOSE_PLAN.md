@@ -1,6 +1,6 @@
 # Block C Git Close Plan
 
-Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 ## Close Preconditions
@@ -79,7 +79,9 @@ Stage only this Block C-specific file list:
 ## Evidence Update Commit
 
 - Commit message: `v5/block-c: record checkpoint evidence`
-- Evidence commit SHA: pending.
-- Push remote/branch: `sageagent v5-build`, pending.
+- Evidence commit SHA: `34374979e851b9ebf24e5a4f9bcd66f007a6cdcf`
+- Push remote/branch: `sageagent v5-build`
+- Push result: `18fb3dc..3437497  v5-build -> v5-build`
+- Post-push git status: unrelated pre-existing dirty files remain; no Block C close/evidence files remain modified after evidence push.
 
 No tag will be created without explicit user approval.

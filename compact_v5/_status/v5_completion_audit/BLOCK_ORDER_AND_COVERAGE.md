@@ -21,18 +21,18 @@ Current mechanical totals from the audit script:
 TOTAL_EXPECTED_ROWS: 233
 ```
 
-Blocks A, E+F, L, N, K, and T are closed/pushed. The remaining audit rows are
+Blocks A, E+F, L, N, K, T, and C are closed/pushed. The remaining audit rows are
 still ship-blocking until each block is ledgered, implemented or explicitly
 user-dispositioned, Claude-reviewed, and pushed.
 
-Latest post-Block-T summary:
+Latest post-Block-C summary:
 
 ```text
 TOTAL_EXPECTED_ROWS: 233
-TOTAL_SHIP_BLOCKING_ROWS: 115
+TOTAL_SHIP_BLOCKING_ROWS: 96
 ```
 
-Evidence: `compact_v5/_status/v5_completion_audit/logs/post-block-t-scope-audit-all-summary.log`.
+Evidence: `compact_v5/_status/v5_completion_audit/logs/post-block-c-scope-audit-all-summary.log`.
 
 ## Redo Order
 
@@ -73,7 +73,7 @@ Rows currently parsed from `SYNTHESIS_MASTER.md`:
 | A | 43 | Closed and pushed. |
 | B | 16 | Pending. |
 | B+ | 8 | Pending. |
-| C | 19 | Pending. |
+| C | 19 | Closed and pushed. |
 | C+ | 3 | Pending. |
 | D | 13 | Pending. |
 | E+F | 8 | Closed and pushed. |
