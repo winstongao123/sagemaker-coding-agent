@@ -32,19 +32,20 @@ updates introduce new evidence gaps.
 
 Current phase: UPDATING_ARTIFACTS
 
-Current task: Stage the specific Block L file list for checkpoint commit.
+Current task: Commit and push Block L evidence-only checkpoint updates.
 
-Last completed action: Ran final `scope_audit.py --block L` and strict variant
-after self-reflection/artifact updates. Both report 28 expected rows, 28 ledger
-rows, 0 weak shipped evidence, 0 ship-blocking rows, and
-`READY_TO_REVIEW_CLOSE`. Updated `GIT_CLOSE_PLAN.md` with the exact staging
-list.
+Last completed action: Created and pushed primary Block L checkpoint commit
+`821744fc80e7fdad8137b0a0eab84c3fc747069f` to `sageagent/v5-build`, verified
+the remote branch, updated `LEDGER.md` git evidence with that SHA, and updated
+`GIT_CLOSE_PLAN.md` with commit/push/post-push evidence.
 
 Next 3 todo items:
 
-1. Stage only the files listed in `blocks/L/GIT_CLOSE_PLAN.md`.
-2. Commit and push Block L to `sageagent/v5-build`.
-3. Update git evidence/checkpoint artifacts with the concrete commit SHA.
+1. Stage only `blocks/L/LEDGER.md`, `blocks/L/GIT_CLOSE_PLAN.md`, and
+   `blocks/L/STATUS.md` for the evidence-only checkpoint.
+2. Commit and push the checkpoint evidence update.
+3. Run `scope_audit.py --all --summary`, read `BLOCK_ORDER_AND_COVERAGE.md`,
+   and select the next unfinished block.
 
 Current review iteration count: 3 attempts recorded; iter3 is the first usable
 verdict.
