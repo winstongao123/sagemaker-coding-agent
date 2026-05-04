@@ -72,6 +72,7 @@ class ToolDef(Protocol):
     always_load: bool                        # Runnable: alwaysLoad
     is_read_only: bool                       # Runnable: isReadOnly()
     is_destructive: bool                     # Runnable: isDestructive()
+    interrupt_behavior: str                  # Runnable: interruptBehavior
     is_concurrency_safe: bool                # Runnable: isConcurrencySafe()
     requires_approval: bool                  # v4-native; Runnable splits into checkPermissions()
     enabled: bool                            # Runnable: isEnabled()
@@ -110,6 +111,7 @@ class ToolRecord:
     # - isEnabled         → true
     is_read_only: bool = False
     is_destructive: bool = False
+    interrupt_behavior: str = "allow"
     is_concurrency_safe: bool = False
     requires_approval: bool = False  # v4 split: defaults False, mutating tools set True
     enabled: bool = True

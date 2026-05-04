@@ -1,24 +1,24 @@
-"""Block N — Parallel tool execution + dynamic tool refs + dedup + fuzzy
+﻿"""Block N â€” Parallel tool execution + dynamic tool refs + dedup + fuzzy
 + ephemeral prompt.
 
 Source: Hermes run_agent.py + Runnable services/tools/dispatch.
 
-Tests per TEST_DESIGN §Block N (9 tests; T2 timing-sensitive
-parallel-exec tests + T5 deferred to Block J / R-tier):
+Tests per TEST_DESIGN Block N plus v5 completion-audit redo rows:
 - test_fuzzy_tool_name_typo_resolves (T1)
 - test_ephemeral_system_prompt_not_persisted (T1)
 - test_dynamic_tool_ref_injection_at_init (T1)
 - test_max_tool_workers_4 (T1)
-- test_tool_call_dedup_blocks_redundant (T2 — structural)
-- test_n7_partial_tool_names_warning_on_disconnect (T2 — structural)
-- test_parallel_exec_3_independent_reads (T2 — DEFERRED to Block J)
-- test_parallel_exec_path_conflict_serializes_writes (T2 — DEFERRED)
-- test_n_real_3_parallel_reads_haiku (T5 — DEFERRED to R-tier)
+- test_tool_call_dedup_blocks_redundant (T2 â€” structural)
+- test_n7_partial_tool_names_warning_on_disconnect (T2 â€” structural)
+- test_parallel_exec_3_independent_reads (local no-AWS structural lock)
+- test_parallel_exec_path_conflict_serializes_writes
+- test_n_real_3_parallel_reads_haiku (local no-AWS structural substitute)
 """
 from __future__ import annotations
 
 import os
 import sys
+import time
 
 import pytest
 
@@ -30,25 +30,25 @@ if _AGENT_ROOT not in sys.path:
 
 
 # ============================================================
-# TEST_DESIGN row 4 — fuzzy tool name typo
+# TEST_DESIGN row 4 â€” fuzzy tool name typo
 # ============================================================
 
 def test_fuzzy_tool_name_typo_resolves():
-    """`read_filee` → fuzzy resolves to `read_file`."""
+    """`read_filee` â†’ fuzzy resolves to `read_file`."""
     from core import fuzzy_resolve_tool_name
 
     tools = ["read_file", "write_file", "edit_file", "bash", "grep"]
     assert fuzzy_resolve_tool_name("read_filee", tools) == "read_file"
     assert fuzzy_resolve_tool_name("read_fil", tools) == "read_file"
     assert fuzzy_resolve_tool_name("READ_FILE", tools) == "read_file"  # case-insens
-    # Below cutoff → None.
+    # Below cutoff â†’ None.
     assert fuzzy_resolve_tool_name("xyzpdq", tools) is None
     assert fuzzy_resolve_tool_name("", tools) is None
     assert fuzzy_resolve_tool_name("read_file", []) is None
 
 
 # ============================================================
-# TEST_DESIGN row 5 — ephemeral system prompt not persisted
+# TEST_DESIGN row 5 â€” ephemeral system prompt not persisted
 # ============================================================
 
 def test_ephemeral_system_prompt_not_persisted():
@@ -92,7 +92,7 @@ def test_ephemeral_drops_message_when_only_ephemeral_blocks():
 
 
 # ============================================================
-# TEST_DESIGN row 6 — dynamic tool ref injection (Hermes A36)
+# TEST_DESIGN row 6 â€” dynamic tool ref injection (Hermes A36)
 # ============================================================
 
 def test_dynamic_tool_ref_injection_at_init():
@@ -114,20 +114,20 @@ def test_dynamic_tool_ref_injection_at_init():
     assert "See also: write_file, edit_file" in out[0]["description"]
     # edit_file got ref.
     assert "See also: read_file, write_file" in out[1]["description"]
-    # bash had no ref → unchanged.
+    # bash had no ref â†’ unchanged.
     assert out[2]["description"] == "Run shell."
     # Original schemas unmodified (dict copies).
     assert "See also" not in schemas[0]["description"]
 
 
 # ============================================================
-# TEST_DESIGN row 7 — MAX_TOOL_WORKERS = 4 constant
+# TEST_DESIGN row 7 â€” MAX_TOOL_WORKERS = 4 constant
 # ============================================================
 
 def test_max_tool_workers_4():
-    """`_MAX_TOOL_WORKERS=4` constant; 5 parallel calls → 4 in flight + 1 queued.
+    """`_MAX_TOOL_WORKERS=4` constant; 5 parallel calls â†’ 4 in flight + 1 queued.
 
-    Block N constant lock — the actual ThreadPoolExecutor wiring lands in
+    Block N constant lock â€” the actual ThreadPoolExecutor wiring lands in
     Block J real-AWS gate. This test pins the constant value so a future
     refactor doesn't silently change Hermes parallelism.
     """
@@ -135,16 +135,31 @@ def test_max_tool_workers_4():
 
     assert MAX_TOOL_WORKERS == 4, (
         "MAX_TOOL_WORKERS must equal 4 (Hermes parallel ceiling). "
-        "Changing this affects Bedrock concurrency cost — review with care."
+        "Changing this affects Bedrock concurrency cost â€” review with care."
     )
 
 
+def test_n3_parallel_constants_match_v5_tool_surface():
+    from core import (
+        NEVER_PARALLEL_TOOLS,
+        PARALLEL_SAFE_TOOLS,
+        PATH_SCOPED_TOOLS,
+        _MAX_TOOL_WORKERS,
+    )
+
+    assert _MAX_TOOL_WORKERS == 4
+    assert {"bash", "python_exec", "task"}.issubset(NEVER_PARALLEL_TOOLS)
+    assert {"read_file", "grep", "glob"}.issubset(PARALLEL_SAFE_TOOLS)
+    assert {"read_file", "write_file", "edit_file", "notebook_edit"}.issubset(PATH_SCOPED_TOOLS)
+    assert not any(name.startswith("ha_") for name in PARALLEL_SAFE_TOOLS)
+
+
 # ============================================================
-# TEST_DESIGN row 3 — tool call dedup
+# TEST_DESIGN row 3 â€” tool call dedup
 # ============================================================
 
 def test_tool_call_dedup_blocks_redundant():
-    """Same `(tool_name, args)` 3x in one batch → 2 calls deduped."""
+    """Same `(tool_name, args)` 3x in one batch â†’ 2 calls deduped."""
     from core import dedup_tool_calls
 
     calls = [
@@ -186,11 +201,11 @@ def test_dedup_handles_attribute_call_objects():
 
 
 # ============================================================
-# TEST_DESIGN row 8 — partial tool-call warning on disconnect (Hermes H2)
+# TEST_DESIGN row 8 â€” partial tool-call warning on disconnect (Hermes H2)
 # ============================================================
 
 def test_n7_partial_tool_names_warning_on_disconnect():
-    """Mid-call disconnect → warning + synthetic tool_result stub."""
+    """Mid-call disconnect â†’ warning + synthetic tool_result stub."""
     from core import partial_tool_call_warning
 
     captured = []
@@ -209,7 +224,7 @@ def test_n7_partial_tool_names_warning_on_disconnect():
 
 
 def test_partial_warning_no_op_when_empty():
-    """Empty interrupted list → no warning, no stubs."""
+    """Empty interrupted list â†’ no warning, no stubs."""
     from core import partial_tool_call_warning
 
     captured = []
@@ -223,9 +238,9 @@ def test_partial_warning_no_op_when_empty():
 # ============================================================
 
 def test_detect_path_conflicts_finds_write_conflicts():
-    """detect_path_conflicts returns dict of canonical path → calls when
+    """detect_path_conflicts returns dict of canonical path â†’ calls when
     2+ writes target the same path. Keys are normpath+abspath (Codex
-    iter-1 #2 — handles relative-vs-absolute). Test compares
+    iter-1 #2 â€” handles relative-vs-absolute). Test compares
     canonicalized expected paths."""
     import os
     from core import detect_path_conflicts
@@ -256,6 +271,115 @@ def test_synthetic_tool_result_stub_shape():
     assert stub["tool_use_id"] == "call_42"
     assert "deduped" in stub["content"]
     assert stub["is_error"] is False
+
+
+def test_n1_n2_dispatch_plan_splits_parallel_and_sequential_paths():
+    from core import plan_tool_dispatch
+    from tools.registry import build_tool
+
+    read = build_tool(
+        "read_file",
+        "read",
+        {},
+        lambda args, context=None: "x",
+        is_read_only=True,
+        is_concurrency_safe=True,
+    )
+    write = build_tool(
+        "write_file",
+        "write",
+        {},
+        lambda args, context=None: "x",
+        is_destructive=True,
+    )
+    calls = [
+        {"name": "read_file", "input": {"file_path": "a"}, "id": "r1"},
+        {"name": "read_file", "input": {"file_path": "b"}, "id": "r2"},
+        {"name": "write_file", "input": {"file_path": "a"}, "id": "w1"},
+    ]
+    plan = plan_tool_dispatch(calls, {"read_file": read, "write_file": write})
+    assert [c["id"] for c in plan["parallel"]] == ["r1", "r2"]
+    assert [c["id"] for c in plan["sequential"]] == ["w1"]
+
+
+def test_n4_parallel_executor_checkpoints_and_preserves_order():
+    from core import ToolDispatchSnapshot, execute_parallel_tool_calls
+
+    checkpoints = []
+
+    class _Call:
+        def __init__(self, id, delay):
+            self.id = id
+            self.name = "read_file"
+            self.input = {"delay": delay}
+
+    calls = [_Call("slow", 0.05), _Call("fast", 0.01)]
+
+    def execute(call):
+        time.sleep(call.input["delay"])
+        return {"type": "tool_result", "tool_use_id": call.id, "content": call.id}
+
+    out = execute_parallel_tool_calls(calls, execute, checkpoint_callback=checkpoints.append)
+    assert [block["tool_use_id"] for block in out] == ["slow", "fast"]
+    assert all(isinstance(item, ToolDispatchSnapshot) for item in checkpoints)
+    assert {item.status for item in checkpoints} >= {"started", "finished"}
+
+
+def test_n5_sequential_fallback_for_path_conflict():
+    from core import plan_tool_dispatch
+    from tools.registry import build_tool
+
+    write = build_tool("write_file", "write", {}, lambda args, context=None: "x", is_destructive=True)
+    calls = [
+        {"name": "write_file", "input": {"file_path": "same.txt"}, "id": "a"},
+        {"name": "write_file", "input": {"file_path": "./same.txt"}, "id": "b"},
+    ]
+    plan = plan_tool_dispatch(calls, {"write_file": write})
+    assert plan["parallel"] == []
+    assert [c["id"] for c in plan["sequential"]] == ["a", "b"]
+    assert plan["conflicts"]
+
+
+def test_n6_enforce_turn_budget_over_recent_tool_messages():
+    from core import enforce_turn_budget
+
+    messages = [
+        {"role": "user", "content": "old"},
+        {"role": "user", "content": [{"type": "tool_result", "content": "a" * 10}]},
+        {"role": "user", "content": [{"type": "tool_result", "content": "b" * 10}]},
+    ]
+    out = enforce_turn_budget(messages, num_tools=2, max_chars=12)
+    assert out[1]["content"][0]["content"] == "a" * 10
+    assert "truncated by turn tool-result budget" in out[2]["content"][0]["content"]
+
+
+def test_n8_retry_classifier_three_categories():
+    from core import classify_tool_retry
+
+    assert classify_tool_retry("pre_call", "timeout").recovery == "retry_before_tool_dispatch"
+    assert classify_tool_retry("mid_call", "disconnect").recovery == "emit_stub_and_retry"
+    post = classify_tool_retry("post_call", "AccessDenied permission")
+    assert post.stage == "post_call"
+    assert post.retryable is False
+
+
+def test_n9_mid_call_stub_recovery_warning():
+    from core import mid_call_stub_recovery
+
+    warnings = []
+    stubs = mid_call_stub_recovery(["a", "b"], "disconnect", output_fn=warnings.append)
+    assert [stub["tool_use_id"] for stub in stubs] == ["a", "b"]
+    assert warnings and "mid-call-recovery" in warnings[0]
+
+
+def test_n18_tool_interface_enrichments_defaults():
+    from tools.registry import build_tool
+
+    tool = build_tool("x", "desc", {}, lambda args, context=None: "ok")
+    assert tool.aliases == ()
+    assert tool.max_result_size_chars == 50_000
+    assert tool.is_destructive is False
+    assert tool.interrupt_behavior == "allow"
 
 
 # ============================================================
@@ -303,31 +427,277 @@ def test_detect_path_conflicts_canonicalizes_relative_paths():
 
 
 # ============================================================
-# DEFERRED tests (Block J real-AWS gate or R-tier)
+# Local parallel execution locks (no AWS/R-tier)
 # ============================================================
 
-@pytest.mark.skip(
-    reason="Block N T2 parallel-exec timing test deferred to Block J "
-    "real-AWS gate (timing-sensitive — depends on actual ThreadPoolExecutor "
-    "wiring into core/query_engine.py + real Bedrock latency). Per ADR-037 §3."
-)
 def test_parallel_exec_3_independent_reads():
-    pass
+    from core import execute_parallel_tool_calls
+
+    class _Call:
+        def __init__(self, id):
+            self.id = id
+            self.name = "read_file"
+            self.input = {}
+
+    start = time.monotonic()
+    out = execute_parallel_tool_calls(
+        [_Call("1"), _Call("2"), _Call("3")],
+        lambda call: (time.sleep(0.05), {
+            "type": "tool_result",
+            "tool_use_id": call.id,
+            "content": call.id,
+        })[1],
+    )
+    elapsed = time.monotonic() - start
+    assert [block["tool_use_id"] for block in out] == ["1", "2", "3"]
+    assert elapsed < 0.13
 
 
-@pytest.mark.skip(
-    reason="Block N T2 path-conflict timing test deferred to Block J "
-    "real-AWS gate. The detect_path_conflicts helper is locked by "
-    "test_detect_path_conflicts_finds_write_conflicts; the END-TO-END "
-    "serialization test belongs with the executor wiring."
-)
+def test_query_engine_parallel_dispatch_3_safe_reads():
+    from core.query_engine import QueryEngine
+    from runtime.bedrock_client import Response, ToolCall
+    from tools.registry import build_tool
+
+    class _Client:
+        mock_mode = True
+
+        def __init__(self):
+            self.turn = 0
+
+        def chat(self, *args, **kwargs):
+            self.turn += 1
+            if self.turn == 1:
+                return Response(
+                    "",
+                    [
+                        ToolCall("1", "read_file", {"file_path": "a"}),
+                        ToolCall("2", "read_file", {"file_path": "b"}),
+                        ToolCall("3", "read_file", {"file_path": "c"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            return Response("done", [], "end_turn", {})
+
+    def _read(args, context=None):
+        time.sleep(0.05)
+        return args["file_path"]
+
+    tool = build_tool(
+        "read_file",
+        "read",
+        {},
+        _read,
+        is_read_only=True,
+        is_concurrency_safe=True,
+    )
+    engine = QueryEngine(_Client(), max_turns=3)
+    start = time.monotonic()
+    result = engine.run("go", "sys", [tool], output_fn=lambda _: None)
+    elapsed = time.monotonic() - start
+    assert result.stop_reason == "end_turn"
+    assert elapsed < 0.13
+    tool_turn = engine.messages[-2]
+    assert [b["tool_use_id"] for b in tool_turn["content"]] == ["1", "2", "3"]
+
 def test_parallel_exec_path_conflict_serializes_writes():
-    pass
+    from core import plan_tool_dispatch
+    from tools.registry import build_tool
 
+    write = build_tool("write_file", "write", {}, lambda args, context=None: "ok", is_destructive=True)
+    calls = [
+        {"name": "write_file", "input": {"file_path": "x.txt"}, "id": "a"},
+        {"name": "write_file", "input": {"file_path": "./x.txt"}, "id": "b"},
+    ]
+    plan = plan_tool_dispatch(calls, {"write_file": write})
+    assert plan["parallel"] == []
+    assert [c["id"] for c in plan["sequential"]] == ["a", "b"]
 
-@pytest.mark.skip(
-    reason="Block N T5 real-Haiku 3-parallel test deferred to R-tier R3 "
-    "(sub-agent dispatch + cache-prefix). ~$0.005."
-)
 def test_n_real_3_parallel_reads_haiku():
-    pass
+    """No-AWS structural substitute: the local executor can run 3 reads concurrently."""
+    from core import MAX_TOOL_WORKERS, execute_parallel_tool_calls
+
+    class _Call:
+        def __init__(self, id):
+            self.id = id
+            self.name = "read_file"
+            self.input = {}
+
+    out = execute_parallel_tool_calls(
+        [_Call("a"), _Call("b"), _Call("c")],
+        lambda call: {"type": "tool_result", "tool_use_id": call.id, "content": "ok"},
+    )
+    assert MAX_TOOL_WORKERS == 4
+    assert [block["tool_use_id"] for block in out] == ["a", "b", "c"]
+
+
+def test_query_engine_parallel_dispatch_audits_success_and_error(tmp_path, monkeypatch):
+    """Parallel fast path keeps Block B forensics: successes and failures
+    both write AUDIT entries, matching the sequential dispatch contract."""
+    from core.query_engine import QueryEngine
+    from runtime.audit import AuditLogger
+    import runtime.audit as audit_mod
+    from runtime.bedrock_client import Response, ToolCall
+    from tools.registry import build_tool
+
+    test_audit = AuditLogger(audit_dir=str(tmp_path))
+    monkeypatch.setattr(audit_mod, "AUDIT", test_audit)
+
+    class _Client:
+        mock_mode = True
+
+        def __init__(self):
+            self.turn = 0
+
+        def chat(self, *args, **kwargs):
+            self.turn += 1
+            if self.turn == 1:
+                return Response(
+                    "",
+                    [
+                        ToolCall("ok", "read_file", {"file_path": "ok"}),
+                        ToolCall("boom", "read_file", {"file_path": "boom"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            return Response("done", [], "end_turn", {})
+
+    def _read(args, context=None):
+        if args["file_path"] == "boom":
+            raise RuntimeError("parallel failure")
+        return "read-ok"
+
+    tool = build_tool(
+        "read_file",
+        "read",
+        {},
+        _read,
+        is_read_only=True,
+        is_concurrency_safe=True,
+    )
+    engine = QueryEngine(_Client(), max_turns=3)
+    engine.run("go", "sys", [tool], output_fn=lambda _: None)
+
+    entries = test_audit.get_session_log(engine.session_id)
+    tool_entries = [
+        (entry["action"], entry["tool_name"])
+        for entry in entries
+        if entry.get("tool_name") == "read_file"
+    ]
+    assert ("tool_dispatch", "read_file") in tool_entries
+    assert ("tool_error", "read_file") in tool_entries
+
+
+def test_query_engine_parallel_dispatch_repairs_json_string_args():
+    """Parallel fast path keeps Block C JSON-repair behavior before tool
+    execution. The tool receives dict args, not the raw JSON string."""
+    from core.query_engine import QueryEngine
+    from runtime.bedrock_client import Response, ToolCall
+    from tools.registry import build_tool
+
+    seen = []
+
+    class _Client:
+        mock_mode = True
+
+        def __init__(self):
+            self.turn = 0
+
+        def chat(self, *args, **kwargs):
+            self.turn += 1
+            if self.turn == 1:
+                return Response(
+                    "",
+                    [
+                        ToolCall("a", "read_file", '{"file_path": "a.txt"}'),
+                        ToolCall("b", "read_file", '{"file_path": "b.txt"}'),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            return Response("done", [], "end_turn", {})
+
+    def _read(args, context=None):
+        seen.append(args)
+        return args["file_path"]
+
+    tool = build_tool(
+        "read_file",
+        "read",
+        {},
+        _read,
+        is_read_only=True,
+        is_concurrency_safe=True,
+    )
+    engine = QueryEngine(_Client(), max_turns=3)
+    engine.run("go", "sys", [tool], output_fn=lambda _: None)
+
+    assert sorted(item["file_path"] for item in seen) == ["a.txt", "b.txt"]
+    assert all(isinstance(item, dict) for item in seen)
+
+
+def test_query_engine_parallel_dispatch_keeps_repetition_guard():
+    """Parallel fast path still updates Block C repetition tracking. A safe
+    read repeated across three tool turns is blocked on the third attempt."""
+    from core.query_engine import QueryEngine
+    from runtime.bedrock_client import Response, ToolCall
+    from tools.registry import build_tool
+
+    class _Client:
+        mock_mode = True
+
+        def __init__(self):
+            self.turn = 0
+
+        def chat(self, *args, **kwargs):
+            self.turn += 1
+            if self.turn == 1:
+                return Response(
+                    "",
+                    [
+                        ToolCall("same1", "read_file", {"file_path": "same.txt"}),
+                        ToolCall("other1", "read_file", {"file_path": "one.txt"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            if self.turn == 2:
+                return Response(
+                    "",
+                    [
+                        ToolCall("same2", "read_file", {"file_path": "same.txt"}),
+                        ToolCall("other2", "read_file", {"file_path": "two.txt"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            if self.turn == 3:
+                return Response(
+                    "",
+                    [
+                        ToolCall("same3", "read_file", {"file_path": "same.txt"}),
+                        ToolCall("other3", "read_file", {"file_path": "three.txt"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            return Response("done", [], "end_turn", {})
+
+    tool = build_tool(
+        "read_file",
+        "read",
+        {},
+        lambda args, context=None: args["file_path"],
+        is_read_only=True,
+        is_concurrency_safe=True,
+    )
+    engine = QueryEngine(_Client(), max_turns=5)
+    result = engine.run("go", "sys", [tool], output_fn=lambda _: None)
+
+    assert result.stop_reason == "end_turn"
+    third_tool_turn = result.messages[6]["content"]
+    by_id = {block["tool_use_id"]: block for block in third_tool_turn}
+    assert by_id["same3"]["is_error"] is True
+    assert "same call to 'read_file'" in by_id["same3"]["content"]
+    assert by_id["other3"]["content"] == "three.txt"

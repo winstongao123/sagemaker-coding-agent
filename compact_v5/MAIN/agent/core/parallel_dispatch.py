@@ -17,12 +17,14 @@ Block N ships:
   emits a synthetic tool_result stub so the API invariant holds.
 
 The parallel-execution wiring (ThreadPoolExecutor at MAX_TOOL_WORKERS) is
-defined here but not yet integrated into core/query_engine.py — that
-integration is gated on Block J's real-AWS test fixtures (Block N
-ships the dispatcher; Block J wires it into the engine).
+defined here and wired into core/query_engine.py for synchronous, non-streaming
+tool dispatch. Real-AWS/R-tier validation remains gated by explicit approval,
+but Block N owns the local dispatcher and QueryEngine integration contract.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 import hashlib
 import json
 import logging
@@ -31,6 +33,57 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 # Hermes parallel ceiling. v5 inherits the same value.
 MAX_TOOL_WORKERS: int = 4
+
+NEVER_PARALLEL_TOOLS: frozenset = frozenset({
+    "bash",
+    "python_exec",
+    "task",
+    "ask_user",
+    "view_image",
+    "web_fetch",
+})
+
+PARALLEL_SAFE_TOOLS: frozenset = frozenset({
+    "read_file",
+    "glob",
+    "grep",
+    "list_dir",
+    "semantic_search",
+    "todo_read",
+    "skill",
+})
+
+PATH_SCOPED_TOOLS: frozenset = frozenset({
+    "read_file",
+    "write_file",
+    "edit_file",
+    "notebook_edit",
+})
+
+_NEVER_PARALLEL_TOOLS = NEVER_PARALLEL_TOOLS
+_PARALLEL_SAFE_TOOLS = PARALLEL_SAFE_TOOLS
+_PATH_SCOPED_TOOLS = PATH_SCOPED_TOOLS
+_MAX_TOOL_WORKERS = MAX_TOOL_WORKERS
+
+
+@dataclass(frozen=True)
+class ToolDispatchSnapshot:
+    """Checkpoint snapshot for a tool dispatch worker."""
+
+    tid: str
+    tool_name: str
+    status: str
+    args_hash: str = ""
+    result_summary: str = ""
+
+
+@dataclass(frozen=True)
+class ToolRetryClassification:
+    """Retry classification for non-streaming Bedrock/tool-call failures."""
+
+    stage: str
+    retryable: bool
+    recovery: str
 
 
 # Tools that mutate filesystem state — same path = serialization needed.
@@ -138,6 +191,158 @@ def detect_path_conflicts(calls: List[Any]) -> Dict[str, List[Any]]:
             continue
         by_path.setdefault(path, []).append(call)
     return {p: cs for p, cs in by_path.items() if len(cs) > 1}
+
+
+def path_scope_key(call: Any) -> str:
+    """Return a path-scope key for tools whose calls can conflict by path."""
+    name = getattr(call, "name", None) or (
+        call.get("name") if isinstance(call, dict) else None
+    )
+    args = getattr(call, "input", None) if not isinstance(call, dict) else call.get("input")
+    return _extract_target_path(name or "", args or {}) or ""
+
+
+def is_parallel_safe_call(call: Any, tool: Any = None) -> bool:
+    """True when a call may run in a parallel batch."""
+    name = getattr(call, "name", None) or (
+        call.get("name") if isinstance(call, dict) else None
+    )
+    if name in NEVER_PARALLEL_TOOLS:
+        return False
+    if tool is not None:
+        if getattr(tool, "requires_approval", False):
+            return False
+        if getattr(tool, "is_destructive", False):
+            return False
+        if getattr(tool, "is_concurrency_safe", False):
+            return True
+    return name in PARALLEL_SAFE_TOOLS
+
+
+def plan_tool_dispatch(calls: List[Any], tools_by_name: Dict[str, Any]) -> Dict[str, Any]:
+    """Split calls into parallel-safe and sequential groups with path conflict data."""
+    kept, dropped = dedup_tool_calls(calls)
+    conflicts = detect_path_conflicts(kept)
+    conflict_ids = {
+        id(call)
+        for conflict_calls in conflicts.values()
+        for call in conflict_calls
+    }
+    parallel: List[Any] = []
+    sequential: List[Any] = []
+    for call in kept:
+        name = getattr(call, "name", None) or (
+            call.get("name") if isinstance(call, dict) else None
+        )
+        tool = tools_by_name.get(name or "")
+        if id(call) not in conflict_ids and is_parallel_safe_call(call, tool):
+            parallel.append(call)
+        else:
+            sequential.append(call)
+    return {
+        "parallel": parallel,
+        "sequential": sequential,
+        "dropped": dropped,
+        "conflicts": conflicts,
+    }
+
+
+def execute_parallel_tool_calls(
+    calls: List[Any],
+    execute_one: Callable[[Any], Dict[str, Any]],
+    checkpoint_callback: Optional[Callable[[ToolDispatchSnapshot], None]] = None,
+) -> List[Dict[str, Any]]:
+    """Run parallel-safe calls with MAX_TOOL_WORKERS and preserve input order."""
+    if not calls:
+        return []
+    results: Dict[int, Dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=MAX_TOOL_WORKERS) as pool:
+        futures = {}
+        for idx, call in enumerate(calls):
+            name = getattr(call, "name", None) or (
+                call.get("name") if isinstance(call, dict) else None
+            )
+            args = getattr(call, "input", None) if not isinstance(call, dict) else call.get("input")
+            tid = getattr(call, "id", None) or (
+                call.get("id") if isinstance(call, dict) else str(idx)
+            )
+            if checkpoint_callback:
+                checkpoint_callback(ToolDispatchSnapshot(str(tid), name or "", "started", _args_hash(args)))
+            futures[pool.submit(execute_one, call)] = (idx, str(tid), name or "", _args_hash(args))
+        for future in as_completed(futures):
+            idx, tid, name, args_hash = futures[future]
+            try:
+                result = future.result()
+                results[idx] = result
+                status = "finished"
+                summary = str(result.get("content", ""))[:120] if isinstance(result, dict) else ""
+            except Exception as exc:  # noqa: BLE001
+                results[idx] = {
+                    "type": "tool_result",
+                    "tool_use_id": tid,
+                    "content": f"error_during_execution: {type(exc).__name__}: {exc}",
+                    "is_error": True,
+                }
+                status = "error"
+                summary = f"{type(exc).__name__}: {exc}"
+            if checkpoint_callback:
+                checkpoint_callback(ToolDispatchSnapshot(tid, name, status, args_hash, summary))
+    return [results[idx] for idx in range(len(calls))]
+
+
+def enforce_turn_budget(messages: List[Dict[str, Any]], num_tools: int, max_chars: int) -> List[Dict[str, Any]]:
+    """Clamp aggregate tool_result content over the last num_tools messages."""
+    if num_tools <= 0 or max_chars <= 0:
+        return list(messages)
+    out = json.loads(json.dumps(messages, ensure_ascii=False, default=str))
+    start = max(0, len(out) - num_tools)
+    used = 0
+    for msg in out[start:]:
+        content = msg.get("content")
+        blocks = content if isinstance(content, list) else []
+        for block in blocks:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            text = str(block.get("content", ""))
+            remaining = max_chars - used
+            if remaining <= 0:
+                block["content"] = "[truncated by turn tool-result budget]"
+                continue
+            if len(text) > remaining:
+                block["content"] = text[:remaining] + "\n[truncated by turn tool-result budget]"
+                used = max_chars
+            else:
+                used += len(text)
+    return out
+
+
+def pending_tool_use_ids(tool_calls: List[Any]) -> List[str]:
+    return [
+        str(getattr(call, "id", None) or (call.get("id") if isinstance(call, dict) else ""))
+        for call in tool_calls or []
+        if getattr(call, "id", None) or (isinstance(call, dict) and call.get("id"))
+    ]
+
+
+def classify_tool_retry(stage: str, exc: BaseException | str) -> ToolRetryClassification:
+    """Classify pre-call, mid-call, and post-call non-streaming retry behavior."""
+    text = str(exc).lower()
+    stage = stage if stage in {"pre_call", "mid_call", "post_call"} else "post_call"
+    if stage == "pre_call":
+        return ToolRetryClassification(stage, True, "retry_before_tool_dispatch")
+    if stage == "mid_call":
+        return ToolRetryClassification(stage, True, "emit_stub_and_retry")
+    if "validation" in text or "accessdenied" in text or "permission" in text:
+        return ToolRetryClassification(stage, False, "surface_user_error")
+    return ToolRetryClassification(stage, True, "retry_after_tool_results")
+
+
+def mid_call_stub_recovery(tool_use_ids: List[str], reason: str, output_fn: Callable[[str], None] = print) -> List[Dict[str, Any]]:
+    output_fn(f"[mid-call-recovery] {len(tool_use_ids)} tool calls recovered with synthetic stubs: {reason}")
+    return [
+        synthetic_tool_result_stub(tool_use_id, reason=reason)
+        for tool_use_id in tool_use_ids
+    ]
 
 
 def fuzzy_resolve_tool_name(query: str, tool_names: List[str]) -> Optional[str]:

@@ -1,4 +1,4 @@
-"""V5 core/query_engine.py — main agent loop (Phase 8 deliverable, ADR-014).
+﻿"""V5 core/query_engine.py â€” main agent loop (Phase 8 deliverable, ADR-014).
 
 Per ADR-014: minimal, focused port of Runnable's `QueryEngine.ts` (1295 LOC)
 adapted to the v5 .ipynb shape. v4's monolithic `Agent.run` (~1500 LOC) is
@@ -14,22 +14,22 @@ IN SCOPE (Phase 8):
     * `tool_search_discovered_names()` extraction from tool_search results.
     * Discovered names are added to the next turn's tools= API param.
 - Tool dispatch via `find_tool_by_name(...).execute(args, context)`.
-- tool_use → tool_result message accumulation in the model-visible
+- tool_use â†’ tool_result message accumulation in the model-visible
   conversation buffer.
 - Bedrock invocation through `BedrockClient.chat(...)`.
 - System prompt assembly via `prompt.build_system_prompt(ctx)`.
 - run_one_turn(...) helper for unit tests (single-turn, no loop).
 
-OUT OF SCOPE — explicitly deferred to later phases (per ADR-014):
-- Microcompact / context_collapse — Phase 11 UX (PS Issue #4 widget surface).
-- 2-stage smart compaction (prune + LLM summary) — Phase 11.
-- Skill auto-trigger — Phase 10 (`SKILLS.discover_relevant`).
-- Plan mode injection of skills into prompt — Phase 10.
-- Sub-agent forkSubagent — Phase 9 (`subagent/spawn.py`).
-- File-read state tracking — Phase 4 already lands this; engine respects but
+OUT OF SCOPE â€” explicitly deferred to later phases (per ADR-014):
+- Microcompact / context_collapse â€” Phase 11 UX (PS Issue #4 widget surface).
+- 2-stage smart compaction (prune + LLM summary) â€” Phase 11.
+- Skill auto-trigger â€” Phase 10 (`SKILLS.discover_relevant`).
+- Plan mode injection of skills into prompt â€” Phase 10.
+- Sub-agent forkSubagent â€” Phase 9 (`subagent/spawn.py`).
+- File-read state tracking â€” Phase 4 already lands this; engine respects but
   doesn't reset on compact (no compact in Phase 8).
-- Diminishing-returns / repetition guard — deferred.
-- Notebook UX (output_fn callback contract) — Phase 11 owns the UI shape;
+- Diminishing-returns / repetition guard â€” deferred.
+- Notebook UX (output_fn callback contract) â€” Phase 11 owns the UI shape;
   Phase 8 takes a `output_fn: Callable[[str], None] = print` so tests can
   capture, but real notebook integration lives in Phase 11.
 
@@ -56,14 +56,14 @@ from .errors import BedrockErrorCategory, ErrorClassifier
 class QueryResult:
     """Outcome of a `QueryEngine.run(...)` call.
 
-    `text`           — final assistant text (last end_turn turn's text block).
-    `messages`       — full message buffer including the user turn that
+    `text`           â€” final assistant text (last end_turn turn's text block).
+    `messages`       â€” full message buffer including the user turn that
                        triggered this call. Caller may discard or persist.
-    `stop_reason`    — "end_turn" | "max_turns" | "budget_exhausted" |
+    `stop_reason`    â€” "end_turn" | "max_turns" | "budget_exhausted" |
                        "context_overflow" | "fatal_error".
-    `turns_used`     — count of model turns executed during this run.
-    `budget_used`    — IterationBudget.used() snapshot at exit.
-    `error`          — short message when stop_reason indicates failure.
+    `turns_used`     â€” count of model turns executed during this run.
+    `budget_used`    â€” IterationBudget.used() snapshot at exit.
+    `error`          â€” short message when stop_reason indicates failure.
     """
     text: str = ""
     messages: List[Dict[str, Any]] = field(default_factory=list)
@@ -120,7 +120,7 @@ def _coerce_tool_result_to_text(value: Any) -> str:
 
     Tool implementations return diverse shapes (str / dict / list). Bedrock's
     tool_result content needs a string. Prefer str() for primitives, JSON for
-    structured shapes — same convention as v4 dispatch."""
+    structured shapes â€” same convention as v4 dispatch."""
     if isinstance(value, str):
         return value
     if isinstance(value, (dict, list, tuple)):
@@ -171,7 +171,7 @@ def strip_signature_blocks(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
 def count_tool_calls(messages: List[Dict[str, Any]], tool_name: str) -> int:
     """Count how many tool_use blocks for `tool_name` appear in `messages`.
 
-    Block M-2 (PORT_LOG #084) — verbatim port of Runnable's countToolCalls
+    Block M-2 (PORT_LOG #084) â€” verbatim port of Runnable's countToolCalls
     at QueryEngine.ts:1004-1048. Used by the structured-output retry-limit
     guard: when the model produces malformed structured output N times in
     a row, the engine halts cleanly instead of looping.
@@ -213,10 +213,10 @@ def _make_unicode_safe_output_fn(fn: Callable[[str], None]) -> Callable[[str], N
     """Wrap an output_fn so UnicodeEncodeError doesn't kill the agent loop.
 
     R-tier R1 PHASE B iter-1 fix (2026-05-03): on Windows the default
-    stdout encoding is cp1252, which can't encode emoji like ✅ (U+2705).
+    stdout encoding is cp1252, which can't encode emoji like âœ… (U+2705).
     The model frequently emits emoji in summary blocks. Without this
     wrapper, the very first call to `print(response.text)` raises
-    UnicodeEncodeError and the entire agent loop dies — even though
+    UnicodeEncodeError and the entire agent loop dies â€” even though
     the agent's actual work (chart.png + report.docx) was done.
 
     Strategy:
@@ -225,7 +225,7 @@ def _make_unicode_safe_output_fn(fn: Callable[[str], None]) -> Callable[[str], N
        errors='replace' (preserves more chars than ASCII).
     3. If THAT still fails, ASCII-replace as the final safe net.
 
-    This is symmetric to Block H's input-side surrogate sanitization —
+    This is symmetric to Block H's input-side surrogate sanitization â€”
     Bedrock returns valid UTF-8; the *terminal* may not be configured
     for it. Pure platform robustness; no behavioral change otherwise.
     """
@@ -284,9 +284,9 @@ class QueryEngine:
                 supplied, the engine (a) injects the active skill body into
                 the dynamic tail of the system prompt, and (b) appends a
                 Hermes-filtered "skills relevant to this task" reminder to
-                the first user turn (Phase 10 wiring contract — Codex
+                the first user turn (Phase 10 wiring contract â€” Codex
                 Phase-10 BLOCKER fix). When None, no skill machinery runs
-                — preserves Phase 1-8 backwards compatibility for tests.
+                â€” preserves Phase 1-8 backwards compatibility for tests.
         """
         self.client = client
         self.max_turns = max(1, int(max_turns))
@@ -306,7 +306,7 @@ class QueryEngine:
             session_id = _uuid.uuid4().hex[:12]
         self.session_id = session_id
 
-        # Block M-2: structured-output retry guard (PORT_LOG #084 — Runnable
+        # Block M-2: structured-output retry guard (PORT_LOG #084 â€” Runnable
         # QueryEngine.ts:1004-1048 countToolCalls + MAX_STRUCTURED_OUTPUT_RETRIES).
         # When `synthetic_output_tool_name` is set, the engine counts how many
         # times that tool appears in self.messages during this run() and
@@ -324,11 +324,11 @@ class QueryEngine:
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
         # Their schemas are added to per-turn `tools=` API param until the
-        # run ends. v5 does NOT persist discovery across `run()` calls — the
+        # run ends. v5 does NOT persist discovery across `run()` calls â€” the
         # set is fresh each user message (matches Runnable's per-message
         # discovered set).
         self._discovered_tool_names: Set[str] = set()
-        # Block F2 — per-run BudgetTracker for iteration-budget auto-continuation.
+        # Block F2 â€” per-run BudgetTracker for iteration-budget auto-continuation.
         # Created lazily inside run() when CONFIG.enable_token_budget_continuation
         # is True; reset each run() so continuation state never leaks across
         # user messages.
@@ -341,6 +341,8 @@ class QueryEngine:
         self._frozen_system_prompt: Optional[str] = None
         self._frozen_tool_names: Tuple[str, ...] = ()
         self._tool_denials_this_turn = 0
+        self._partial_tool_names: Set[str] = set()
+        self._tool_dispatch_checkpoints: List[Any] = []
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -366,7 +368,7 @@ class QueryEngine:
         """
         # R-tier R1 PHASE B iter-1 fix: wrap output_fn to swallow
         # UnicodeEncodeError on Windows cp1252 stdout. The agent emits
-        # valid UTF-8 (e.g. ✅ U+2705 in summary blocks); a raw print()
+        # valid UTF-8 (e.g. âœ… U+2705 in summary blocks); a raw print()
         # on a default-Windows console crashes the entire loop. Block H
         # surrogate sanitization handles INPUT; this is the symmetric
         # output-side robustness. Codex R1 PhaseB iter-1 APPROVE_FIX.
@@ -383,7 +385,7 @@ class QueryEngine:
         # of the engine).
         self._warned_over_budget = False
         self._tool_denials_this_turn = 0
-        # Block C — exec-limit gate (PS#7 fix) + repetition detector.
+        # Block C â€” exec-limit gate (PS#7 fix) + repetition detector.
         # Counters live on the QueryEngine. Codex iter-1 finding #3:
         # unconditional reset at run() entry so counters DON'T leak
         # across run() calls (the v4 contract; sub-agent dispatch is
@@ -391,10 +393,10 @@ class QueryEngine:
         # parent_engine forwarding).
         self._exec_call_count = 0  # bash + python_exec only
         self._recent_tool_calls: list = []  # [(name, args_hash), ...]
-        # Block F2 — fresh BudgetTracker per run() so continuation state
+        # Block F2 â€” fresh BudgetTracker per run() so continuation state
         # never leaks across user messages.
         self._budget_tracker = None
-        # Block M-1 (PORT_LOG #085) — Runnable QueryEngine.ts:238 verbatim:
+        # Block M-1 (PORT_LOG #085) â€” Runnable QueryEngine.ts:238 verbatim:
         # discoveredSkillNames.clear() at run() entry. Prevents
         # path/trigger-activated skills from contaminating the next user
         # message's flow. Best-effort; never blocks run() on missing
@@ -407,7 +409,7 @@ class QueryEngine:
                     self.skill_manager._pending_activations.clear()
         except Exception:
             pass
-        # Block M-2 (PORT_LOG #084) — capture the baseline structured-output
+        # Block M-2 (PORT_LOG #084) â€” capture the baseline structured-output
         # tool-call count at run-entry. Calls THIS run = current_count -
         # baseline. Initial count when the run starts may be non-zero if
         # messages were carried over from a previous run() (continued
@@ -417,7 +419,7 @@ class QueryEngine:
             if self.synthetic_output_tool_name else 0
         )
 
-        # Block C+ — message rate limit (v4 :8731-8740). Lives on the
+        # Block C+ â€” message rate limit (v4 :8731-8740). Lives on the
         # engine so per-session caps are tracked.
         if not hasattr(self, "_rate_limiter"):
             from ui.approval_dialog import RateLimiter
@@ -440,7 +442,7 @@ class QueryEngine:
         had_prior_messages = bool(self.messages)
 
         # Append user turn (Bedrock requires alternation; merge into trailing
-        # user if needed — matches v4 sagemaker_agent.py:8744).
+        # user if needed â€” matches v4 sagemaker_agent.py:8744).
         if self.messages and self.messages[-1].get("role") == "user":
             prev = self.messages[-1]
             prev_content = prev.get("content", "")
@@ -469,7 +471,7 @@ class QueryEngine:
         # tool names so skills with `requires_tools` are pruned when the
         # required tools aren't currently available.
         effective_system_prompt = system_prompt
-        # Block G3 — coordinator-mode prompt augmentation. Default OFF.
+        # Block G3 â€” coordinator-mode prompt augmentation. Default OFF.
         # Only the PARENT agent gets the coordinator block (sub-agents are
         # workers, not coordinators). Best-effort try/except.
         try:
@@ -515,7 +517,7 @@ class QueryEngine:
                     # Block G3 iter-2 (Codex iter-1 finding #1 HIGH lock):
                     # append to the existing effective_system_prompt (which
                     # already carries the coordinator block when that's on);
-                    # don't reset to bare `system_prompt + active_block` —
+                    # don't reset to bare `system_prompt + active_block` â€”
                     # that would silently discard the coordinator block.
                     effective_system_prompt = effective_system_prompt + active_block
                 visible_tool_names = {t.name for t in tools}
@@ -534,7 +536,7 @@ class QueryEngine:
                         last_user["content"] = content + reminder
                     elif isinstance(content, list):
                         content.append({"type": "text", "text": reminder})
-            except Exception as exc:  # noqa: BLE001 — skill machinery never raises into agent loop
+            except Exception as exc:  # noqa: BLE001 â€” skill machinery never raises into agent loop
                 logging.warning("[skill-wiring] %s: %s", type(exc).__name__, exc)
 
         effective_system_prompt, tools, _cache_policy_warnings = (
@@ -567,7 +569,7 @@ class QueryEngine:
                     pass
                 break
 
-            # Block M-2 (PORT_LOG #084) — structured-output retry-limit
+            # Block M-2 (PORT_LOG #084) â€” structured-output retry-limit
             # guard. When `synthetic_output_tool_name` is configured, count
             # how many times the model produced a malformed structured
             # output (each tool_use of that synthetic tool counts). Halt
@@ -586,7 +588,7 @@ class QueryEngine:
                     stop_reason = "error_max_structured_output_retries"
                     break
 
-            # Budget gate — shared with sub-agents (Phase 9).
+            # Budget gate â€” shared with sub-agents (Phase 9).
             if not self.budget.consume():
                 used, total = self.budget.used(), self.budget.total()
                 output_fn(
@@ -611,7 +613,7 @@ class QueryEngine:
                 tools, enabled=True,
             )
             if self._discovered_tool_names:
-                # Promote previously-discovered tools from deferred → visible.
+                # Promote previously-discovered tools from deferred â†’ visible.
                 discovered = {n for n in self._discovered_tool_names if n in deferred_names}
                 if discovered:
                     promoted = [
@@ -707,7 +709,7 @@ class QueryEngine:
                     thinking_enabled=thinking_enabled,
                     thinking_budget=thinking_budget,
                 )
-            except Exception as exc:  # noqa: BLE001 — classify and surface
+            except Exception as exc:  # noqa: BLE001 â€” classify and surface
                 category, recovery, debug = ErrorClassifier.classify(exc)
                 try:
                     from core.compactor import Compactor, TransitionReason
@@ -736,7 +738,7 @@ class QueryEngine:
             turns_used += 1
 
             # Block B (PORT_LOG #039+#040): record token usage + per-agent
-            # attribution. "parent" or sub-agent type-string. Best-effort —
+            # attribution. "parent" or sub-agent type-string. Best-effort â€”
             # never break the agent loop if the singleton import fails.
             try:
                 from runtime.tokens import TOKENS as _TOKENS
@@ -780,8 +782,8 @@ class QueryEngine:
                     pass
                 # Block B+ (PORT_LOG #052): per-turn cost-vs-budget runtime
                 # warning. v4 sagemaker_agent.py:8787 prints
-                #   `[Cost ${session_cost} passed budget ${limit} — continuing.]`
-                # NOT a hard halt — per user 2026-05-03 update to plan v3,
+                #   `[Cost ${session_cost} passed budget ${limit} â€” continuing.]`
+                # NOT a hard halt â€” per user 2026-05-03 update to plan v3,
                 # v5 matches v4 UX: warn and continue. True hard halt is at
                 # cloud-budget level (AWS Budget Action / GCP).
                 from runtime.config import CONFIG as _CFG
@@ -792,7 +794,7 @@ class QueryEngine:
                     if not getattr(self, "_warned_over_budget", False):
                         output_fn(
                             f"[Cost ${_TOKENS.session_cost:.4f} passed "
-                            f"budget ${limit:.2f} — continuing.]"
+                            f"budget ${limit:.2f} â€” continuing.]"
                         )
                         self._warned_over_budget = True
             except Exception:
@@ -810,7 +812,7 @@ class QueryEngine:
             if response.text:
                 last_text = response.text
 
-            # Block A — auto-compact gate. Per-turn check: if the
+            # Block A â€” auto-compact gate. Per-turn check: if the
             # message buffer has crossed the 80% threshold AND the
             # circuit breaker allows another attempt, run Compactor.
             try:
@@ -842,15 +844,15 @@ class QueryEngine:
                             if _disabled:
                                 output_fn(f"[{_reason}]")
                     else:
-                        # Cooldown / cap message — log once per turn, no
+                        # Cooldown / cap message â€” log once per turn, no
                         # spam since try_attempt returns reason text.
                         output_fn(f"[auto-compact skipped: {_why}]")
             except Exception:
                 pass
 
-            # Stop conditions: end_turn / no tool_use blocks → final answer.
+            # Stop conditions: end_turn / no tool_use blocks â†’ final answer.
             if not response.tool_calls:
-                # Block F2 — auto-continuation under iteration budget. Only
+                # Block F2 â€” auto-continuation under iteration budget. Only
                 # parent agents (not sub-agents) and only when CONFIG flag
                 # is opt-in (default OFF per Wave 6 NLT row #21). Cost-cap
                 # halt has priority inside check_iteration_budget().
@@ -919,7 +921,7 @@ class QueryEngine:
                                     pass
                 except Exception as _f2_exc:
                     # Codex iter-1 finding #2 lock: best-effort wrap MUST
-                    # surface a diagnostic when F2 is opt-in enabled — silent
+                    # surface a diagnostic when F2 is opt-in enabled â€” silent
                     # fail-closed makes opt-in users see "no auto-continue"
                     # with zero clue why. logging.warning matches the
                     # cost-runtime warning pattern at [Cost ...] above.
@@ -938,319 +940,88 @@ class QueryEngine:
                     output_fn(response.text)
                 break
 
-            # Tool dispatch — emit one tool_result per tool_use call.
+            # Tool dispatch â€” emit one tool_result per tool_use call.
             tool_results: List[Dict[str, Any]] = []
-            for call in response.tool_calls:
-                tool = find_tool_by_name(tools, call.name)
-                if tool is None:
-                    # Unknown tool name — return error to model so it can
-                    # recover (v4 parity: dispatch never raises).
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": f"error_during_execution: unknown tool '{call.name}'",
-                        "is_error": True,
-                    })
-                    # Block B (Codex finding #2 HIGH lock): every dispatch
-                    # path — including unknown-tool — must be audited so
-                    # forensics can see what the model attempted to call.
-                    try:
-                        from runtime.audit import AUDIT as _AUDIT
-                        _AUDIT.log(
-                            session_id=self.session_id,
-                            action="tool_unknown",
-                            tool_name=call.name,
-                            parameters=call.input or {},
-                            result_summary=f"unknown tool '{call.name}'",
-                            user_approved=False,
-                        )
-                    except Exception:
-                        pass
-                    continue
-
-                # Plan-mode dispatch gate — strict allowlist by name (v4
-                # PLAN_MODE_ALLOWED_TOOLS, sagemaker_agent.py:9390 + 6905).
-                # Codex Phase-08 finding (medium): the prior version exempted
-                # `always_load=True` tools, which would let `tool_search`
-                # itself (or any future always_load mutating tool) execute
-                # in plan mode despite v4 forbidding it. The allowlist is
-                # defense-in-depth on top of registry filtering: even if a
-                # disallowed mutating tool reaches dispatch (e.g. discovered
-                # via tool_search after enabled=True), it cannot run.
-                # Lock test: test_engine_plan_mode_blocks_always_load_mutating_tool.
-                if plan_mode and call.name not in PLAN_MODE_ALLOWED_TOOLS:
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": (
-                            f"Error: tool '{call.name}' is not in "
-                            "PLAN_MODE_ALLOWED_TOOLS; blocked in plan mode."
-                        ),
-                        "is_error": True,
-                    })
-                    # Block B (Codex finding #2 HIGH lock): plan-mode
-                    # block is an audit-relevant security event.
-                    try:
-                        from runtime.audit import AUDIT as _AUDIT
-                        _AUDIT.log(
-                            session_id=self.session_id,
-                            action="plan_mode_blocked",
-                            tool_name=call.name,
-                            parameters=call.input or {},
-                            result_summary=(
-                                f"plan-mode allowlist blocked '{call.name}'"
-                            ),
-                            user_approved=False,
-                        )
-                    except Exception:
-                        pass
-                    continue
-
-                # Block C — exec-limit gate (PS#7 fix). Only bash +
-                # python_exec count toward this limit. v4 verbatim
-                # message at sagemaker_agent.py:9482-9489 — preserved
-                # so the model can recover by switching to non-counted
-                # tools.
-                if call.name in {"bash", "python_exec"}:
-                    from runtime.config import CONFIG as _CFG
-                    cap = getattr(_CFG, "max_exec_calls_per_session", 200)
-                    if self._exec_call_count >= cap:
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": call.id,
-                            "content": (
-                                f"Blocked: bash + python_exec call limit "
-                                f"reached ({cap}/session). "
-                                "OTHER TOOLS STILL WORK: read_file, grep, "
-                                "glob, edit_file, write_file, notebook_edit, "
-                                "task, ask_user, view_image, web_fetch are "
-                                "NOT counted by this limit."
-                            ),
-                            "is_error": True,
-                        })
-                        continue
-
-                # Block C — repetition detector. Same (tool_name,
-                # args_hash) appearing 3+ times in the last 6 calls is
-                # almost always a stuck loop. v4 sagemaker_agent.py:9156-9180
-                # threshold=2 (block on 3rd duplicate).
-                import hashlib as _hashlib
-                import json as _json
-                try:
-                    _args_hash = _hashlib.sha256(
-                        _json.dumps(call.input or {}, sort_keys=True, default=str).encode()
-                    ).hexdigest()[:12]
-                except Exception:
-                    _args_hash = ""
-                _key = (call.name, _args_hash)
-                _recent = self._recent_tool_calls[-6:]
-                if _recent.count(_key) >= 2:
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": (
-                            f"Blocked: same call to '{call.name}' with "
-                            f"identical arguments has been issued 3 times "
-                            "in a row. This is almost always a stuck loop. "
-                            "Try a different approach, different arguments, "
-                            "or use ask_user to clarify."
-                        ),
-                        "is_error": True,
-                    })
-                    continue
-                # Track this call (rolling window of last 12).
-                self._recent_tool_calls.append(_key)
-                if len(self._recent_tool_calls) > 12:
-                    self._recent_tool_calls = self._recent_tool_calls[-12:]
-
-                # Block C — JSON-repair tool args before dispatch. If
-                # Bedrock streamed back malformed JSON in tool_use.input,
-                # try to recover gracefully instead of falling through
-                # to a tool-side type error.
-                _repaired_input = call.input
-                if isinstance(call.input, str):
-                    # When tool_use.input arrives as a JSON string (some
-                    # Bedrock variants), parse + repair before dispatch.
-                    try:
-                        from security.json_repair import repair_tool_call_arguments
-                        _repaired_input = repair_tool_call_arguments(call.input)
-                    except Exception:
-                        _repaired_input = {}
-
-                # Block C+ — approval gate. When CONFIG.require_tool_approval
-                # AND tool.requires_approval are BOTH True (and we're not
-                # in mock_mode for tests), surface a PermissionDialog
-                # and block until decided. always-allow decisions stick
-                # on CONFIG._always_allowed[tool.name]. Mock detection
-                # checks the BedrockClient instance (not CONFIG) because
-                # tests construct their own client without flipping the
-                # global CONFIG.mock_mode flag.
-                from runtime.config import CONFIG as _CFG_AT
-                _is_mock = bool(
-                    getattr(_CFG_AT, "mock_mode", False)
-                    or getattr(self.client, "mock_mode", False)
+            _dispatch_calls = list(response.tool_calls)
+            try:
+                from core.parallel_dispatch import (
+                    execute_parallel_tool_calls,
+                    partial_tool_call_warning,
+                    pending_tool_use_ids,
+                    plan_tool_dispatch,
+                    synthetic_tool_result_stub,
                 )
-                if (not _is_mock
-                        and getattr(_CFG_AT, "require_tool_approval", False)
-                        and getattr(tool, "requires_approval", False)):
-                    if not hasattr(_CFG_AT, "_always_allowed"):
-                        _CFG_AT._always_allowed = {}
-                    if not _CFG_AT._always_allowed.get(call.name):
-                        try:
-                            from ui.approval_dialog import PermissionDialog
-                            _model_reason = ""
-                            if isinstance(_repaired_input, dict):
-                                _model_reason = str(_repaired_input.get("reason", ""))
-                            # Block C+ Codex iter-1 finding #1 (HIGH) lock:
-                            # for edit_file / write_file, render an inline
-                            # diff for the approval body so users see the
-                            # actual change before approving (Phase-4
-                            # ADR-010 commitment).
-                            _diff_html = None
-                            if call.name in {"edit_file", "write_file"} and isinstance(_repaired_input, dict):
-                                try:
-                                    from ui.diff_widget import (
-                                        render_inline_diff,
-                                        render_new_file_diff,
-                                    )
-                                    import os as _os_diff
-                                    _fp = _repaired_input.get("file_path", "")
-                                    if call.name == "edit_file":
-                                        _old = _repaired_input.get("old_string", "")
-                                        _new = _repaired_input.get("new_string", "")
-                                        if _fp and _os_diff.path.isfile(_fp):
-                                            with open(_fp, "r", encoding="utf-8", errors="replace") as _f:
-                                                _before = _f.read()
-                                            _after = _before.replace(_old, _new, 1)
-                                            _diff_html = render_inline_diff(_fp, _before, _after)
-                                    else:  # write_file
-                                        _content = _repaired_input.get("content", "")
-                                        _mode = _repaired_input.get("mode", "write")
-                                        if _fp and _os_diff.path.isfile(_fp) and _mode == "write":
-                                            with open(_fp, "r", encoding="utf-8", errors="replace") as _f:
-                                                _before = _f.read()
-                                            _diff_html = render_inline_diff(_fp, _before, _content)
-                                        else:
-                                            _diff_html = render_new_file_diff(_fp, _content)
-                                except Exception:
-                                    _diff_html = None
-                            _dlg = PermissionDialog(
-                                tool_name=call.name,
-                                parameters=_repaired_input or {},
-                                reason=_model_reason,
-                                diff_html=_diff_html,
-                            )
-                            _result = _dlg.prompt()
-                            if not _result.approved:
-                                self._record_tool_denial(
-                                    call.name,
-                                    _result.reason,
-                                    output_fn,
-                                )
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": call.id,
-                                    "content": (
-                                        f"User denied approval for "
-                                        f"`{call.name}`: {_result.reason}"
-                                    ),
-                                    "is_error": True,
-                                })
-                                continue
-                            # Approved — sticky if user clicked Always.
-                        except Exception as _approval_exc:
-                            logging.warning(
-                                f"approval gate failed: {_approval_exc}; "
-                                "defaulting to deny"
-                            )
-                            self._record_tool_denial(
-                                call.name,
-                                f"approval gate error: {_approval_exc}",
-                                output_fn,
-                            )
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": call.id,
-                                "content": (
-                                    f"Approval gate error for `{call.name}`; "
-                                    f"defaulting to deny."
-                                ),
-                                "is_error": True,
-                            })
-                            continue
-
-                # Execute. Tool implementations may raise; we trap and surface
-                # the error to the model rather than the human user.
-                # `parent_engine` is passed for Phase 9 task tool — the sub-agent
-                # spawn needs the parent's IterationBudget + BedrockClient (ADR-015).
-                try:
-                    if call.name in {"bash", "python_exec"}:
-                        self._exec_call_count += 1
-                    raw = tool.execute(_repaired_input, context={
-                        "active_tools": tools,
-                        "plan_mode": plan_mode,
-                        "parent_engine": self,
-                        "parent_depth": getattr(self, "_subagent_depth", 0),
-                        # Block I-1/I-5: edit_file + write_file consume this
-                        # to auto-activate skills with `paths:` frontmatter.
-                        "skill_manager": self.skill_manager,
-                        "session_id": self.session_id,
-                    })
-                    text = _coerce_tool_result_to_text(raw)
-                    text = _truncate_tool_result(text, tool.max_result_size_chars)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": text,
-                    })
-                    # Block B (PORT_LOG #043): audit-log every tool dispatch
-                    # so /diffs / /regression / forensics have a tamper-hashed
-                    # trail. Best-effort.
-                    try:
-                        from runtime.audit import AUDIT as _AUDIT
-                        _AUDIT.log(
-                            session_id=self.session_id,
-                            action="tool_dispatch",
-                            tool_name=call.name,
-                            parameters=call.input or {},
-                            result_summary=text[:500] if isinstance(text, str) else "",
-                            user_approved=True,
-                        )
-                    except Exception:
-                        pass
-                    # Phase 7 wiring: extract discovered names from tool_search
-                    # results and add to the next turn's tools= payload.
-                    if call.name == "tool_search":
-                        discovered = tool_search_discovered_names(text)
-                        if discovered:
-                            self._discovered_tool_names.update(discovered)
-                except Exception as exc:  # noqa: BLE001 — surface to model
-                    logging.warning(
-                        "[query_engine] tool '%s' raised %s: %s",
-                        call.name, type(exc).__name__, exc,
+                self._partial_tool_names = set(pending_tool_use_ids(_dispatch_calls))
+                _tools_by_name = {getattr(t, "name", ""): t for t in tools}
+                _plan = plan_tool_dispatch(_dispatch_calls, _tools_by_name)
+                for _dropped in _plan.get("dropped", []):
+                    _tid = getattr(_dropped, "id", "") or (
+                        _dropped.get("id") if isinstance(_dropped, dict) else ""
                     )
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": f"error_during_execution: {type(exc).__name__}: {exc}",
-                        "is_error": True,
-                    })
-                    # Audit the failed dispatch too so forensics can see what
-                    # was attempted (sanitized parameters; no result body).
-                    try:
-                        from runtime.audit import AUDIT as _AUDIT
-                        _AUDIT.log(
-                            session_id=self.session_id,
-                            action="tool_error",
-                            tool_name=call.name,
-                            parameters=call.input or {},
-                            result_summary=f"{type(exc).__name__}: {exc}",
-                            user_approved=False,
+                    tool_results.append(
+                        synthetic_tool_result_stub(str(_tid), reason="duplicate tool call")
+                    )
+                    self._partial_tool_names.discard(str(_tid))
+                if (
+                    len(_plan.get("parallel", [])) > 1
+                    and not _plan.get("sequential")
+                    and not plan_mode
+                ):
+                    import threading as _threading
+                    _parallel_bookkeeping_lock = _threading.Lock()
+
+                    def _execute_parallel_one(_call: Any) -> Dict[str, Any]:
+                        return self._dispatch_single_tool_call(
+                            _call,
+                            tools=tools,
+                            plan_mode=plan_mode,
+                            output_fn=output_fn,
+                            bookkeeping_lock=_parallel_bookkeeping_lock,
                         )
-                    except Exception:
-                        pass
+
+                    _parallel_results = execute_parallel_tool_calls(
+                        _plan["parallel"],
+                        _execute_parallel_one,
+                        checkpoint_callback=self._tool_dispatch_checkpoints.append,
+                    )
+                    tool_results.extend(_parallel_results)
+                    for _block in _parallel_results:
+                        self._partial_tool_names.discard(str(_block.get("tool_use_id", "")))
+                    if self._partial_tool_names:
+                        tool_results.extend(
+                            partial_tool_call_warning(
+                                sorted(self._partial_tool_names),
+                                output_fn=output_fn,
+                            )
+                        )
+                    self._partial_tool_names.clear()
+                    self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
+                    continue
+                _dispatch_calls = _plan.get("parallel", []) + _plan.get("sequential", [])
+            except Exception:
+                _dispatch_calls = list(response.tool_calls)
+
+            for call in _dispatch_calls:
+                self._partial_tool_names.discard(str(call.id))
+                tool_results.append(self._dispatch_single_tool_call(
+                    call,
+                    tools=tools,
+                    plan_mode=plan_mode,
+                    output_fn=output_fn,
+                ))
 
             # Append the tool_results as a user turn (Bedrock convention).
+            if self._partial_tool_names:
+                try:
+                    from core.parallel_dispatch import partial_tool_call_warning
+                    tool_results.extend(
+                        partial_tool_call_warning(
+                            sorted(self._partial_tool_names),
+                            output_fn=output_fn,
+                        )
+                    )
+                finally:
+                    self._partial_tool_names.clear()
             self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
 
         else:  # for-loop fell through without break
@@ -1264,6 +1035,281 @@ class QueryEngine:
             turns_used=turns_used,
             budget_used=self.budget.used(),
         )
+
+    def _dispatch_single_tool_call(
+        self,
+        call: Any,
+        *,
+        tools: List[Any],
+        plan_mode: bool,
+        output_fn: Callable[[str], None],
+        bookkeeping_lock: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Dispatch one tool call through the canonical QueryEngine pipeline.
+
+        Block N uses this same function for sequential dispatch and parallel
+        safe calls so audit logging, repetition tracking, JSON repair, approval
+        checks, tool_search discovery, and error forensics cannot drift between
+        paths. `bookkeeping_lock` serializes shared engine counters when this
+        function runs inside ThreadPoolExecutor workers.
+        """
+        from contextlib import nullcontext
+        from tools.registry import PLAN_MODE_ALLOWED_TOOLS, find_tool_by_name
+        from tools.tool_search import tool_search_discovered_names
+
+        def _guard():
+            return bookkeeping_lock if bookkeeping_lock is not None else nullcontext()
+
+        def _audit_parameters(value: Any) -> Dict[str, Any]:
+            return value if isinstance(value, dict) else {}
+
+        tool = find_tool_by_name(tools, call.name)
+        if tool is None:
+            result = {
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": f"error_during_execution: unknown tool '{call.name}'",
+                "is_error": True,
+            }
+            try:
+                from runtime.audit import AUDIT as _AUDIT
+                _AUDIT.log(
+                    session_id=self.session_id,
+                    action="tool_unknown",
+                    tool_name=call.name,
+                    parameters=_audit_parameters(call.input),
+                    result_summary=f"unknown tool '{call.name}'",
+                    user_approved=False,
+                )
+            except Exception:
+                pass
+            return result
+
+        if plan_mode and call.name not in PLAN_MODE_ALLOWED_TOOLS:
+            result = {
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": (
+                    f"Error: tool '{call.name}' is not in "
+                    "PLAN_MODE_ALLOWED_TOOLS; blocked in plan mode."
+                ),
+                "is_error": True,
+            }
+            try:
+                from runtime.audit import AUDIT as _AUDIT
+                _AUDIT.log(
+                    session_id=self.session_id,
+                    action="plan_mode_blocked",
+                    tool_name=call.name,
+                    parameters=_audit_parameters(call.input),
+                    result_summary=f"plan-mode allowlist blocked '{call.name}'",
+                    user_approved=False,
+                )
+            except Exception:
+                pass
+            return result
+
+        if call.name in {"bash", "python_exec"}:
+            from runtime.config import CONFIG as _CFG
+            cap = getattr(_CFG, "max_exec_calls_per_session", 200)
+            with _guard():
+                if self._exec_call_count >= cap:
+                    return {
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": (
+                            f"Blocked: bash + python_exec call limit "
+                            f"reached ({cap}/session). "
+                            "OTHER TOOLS STILL WORK: read_file, grep, "
+                            "glob, edit_file, write_file, notebook_edit, "
+                            "task, ask_user, view_image, web_fetch are "
+                            "NOT counted by this limit."
+                        ),
+                        "is_error": True,
+                    }
+
+        import hashlib as _hashlib
+        import json as _json
+        try:
+            _args_hash = _hashlib.sha256(
+                _json.dumps(call.input or {}, sort_keys=True, default=str).encode()
+            ).hexdigest()[:12]
+        except Exception:
+            _args_hash = ""
+        _key = (call.name, _args_hash)
+        with _guard():
+            _recent = self._recent_tool_calls[-6:]
+            if _recent.count(_key) >= 2:
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": call.id,
+                    "content": (
+                        f"Blocked: same call to '{call.name}' with "
+                        f"identical arguments has been issued 3 times "
+                        "in a row. This is almost always a stuck loop. "
+                        "Try a different approach, different arguments, "
+                        "or use ask_user to clarify."
+                    ),
+                    "is_error": True,
+                }
+            self._recent_tool_calls.append(_key)
+            if len(self._recent_tool_calls) > 12:
+                self._recent_tool_calls = self._recent_tool_calls[-12:]
+
+        _repaired_input = call.input
+        if isinstance(call.input, str):
+            try:
+                from security.json_repair import repair_tool_call_arguments
+                _repaired_input = repair_tool_call_arguments(call.input)
+            except Exception:
+                _repaired_input = {}
+
+        from runtime.config import CONFIG as _CFG_AT
+        _is_mock = bool(
+            getattr(_CFG_AT, "mock_mode", False)
+            or getattr(self.client, "mock_mode", False)
+        )
+        if (
+            not _is_mock
+            and getattr(_CFG_AT, "require_tool_approval", False)
+            and getattr(tool, "requires_approval", False)
+        ):
+            if not hasattr(_CFG_AT, "_always_allowed"):
+                _CFG_AT._always_allowed = {}
+            if not _CFG_AT._always_allowed.get(call.name):
+                try:
+                    from ui.approval_dialog import PermissionDialog
+                    _model_reason = ""
+                    if isinstance(_repaired_input, dict):
+                        _model_reason = str(_repaired_input.get("reason", ""))
+                    _diff_html = None
+                    if call.name in {"edit_file", "write_file"} and isinstance(_repaired_input, dict):
+                        try:
+                            from ui.diff_widget import (
+                                render_inline_diff,
+                                render_new_file_diff,
+                            )
+                            import os as _os_diff
+                            _fp = _repaired_input.get("file_path", "")
+                            if call.name == "edit_file":
+                                _old = _repaired_input.get("old_string", "")
+                                _new = _repaired_input.get("new_string", "")
+                                if _fp and _os_diff.path.isfile(_fp):
+                                    with open(_fp, "r", encoding="utf-8", errors="replace") as _f:
+                                        _before = _f.read()
+                                    _after = _before.replace(_old, _new, 1)
+                                    _diff_html = render_inline_diff(_fp, _before, _after)
+                            else:
+                                _content = _repaired_input.get("content", "")
+                                _mode = _repaired_input.get("mode", "write")
+                                if _fp and _os_diff.path.isfile(_fp) and _mode == "write":
+                                    with open(_fp, "r", encoding="utf-8", errors="replace") as _f:
+                                        _before = _f.read()
+                                    _diff_html = render_inline_diff(_fp, _before, _content)
+                                else:
+                                    _diff_html = render_new_file_diff(_fp, _content)
+                        except Exception:
+                            _diff_html = None
+                    _dlg = PermissionDialog(
+                        tool_name=call.name,
+                        parameters=_repaired_input or {},
+                        reason=_model_reason,
+                        diff_html=_diff_html,
+                    )
+                    _result = _dlg.prompt()
+                    if not _result.approved:
+                        self._record_tool_denial(
+                            call.name,
+                            _result.reason,
+                            output_fn,
+                        )
+                        return {
+                            "type": "tool_result",
+                            "tool_use_id": call.id,
+                            "content": (
+                                f"User denied approval for "
+                                f"`{call.name}`: {_result.reason}"
+                            ),
+                            "is_error": True,
+                        }
+                except Exception as _approval_exc:
+                    logging.warning(
+                        f"approval gate failed: {_approval_exc}; defaulting to deny"
+                    )
+                    self._record_tool_denial(
+                        call.name,
+                        f"approval gate error: {_approval_exc}",
+                        output_fn,
+                    )
+                    return {
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": (
+                            f"Approval gate error for `{call.name}`; "
+                            f"defaulting to deny."
+                        ),
+                        "is_error": True,
+                    }
+
+        try:
+            if call.name in {"bash", "python_exec"}:
+                with _guard():
+                    self._exec_call_count += 1
+            raw = tool.execute(_repaired_input, context={
+                "active_tools": tools,
+                "plan_mode": plan_mode,
+                "parent_engine": self,
+                "parent_depth": getattr(self, "_subagent_depth", 0),
+                "skill_manager": self.skill_manager,
+                "session_id": self.session_id,
+            })
+            text = _coerce_tool_result_to_text(raw)
+            text = _truncate_tool_result(text, tool.max_result_size_chars)
+            try:
+                from runtime.audit import AUDIT as _AUDIT
+                _AUDIT.log(
+                    session_id=self.session_id,
+                    action="tool_dispatch",
+                    tool_name=call.name,
+                    parameters=_audit_parameters(_repaired_input),
+                    result_summary=text[:500] if isinstance(text, str) else "",
+                    user_approved=True,
+                )
+            except Exception:
+                pass
+            if call.name == "tool_search":
+                discovered = tool_search_discovered_names(text)
+                if discovered:
+                    with _guard():
+                        self._discovered_tool_names.update(discovered)
+            return {
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": text,
+            }
+        except Exception as exc:  # noqa: BLE001 - surface to model
+            logging.warning(
+                "[query_engine] tool '%s' raised %s: %s",
+                call.name, type(exc).__name__, exc,
+            )
+            try:
+                from runtime.audit import AUDIT as _AUDIT
+                _AUDIT.log(
+                    session_id=self.session_id,
+                    action="tool_error",
+                    tool_name=call.name,
+                    parameters=_audit_parameters(_repaired_input),
+                    result_summary=f"{type(exc).__name__}: {exc}",
+                    user_approved=False,
+                )
+            except Exception:
+                pass
+            return {
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": f"error_during_execution: {type(exc).__name__}: {exc}",
+                "is_error": True,
+            }
 
     # ------------------------------------------------------------
     # Internal: E+F runtime event surfaces
@@ -1449,7 +1495,7 @@ class QueryEngine:
     def _build_assistant_content(response: Any) -> List[Dict[str, Any]]:
         """Construct a Bedrock-shaped assistant content list from a Response.
 
-        Order: thinking blocks (if any) → text → tool_use. The thinking
+        Order: thinking blocks (if any) â†’ text â†’ tool_use. The thinking
         block is preserved so the next turn's API call carries it back to
         the model (Bedrock requires this for extended thinking continuity).
         """
@@ -1481,7 +1527,7 @@ class QueryEngine:
         the model knows what's available via tool_search.
 
         The reminder is injected as a transient text block on the trailing
-        user turn — it does not mutate `self.messages`, so it does not leak
+        user turn â€” it does not mutate `self.messages`, so it does not leak
         into subsequent turns once the model has loaded the schemas it needs.
         """
         if not deferred_names:
@@ -1489,14 +1535,14 @@ class QueryEngine:
         reminder = (
             "<system-reminder>\n"
             "The following deferred tools are available via tool_search. Their schemas "
-            "are NOT loaded — calling them directly will fail. Use tool_search with "
+            "are NOT loaded â€” calling them directly will fail. Use tool_search with "
             "query \"select:<name>[,<name>...]\" to load tool schemas before calling them:\n"
             + "\n".join(sorted(deferred_names))
             + "\n</system-reminder>"
         )
         # Transient append: copy the trailing user message and add the reminder
         # as an extra text block. If the trailing turn is not user-role, we
-        # append a fresh user message — but this should never happen because
+        # append a fresh user message â€” but this should never happen because
         # the loop only invokes Bedrock right after a user turn or tool_results.
         out = list(messages)
         if not out or out[-1].get("role") != "user":
@@ -1548,3 +1594,4 @@ def run_one_turn(
         thinking_enabled=thinking_enabled,
         thinking_budget=thinking_budget,
     )
+

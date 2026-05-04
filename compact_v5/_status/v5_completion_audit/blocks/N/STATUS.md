@@ -1,59 +1,55 @@
 # Block N Status
 
-Status: IMPLEMENTING
+Status: READY_FOR_GIT_CHECKPOINT
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 19
-Ledger rows: 0
+Ledger rows: 19
 
 Disposition counts in current ledger:
 
-- SHIPPED: 0
+- SHIPPED: 14
 - PARTIAL: 0
 - MISSING: 0
 - DEFERRED_USER_APPROVED: 0
 - DROPPED_USER_APPROVED: 0
-- N/A_CONSTRAINT: 0
+- N/A_CONSTRAINT: 5
 
-Current blocking-row count: 19. Initial `scope_audit.py --block N` reports
-`LEDGER_INCOMPLETE` because no Block N redo ledger exists yet.
+Current blocking-row count: 0. `scope_audit.py --block N` and strict variant
+both report `READY_TO_REVIEW_CLOSE` after the QueryEngine parallel-dispatch
+bookkeeping fix.
 
 ## Reviewer Loop State
 
-Review attempts counted for Block N: 0.
+Review attempts counted for Block N: 1.
 
-Latest usable Claude verdict: none for Block N in the v5 completion audit redo.
+Latest usable Claude verdict: `APPROVE_WITH_FIXES` /
+`READY_FOR_BLOCK_CLOSE_REVIEW` from
+`reviews/block-n-claude-review-iter1.md`.
 
-Next Claude review state: not ready. Worker must reconstruct all canonical N
-rows from `SYNTHESIS_MASTER.md`, implement/ledger evidence or record hard
-constraints, run tests and scope audit, then send a compliant Claude review
-prompt.
+Next Claude review state: no further review pending. Iter2 returned
+`APPROVE` / `READY_FOR_BLOCK_CLOSE_REVIEW`.
 
 ## Progress Heartbeat
 
-Current phase: IMPLEMENTING
+Current phase: CLOSE_ARTIFACTS_AND_GIT_CHECKPOINT
 
-Current task: Reconstruct Block N ownership and inspect existing parallel tool
-dispatch, tool-call bookkeeping, dynamic tool refs, fuzzy matching, dedup,
-request sanitization, BaseTool metadata, and task-tool surfaces.
+Current task: Finalize close artifacts, stage a specific Block N file list,
+commit, and push to `sageagent/v5-build`.
 
-Last completed action: Closed and pushed Block L, ran
-`scope_audit.py --all --summary`, re-read `BLOCK_ORDER_AND_COVERAGE.md`, read
-canonical Block N rows from `SYNTHESIS_MASTER.md`, and ran initial Block N
-scope audit. Result: 19 expected rows, 0 ledger rows, 19 ship-blocking rows.
+Last completed action: Claude iter2 returned `APPROVE` /
+`READY_FOR_BLOCK_CLOSE_REVIEW`; missing iter2 compile-log artifact was fixed;
+final scope audit and strict scope audit passed with 0 blockers.
 
 Next 3 todo items:
 
-1. Inspect existing v5 tool dispatch and parallel helper modules for N-1
-   through N-9 and N-14 through N-18 evidence.
-2. Decide row dispositions for no-streaming/task-swarm constraints without
-   silently dropping scope, and add tests for local adaptations.
-3. Create Block N ledger/artifacts and run targeted tests plus
-   `scope_audit.py --block N` before Claude review.
+1. Update self-review, self-reflection, and git close plan.
+2. Stage only Block N-specific files and commit.
+3. Push to `sageagent/v5-build`, then run all-block summary and start Block K.
 
-Current review iteration count: 0 recorded attempts.
+Current review iteration count: 2 usable reviews completed.
 
-Current ship-blocking row count: 19.
+Current ship-blocking row count: 0.
 
 Blocker or human decision needed: No human decision needed currently. Do not
 run AWS/R-tier spend, git tag, Codex review, nested `codex exec`, git

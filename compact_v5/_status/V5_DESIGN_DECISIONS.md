@@ -3299,6 +3299,72 @@ locally with short deadlines rather than with AWS/R-tier wall-clock calls.
 
 No AWS/R-tier test was run.
 
+## ADR-046 - Block N completion-audit redo
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block N completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+The prior Block N helper module shipped fuzzy matching, dedup, dynamic refs,
+and partial-warning helpers, but explicitly left ThreadPoolExecutor wiring out
+of QueryEngine and retained skipped timing tests. The v5.0.1 redo reconstructs
+Block N from `SYNTHESIS_MASTER.md`, which requires concurrent and sequential
+tool-dispatch paths, path-scoped safety, retry/stub recovery, and clear
+constraint disposition for streaming-only and TaskV2 swarm rows.
+
+### Decision
+
+Close Block N with synchronous, Bedrock-compatible local mechanisms:
+
+- `core/parallel_dispatch.py` owns the v5-filtered parallel constants,
+  path-scoped conflict detection, dispatch planning, ThreadPoolExecutor worker
+  execution, checkpoint snapshots, aggregate turn-budget enforcement, pending
+  tool-use tracking, retry classification, and mid-call stub recovery.
+- `core/query_engine.py` uses the dispatcher for all-safe multi-tool turns,
+  preserves result order, records worker checkpoints, emits duplicate-call
+  stubs, and falls back to the existing sequential path for unsafe or
+  path-conflicting batches.
+- `tools/registry.py` adds the Runnable `interruptBehavior` analogue as
+  `interrupt_behavior` while preserving aliases, destructive metadata, and
+  max-result-size defaults.
+- Streaming-only rows N-10/N-11/N-13 and TaskV2 swarm row N-19 are not
+  silently dropped; they are ledgered as `N/A_CONSTRAINT` because v5.0.1
+  forbids streaming and does not ship the async TaskV2 swarm surface.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+Runnable/Hermes concurrent semantics are preserved for v5's local synchronous
+tool-dispatch surface. Streaming callbacks and async task-swarm tools are hard
+out-of-scope constraints for v5.0.1 and remain outside AWS/R-tier spend.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/parallel_dispatch.py`
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/core/__init__.py`
+- `compact_v5/MAIN/agent/tools/registry.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_n.py`
+- `compact_v5/_status/v5_completion_audit/blocks/N/*`
+
+### Linked port-log rows
+
+- #114 - Block N completion-audit redo.
+
+### Validation
+
+- `python -m py_compile compact_v5\MAIN\agent\core\parallel_dispatch.py compact_v5\MAIN\agent\core\query_engine.py compact_v5\MAIN\agent\core\__init__.py compact_v5\MAIN\agent\tools\registry.py compact_v5\MAIN\agent\tests\integration\test_block_n.py`
+- Result: PASS. Log: `block-n-py-compile.log`.
+- `python -m pytest compact_v5\MAIN\agent\tests\integration\test_block_n.py -q`
+- Result: 25 passed. Log: `block-n-pytest.log`.
+- `python -m pytest compact_v5\MAIN\agent\tests\integration\test_query_engine.py compact_v5\MAIN\agent\tests\integration\test_subagent.py compact_v5\MAIN\agent\tests\unit\test_registry.py -q`
+- Result: 53 passed. Log: `block-n-regression.log`.
+
+No AWS/R-tier test was run.
+
 ## ADR-042 - Block A remaining completion-audit blockers
 
 **Date**: 2026-05-04
