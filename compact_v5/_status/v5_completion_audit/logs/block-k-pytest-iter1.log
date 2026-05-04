@@ -1,0 +1,33 @@
+.F.......                                                                [100%]
+================================== FAILURES ===================================
+______________ test_k2_port_log_evidence_tier_column_and_values _______________
+
+    def test_k2_port_log_evidence_tier_column_and_values():
+        text = _read(_PORT_LOG)
+        header = next(line for line in text.splitlines() if line.startswith("| ID |"))
+        columns = _split_markdown_row(header)
+    
+        assert "Evidence tier" in columns
+        tier_index = columns.index("Evidence tier")
+        allowed = {"VERIFIED", "LISTED"}
+    
+        rows = [
+            _split_markdown_row(line)
+            for line in text.splitlines()
+            if re.match(r"^\|\s*[0-9A-Z][0-9A-Z-]*\s*\|", line)
+        ]
+        assert rows, "PORT_LOG has no data rows"
+        bad_rows = []
+        for row in rows:
+            if len(row) != len(columns):
+                bad_rows.append((row[0], f"column count {len(row)} != {len(columns)}"))
+                continue
+            if row[tier_index] not in allowed:
+                bad_rows.append((row[0], f"bad Evidence tier {row[tier_index]!r}"))
+>       assert not bad_rows
+E       assert not [('ID', "bad Evidence tier 'Evidence tier'")]
+
+tests\integration\test_block_k_process.py:81: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/test_block_k_process.py::test_k2_port_log_evidence_tier_column_and_values
+1 failed, 8 passed in 0.15s

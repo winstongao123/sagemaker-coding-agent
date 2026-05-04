@@ -63,3 +63,37 @@ Use these files to understand current progress:
 `CLAUDE.md` remains useful project context, but it is Claude-oriented and partly
 legacy v4 overview. For Codex behavior, follow this `AGENTS.md` plus the active
 v5 audit control files.
+
+## Test Policy
+
+### A44 - No Change-Detector Tests
+
+Tests must lock behavior and invariants, not incidental catalog shape. Avoid
+snapshot-style assertions such as hardcoded model counts, exact version literals,
+or bare membership checks whose only signal is "the list changed." Rewrite these
+as contracts: every model has required metadata, every advertised tool can
+execute or is explicitly gated, every migration reaches the current format, and
+every generated artifact proves a user-visible property.
+
+Line-level `# noqa: A44` opt-outs are allowed only for explicit v4-baseline
+coverage locks, and each opt-out needs a nearby test-file justification so future
+reviewers can distinguish parity evidence from brittle change detection.
+
+### A41 - Hermetic Test Parity
+
+Local tests should not depend on ambient credentials, host timezone, locale,
+network reachability, or a developer's personal shell state. Where behavior is
+time, locale, or environment sensitive, tests must set fixed values or clear the
+relevant variables. AWS/R-tier behavior stays behind explicit env gates and user
+approval; local tests may assert marker/spec behavior but must not silently spend.
+
+## Pitfalls
+
+### A39 - No Wire-Dead-Code Without E2E Evidence
+
+A port is not shipped merely because a registry entry, callback, or config knob
+exists. Each v4/Runnable/Hermes/Learning Factory cherry-pick needs one of:
+concrete local lock-test evidence that exercises the runtime path, explicit E2E
+or reviewer evidence, or a documented hard `N/A_CONSTRAINT` tied to the v5
+environment. Wiring-only claims remain ship-blocking until one of those evidence
+paths exists.

@@ -1,5 +1,27 @@
 # compact_v5 changelog
 
+## Changelog Postmortem Entry Shape
+
+For every non-trivial bug fix, reviewer finding closure, or process incident,
+add a short postmortem entry with these subsections:
+
+### Symptom
+
+What failed or what risk was observed.
+
+### Root cause
+
+Why the failure or risk existed.
+
+### Fix
+
+What changed, including the primary code or process artifact.
+
+### Verification
+
+Which local test, scope audit, reviewer verdict, or explicit no-test
+justification proves the fix.
+
 ## v5.0.1-block-e-f — env_block + ADR-020 0-2/0-4/0-6 remap closure (2026-05-03)
 
 Codex review: 2-iter cycle (gpt-5.3-codex throughout):

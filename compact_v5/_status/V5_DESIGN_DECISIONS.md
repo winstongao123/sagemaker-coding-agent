@@ -4,6 +4,51 @@ Each entry is a mini-ADR. Never edit a closed entry; supersede with a new one re
 
 ---
 
+## ADR-047 - Block K process discipline gates
+- Date: 2026-05-04
+- Phase ID: Block K
+- Status: ACTIVE
+
+### Context
+
+Block K is process-only scope from `SYNTHESIS_MASTER.md:377-390`. It imports
+Learning Factory and Hermes process controls that prevent scope drift,
+overstated evidence, brittle tests, and wiring-only ports.
+
+### Decision
+
+Adopt the eight Block K rows as repository process:
+
+- K-1 adds `00-SYNTHESIS.md` pointer support and audit-directory shape docs.
+- K-2 adds `Evidence tier` to the active PORT_LOG, with only `VERIFIED` or
+  `LISTED` allowed.
+- K-3 documents changelog-as-postmortem entries with Symptom, Root cause, Fix,
+  and Verification sections.
+- K-4 adds the five-category preflight gate: hooks, permissions, reviewer,
+  tree, and session-state.
+- K-5 adds the three-critic AXIS A/B/C process: value, timing, and cost.
+- K-6 adds A44 no-change-detector-tests policy.
+- K-7 adds A39 no-wire-dead-code-without-E2E policy.
+- K-8 adds A41 hermetic test parity policy.
+
+### Constraints
+
+The Wave-5-DEEP numeric file rename remains optional polish because
+`SYNTHESIS_MASTER.md:709-710` says it is not a blocker. The current redo adds
+the required `00-SYNTHESIS.md` pointer and future-audit shape docs without
+renaming source evidence files.
+
+### Verification
+
+`compact_v5/MAIN/agent/tests/integration/test_block_k_process.py` locks all
+eight process rows, and `scope_audit.py --block K` gates row completeness.
+
+### Linked port-log rows
+
+#115 through #122.
+
+---
+
 ## ADR-001 — File-per-tool layout instead of dir-per-tool
 - Date: 2026-04-30
 - Phase ID: 00

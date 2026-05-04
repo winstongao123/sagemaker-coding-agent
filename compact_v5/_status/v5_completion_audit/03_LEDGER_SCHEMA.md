@@ -33,6 +33,13 @@ Every block ledger must use this schema.
 | `DROPPED_USER_APPROVED` | Not ship-blocking only with explicit user approval citation. |
 | `N/A_CONSTRAINT` | Not ship-blocking only with hard-constraint citation. |
 
+## Review Sentinel Values
+
+Use `NOT_INCLUDED_IN_REVIEW` when a historical review did not include the row.
+For a current block before its first compliant Claude review returns, workers may
+temporarily use `NOT_YET_CLAUDE_REVIEWED` in `historical_review`. Replace that
+temporary value with the saved review path after the first usable review.
+
 ## Required Summary
 
 Each ledger must end with:
