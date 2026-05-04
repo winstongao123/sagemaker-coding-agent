@@ -1,6 +1,6 @@
 # Block N Status
 
-Status: READY_FOR_GIT_CHECKPOINT
+Status: PRIMARY_PUSHED_EVIDENCE_PENDING
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 19
@@ -34,18 +34,17 @@ Next Claude review state: no further review pending. Iter2 returned
 
 Current phase: CLOSE_ARTIFACTS_AND_GIT_CHECKPOINT
 
-Current task: Finalize close artifacts, stage a specific Block N file list,
-commit, and push to `sageagent/v5-build`.
+Current task: Commit and push the Block N git close-plan evidence update.
 
-Last completed action: Claude iter2 returned `APPROVE` /
-`READY_FOR_BLOCK_CLOSE_REVIEW`; missing iter2 compile-log artifact was fixed;
-final scope audit and strict scope audit passed with 0 blockers.
+Last completed action: Primary Block N checkpoint commit
+`a72d351cb5f9accbcad722dd84ed9dbac4f5ea44` was pushed to
+`sageagent/v5-build` and remote verification matched that SHA.
 
 Next 3 todo items:
 
-1. Update self-review, self-reflection, and git close plan.
-2. Stage only Block N-specific files and commit.
-3. Push to `sageagent/v5-build`, then run all-block summary and start Block K.
+1. Stage only `blocks/N/GIT_CLOSE_PLAN.md` and `blocks/N/STATUS.md`.
+2. Commit/push Block N checkpoint evidence.
+3. Run all-block summary, update order docs, and start Block K.
 
 Current review iteration count: 2 usable reviews completed.
 
