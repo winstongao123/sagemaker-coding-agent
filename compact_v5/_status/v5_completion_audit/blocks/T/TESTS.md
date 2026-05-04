@@ -62,12 +62,16 @@ Date: 2026-05-04
     - Log: `compact_v5/_status/v5_completion_audit/logs/block-t-post-ledger-field-scope-audit-strict.log`
 
 15. Documentation consistency pass from `PS_CLI_WOKER_DESIGN/GIT_CHECKPOINT_POLICY.md`
-    - Result: PASS, with expected pre-commit `pending Block T checkpoint` git evidence marker documented.
+    - Result: PASS, with the then-expected pre-commit git evidence marker documented before the close commit SHA existed.
     - Log: `compact_v5/_status/v5_completion_audit/logs/block-t-doc-consistency-pass.log`
 
 16. `py -3.10 compact_v5/_status/scripts/scope_audit.py --block T --strict`
     - Result: 12 rows, 10 shipped, 1 dropped, 1 N/A, 0 blocking, `READY_TO_REVIEW_CLOSE`
     - Log: `compact_v5/_status/v5_completion_audit/logs/block-t-pre-close-scope-audit-strict.log`
+
+17. `py -3.10 compact_v5/_status/scripts/scope_audit.py --block T --strict`
+    - Result: 12 rows, 10 shipped, 1 dropped, 1 N/A, 0 blocking, `READY_TO_REVIEW_CLOSE`
+    - Log: `compact_v5/_status/v5_completion_audit/logs/block-t-post-close-evidence-scope-audit-strict.log`
 
 ## Coverage Notes
 

@@ -1,23 +1,23 @@
 # Block T Status
 
-Status: COMMIT_HOOK_UTF8_REPAIR_READY_TO_RETRY
+Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 12
 Ledger rows: 12
 Current blocking-row count: 0
 
-Current phase: COMMIT_HOOK_REPAIR
+Current phase: CHECKPOINT_EVIDENCE_UPDATE
 
-Current task: Convert the newly generated pre-close strict audit log to UTF-8 and retry the close commit.
+Current task: Commit and push Block T checkpoint evidence artifacts with the actual close commit SHA.
 
-Last completed action: Second commit attempt was blocked only by `logs/block-t-pre-close-scope-audit-strict.log` having invalid Unicode from PowerShell redirection.
+Last completed action: Replaced Block T ledger git evidence with close commit `43d27278fda49173d2cbb3422603a20d3e9e81b5` and reran strict scope audit; 0 blockers.
 
 Next 3 todo items:
 
-1. Convert `logs/block-t-pre-close-scope-audit-strict.log` to UTF-8.
-2. Re-stage the repaired log and this heartbeat update.
-3. Retry commit `v5/block-t: complete tool surface closure audit`.
+1. Stage only the evidence update file list in `GIT_CLOSE_PLAN.md`.
+2. Commit `v5/block-t: record checkpoint evidence`.
+3. Push the checkpoint evidence commit to `sageagent/v5-build`.
 
 Next Claude review state: iter3 review saved at `reviews/block-t-claude-review-iter3.md`; no further Claude review currently needed.
 

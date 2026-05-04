@@ -51,9 +51,9 @@ SHIP_BLOCKING_ROWS: 0
 
 ## Git Evidence
 
-Pending Block T checkpoint. Ledger rows currently say `pending Block T checkpoint`;
-replace with the actual commit SHA after Claude approval, final scope audit,
-specific-file commit, and push.
+Block T close checkpoint: `43d27278fda49173d2cbb3422603a20d3e9e81b5`.
+Ledger git evidence rows now reference this SHA after Claude approval, final
+scope audit, specific-file commit, and push.
 
 ## Final Scope Audit
 

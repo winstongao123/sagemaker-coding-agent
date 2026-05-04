@@ -1,6 +1,6 @@
 # Block T Git Close Plan
 
-Status: READY_TO_STAGE
+Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
 Date: 2026-05-04
 
 ## Close Preconditions
@@ -73,10 +73,53 @@ Specific-file staging only. Do not use `git add -A`.
 
 Planned commit message: `v5/block-t: complete tool surface closure audit`
 
-Commit SHA: pending.
+Commit SHA: `43d27278fda49173d2cbb3422603a20d3e9e81b5`.
 
-Push result: pending.
+Push result: `git push sageagent v5-build` succeeded.
 
-Post-push git status: pending.
+Push output:
+
+```text
+To https://github.com/winstonpgao/sageagent.git
+   3b7632d..43d2727  v5-build -> v5-build
+```
+
+Post-push git status before checkpoint evidence update:
+
+```text
+ m _archive/compare_code/gg-claude-code-runnable
+ M compact_v5.zip
+ M compact_v5/MAIN/agent/memory.md
+ M compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md
+ M compact_v5/_status/PS_AGENT_SELF_REFLECTION.md
+ M compact_v5/_status/PS_CRITICAL_WORKER_PROBLEM.md
+ M compact_v5/_status/RESUME.md
+ M compact_v5/_status/R_TIER_GATE_STATUS.md
+ M compact_v5/_status/R_TIER_PENDING_TESTS.md
+ M compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md
+ M compact_v5/_status/r_tier_test_matrix.json
+ M compact_v5/_status/v5_completion_audit/06_CODEX_WORKER_SELF_COORDINATED_PROMPT.md
+ M compact_v5/_status/v5_completion_audit/PS_CLI_WOKER_DESIGN/GIT_CHECKPOINT_POLICY.md
+ M compact_v5/_status/v5_completion_audit/PS_CLI_WOKER_DESIGN/README.md
+ M compact_v5/_status/v5_completion_audit/blocks/A/STATUS.md
+ M compact_v5/docs/PS_V5_TEST_PLAYBOOK.md
+ M compact_v5/docs/PS_V5_TEST_WORKER_FINAL.md
+```
+
+Checkpoint evidence update: this file is part of the evidence update commit
+that records the close commit SHA and push evidence.
 
 Tag: no tag created; explicit user approval required for any tag.
+
+## Checkpoint Evidence Commit
+
+Planned commit message: `v5/block-t: record checkpoint evidence`
+
+Specific-file staging only:
+
+- `compact_v5/_status/v5_completion_audit/blocks/T/GIT_CLOSE_PLAN.md`
+- `compact_v5/_status/v5_completion_audit/blocks/T/LEDGER.md`
+- `compact_v5/_status/v5_completion_audit/blocks/T/STATUS.md`
+- `compact_v5/_status/v5_completion_audit/blocks/T/TESTS.md`
+- `compact_v5/_status/v5_completion_audit/blocks/T/WORKER_SELF_REVIEW.md`
+- `compact_v5/_status/v5_completion_audit/logs/block-t-post-close-evidence-scope-audit-strict.log`
