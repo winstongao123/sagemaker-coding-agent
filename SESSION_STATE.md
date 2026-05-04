@@ -1,5 +1,19 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-04 — SCOPE-DRIFT MITIGATION TOOLKIT CREATED (post-incident, 7 pieces)
+
+Per user "yes" approval after PS_CRITICAL_WORKER_PROBLEM.md showed silent scope narrowing despite 50 prior Codex APPROVE iters. Created 7 mechanical gates so the failure mode cannot recur silently:
+
+1. `D:/Github/Learning_Factory/docs/LF_LESSON_AGENT_SCOPE_DRIFT.md` — generalized lesson for any future agent project
+2. `compact_v5/_status/PS_AGENT_SELF_REFLECTION.md` — 7-step mandatory pre-DONE checklist
+3. `compact_v5/_status/scripts/scope_audit.py` — mechanical audit (now ledger-based per user improvement)
+4. `~/.claude/hooks/verify-scope-completeness.sh` — pre-commit hook blocking `git tag v5.0.1-block-X` on MISSING items
+5. `~/.claude/CLAUDE.md` "DONE Definition" — codifies 5 conditions DONE requires
+6. `~/.claude/projects/d--Github/memory/feedback_no_unilateral_scope_narrowing.md` — updated with mechanical-gate addition
+7. `compact_v5/_status/CODEX_REVIEW_TEMPLATE.md` AXIS D — scope-completeness review axis (Codex independently verifies PRESENT claims via grep)
+
+Next: run `python compact_v5/_status/scripts/scope_audit.py --all --summary` against the new ledger-based v5_completion_audit/blocks/ structure (when populated) to get authoritative per-Block PRESENT/MISSING table for user A/B/C/D scope decision.
+
 ## 2026-05-04 — CRITICAL SCOPE INVESTIGATION OPENED
 
 R-tier R4 ESCALATION-R4.md surfaced A-16 (PS#3 cold-cache fix) NOT IMPLEMENTED in v5.0.1 despite being in Wave-5-DEEP plan. Spot-check expanded to all Blocks: Block A 9-of-43 PORT_LOG rows + 24-of-25 named items missing in grep; Block H+ 1-of-20 rows; Block L 3-of-28 rows. Significant scope-narrowing despite explicit user "no deferred items" directive + 50 prior Codex APPROVE iterations.

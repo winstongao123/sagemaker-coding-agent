@@ -88,6 +88,43 @@ AXIS C VERDICT: PASS | CHANGES_REQUESTED | BLOCKER
 Gaps: [category: MUST|DEFER|DROP|N/A] reference_file:line — description
 — disposition (target Block | DECISION-DROP-PER-USER row | N/A reason)
 
+=== AXIS D — Scope completeness vs SYNTHESIS_MASTER (added 2026-05-04) ===
+
+CRITICAL: this axis prevents silent scope narrowing — the failure mode
+that v5.0.0 + v5.0.1 R-tier surfaced. Per LF_LESSON_AGENT_SCOPE_DRIFT.md.
+
+Required inputs from worker (must be in this prompt, not just submitted code):
+1. Full spec items list for Block {{ID}} from SYNTHESIS_MASTER.md
+   (e.g. for Block A: A-1 through A-43 with their names + source paths)
+2. Worker's per-item PRESENT/PARTIAL/MISSING claim with file:line evidence
+3. Output of `python compact_v5/_status/scripts/scope_audit.py --block {{ID}}`
+
+YOUR JOB (Codex):
+- INDEPENDENTLY verify each PRESENT claim by running grep on the cited
+  file:line. Do NOT trust worker's claim without verification.
+- For each MISSING item, check whether PORT_LOG has a DEFERRED-USER-APPROVED
+  row referencing it. If yes, mark DEFERRED-OK. If no, mark SILENTLY-DROPPED.
+- For each PARTIAL item, identify what's missing and whether it's required.
+
+SILENTLY-DROPPED is BLOCKER severity. User did not approve. Block is NOT
+ready to tag.
+
+Output:
+AXIS D VERDICT: PASS | CHANGES_REQUESTED | BLOCKER
+Per-item verification table:
+| Item ID | Worker claim | Codex verification | Verdict |
+|---------|--------------|--------------------|---------|
+| X-1     | PRESENT file:line | grep confirmed   | OK |
+| X-2     | MISSING       | no DEFER row found | BLOCKER (silently dropped) |
+| X-3     | PARTIAL       | only stub present  | CHANGES_REQUESTED |
+| X-4     | DEFERRED      | PORT_LOG #N user-approved | OK |
+
+Aggregate:
+- PRESENT verified: <count>
+- DEFERRED-OK: <count>
+- SILENTLY-DROPPED: <count> ← MUST be 0 for tag
+- CHANGES_REQUESTED: <count>
+
 === FINAL ===
 PHASE {{ID}} OVERALL: APPROVE | APPROVE_WITH_FIXES | REJECT
 A-axis: <one-line>
