@@ -49,3 +49,5 @@ Cleanup gates after Claude iter2 LOW ledger findings:
   Log: `compact_v5/_status/v5_completion_audit/logs/block-k-scope-audit-strict-iter3.log`.
 - Final pre-checkpoint strict scope audit: PASS, 8 shipped, 0 blocking.
   Log: `compact_v5/_status/v5_completion_audit/logs/block-k-final-scope-audit-strict.log`.
+- Post-primary checkpoint strict scope audit: PASS, 8 shipped, 0 blocking.
+  Log: `compact_v5/_status/v5_completion_audit/logs/block-k-post-primary-scope-audit-strict.log`.

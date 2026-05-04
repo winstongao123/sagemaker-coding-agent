@@ -1,6 +1,6 @@
 # Block K Status
 
-Status: READY_FOR_CLOSE_CHECKPOINT
+Status: PRIMARY_PUSHED_EVIDENCE_PENDING
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 8
@@ -9,15 +9,15 @@ Current blocking-row count: 0
 
 Current phase: UPDATING_ARTIFACTS
 
-Current task: Finalize Block K close artifacts, run final scope audit, and create a specific-file checkpoint commit.
+Current task: Commit and push Block K checkpoint evidence update.
 
-Last completed action: Claude iter3 returned `VERDICT: APPROVE` and `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`; 8 shipped rows, 0 blockers.
+Last completed action: Primary Block K checkpoint commit `535b5d852e62e765ae802d47d9ae0229b13e6d39` was pushed to `sageagent/v5-build` and remote verification matched that SHA.
 
 Next 3 todo items:
 
-1. Run final `scope_audit.py --block K` before checkpoint.
-2. Stage only the Block K file list and create the close checkpoint commit.
-3. Push to `sageagent/v5-build`, then update git evidence artifacts.
+1. Stage only `blocks/K/LEDGER.md`, `blocks/K/GIT_CLOSE_PLAN.md`, and `blocks/K/STATUS.md`.
+2. Commit/push the Block K checkpoint evidence update.
+3. Run all-block summary, update order docs, and start Block T.
 
 Next Claude review state: no further review pending; iter3 approval saved at `reviews/block-k-claude-review-iter3.md`.
 

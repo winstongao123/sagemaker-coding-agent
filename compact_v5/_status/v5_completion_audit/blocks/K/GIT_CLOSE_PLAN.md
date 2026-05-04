@@ -1,6 +1,6 @@
 # Block K Git Close Plan
 
-Status: READY_TO_STAGE_PRIMARY
+Status: PRIMARY_PUSHED_EVIDENCE_PENDING
 Date: 2026-05-04
 
 Block K clean close criteria:
@@ -49,6 +49,7 @@ Specific file list to stage for primary checkpoint:
 - `compact_v5/_status/v5_completion_audit/logs/block-k-claude-review-iter3.command.md`
 - `compact_v5/_status/v5_completion_audit/logs/block-k-claude-review-iter3.log`
 - `compact_v5/_status/v5_completion_audit/logs/block-k-final-scope-audit-strict.log`
+- `compact_v5/_status/v5_completion_audit/logs/block-k-post-primary-scope-audit-strict.log`
 - `compact_v5/_status/v5_completion_audit/logs/block-k-py-compile-iter1.log`
 - `compact_v5/_status/v5_completion_audit/logs/block-k-py-compile-iter2.log`
 - `compact_v5/_status/v5_completion_audit/logs/block-k-py-compile-iter3.log`
@@ -72,10 +73,22 @@ Specific file list to stage for primary checkpoint:
 - `compact_v5/docs/audits/README.md`
 - `compact_v5/docs/audits/THREE_CRITIC_REVIEW.md`
 
-Primary commit SHA: pending.
+Primary commit SHA: `535b5d852e62e765ae802d47d9ae0229b13e6d39`.
 
-Push result: pending.
+Push result: pushed to `sageagent/v5-build`.
 
-Post-push git status: pending.
+Remote verification:
+
+`535b5d852e62e765ae802d47d9ae0229b13e6d39 refs/heads/v5-build`.
+
+Evidence update commit message:
+
+`v5/block-k: record checkpoint evidence`
+
+Evidence commit SHA: pending.
+
+Evidence push result: pending.
+
+Post-push git status: pending after evidence commit.
 
 No tag will be created without explicit user approval.
