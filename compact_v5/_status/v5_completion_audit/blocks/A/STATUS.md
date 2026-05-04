@@ -39,22 +39,22 @@ Next Claude review state: no review running. No further Claude review needed bef
 
 ## Progress Heartbeat
 
-Current phase: GIT_CHECKPOINT_PREP
+Current phase: CHECKPOINT_PUSHED
 
-Current task: Verify and stage the exact checkpoint file list from `blocks/A/GIT_CLOSE_PLAN.md`, then commit and push to `sageagent v5-build`.
+Current task: Block A checkpoint was committed and pushed; checkpoint evidence is being saved in `blocks/A/GIT_CLOSE_PLAN.md`.
 
-Last completed action: Fixed commit-hook Unicode blockers by generating the surrogate test value at runtime and normalizing saved reviewer/log artifacts to valid UTF-8; targeted `test_a26_surrogate_sanitizer_recursive` passed; `git diff --cached --check` passes.
+Last completed action: Commit `0f9ec6a81ae2998b2d11fec93d0d3bf24fa6128d` (`v5/block-a: complete compactor closure audit`) pushed successfully to `sageagent v5-build`.
 
 Next 3 todo items:
 
-1. Restage the heartbeat file updated after the Unicode hook fix.
-2. Commit the explicit Block A checkpoint file list.
-3. Push to `sageagent v5-build`, then update `GIT_CLOSE_PLAN.md` with SHA, push result, post-push status, and no-tag note.
+1. Save checkpoint evidence in `GIT_CLOSE_PLAN.md`.
+2. Optionally commit only `GIT_CLOSE_PLAN.md` and this heartbeat as evidence artifacts if needed for remote traceability.
+3. Continue with the next block only under the same worker/reviewer protocol; no AWS/R-tier spend or tag.
 
 Current review iteration count: 11 recorded attempts; latest usable review is iter11.
 
 Current ship-blocking row count: 0 after final scope audit and Claude iter11 review.
 
-Blocker or human decision needed: No human decision needed currently. User authorized git checkpoint after clean close state. Do not run AWS/R-tier spend, git tag, Codex review, nested codex exec, git reset/checkout, force push, or final-ready approval.
+Blocker or human decision needed: No human decision needed currently. Block A checkpoint push succeeded. Do not run AWS/R-tier spend, git tag, Codex review, nested codex exec, git reset/checkout, force push, or final-ready approval.
 
 Learning Factory / AGENTS.md state rule: Codex remains the only writer; Claude remains read-only reviewer; goals/status live in files; reviewer must reconstruct canonical scope first; any compaction/resume must use files plus `scope_audit.py`, not chat memory.

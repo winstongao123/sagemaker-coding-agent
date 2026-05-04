@@ -187,3 +187,51 @@ After push, update this file with:
 - push result
 - `git status --short`
 - note: no tag created
+
+## Checkpoint Evidence
+
+Commit message:
+
+```text
+v5/block-a: complete compactor closure audit
+```
+
+Checkpoint commit SHA:
+
+```text
+0f9ec6a81ae2998b2d11fec93d0d3bf24fa6128d
+```
+
+Push remote and branch:
+
+```text
+sageagent v5-build
+```
+
+Push result:
+
+```text
+To https://github.com/winstonpgao/sageagent.git
+   6c791f5..0f9ec6a  v5-build -> v5-build
+```
+
+Post-push `git status --short` captured immediately after the checkpoint push:
+
+```text
+ m _archive/compare_code/gg-claude-code-runnable
+ M compact_v5.zip
+ M compact_v5/MAIN/agent/memory.md
+ M compact_v5/_phase_2/wave_6/BUILDER_PROMPT.md
+ M compact_v5/_status/PS_AGENT_SELF_REFLECTION.md
+ M compact_v5/_status/PS_CRITICAL_WORKER_PROBLEM.md
+ M compact_v5/_status/RESUME.md
+ M compact_v5/_status/R_TIER_GATE_STATUS.md
+ M compact_v5/_status/R_TIER_PENDING_TESTS.md
+ M compact_v5/_status/R_TIER_REVIEW_TEMPLATE.md
+ M compact_v5/_status/r_tier_test_matrix.json
+ M compact_v5/docs/PS_V5_TEST_PLAYBOOK.md
+ M compact_v5/docs/PS_V5_TEST_WORKER_FINAL.md
+```
+
+No tag was created. No AWS/R-tier spend was run. No Codex review or nested
+`codex exec` was run.
