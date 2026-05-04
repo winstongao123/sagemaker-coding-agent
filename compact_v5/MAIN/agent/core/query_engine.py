@@ -275,6 +275,7 @@ class QueryEngine:
         max_structured_output_retries: int = 3,
         status_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         tool_gen_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        abort_events: Optional[Any] = None,
     ):
         """Construct a QueryEngine.
 
@@ -325,6 +326,7 @@ class QueryEngine:
         # output_fn-only behavior.
         self.status_callback = status_callback
         self.tool_gen_callback = tool_gen_callback
+        self.abort_events = tuple(abort_events or ())
 
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
@@ -1269,6 +1271,7 @@ class QueryEngine:
                 "parent_depth": getattr(self, "_subagent_depth", 0),
                 "skill_manager": self.skill_manager,
                 "session_id": self.session_id,
+                "abort_events": self.abort_events,
             })
             text = _coerce_tool_result_to_text(raw)
             text = _truncate_tool_result(text, tool.max_result_size_chars)

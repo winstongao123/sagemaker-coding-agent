@@ -219,6 +219,10 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
     if not isinstance(code, str) or not code:
         return "Error: code is required and must be a non-empty string"
 
+    abort_event = _combined_abort_event(context)
+    if abort_event is not None and abort_event.is_set():
+        return "Error: execution aborted before start"
+
     raw_timeout = args.get("timeout", 60)
     try:
         timeout = int(raw_timeout)
@@ -233,7 +237,8 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
     # Build preamble at call time (captures current CONFIG state).
     preamble = _build_python_preamble()
 
-    fd, temp_path = tempfile.mkstemp(suffix=".py", prefix="agent_exec_", dir=CONFIG.workspace)
+    workspace = _current_workspace()
+    fd, temp_path = tempfile.mkstemp(suffix=".py", prefix="agent_exec_", dir=workspace)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(preamble)
@@ -242,18 +247,18 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
         if CONFIG.execution_mode == "docker":
             from security.manager import ensure_docker_image_ready
             ensure_docker_image_ready()
-            rel = os.path.relpath(temp_path, CONFIG.workspace).replace("\\", "/")
+            rel = os.path.relpath(temp_path, workspace).replace("\\", "/")
             docker_cmd = docker_base_cmd()
             docker_cmd.extend([CONFIG.exec_docker_image, "python", "-I", f"/workspace/{rel}"])
             result = run_subprocess(
                 docker_cmd, timeout=timeout, shell=False,
-                cwd=CONFIG.workspace, env=safe_exec_env(),
+                cwd=workspace, env=safe_exec_env(),
             )
         else:
             result = run_subprocess(
                 [sys.executable, "-I", temp_path],
                 timeout=timeout, shell=False,
-                cwd=CONFIG.workspace, env=safe_exec_env(),
+                cwd=workspace, env=safe_exec_env(),
             )
 
         output = result.stdout
@@ -289,3 +294,25 @@ def _register():
         requires_approval=True,      # HIGH_RISK_TOOLS membership
         search_hint="execute python sandboxed",
     ))
+
+
+def _current_workspace() -> str:
+    from runtime.config import CONFIG
+    from runtime.execution_context import current_cwd
+    return current_cwd(CONFIG.workspace) or CONFIG.workspace
+
+
+def _combined_abort_event(context: Optional[Dict[str, Any]]) -> Optional[Any]:
+    if not isinstance(context, dict):
+        return None
+    events = []
+    event = context.get("abort_event")
+    if event is not None:
+        events.append(event)
+    extra = context.get("abort_events")
+    if isinstance(extra, (list, tuple)):
+        events.extend(e for e in extra if e is not None)
+    if not events:
+        return None
+    from runtime.execution_context import combined_abort_signal
+    return combined_abort_signal(*events)

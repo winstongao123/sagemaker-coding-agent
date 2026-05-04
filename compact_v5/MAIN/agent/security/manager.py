@@ -271,6 +271,28 @@ class SecurityManager:
             if compiled.search(command):
                 return False, f"HARD BLOCKED — {reason}. This operation is permanently disabled."
 
+        # Block C C-11/C-12: consume approval-sensitive cwd command
+        # helpers in the runtime validation path instead of leaving them
+        # as detection-only helpers.
+        try:
+            from security.bash_safety import (
+                has_cd_git_compound_with_bare_repo,
+                has_multiple_cd,
+            )
+            if has_cd_git_compound_with_bare_repo(command):
+                return False, (
+                    "cd into a bare Git repository followed by a git command "
+                    "requires a separate explicit command; blocked to avoid "
+                    "bare-repo fsmonitor side effects."
+                )
+            if has_multiple_cd(command):
+                return False, (
+                    "Multiple cd segments require separate explicit commands "
+                    "so approval and workspace semantics stay clear."
+                )
+        except Exception:
+            pass
+
         # Layer 0: Bedrock-only
         if getattr(CONFIG, "aws_bedrock_only", False) and re.search(r'\baws\s', command):
             return False, "AWS CLI blocked (aws_bedrock_only=true). v5 only uses Bedrock via Python SDK."
@@ -436,6 +458,16 @@ class SecurityManager:
             except re.error:
                 continue
         return findings
+
+    def redact_secrets(self, content: str, marker: str = "[REDACTED_SECRET]") -> str:
+        """Redact known secret patterns from content."""
+        redacted = content
+        for pattern, _secret_type in self.SECRET_PATTERNS:
+            try:
+                redacted = re.sub(pattern, marker, redacted)
+            except re.error:
+                continue
+        return redacted
 
     def truncate_output(self, output: str, max_size: Optional[int] = None,
                         use_smart: bool = True) -> str:

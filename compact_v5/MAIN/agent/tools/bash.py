@@ -109,6 +109,10 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
     if not isinstance(command, str) or not command:
         return "Error: command is required and must be a non-empty string"
 
+    abort_event = _combined_abort_event(context)
+    if abort_event is not None and abort_event.is_set():
+        return "Error: execution aborted before start"
+
     raw_timeout = args.get("timeout", 120)
     try:
         timeout = int(raw_timeout)
@@ -128,7 +132,7 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
             docker_cmd.extend([CONFIG.exec_docker_image, "sh", "-lc", command])
             result = run_subprocess(
                 docker_cmd, timeout=timeout, shell=False,
-                cwd=CONFIG.workspace, env=safe_exec_env(),
+                cwd=_current_workspace(), env=safe_exec_env(),
             )
         else:
             needs_shell = bool(re.search(r"[|><;]|&&|\|\||`|\$\(", command))
@@ -147,7 +151,7 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
                 use_shell = False
             result = run_subprocess(
                 cmd_arg, timeout=timeout, shell=use_shell,
-                cwd=CONFIG.workspace, env=safe_exec_env(),
+                cwd=_current_workspace(), env=safe_exec_env(),
             )
 
         output = result.stdout
@@ -216,3 +220,25 @@ def _register():
         requires_approval=True,      # HIGH_RISK_TOOLS membership
         search_hint="execute shell command allowlist",
     ))
+
+
+def _current_workspace() -> str:
+    from runtime.config import CONFIG
+    from runtime.execution_context import current_cwd
+    return current_cwd(CONFIG.workspace) or CONFIG.workspace
+
+
+def _combined_abort_event(context: Optional[Dict[str, Any]]) -> Optional[Any]:
+    if not isinstance(context, dict):
+        return None
+    events = []
+    event = context.get("abort_event")
+    if event is not None:
+        events.append(event)
+    extra = context.get("abort_events")
+    if isinstance(extra, (list, tuple)):
+        events.extend(e for e in extra if e is not None)
+    if not events:
+        return None
+    from runtime.execution_context import combined_abort_signal
+    return combined_abort_signal(*events)

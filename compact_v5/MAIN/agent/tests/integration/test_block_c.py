@@ -172,10 +172,30 @@ def test_secret_scanner_detects_new_gitleaks_patterns():
 # T1 — JSON repair (Hermes-style)
 # ============================================================
 
+def test_secret_scanner_redacts_matches():
+    """C-2 (R5 A1) - redaction helper removes detected secret values."""
+    from security.manager import _build_singleton
+
+    sm = _build_singleton()
+    text = (
+        "api_key='sk-ant-12345678901234567890abcdef' "
+        "and token=glpat-abcdefghijklmnopqrst"
+    )
+
+    redacted = sm.redact_secrets(text)
+
+    assert "sk-ant-" not in redacted
+    assert "glpat-" not in redacted
+    assert redacted.count("[REDACTED_SECRET]") >= 2
+
+
 def test_json_repair_malformed_args():
     """Malformed JSON tool-args are gracefully repaired; irrecoverable
     falls back to {}."""
-    from security.json_repair import repair_tool_call_arguments
+    from security.json_repair import (
+        _escape_invalid_chars_in_json_strings,
+        repair_tool_call_arguments,
+    )
 
     # Happy path.
     assert repair_tool_call_arguments('{"foo": "bar"}') == {"foo": "bar"}
@@ -189,6 +209,9 @@ def test_json_repair_malformed_args():
     assert repair_tool_call_arguments('{"foo": "line1\nline2"}') == {
         "foo": "line1\nline2",
     }
+    assert _escape_invalid_chars_in_json_strings('{"foo": "a\nb\tc"}') == (
+        '{"foo": "a\\nb\\tc"}'
+    )
     # Irrecoverable garbage → {}.
     assert repair_tool_call_arguments("not json at all") == {}
     # None / non-string fallback.
@@ -250,6 +273,15 @@ def test_quote_normalization_curly_to_straight():
 # T1 — UTF-16 BOM detection
 # ============================================================
 
+def test_preserve_quote_style():
+    """C-4 (R1 #116) - replacement text follows original quote style."""
+    from security.edit_file_safety import preserve_quote_style
+
+    assert preserve_quote_style("name = 'old'", "name = 'new'") == "name = 'new'"
+    assert preserve_quote_style("name = \u2019old\u2019", "name = 'new'") == "name = \u2019new\u2019"
+    assert preserve_quote_style('name = \u201dold\u201d', 'name = "new"') == "name = \u201dnew\u201d"
+
+
 def test_utf16_bom_detected(tmp_path):
     """C-5 (R1 #121) — BOM detector recognizes Notepad-saved files."""
     from security.edit_file_safety import detect_utf16_bom
@@ -278,6 +310,26 @@ def test_utf16_bom_detected(tmp_path):
 # ============================================================
 # T1 — UNC path skip on Windows
 # ============================================================
+
+def test_line_ending_round_trip_and_staleness_fallback(tmp_path):
+    """C-7/C-8 - preserve EOLs and tolerate content-identical mtime drift."""
+    from security.edit_file_safety import (
+        is_staleness_false_positive,
+        normalize_line_endings,
+        restore_line_endings,
+    )
+
+    normalized, eol = normalize_line_endings("a\r\nb\r\n")
+    assert normalized == "a\nb\n"
+    assert eol == "\r\n"
+    assert restore_line_endings(normalized.replace("b", "c"), eol) == "a\r\nc\r\n"
+
+    f = tmp_path / "same.txt"
+    f.write_text("stable", encoding="utf-8")
+    old_mtime = f.stat().st_mtime - 10
+    assert is_staleness_false_positive(str(f), old_mtime, "stable")
+    assert not is_staleness_false_positive(str(f), old_mtime, "changed")
+
 
 def test_unc_path_skip_windows():
     """C-6 (R1 #123) — UNC paths rejected on Windows; OK elsewhere."""
@@ -384,6 +436,69 @@ def test_extract_bash_comment_label():
 # ============================================================
 # ADR-020 0-5 remap — scratchpad
 # ============================================================
+
+def test_binary_file_detection_xml_escape_and_execution_context():
+    """C-15/C-16/C-17 - file, XML, cwd context, and abort helpers."""
+    import asyncio
+    from runtime.execution_context import combined_abort_signal, current_cwd, use_cwd
+    from runtime.file_safety import BINARY_EXTENSIONS, is_binary_content
+    from runtime.tool_surface import escape_xml, escape_xml_attr, xml_tag
+    from tools.bash import _current_workspace as bash_current_workspace
+    from tools.python_exec import _current_workspace as python_current_workspace
+
+    assert ".png" in BINARY_EXTENSIONS
+    assert is_binary_content(b"abc\x00def")
+    assert is_binary_content(b"plain", filename="image.png")
+    assert not is_binary_content(b"plain text", filename="notes.txt")
+
+    assert escape_xml("<a&b>") == "&lt;a&amp;b&gt;"
+    assert escape_xml_attr('"x\'&') == "&quot;x&apos;&amp;"
+    assert xml_tag("system-reminder", "use <x> & y") == (
+        "<system-reminder>\nuse &lt;x&gt; &amp; y\n</system-reminder>"
+    )
+
+    assert current_cwd("base") == "base"
+    with use_cwd("child"):
+        assert current_cwd("base") == "child"
+        assert bash_current_workspace() == "child"
+        assert python_current_workspace() == "child"
+    assert current_cwd("base") == "base"
+
+    async def _check_combined() -> None:
+        first = asyncio.Event()
+        second = asyncio.Event()
+        combined = combined_abort_signal(first, second)
+        assert not combined.is_set()
+        second.set()
+        await asyncio.wait_for(combined.wait(), timeout=1)
+
+    asyncio.run(_check_combined())
+
+
+def test_read_file_rejects_binary_content(tmp_path, monkeypatch):
+    """C-15 - read_file refuses binary extension or NUL-byte content."""
+    from runtime.config import CONFIG
+    from security import manager as security_manager
+    from tools.read_file import _read_file_executor
+
+    old_workspace = CONFIG.workspace
+    old_allowed_paths = CONFIG.allowed_paths
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path), raising=False)
+    monkeypatch.setattr(CONFIG, "allowed_paths", [], raising=False)
+    security_manager.rebuild_singleton_for_tests()
+    try:
+        binary = tmp_path / "payload.bin"
+        binary.write_bytes(b"plain text by bytes")
+        with_null = tmp_path / "payload.txt"
+        with_null.write_bytes(b"hello\x00world")
+
+        assert "Refusing to read binary file" in _read_file_executor({"file_path": str(binary)})
+        assert "Refusing to read binary file" in _read_file_executor({"file_path": str(with_null)})
+    finally:
+        monkeypatch.setattr(CONFIG, "workspace", old_workspace, raising=False)
+        monkeypatch.setattr(CONFIG, "allowed_paths", old_allowed_paths, raising=False)
+        security_manager.rebuild_singleton_for_tests()
+
 
 def test_scratchpad_dir_pre_allowlisted_and_gc():
     """Scratchpad dir is created on first call, registered for cleanup,
@@ -506,3 +621,76 @@ def test_bash_destructive_warning_annotated_in_output(tmp_path, monkeypatch):
     assert warns
     # All-safe pipe — no warnings.
     assert pipe_segment_permission_check("ls | grep foo") == []
+
+
+def test_cd_git_and_multiple_cd_helpers_consumed_by_command_validation():
+    """Claude iter1 LOW C-11/C-12 lock: cwd-sensitive bash helper checks
+    are consumed by SecurityManager.validate_command, not left helper-only."""
+    from security.manager import _build_singleton
+
+    sm = _build_singleton()
+
+    ok, msg = sm.validate_command("cd repo.git && git status")
+    assert not ok
+    assert "bare Git repository" in msg
+
+    ok, msg = sm.validate_command("cd src && cd subdir && ls")
+    assert not ok
+    assert "Multiple cd segments" in msg
+
+
+def test_abort_context_reaches_query_engine_bash_and_python_exec(monkeypatch):
+    """Claude iter1 LOW C-17 lock: combined abort events are consumed by
+    runtime tool paths, including QueryEngine -> bash dispatch."""
+    import asyncio
+
+    from core.query_engine import QueryEngine
+    from runtime.bedrock_client import BedrockClient, Response, ToolCall
+    from tools.python_exec import _python_exec_executor
+
+    abort_event = asyncio.Event()
+    abort_event.set()
+
+    client = BedrockClient(model_id="x", region="us-east-1", mock_mode=True)
+    calls = {"n": 0}
+
+    def fake_chat(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return Response(
+                text="",
+                tool_calls=[ToolCall(
+                    id="abort-bash",
+                    name="bash",
+                    input={"command": "ls"},
+                )],
+                stop_reason="tool_use",
+            )
+        return Response(text="done", tool_calls=[], stop_reason="end_turn")
+
+    monkeypatch.setattr(client, "chat", fake_chat)
+
+    from tools.registry import all_registered, _reset_registry_for_tests
+    from tools import bootstrap_built_ins
+    _reset_registry_for_tests()
+    bootstrap_built_ins()
+
+    engine = QueryEngine(client=client, max_turns=4, abort_events=[abort_event])
+    result = engine.run(
+        user_message="run aborted bash",
+        system_prompt="test",
+        tools=all_registered(),
+    )
+    tool_texts = [
+        block.get("content", "")
+        for msg in result.messages
+        for block in msg.get("content", [])
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+    assert any("execution aborted before start" in str(text) for text in tool_texts)
+
+    py_result = _python_exec_executor(
+        {"code": "print('should not run')"},
+        context={"abort_event": abort_event},
+    )
+    assert "execution aborted before start" in py_result

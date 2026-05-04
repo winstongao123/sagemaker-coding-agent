@@ -118,9 +118,9 @@ def repair_tool_call_arguments(raw: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # Attempt 4: escape lone newlines inside string values.
-    if "\n" in repaired:
-        escaped = repaired.replace("\n", "\\n").replace("\r", "\\r")
+    # Attempt 4: escape invalid raw chars inside string values.
+    if any(ch in repaired for ch in ("\n", "\r", "\t")):
+        escaped = _escape_invalid_chars_in_json_strings(repaired)
         try:
             parsed = json.loads(escaped)
             if isinstance(parsed, dict):
@@ -136,4 +136,33 @@ def repair_tool_call_arguments(raw: str) -> Dict[str, Any]:
     return {}
 
 
-__all__ = ["repair_tool_call_arguments"]
+def _escape_invalid_chars_in_json_strings(raw: str) -> str:
+    """Escape raw newline, carriage-return, and tab chars inside JSON strings."""
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in raw:
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            out.append(ch)
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            out.append(ch)
+            continue
+        if in_string and ch == "\n":
+            out.append("\\n")
+        elif in_string and ch == "\r":
+            out.append("\\r")
+        elif in_string and ch == "\t":
+            out.append("\\t")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+__all__ = ["repair_tool_call_arguments", "_escape_invalid_chars_in_json_strings"]

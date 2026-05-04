@@ -28,6 +28,7 @@ from runtime.tool_surface import (
     read_file_in_range,
     semantic_number,
 )
+from runtime.file_safety import is_binary_content
 
 
 # ============================================================
@@ -121,6 +122,13 @@ def _read_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
         return f"Error: File not found: {file_path} (resolved to {abs_path})"
     if not os.path.isfile(abs_path):
         return f"Error: Not a file: {abs_path} (use list_dir for directories)"
+    try:
+        with open(abs_path, "rb") as probe:
+            sample = probe.read(8192)
+        if is_binary_content(sample, filename=abs_path):
+            return f"Error: Refusing to read binary file: {abs_path}"
+    except OSError as e:
+        return f"Error: cannot read file: {e}"
 
     # Lazy import CONFIG so test envs without a config still load.
     from runtime.config import CONFIG

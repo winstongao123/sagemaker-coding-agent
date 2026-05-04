@@ -251,8 +251,27 @@ def enforce_tool_result_message_budget(
     return out
 
 
+def escape_xml(text: Any) -> str:
+    """Escape XML text content."""
+    value = str(text)
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def escape_xml_attr(text: Any) -> str:
+    """Escape XML attribute content."""
+    return (
+        escape_xml(text)
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
 def xml_tag(name: str, content: str) -> str:
-    return f"<{name}>\n{content}\n</{name}>"
+    return f"<{name}>\n{escape_xml(content)}\n</{name}>"
 
 
 @contextmanager

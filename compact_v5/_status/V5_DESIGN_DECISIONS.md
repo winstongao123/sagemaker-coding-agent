@@ -3143,6 +3143,93 @@ For A-21, compaction changes what the model can legitimately rely on. Clearing r
 
 No AWS/R-tier test was run.
 
+## ADR-049 - Block C runtime safety and JSON repair redo
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block C completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+`SYNTHESIS_MASTER.md:89-113` identifies 19 Block C rows covering security
+manager explicit evidence, secret scanning/redaction, edit-file safety,
+bash hardening helpers, binary/XML utilities, cwd/abort context helpers, and
+Hermes-style JSON argument repair. Several helpers already existed but lacked
+row-specific completion-audit evidence; the redo adds missing local helpers,
+runtime wiring, lock tests, PORT_LOG rows, and this decision record.
+
+### Decision
+
+Ship Block C as local runtime safety infrastructure:
+
+- Keep the existing v4-derived `SecurityManager` as the canonical path,
+  command, Python, secret scan, and subprocess safety surface.
+- Extend the secret scanner with the 25 gitleaks-style Runnable patterns and
+  add `redact_secrets()` for redaction parity.
+- Keep edit-file safety in `security/edit_file_safety.py` and wire it through
+  `tools/edit_file.py` for quote-normalized matching, quote-style preservation,
+  BOM decoding, UNC-path refusal, line-ending round trip, and staleness
+  content fallback.
+- Keep bash helper logic in `security/bash_safety.py`; `tools/bash.py`
+  annotates non-zero semantic exits and destructive command/pipe findings.
+  SecurityManager consumes the C-11/C-12 cwd-sensitive helpers to block
+  bare-repo git compounds and multiple-cd commands before execution.
+- Add `runtime/file_safety.py` for binary extension/null-byte detection and
+  wire `read_file` to refuse binary content before text decoding.
+- Add XML text/attribute escaping in `runtime/tool_surface.py` and route
+  `xml_tag()` content through escaping. The Block T XML regression remains
+  green.
+- Adapt Runnable `combinedAbortSignal` and `AsyncLocalStorage` cwd to Python
+  as `asyncio.Event` fan-in plus `contextvars`; QueryEngine forwards abort
+  events into tool context, bash/python_exec consume the combined abort event
+  before launch, bash/python_exec read the active context cwd, and python_exec
+  writes temp files under that context.
+- Use `security/json_repair.py` as the shared multi-pass repair ladder for
+  malformed Bedrock tool-call arguments, including invalid control characters
+  inside JSON strings.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+The adaptation preserves the runtime contracts in the Bedrock/Python runtime:
+no browser UI layer and no JavaScript `AbortSignal`, but the equivalent safety
+state is exposed through Python helpers with direct lock tests and consumed by
+the bash/python execution paths. The bash compound-cd helpers are consumed by
+SecurityManager validation rather than left as helper-only evidence.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/security/manager.py`
+- `compact_v5/MAIN/agent/security/json_repair.py`
+- `compact_v5/MAIN/agent/security/edit_file_safety.py`
+- `compact_v5/MAIN/agent/security/bash_safety.py`
+- `compact_v5/MAIN/agent/runtime/file_safety.py`
+- `compact_v5/MAIN/agent/runtime/execution_context.py`
+- `compact_v5/MAIN/agent/runtime/tool_surface.py`
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/tools/read_file.py`
+- `compact_v5/MAIN/agent/tools/bash.py`
+- `compact_v5/MAIN/agent/tools/python_exec.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_c.py`
+
+### Linked port-log rows
+
+- #135 through #153 - Block C completion-audit redo rows C-1 through C-19.
+
+### Validation
+
+- `python -m py_compile <Block C touched files>`
+- Result: PASS.
+- `python -m pytest tests/integration/test_block_c.py -q`
+- Result after Claude iter1 LOW fixes: 28 passed.
+- `python -m pytest tests/unit/test_security_manager.py -q`
+- Result: 69 passed, 3 skipped.
+- `python -m pytest tests/integration/test_block_t.py -q`
+- Result: 17 passed, 14 skipped.
+
+No AWS/R-tier test was run.
+
 ## ADR-048 - Block T completion-audit tool-surface utility closure
 
 **Date**: 2026-05-04
