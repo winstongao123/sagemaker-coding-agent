@@ -1,6 +1,6 @@
 # Block E+F Status
 
-Status: READY_FOR_GIT_CHECKPOINT
+Status: PUSHED_CHECKPOINT_EVIDENCE_RECORDING
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 8
@@ -33,17 +33,19 @@ scope audit or git status reveals a new blocker.
 
 Current phase: CLOSE_ARTIFACTS_AND_GIT_CHECKPOINT
 
-Current task: Stage only the specific Block E+F file list for git checkpoint.
+Current task: Commit and push Block E+F checkpoint evidence after primary
+closure push.
 
-Last completed action: Final `scope_audit.py --block E+F` and `--strict`
-audits both reported no ship-blocking rows and `READY_TO_REVIEW_CLOSE`.
+Last completed action: Created primary closure commit
+`56be608918ac58da0d83c3a09cb5e73437d35ff2` and pushed it to
+`sageagent/v5-build`; remote verification points to the same SHA.
 
 Next 3 todo items:
 
-1. Inspect git status and identify unrelated pre-existing dirty files.
-2. Update `GIT_CLOSE_PLAN.md` with the exact staged file list.
-3. Stage only the Block E+F file list, commit, push to `sageagent v5-build`,
-   and record results.
+1. Stage only `blocks/E+F/GIT_CLOSE_PLAN.md` and `blocks/E+F/STATUS.md` for
+   checkpoint evidence.
+2. Commit the checkpoint evidence.
+3. Push the evidence commit to `sageagent/v5-build` and record final status.
 
 Current review iteration count: 2 recorded attempts.
 
