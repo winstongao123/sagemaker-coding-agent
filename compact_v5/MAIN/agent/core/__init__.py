@@ -41,4 +41,16 @@ from .parallel_dispatch import (  # noqa: F401
     partial_tool_call_warning,
 )
 from .retry import RetryPolicy  # noqa: F401
-from .query_engine import QueryEngine, run_one_turn, count_tool_calls  # noqa: F401
+from .formatting import (  # noqa: F401
+    format_cost,
+    format_duration,
+    format_file_size,
+    format_tokens,
+)
+from .query_engine import (  # noqa: F401
+    FallbackTriggeredError,
+    QueryEngine,
+    count_tool_calls,
+    run_one_turn,
+    strip_signature_blocks,
+)

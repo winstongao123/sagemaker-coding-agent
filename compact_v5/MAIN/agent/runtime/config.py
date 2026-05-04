@@ -87,7 +87,8 @@ class Config:
     # are counted; read_file/grep/glob/edit_file/etc are unaffected.
     max_exec_calls_per_session: int = 200
     max_exec_seconds_per_session: int = 900
-    session_cost_limit: float = 0.0  # 0 = no limit. Warns at 80%, stops at 100%.
+    session_cost_limit: float = 0.0  # 0 = no limit. Warn-and-continue UX threshold.
+    max_budget_usd: float = 0.0  # 0 = no hard cap. QueryEngine halts at or above this value.
     audit_retention_days: int = 30
 
     # AWS scope
@@ -228,6 +229,7 @@ def _apply_config_file(config: Config) -> None:
         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
         "require_auth": bool, "require_tool_approval": bool,
         "aws_bedrock_only": bool, "disable_local_traces": bool, "session_cost_limit": float,
+        "max_budget_usd": float, "maxBudgetUsd": float,
         "load_claude_md": bool,
         "enable_prompt_cache": bool,
         "enable_memory_extraction": bool,

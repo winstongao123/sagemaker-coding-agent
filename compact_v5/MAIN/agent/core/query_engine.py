@@ -82,6 +82,20 @@ class PromptCacheInvariantState:
     tool_names: Tuple[str, ...]
 
 
+class FallbackTriggeredError(Exception):
+    """Signal that the current model should be swapped and retried once.
+
+    Block E+F EF-3: thinking signatures are model-bound, so the retry path
+    strips signature material before resubmitting the same turn to the
+    fallback model.
+    """
+
+    def __init__(self, target_model_id: str, reason: str = ""):
+        self.target_model_id = target_model_id
+        self.reason = reason
+        super().__init__(reason or f"fallback requested: {target_model_id}")
+
+
 # ============================================================
 # Helpers
 # ============================================================
@@ -115,6 +129,43 @@ def _coerce_tool_result_to_text(value: Any) -> str:
         except Exception:
             return str(value)
     return str(value)
+
+
+def _strip_signature_from_content(content: Any) -> Any:
+    if isinstance(content, list):
+        stripped = []
+        for block in content:
+            if not isinstance(block, dict):
+                stripped.append(block)
+                continue
+            if block.get("type") == "redacted_thinking":
+                continue
+            item = dict(block)
+            for key in list(item):
+                normalized = key.replace("_", "").lower()
+                if "signature" in normalized or normalized in {
+                    "encryptedcontent",
+                }:
+                    item.pop(key, None)
+            stripped.append(item)
+        return stripped
+    return content
+
+
+def strip_signature_blocks(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return messages safe to replay after a model fallback.
+
+    Bedrock extended-thinking signatures are tied to the model that created
+    them. Replaying those signatures to a different model can fail; this
+    helper preserves text/tool context while removing signature material and
+    redacted thinking blocks.
+    """
+    sanitized: List[Dict[str, Any]] = []
+    for msg in messages:
+        item = dict(msg)
+        item["content"] = _strip_signature_from_content(item.get("content"))
+        sanitized.append(item)
+    return sanitized
 
 
 def count_tool_calls(messages: List[Dict[str, Any]], tool_name: str) -> int:
@@ -217,6 +268,8 @@ class QueryEngine:
         session_id: Optional[str] = None,
         synthetic_output_tool_name: Optional[str] = None,
         max_structured_output_retries: int = 3,
+        status_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        tool_gen_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ):
         """Construct a QueryEngine.
 
@@ -262,6 +315,11 @@ class QueryEngine:
         # built-in structured-output mode; this is a hook for future support).
         self.synthetic_output_tool_name = synthetic_output_tool_name
         self.max_structured_output_retries = max(1, int(max_structured_output_retries))
+        # Block E+F EF-8/EF-5: optional read-only event callbacks for
+        # notebook/runtime UI surfaces. Defaults preserve the historical
+        # output_fn-only behavior.
+        self.status_callback = status_callback
+        self.tool_gen_callback = tool_gen_callback
 
         self.messages: List[Dict[str, Any]] = []
         # Tool names that have been "discovered" via tool_search this run.
@@ -282,6 +340,7 @@ class QueryEngine:
         self._prompt_cache_state: Optional[PromptCacheInvariantState] = None
         self._frozen_system_prompt: Optional[str] = None
         self._frozen_tool_names: Tuple[str, ...] = ()
+        self._tool_denials_this_turn = 0
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -323,6 +382,7 @@ class QueryEngine:
         # warning once each (instead of staying silent for the lifetime
         # of the engine).
         self._warned_over_budget = False
+        self._tool_denials_this_turn = 0
         # Block C — exec-limit gate (PS#7 fix) + repetition detector.
         # Counters live on the QueryEngine. Codex iter-1 finding #3:
         # unconditional reset at run() entry so counters DON'T leak
@@ -492,6 +552,10 @@ class QueryEngine:
         turns_used = 0
 
         for turn in range(self.max_turns):
+            hard_cap = self._max_budget_halt(output_fn)
+            if hard_cap is not None:
+                return hard_cap
+            self._tool_denials_this_turn = 0
             # User-requested stop (Phase 11 wires this to the Stop button).
             if self.on_stop_check and self.on_stop_check():
                 output_fn("[Stopped by user]")
@@ -634,7 +698,7 @@ class QueryEngine:
 
             # Bedrock invocation.
             try:
-                response = self.client.chat(
+                response = self._chat_with_fallback(
                     messages=turn_messages,
                     system=effective_system_prompt,
                     tools=_build_tools_api_payload(visible_tools),
@@ -741,6 +805,7 @@ class QueryEngine:
                 "content": assistant_content,
                 "is_meta": False,
             })
+            self._notify_tool_generation(response)
 
             if response.text:
                 last_text = response.text
@@ -1077,6 +1142,11 @@ class QueryEngine:
                             )
                             _result = _dlg.prompt()
                             if not _result.approved:
+                                self._record_tool_denial(
+                                    call.name,
+                                    _result.reason,
+                                    output_fn,
+                                )
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": call.id,
@@ -1092,6 +1162,11 @@ class QueryEngine:
                             logging.warning(
                                 f"approval gate failed: {_approval_exc}; "
                                 "defaulting to deny"
+                            )
+                            self._record_tool_denial(
+                                call.name,
+                                f"approval gate error: {_approval_exc}",
+                                output_fn,
                             )
                             tool_results.append({
                                 "type": "tool_result",
@@ -1189,6 +1264,139 @@ class QueryEngine:
             turns_used=turns_used,
             budget_used=self.budget.used(),
         )
+
+    # ------------------------------------------------------------
+    # Internal: E+F runtime event surfaces
+    # ------------------------------------------------------------
+
+    def _emit_status(
+        self,
+        event_type: str,
+        message: str,
+        *,
+        output_fn: Optional[Callable[[str], None]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        event = {
+            "type": event_type,
+            "message": message,
+            "session_id": self.session_id,
+            "agent_kind": self.agent_kind,
+            "metadata": metadata or {},
+        }
+        if self.status_callback is not None:
+            try:
+                self.status_callback(event)
+            except Exception as exc:  # noqa: BLE001 - callbacks are best-effort UI hooks
+                logging.warning(
+                    "[status-callback] %s: %s",
+                    type(exc).__name__, exc,
+                )
+        if output_fn is not None and event_type == "warning":
+            output_fn(f"[warning] {message}")
+
+    def _emit_warning(
+        self,
+        message: str,
+        *,
+        output_fn: Optional[Callable[[str], None]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self._emit_status(
+            "warning",
+            message,
+            output_fn=output_fn,
+            metadata=metadata,
+        )
+
+    def _record_tool_denial(
+        self,
+        tool_name: str,
+        reason: str,
+        output_fn: Callable[[str], None],
+    ) -> None:
+        self._tool_denials_this_turn += 1
+        count = self._tool_denials_this_turn
+        if count >= 3:
+            self._emit_warning(
+                f"{count} tool denials this turn",
+                output_fn=output_fn,
+                metadata={"tool_name": tool_name, "reason": reason, "count": count},
+            )
+        else:
+            self._emit_status(
+                "tool_denial",
+                f"{count} tool denial{'s' if count != 1 else ''} this turn",
+                metadata={"tool_name": tool_name, "reason": reason, "count": count},
+            )
+
+    def _max_budget_halt(
+        self,
+        output_fn: Callable[[str], None],
+    ) -> Optional[QueryResult]:
+        try:
+            from runtime.config import CONFIG as _CFG
+            from runtime.tokens import TOKENS as _TOKENS
+            limit = float(
+                getattr(_CFG, "max_budget_usd", 0.0)
+                or getattr(_CFG, "maxBudgetUsd", 0.0)
+                or 0.0
+            )
+            cost = float(getattr(_TOKENS, "session_cost", 0.0) or 0.0)
+        except Exception:
+            return None
+        if limit <= 0 or cost < limit:
+            return None
+        message = f"maxBudgetUsd hard cap reached: ${cost:.4f} >= ${limit:.4f}"
+        self._emit_warning(
+            message,
+            output_fn=output_fn,
+            metadata={"session_cost": cost, "max_budget_usd": limit},
+        )
+        return QueryResult(
+            text=message,
+            messages=list(self.messages),
+            stop_reason="cost_cap",
+            turns_used=0,
+            budget_used=self.budget.used(),
+            error=message,
+        )
+
+    def _chat_with_fallback(self, **kwargs: Any) -> Any:
+        try:
+            return self.client.chat(**kwargs)
+        except FallbackTriggeredError as exc:
+            if getattr(self.client, "model_id", None) is not None:
+                try:
+                    self.client.model_id = exc.target_model_id
+                except Exception:
+                    pass
+            retry_kwargs = dict(kwargs)
+            retry_kwargs["messages"] = strip_signature_blocks(
+                retry_kwargs.get("messages", [])
+            )
+            return self.client.chat(**retry_kwargs)
+
+    def _notify_tool_generation(self, response: Any) -> None:
+        if self.tool_gen_callback is None:
+            return
+        calls = getattr(response, "tool_calls", None) or []
+        if not calls:
+            return
+        for call in calls:
+            event = {
+                "type": "tool_generation",
+                "tool_use_id": getattr(call, "id", ""),
+                "name": getattr(call, "name", ""),
+                "input": getattr(call, "input", {}) or {},
+            }
+            try:
+                self.tool_gen_callback(event)
+            except Exception as exc:  # noqa: BLE001 - callbacks are best-effort UI hooks
+                logging.warning(
+                    "[tool-gen-callback] %s: %s",
+                    type(exc).__name__, exc,
+                )
 
     # ------------------------------------------------------------
     # Internal: A-33 prompt-cache invariant policy

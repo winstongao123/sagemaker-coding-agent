@@ -3155,6 +3155,82 @@ while making the retry reset behavior real.
 
 No AWS/R-tier test was run.
 
+## ADR-044 - Block E+F completion-audit redo
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block E+F completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+The original Block E+F implementation and ADR-027 closed only the older
+env-block remap rows. The v5.0.1 redo reconstructs Block E+F from
+`SYNTHESIS_MASTER.md`, which defines eight canonical EF rows: permission
+denial status, maxBudgetUsd hard cap, fallback signature stripping, format
+helpers, tool-generation feedback, two no-streaming delta rows, and a
+status/warning event channel.
+
+### Decision
+
+Close the active runtime rows with small, local QueryEngine/runtime helpers:
+
+- Add optional `status_callback` and `tool_gen_callback` QueryEngine hooks.
+- Track permission denials per model turn and surface `"3 tool denials this
+  turn"` as a warning event and output message.
+- Add `CONFIG.max_budget_usd` plus `maxBudgetUsd` config-file compatibility,
+  and halt before Bedrock when `TOKENS.session_cost` is already at or above
+  the hard cap. This remains distinct from the existing
+  `session_cost_limit` warn-and-continue behavior.
+- Add `FallbackTriggeredError` and `strip_signature_blocks()` so a fallback
+  model retry removes thinking signatures and redacted thinking blocks before
+  replay. Claude iter1 LOW review noted possible future provider signature
+  variants, so the final helper strips any top-level thinking-block key whose
+  normalized name contains `signature`, plus encrypted content variants.
+- Add shared `core.formatting` helpers for file size, duration, token count,
+  and cost formatting.
+- Emit tool-generation events for every visible tool call in the synchronous
+  response before dispatch. This preserves the first-tool signal and also keeps
+  multi-tool assistant turns visible to UI consumers.
+- Mark EF-6 and EF-7 as `N/A_CONSTRAINT` because v5.0.1 explicitly forbids
+  streaming; there is no stream-delivery duplicate suppression or stream
+  paragraph delta path to port.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+Runnable's streaming-first UI signals are adapted to v5's synchronous
+Bedrock-only notebook/runtime callbacks. The no-streaming rows are not
+silently dropped; they are ledgered as hard constraints tied to the active
+v5 no-streaming rule.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/core/formatting.py`
+- `compact_v5/MAIN/agent/core/__init__.py`
+- `compact_v5/MAIN/agent/runtime/config.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_e_f.py`
+- `compact_v5/_status/v5_completion_audit/blocks/E+F/*`
+
+### Linked port-log rows
+
+- #112 - Block E+F completion-audit redo.
+
+### Validation
+
+- `py -3.11 -m py_compile compact_v5\MAIN\agent\core\query_engine.py compact_v5\MAIN\agent\runtime\config.py compact_v5\MAIN\agent\core\formatting.py compact_v5\MAIN\agent\tests\integration\test_block_e_f.py`
+- Result: PASS. Iter2 log: `block-e-f-py-compile-iter2.log`.
+- `py -3.11 -m pytest tests/integration/test_block_e_f.py -q`
+- Result: 21 passed. Iter2 log: `block-e-f-pytest-iter2.log`.
+- `py -3.11 -m pytest tests/integration/test_query_engine.py tests/integration/test_block_f2.py -q`
+- Result: 34 passed. Iter2 log: `block-e-f-query-f2-regression-iter2.log`.
+- `py -3.11 compact_v5\_status\scripts\scope_audit.py --block E+F --strict`
+- Result: PASS, no ship-blocking rows. Iter2 log:
+  `block-e-f-scope-audit-strict-iter2.log`.
+
+No AWS/R-tier test was run.
+
 ## ADR-042 - Block A remaining completion-audit blockers
 
 **Date**: 2026-05-04
