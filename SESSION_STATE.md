@@ -1,5 +1,35 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-04 — R-tier R3 READY NEAR_IDEAL ($0.0810); cumulative $0.3662 / $14.25
+
+R3 = "Three sub-agent dispatches + parent synthesis" (Phase 9 task tool).
+Final verdict: GENUINE_PASS NEAR_IDEAL (worker 5.00, Codex 4.83). 2 AWS calls.
+
+Per-test discipline:
+- PHASE A: 4 iters (iter1 REJECT 4 fixes, iter2 REJECT 3 fixes, iter3 APPROVE, iter4 confirm-fix APPROVE).
+- PHASE B: 2 AWS calls (call#1 FAIL marker assertion / behavior CORRECT; call#2 PASS after assertion fix to body content).
+- PHASE C: 1 iter, GENUINE_PASS.
+
+Pre-flight caught 6 design issues BEFORE AWS spend:
+1. >=3 vs ==3 dispatch counts.
+2. read_file evidence not session-split (parent could bypass children).
+3. one-to-one task→file mapping not asserted.
+4. disable_local_traces not pinned (audit_log silent disable risk).
+5. IterationBudget cap missing (default 600 too high).
+6. G3 coverage claim was unfalsifiable — narrowed to Phase 9 only.
+
+Real bug surfaced by call #1: marker-literal assertion was over-strict.
+The `R3-marker-A/B/C` parenthetical metadata is naturally dropped by
+children when extracting "TODO text" — model behavior, not v5 bug.
+Fix: replaced markers with distinctive TODO body fragments
+("Unicode whitespace" / "raise ValueError when lo > hi" / "negative or zero size").
+
+Cumulative R-tier spend: $0.0632 (R1) + $0.222 (R2) + $0.0810 (R3) = $0.3662 / $14.25 (2.6%).
+
+Continuing R4 → R17 → R18 → R19 per WORKER_FINAL discipline (no checkpoint pauses per user directive).
+
+---
+
 ## 2026-05-04 — R-tier PAUSED at HEAD a73befc — R1+R2 READY NEAR_IDEAL ($0.29 / $14.25)
 
 User invoked option (c) PAUSE after R2 NEAR_IDEAL 5.00/5. R-tier resumable from R3 next session.

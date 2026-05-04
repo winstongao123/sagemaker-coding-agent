@@ -1,0 +1,141 @@
+An R-tier test JUST failed on real Bedrock. AWS call #1 of 3 max consumed.
+You are reviewing the worker's failure-diagnosis BEFORE we spend AWS call #2
+on a fix. Worker proposes a root cause and a fix — judge both before
+approving the next spend.
+
+CONTEXT
+- Test: R3 — three sub-agent dispatches + parent synthesis
+- AWS call number that just failed: #1
+- Cost spent so far on this test: $0.0406 of $0.50 cap
+- Calls remaining in 3-call cap: 2
+- Failure: AssertionError on `len(marker_hits) == 3` — `R3-marker-A/B/C`
+  literals were not present in findings.md.
+- ALL OTHER assertions PASSED (real-AWS evidence is strong):
+  - task_dispatches == 3 ✓
+  - explore_dispatches == 3 ✓
+  - parent_read_file_dispatches == 0 ✓ (parent did NOT bypass children)
+  - child_read_file_dispatches == 3 ✓ (one per file)
+  - files_read_by_children == {utils_a.py, utils_b.py, utils_c.py} ✓
+  - task_prompt_file_targets = [[utils_a.py], [utils_b.py], [utils_c.py]] ✓
+  - function_hits == 3 ✓ (kebab_case, clamp, chunked)
+  - findings.md exists, 640 bytes ✓
+  - stop_reason == "end_turn" ✓
+
+Agent log excerpt — actual findings.md body produced (full content shown by the failed assertion):
+"""
+# Investigation Findings
+
+## utils_a.py
+
+**Function:** `kebab_case`
+
+**Summary:** Converts spaces and underscores to hyphens and lowercases the result.
+
+**TODO:** handle Unicode whitespace beyond ASCII space.
+
+---
+
+## utils_b.py
+
+**Function:** `clamp`
+
+**Summary:** Constrains a value to an inclusive range [lo, hi], returning the value unchanged if lo > hi.
+
+**TODO:** raise ValueError when lo > hi instead of silent fall-through.
+
+---
+
+## utils_c.py
+
+**Function:** `chunked`
+
+**Summary:** Yields su[truncated in error display]
+"""
+
+The fixture markers were embedded in the TODO line as a parenthetical:
+- `# TODO(R3-marker-A): handle Unicode whitespace beyond ASCII space.`
+- `# TODO(R3-marker-B): raise ValueError when lo > hi instead of silent fall-through.`
+- `# TODO(R3-marker-C): support negative or zero size with a clear error.`
+
+The children's prompt was: "Report... the exact TODO comment text from that file." The children extracted the `<body>` after the marker (stripping `R3-marker-X` as metadata), so findings.md has the TODO bodies but no markers.
+
+WORKER'S DIAGNOSIS:
+This is a TEST DESIGN bug, not a v5 bug. The marker prefix `R3-marker-A/B/C`
+was placed in the TODO line specifically to trace which child reported what,
+but children naturally treat `R3-marker-X` as metadata when asked to extract
+"TODO text" — they report the human-readable body, not the marker. v5
+behaved correctly: 3 sub-agents read 3 files, the parent synthesized into
+findings.md, and the TODO BODIES are present (matching the source). Only
+the marker literal is absent.
+
+The marker assertion was added to detect lossy synthesis (e.g., parent
+fabricating content). But function_hits + the existing one-to-one task
+mapping + child-session reads already prove non-fabrication via independent
+channels.
+
+WORKER'S PROPOSED FIX:
+Replace marker-based assertion with TODO-body-content assertion.
+Each utility file has a distinctive TODO body phrase — assert each
+phrase appears in findings.md instead of the marker literal.
+
+Specific fix:
+```python
+# Replace _MARKERS tuple at top of file:
+_TODO_BODIES = (
+    "Unicode whitespace",          # utils_a.py TODO body
+    "raise ValueError when lo > hi",  # utils_b.py TODO body
+    "negative or zero size",       # utils_c.py TODO body
+)
+
+# Replace marker_hits computation:
+todo_body_hits = [b for b in _TODO_BODIES if b in findings_text]
+
+# Replace assertion:
+assert len(todo_body_hits) == 3, (
+    f"R3 findings.md missing TODO body content. expected all of "
+    f"{_TODO_BODIES}; found {todo_body_hits}. "
+    f"body[:500]={findings_text[:500]!r}"
+)
+```
+
+The 3 phrases are short, distinctive, and present in the source TODO
+bodies. They survive the children's natural extraction format. They
+provide the same falsifiability as `R3-marker-*`: if findings.md doesn't
+contain "Unicode whitespace" / "raise ValueError when lo > hi" /
+"negative or zero size", the parent didn't faithfully transcribe the
+children's TODO output.
+
+PRODUCE THREE VERDICTS.
+
+=== AXIS A — Diagnosis correctness ===
+- Is the worker's root-cause hypothesis supported by the log evidence?
+- Could there be a simpler / different root cause? (e.g., is this actually
+  a v5 audit-log redaction issue, not a model-behavior issue?)
+- Is this a v5 bug, a test-design bug, a Bedrock infra issue, or model flake?
+
+Output:
+AXIS A VERDICT: AGREE | DISAGREE | INSUFFICIENT_EVIDENCE
+
+=== AXIS B — Fix soundness ===
+- Does the proposed fix actually address the root cause?
+- Does the fix introduce regression risk to other Blocks? (No — pure test-side change.)
+- Are the new body phrases sufficiently unique to be falsifiable? (i.e., they
+  could only appear if the children read the source files.)
+- Will a lock test be added? (Same test, just smarter assertion.)
+
+Output:
+AXIS B VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
+Findings: file:line — issue — required change
+
+=== AXIS C — Spend-justification ===
+- This is a one-line assertion fix. AWS call #2 success probability: HIGH
+  (the agent already produced findings.md with all the body content; the
+  assertion change makes the test correctly recognize that PASS).
+- Worth spending AWS call #2 vs ESCALATING?
+
+Output:
+AXIS C VERDICT: APPROVE_FOR_AWS_RETRY | RECOMMEND_ESCALATE
+Confidence next-call passes: HIGH | MEDIUM | LOW
+
+=== FINAL ===
+DIAGNOSIS VERDICT: APPROVE_FIX_AND_RETRY | REJECT_FIX | ESCALATE

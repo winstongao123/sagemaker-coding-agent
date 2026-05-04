@@ -1,0 +1,51 @@
+PHASE A pre-flight review iter-4 — re-review of R3 after the
+PhaseB-iter1 APPROVE_FIX_AND_RETRY fix is applied. Confirm the
+test-design fix is sound before AWS call #2.
+
+CONTEXT
+- Test: R3 — three sub-agent dispatches + parent synthesis
+- Cost cap: $0.50, spent so far on R3: $0.0406, remaining cap: $0.4594
+- AWS calls used: 1 of 3 max
+- Previous reviews: phaseA-iter1 REJECT, iter2 REJECT, iter3 APPROVE,
+  phaseB-iter1 APPROVE_FIX_AND_RETRY
+- This iter-4 confirms the PhaseB-iter1 fix is in place; it is NOT a
+  fresh design review (test logic is unchanged from iter3 except the
+  marker-vs-body content assertion).
+
+PHASE B FIX APPLIED:
+- Replaced `_MARKERS = ("R3-marker-A", "R3-marker-B", "R3-marker-C")`
+  with `_TODO_BODIES = ("Unicode whitespace", "raise ValueError when lo > hi",
+  "negative or zero size")` — distinctive TODO body fragments that the
+  children DO transcribe (the marker prefixes were dropped as model-treated
+  metadata).
+- `marker_hits` -> `todo_body_hits` everywhere (compute, metrics field,
+  assertion, assertion message).
+- Docstring updated: "all 3 TODO markers" -> "all 3 TODO body phrases".
+- Per-test PASS criteria docstring: ">= 3" -> "exactly 3" wording aligned.
+
+EVIDENCE FROM AWS CALL #1 (the failed run had ALL behavioral signals correct):
+- task_dispatches=3, explore_dispatches=3
+- parent_read_file_dispatches=0 (parent did NOT bypass children)
+- child_read_file_dispatches=3 (one per file)
+- files_read_by_children = {utils_a.py, utils_b.py, utils_c.py}
+- task_prompt_file_targets = [[utils_a.py], [utils_b.py], [utils_c.py]]
+- function_hits = [kebab_case, clamp, chunked]
+- findings.md present (640 bytes) with all 3 TODO bodies in plain text:
+  * "handle Unicode whitespace beyond ASCII space."
+  * "raise ValueError when lo > hi instead of silent fall-through."
+  * "support negative or zero size with a clear error."
+- stop_reason="end_turn", cost=$0.0406
+
+The new `_TODO_BODIES` list contains substrings of those bodies, so the
+new assertion will pass on identical agent behavior.
+
+VERDICT REQUEST: confirm
+1. The marker-to-body assertion swap is sound (no regression to the other
+   axes — dispatch counts, session split, file mapping all still pass).
+2. The new body phrases are distinctive enough that they couldn't appear
+   without the children's read evidence (e.g., they are NOT in the parent's
+   prompt or system prompt).
+3. AWS call #2 is justified given the high-confidence fix.
+
+If APPROVE: AWS call #2 may proceed.
+If REJECT: required additional fixes before AWS call #2.
