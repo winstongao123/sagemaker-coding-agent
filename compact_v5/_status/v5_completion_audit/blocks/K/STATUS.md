@@ -1,6 +1,6 @@
 # Block K Status
 
-Status: PRIMARY_PUSHED_EVIDENCE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 8
@@ -9,15 +9,15 @@ Current blocking-row count: 0
 
 Current phase: UPDATING_ARTIFACTS
 
-Current task: Commit and push Block K checkpoint evidence update.
+Current task: Closed and pushed; transition docs now move to Block T.
 
-Last completed action: Primary Block K checkpoint commit `535b5d852e62e765ae802d47d9ae0229b13e6d39` was pushed to `sageagent/v5-build` and remote verification matched that SHA.
+Last completed action: Evidence checkpoint commit `c0feaad2fd9975d13655f5b3eba0d8b4a24b5e72` was pushed to `sageagent/v5-build` and remote verification matched that SHA.
 
 Next 3 todo items:
 
-1. Stage only `blocks/K/LEDGER.md`, `blocks/K/GIT_CLOSE_PLAN.md`, and `blocks/K/STATUS.md`.
-2. Commit/push the Block K checkpoint evidence update.
-3. Run all-block summary, update order docs, and start Block T.
+1. Run all-block summary and save the post-Block-K log.
+2. Update global order/status docs with Block K closed and Block T active.
+3. Start Block T from canonical scope.
 
 Next Claude review state: no further review pending; iter3 approval saved at `reviews/block-k-claude-review-iter3.md`.
 

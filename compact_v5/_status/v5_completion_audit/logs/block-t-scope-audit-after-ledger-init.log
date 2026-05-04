@@ -1,0 +1,22 @@
+﻿=== Block T ===
+Expected rows: 12
+Ledger rows: 12
+SHIPPED: 0  PARTIAL: 0  MISSING: 12  DEFERRED: 0  DROPPED: 0  N/A: 0
+Ledger missing: 0  Weak shipped evidence: 0  Unknown disposition: 0
+Ship-blocking rows: T-1, T-2, T-3, T-4, T-5, T-6, T-7, T-8, T-9, T-10, T-11, T-12
+Verdict: NEEDS_IMPLEMENTATION
+
+| row_id | disposition | ship_blocking | evidence_problems | capability |
+|---|---|---:|---|---|
+| T-1 | MISSING | YES |  | `notebook_edit` (v4 :5921 schema :7275) (R2 finding #1, V1 gap #2) |
+| T-2 | MISSING | YES |  | `view_image` (v4 :6419 schema :7307) (V1 gap #3) |
+| T-3 | MISSING | YES |  | `SemanticSearch` class verbatim port (V1 gap #4) |
+| T-4 | MISSING | YES |  | WebFetch fold-ins: 15-min URL LRU cache + same-host redirect + Turndown (R3 row 20) |
+| T-5 | MISSING | YES |  | `tool_skill` + `tool_skill_propose_patch` registry rows (R2 finding #2) |
+| T-6 | MISSING | YES |  | `semanticBoolean` / `semanticNumber` coerce (R8 #2) |
+| T-7 | MISSING | YES |  | `readFileInRange` fast/streaming with FileTooLargeError (R8 #35) |
+| T-8 | MISSING | YES |  | `lockfile` lazy wrapper (R8 #36) |
+| T-9 | MISSING | YES |  | `tagMessagesWithToolUseID` (R3 row utils.ts) |
+| T-10 | MISSING | YES |  | API limits constants (5MB image / 20MB PDF / 100 pages) (R8 #29) |
+| T-11 | MISSING | YES |  | Tool result limits + per-message budget (R8 #30) |
+| T-12 | MISSING | YES |  | XML tag constants (R8 #27) |

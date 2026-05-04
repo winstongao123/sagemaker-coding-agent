@@ -1,6 +1,6 @@
 # Block K Git Close Plan
 
-Status: PRIMARY_PUSHED_EVIDENCE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 Block K clean close criteria:
@@ -85,10 +85,17 @@ Evidence update commit message:
 
 `v5/block-k: record checkpoint evidence`
 
-Evidence commit SHA: pending.
+Evidence commit SHA: `c0feaad2fd9975d13655f5b3eba0d8b4a24b5e72`.
 
-Evidence push result: pending.
+Evidence push result: pushed to `sageagent/v5-build`.
 
-Post-push git status: pending after evidence commit.
+Remote verification:
+
+`c0feaad2fd9975d13655f5b3eba0d8b4a24b5e72 refs/heads/v5-build`.
+
+Post-push git status: no Block K implementation/artifact files remain unstaged
+after evidence push. Existing unrelated dirty files remain outside this
+checkpoint, including `compact_v5.zip`, `compact_v5/MAIN/agent/memory.md`,
+R-tier status docs, and prior unrelated status/doc worktree edits.
 
 No tag will be created without explicit user approval.
