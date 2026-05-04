@@ -1,6 +1,6 @@
 # Block C Worker Self-Review
 
-Status: CLAUDE_ITER3_APPROVED_PENDING_CLOSE_COMMIT
+Status: CLOSED_PUSHED_EVIDENCE_UPDATE_PENDING
 Date: 2026-05-04
 
 ## Scope Regenerated
@@ -44,11 +44,11 @@ Current row evidence has clean independent Claude iter3 review. `historical_revi
 
 ## Git Evidence
 
-Pre-close placeholder remains `pending Block C checkpoint` in the ledger. This must be replaced with the actual close commit SHA after final scope audit and the specific-file commit/push sequence.
+Close commit evidence is now recorded in the ledger and PORT_LOG as `18fb3dc14e9e33f3d233f50c8bcde9d14f36558e`. The separate evidence checkpoint commit is still pending.
 
 ## Open Risk
 
-- Specific-file close commit/push and post-push git-evidence update are still pending.
+- Post-push git-evidence update commit is still pending.
 - No AWS/R-tier tests were run or approved.
 
 ## Mandatory Self-Reflection Checklist

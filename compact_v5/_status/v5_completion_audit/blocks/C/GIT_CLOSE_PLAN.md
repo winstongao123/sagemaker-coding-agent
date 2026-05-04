@@ -1,6 +1,6 @@
 # Block C Git Close Plan
 
-Status: READY_TO_STAGE_CLOSE_COMMIT
+Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
 Date: 2026-05-04
 
 ## Close Preconditions
@@ -71,9 +71,10 @@ Stage only this Block C-specific file list:
 ## Close Commit
 
 - Commit message: `v5/block-c: complete runtime safety closure audit`
-- Commit SHA: pending.
-- Push remote/branch: `sageagent v5-build`, pending.
-- Post-push git status: pending.
+- Commit SHA: `18fb3dc14e9e33f3d233f50c8bcde9d14f36558e`
+- Push remote/branch: `sageagent v5-build`
+- Push result: `4c65860..18fb3dc  v5-build -> v5-build`
+- Post-push git status: unrelated pre-existing dirty files remain outside the staged Block C close set; no Block C close files were left unstaged before the evidence update.
 
 ## Evidence Update Commit
 
