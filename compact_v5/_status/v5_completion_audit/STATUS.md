@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-04
-Current state: WORKER-LED LOOP SELECTED; BLOCK A AND BLOCK E+F CLOSED/PUSHED; NEXT BLOCK L; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, AND N CLOSED/PUSHED; NEXT BLOCK K; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -65,13 +65,16 @@ Recommended driver:
 
 `compact_v5/_status/v5_completion_audit/06_CODEX_WORKER_SELF_COORDINATED_PROMPT.md`
 
-Current active Codex worker has completed and pushed Block A and Block E+F:
+Current active Codex worker has completed and pushed Block A, Block E+F,
+Block L, and Block N:
 
 - Block A evidence commit: `05f85f442c47c49f0bf1e6e34871b653e13ff7f3`.
 - Block E+F evidence commit: `6c36e1a77868d3c0d9247cd508c87916638812fd`.
+- Block L evidence commit: `35730b3e05f2592ce58ab1767860808452f80700`.
+- Block N evidence commit: `2f919bf53dadd64885912a69d0cae6a739dabb6c`.
 
 The next worker action is to resume from files, read
-`BLOCK_ORDER_AND_COVERAGE.md`, and start Block L. Do not tag unless explicitly
+`BLOCK_ORDER_AND_COVERAGE.md`, and start Block K. Do not tag unless explicitly
 approved.
 
 Worker-led loop docs:

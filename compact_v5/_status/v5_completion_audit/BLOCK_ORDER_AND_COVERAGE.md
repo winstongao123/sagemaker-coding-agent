@@ -21,18 +21,18 @@ Current mechanical totals from the audit script:
 TOTAL_EXPECTED_ROWS: 233
 ```
 
-Blocks A, E+F, and L are closed/pushed. The remaining audit rows are still
+Blocks A, E+F, L, and N are closed/pushed. The remaining audit rows are still
 ship-blocking until each block is ledgered, implemented or explicitly
 user-dispositioned, Claude-reviewed, and pushed.
 
-Latest post-Block-L summary:
+Latest post-Block-N summary:
 
 ```text
 TOTAL_EXPECTED_ROWS: 233
-TOTAL_SHIP_BLOCKING_ROWS: 154
+TOTAL_SHIP_BLOCKING_ROWS: 135
 ```
 
-Evidence: `compact_v5/_status/v5_completion_audit/logs/scope-audit-all-summary-after-block-l.log`.
+Evidence: `compact_v5/_status/v5_completion_audit/logs/scope-audit-all-summary-after-block-n.log`.
 
 ## Redo Order
 
@@ -86,10 +86,10 @@ Rows currently parsed from `SYNTHESIS_MASTER.md`:
 | I | 13 | Pending. |
 | L | 28 | Closed and pushed. |
 | M | 0 | No rows in current parser; still needs closure note/reviewer confirmation if protocol requires. |
-| N | 19 | Current next block in active redo order. |
+| N | 19 | Closed and pushed. |
 | T | 12 | Pending. |
 | J | 0 | No rows in current parser; no AWS spend without explicit user approval. |
-| K | 8 | Pending. |
+| K | 8 | Current next block in active redo order. |
 
 ## Coverage Gate
 

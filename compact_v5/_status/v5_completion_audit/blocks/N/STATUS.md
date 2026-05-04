@@ -1,6 +1,6 @@
 # Block N Status
 
-Status: PRIMARY_PUSHED_EVIDENCE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 19
@@ -34,17 +34,17 @@ Next Claude review state: no further review pending. Iter2 returned
 
 Current phase: CLOSE_ARTIFACTS_AND_GIT_CHECKPOINT
 
-Current task: Commit and push the Block N git close-plan evidence update.
+Current task: Closed and pushed; transition docs now point to Block K.
 
-Last completed action: Primary Block N checkpoint commit
-`a72d351cb5f9accbcad722dd84ed9dbac4f5ea44` was pushed to
+Last completed action: Evidence checkpoint commit
+`2f919bf53dadd64885912a69d0cae6a739dabb6c` was pushed to
 `sageagent/v5-build` and remote verification matched that SHA.
 
 Next 3 todo items:
 
-1. Stage only `blocks/N/GIT_CLOSE_PLAN.md` and `blocks/N/STATUS.md`.
-2. Commit/push Block N checkpoint evidence.
-3. Run all-block summary, update order docs, and start Block K.
+1. Commit transition docs with Block N closed and Block K active.
+2. Reconstruct Block K ledger from `SYNTHESIS_MASTER.md`.
+3. Start Block K implementation/review loop.
 
 Current review iteration count: 2 usable reviews completed.
 

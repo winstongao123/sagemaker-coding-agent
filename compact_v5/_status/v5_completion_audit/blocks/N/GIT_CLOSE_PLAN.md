@@ -1,6 +1,6 @@
 # Block N Git Close Plan
 
-Status: PRIMARY_PUSHED_EVIDENCE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 ## Close Evidence
@@ -61,8 +61,10 @@ Do not use `git add -A`. Do not tag. Do not force push.
 - Primary push result: pushed to `sageagent/v5-build`.
   Remote verification:
   `a72d351cb5f9accbcad722dd84ed9dbac4f5ea44 refs/heads/v5-build`.
-- Evidence commit SHA: pending.
-- Evidence push result: pending.
+- Evidence commit SHA: `2f919bf53dadd64885912a69d0cae6a739dabb6c`.
+- Evidence push result: pushed to `sageagent/v5-build`.
+  Remote verification:
+  `2f919bf53dadd64885912a69d0cae6a739dabb6c refs/heads/v5-build`.
 - Post-push git status: no Block N implementation/artifact files remain
   unstaged after primary push. Existing unrelated dirty files remain outside
   this checkpoint, including `compact_v5.zip`, `compact_v5/MAIN/agent/memory.md`,
