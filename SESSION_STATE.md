@@ -1,5 +1,24 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-04 — R-tier R4 DEFERRED-NOT-IMPLEMENTED (PS#3 / A-16 missing in v5.0.1)
+
+R4 claim: "30-min idle → cold-cache microcompact fires" (PS#3 structural fix).
+v5.0.1 Compactor is **token-threshold only** (Block A PORT_LOG #066-070).
+Runnable's time-based microcompact (microCompact.ts:411-530, SYNTHESIS_MASTER A-16)
+was identified HIGH-priority but **DEFERRED per PORT_LOG #019**.
+
+Running R4 as designed would burn $0.20 to confirm absence (non-empirical).
+Defaulted to Option A (DEFER + continue R5) per user's "no checkpoint pauses"
+directive — feature-missing isn't on the 8 listed ESCALATE-and-HALT triggers.
+
+ESCALATION-R4.md committed with 3 resolution options for user review.
+
+Continuing to R5 (200-bash-exec recovery / PS#7).
+
+Cumulative R-tier spend unchanged: $0.3662 / $14.25 (2.6%).
+
+---
+
 ## 2026-05-04 — R-tier R3 READY NEAR_IDEAL ($0.0810); cumulative $0.3662 / $14.25
 
 R3 = "Three sub-agent dispatches + parent synthesis" (Phase 9 task tool).
