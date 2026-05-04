@@ -134,4 +134,6 @@ Recommendation: READY-FOR-BLOCK-CLOSE-CHECKPOINT.
 ## Open Risk
 
 - No AWS/R-tier tests were run or approved.
-- Git evidence is pending the Block T close checkpoint commit and push.
+- Git evidence is recorded in the ledger and PORT_LOG as
+  `43d27278fda49173d2cbb3422603a20d3e9e81b5`; evidence commit
+  `05972befa0c97f883e152e4fe5d7be1bb4baf531` was pushed afterward.

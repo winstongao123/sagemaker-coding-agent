@@ -1,6 +1,6 @@
 # Block T Git Close Plan
 
-Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 ## Close Preconditions
@@ -108,6 +108,17 @@ Post-push git status before checkpoint evidence update:
 
 Checkpoint evidence update: this file is part of the evidence update commit
 that records the close commit SHA and push evidence.
+
+Checkpoint evidence commit: `05972befa0c97f883e152e4fe5d7be1bb4baf531`.
+
+Checkpoint evidence push result: `git push sageagent v5-build` succeeded.
+
+Checkpoint evidence push output:
+
+```text
+To https://github.com/winstonpgao/sageagent.git
+   43d2727..05972be  v5-build -> v5-build
+```
 
 Tag: no tag created; explicit user approval required for any tag.
 
