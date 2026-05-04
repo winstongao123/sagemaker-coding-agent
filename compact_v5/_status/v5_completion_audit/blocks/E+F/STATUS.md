@@ -1,6 +1,6 @@
 # Block E+F Status
 
-Status: PUSHED_CHECKPOINT_EVIDENCE_RECORDING
+Status: CHECKPOINT_PUSHED_AND_EVIDENCE_PUSHED
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 8
@@ -31,28 +31,30 @@ scope audit or git status reveals a new blocker.
 
 ## Progress Heartbeat
 
-Current phase: CLOSE_ARTIFACTS_AND_GIT_CHECKPOINT
+Current phase: CHECKPOINT_PUSHED_AND_EVIDENCE_PUSHED
 
-Current task: Commit and push Block E+F checkpoint evidence after primary
-closure push.
+Current task: Block E+F checkpoint and evidence commits are pushed. Resume the
+redo sequence at Block L.
 
-Last completed action: Created primary closure commit
-`56be608918ac58da0d83c3a09cb5e73437d35ff2` and pushed it to
-`sageagent/v5-build`; remote verification points to the same SHA.
+Last completed action: Evidence commit
+`6c36e1a77868d3c0d9247cd508c87916638812fd`
+(`v5/block-e-f: record checkpoint evidence`) pushed successfully to
+`sageagent/v5-build` after primary closure commit
+`56be608918ac58da0d83c3a09cb5e73437d35ff2`.
 
 Next 3 todo items:
 
-1. Stage only `blocks/E+F/GIT_CLOSE_PLAN.md` and `blocks/E+F/STATUS.md` for
-   checkpoint evidence.
-2. Commit the checkpoint evidence.
-3. Push the evidence commit to `sageagent/v5-build` and record final status.
+1. Resume from files plus `scope_audit.py`, not memory.
+2. Start Block L according to `BLOCK_ORDER_AND_COVERAGE.md`.
+3. Continue Claude read-only review handoffs with canonical-scope
+   reconstruction; no AWS/R-tier spend, Codex review, nested `codex exec`, tag,
+   or final-ready approval.
 
 Current review iteration count: 2 recorded attempts.
 
 Current ship-blocking row count: 0.
 
-Blocker or human decision needed: No human decision needed before Claude
-review. EF-6 and EF-7 are ledgered as `N/A_CONSTRAINT` due the active
-no-streaming rule and still need reviewer verification. Do not run AWS/R-tier
-spend, git tag, Codex review, nested `codex exec`, git reset/checkout, force
-push, or final-ready approval.
+Blocker or human decision needed: No human decision needed currently. Block
+E+F checkpoint and evidence pushes succeeded. Do not run AWS/R-tier spend, git
+tag, Codex review, nested `codex exec`, git reset/checkout, force push, or
+final-ready approval.

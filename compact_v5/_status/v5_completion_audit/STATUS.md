@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-04
-Current state: WORKER-LED LOOP SELECTED; BLOCK A CLAUDE ITER11 APPROVED; 0 BLOCKING ROWS; BLOCK A READY FOR SPECIFIC-FILE GIT CHECKPOINT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP SELECTED; BLOCK A AND BLOCK E+F CLOSED/PUSHED; NEXT BLOCK L; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -23,7 +23,7 @@ Current state: WORKER-LED LOOP SELECTED; BLOCK A CLAUDE ITER11 APPROVED; 0 BLOCK
 | Block A A-21 post-compact cleanup missing in compactor path | Implemented and Claude iter10 reviewed |
 | Block A A-25 post-compact stub injection missing in compactor path | Implemented and Claude iter10 reviewed |
 | Block A closure | Claude iter11 returned `APPROVE`, `READY_FOR_BLOCK_CLOSE_REVIEW`, 43/43 shipped, 0 blocking rows; LOW A-22/A-30/A-37 findings fixed and re-reviewed |
-| E+F narrowed to env_block remaps | Ship-blocking until ledger/implementation completed |
+| E+F narrowed to env_block remaps | Fixed and closed. Claude iter2 returned `APPROVE`, `READY_FOR_BLOCK_CLOSE_REVIEW`; 8/8 ledger rows, 0 blocking rows; pushed at `6c36e1a`. |
 | R-tier 42 scenario executable gate incomplete | Resolved for executable marker materialization; still ship-blocking until Claude-reviewed Phase A, AWS/mock execution, phase C review, telemetry, metrics, and per-test gate pass |
 
 ## Next Action
@@ -65,13 +65,14 @@ Recommended driver:
 
 `compact_v5/_status/v5_completion_audit/06_CODEX_WORKER_SELF_COORDINATED_PROMPT.md`
 
-Current active Codex worker has completed Block A implementation and obtained a
-usable Claude LOW-fix re-review at
-`reviews/block-a-claude-review-iter11.md`. Claude returned `VERDICT: APPROVE`
-and `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`. The next worker action is
-to run final scope/self-reflection checks, create the Block A specific-file git
-checkpoint, push branch `v5-build` to `sageagent`, and then continue to the
-next block. Do not tag unless explicitly approved.
+Current active Codex worker has completed and pushed Block A and Block E+F:
+
+- Block A evidence commit: `05f85f442c47c49f0bf1e6e34871b653e13ff7f3`.
+- Block E+F evidence commit: `6c36e1a77868d3c0d9247cd508c87916638812fd`.
+
+The next worker action is to resume from files, read
+`BLOCK_ORDER_AND_COVERAGE.md`, and start Block L. Do not tag unless explicitly
+approved.
 
 Worker-led loop docs:
 
