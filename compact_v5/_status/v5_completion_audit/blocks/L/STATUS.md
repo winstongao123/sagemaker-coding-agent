@@ -1,6 +1,6 @@
 # Block L Status
 
-Status: UPDATING_ARTIFACTS
+Status: CLOSED_PUSHED
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 28
@@ -32,20 +32,19 @@ updates introduce new evidence gaps.
 
 Current phase: UPDATING_ARTIFACTS
 
-Current task: Commit and push Block L evidence-only checkpoint updates.
+Current task: Run global scope summary, refresh block-order docs, and start the
+next unfinished block.
 
-Last completed action: Created and pushed primary Block L checkpoint commit
-`821744fc80e7fdad8137b0a0eab84c3fc747069f` to `sageagent/v5-build`, verified
-the remote branch, updated `LEDGER.md` git evidence with that SHA, and updated
-`GIT_CLOSE_PLAN.md` with commit/push/post-push evidence.
+Last completed action: Created and pushed Block L evidence checkpoint commit
+`35730b3e05f2592ce58ab1767860808452f80700` to `sageagent/v5-build` and
+verified the remote branch. Primary Block L commit:
+`821744fc80e7fdad8137b0a0eab84c3fc747069f`.
 
 Next 3 todo items:
 
-1. Stage only `blocks/L/LEDGER.md`, `blocks/L/GIT_CLOSE_PLAN.md`, and
-   `blocks/L/STATUS.md` for the evidence-only checkpoint.
-2. Commit and push the checkpoint evidence update.
-3. Run `scope_audit.py --all --summary`, read `BLOCK_ORDER_AND_COVERAGE.md`,
-   and select the next unfinished block.
+1. Run `scope_audit.py --all --summary`.
+2. Read/update `BLOCK_ORDER_AND_COVERAGE.md` to mark L closed and N next.
+3. Start Block N heartbeat/artifacts.
 
 Current review iteration count: 3 attempts recorded; iter3 is the first usable
 verdict.

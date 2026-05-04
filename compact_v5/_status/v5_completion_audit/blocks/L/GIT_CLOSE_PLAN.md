@@ -1,6 +1,6 @@
 # Block L Git Close Plan
 
-Status: PUSHED_WITH_CHECKPOINT_EVIDENCE_PENDING
+Status: PUSHED_WITH_CHECKPOINT_EVIDENCE
 
 Block L has local implementation, tests, mechanical audit, self-review, and a
 usable Claude iter3 verdict. Stage only the specific file list below.
@@ -118,5 +118,24 @@ No tag was created.
 
 After the primary commit/push, Claude's LOW process finding was handled by
 updating `blocks/L/LEDGER.md` git evidence from pending working-tree text to
-the concrete commit SHA above. This evidence-only update still needs its own
-specific-file checkpoint commit/push.
+the concrete commit SHA above.
+
+Evidence checkpoint commit:
+
+```text
+35730b3e05f2592ce58ab1767860808452f80700
+v5/block-l: record checkpoint evidence
+```
+
+Evidence push result:
+
+```text
+To https://github.com/winstonpgao/sageagent.git
+   821744f..35730b3  v5-build -> v5-build
+```
+
+Remote verification after evidence push:
+
+```text
+35730b3e05f2592ce58ab1767860808452f80700	refs/heads/v5-build
+```
