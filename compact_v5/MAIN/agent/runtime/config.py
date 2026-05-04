@@ -121,6 +121,12 @@ class Config:
     compaction_model: str = ""
     cold_cache_threshold_seconds: int = 30 * 60
     cache_ttl: str = "5m"
+    bedrock_guardrail_identifier: str = ""
+    bedrock_guardrail_version: str = ""
+    bedrock_guardrail_trace: str = ""
+    bedrock_stale_call_seconds: int = 0
+    bedrock_heartbeat_seconds: int = 30
+    bedrock_disable_keepalive_on_retry: bool = True
 
     # V4.9.5: opt-in self-patching skills
     enable_skill_patching: bool = False
@@ -243,6 +249,13 @@ def _apply_config_file(config: Config) -> None:
         "audit_retention_days": int,
         "context_max_tokens": int,
         "compaction_model": str,
+        "cache_ttl": str,
+        "bedrock_guardrail_identifier": str,
+        "bedrock_guardrail_version": str,
+        "bedrock_guardrail_trace": str,
+        "bedrock_stale_call_seconds": int,
+        "bedrock_heartbeat_seconds": int,
+        "bedrock_disable_keepalive_on_retry": bool,
         "enable_skill_patching": bool,
         "enforce_verify_contract": bool,
         "enable_subagent_handoff": bool,

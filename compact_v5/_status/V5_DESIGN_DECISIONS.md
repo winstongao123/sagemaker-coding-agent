@@ -3231,6 +3231,74 @@ v5 no-streaming rule.
 
 No AWS/R-tier test was run.
 
+## ADR-045 - Block L completion-audit redo
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block L completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+The prior Block L port covered the older eight-test slice only. The v5.0.1
+redo reconstructs Block L from `SYNTHESIS_MASTER.md`, which now defines 28
+canonical rows spanning Runnable error/retry/cache-break helpers and Hermes
+Bedrock stale-call, recovery, and guardrail lessons.
+
+### Decision
+
+Close Block L with local, no-AWS mechanisms in the existing runtime modules:
+
+- `core/errors.py` owns prompt-too-long gap parsing and group dropping,
+  max-token/context overflow parsing, unified reset parsing, 529 retry/drop
+  and fallback target selection, SSL/proxy details, API error sanitization and
+  humanization, rollback-to-last-assistant helper, generic error helpers, and
+  structured shell/config/telemetry-safe error classes.
+- `core/retry.py` keeps the v4 retry curve but adds env-gated persistent retry,
+  one-extra primary recovery after the nominal retry cap, and a Bedrock
+  three-tier recovery ladder.
+- `core/cache_break_detection.py` expands per-tool cache-break support with an
+  eight-field Bedrock-applicable `PromptStateSnapshot`, max-10 source LRU,
+  min-cache-miss threshold, TTL expiry classification, diff writing, and
+  separate cache-control hashing.
+- `runtime/bedrock_client.py` adds keep-alive-disabled client rebuild,
+  region-scoped runtime client invalidation, daemon-thread call wrapper with
+  heartbeat/stale-deadline handling, context-scaled stale-call deadline,
+  three-529 fallback trigger, and Bedrock guardrail request kwargs.
+- `runtime/config.py` adds guardrail, stale-call, heartbeat, and retry
+  keep-alive knobs.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+Anthropic-direct and streaming-specific branches are adapted to the current
+v5 Bedrock-only synchronous runtime. The daemon and heartbeat paths are tested
+locally with short deadlines rather than with AWS/R-tier wall-clock calls.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/errors.py`
+- `compact_v5/MAIN/agent/core/retry.py`
+- `compact_v5/MAIN/agent/core/cache_break_detection.py`
+- `compact_v5/MAIN/agent/core/__init__.py`
+- `compact_v5/MAIN/agent/runtime/bedrock_client.py`
+- `compact_v5/MAIN/agent/runtime/config.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_l.py`
+- `compact_v5/_status/v5_completion_audit/blocks/L/*`
+
+### Linked port-log rows
+
+- #113 - Block L completion-audit redo.
+
+### Validation
+
+- `python -m py_compile compact_v5\MAIN\agent\core\errors.py compact_v5\MAIN\agent\core\retry.py compact_v5\MAIN\agent\core\cache_break_detection.py compact_v5\MAIN\agent\core\__init__.py compact_v5\MAIN\agent\runtime\bedrock_client.py compact_v5\MAIN\agent\runtime\config.py compact_v5\MAIN\agent\tests\integration\test_block_l.py`
+- Result: PASS. Log: `block-l-py-compile.log`.
+- `python -m pytest compact_v5\MAIN\agent\tests\integration\test_block_l.py -q`
+- Result: 40 passed. Log: `block-l-pytest.log`.
+
+No AWS/R-tier test was run.
+
 ## ADR-042 - Block A remaining completion-audit blockers
 
 **Date**: 2026-05-04

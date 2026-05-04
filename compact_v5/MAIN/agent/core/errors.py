@@ -18,6 +18,8 @@ re-imports these names for backwards compatibility (no chat() change).
 """
 from __future__ import annotations
 
+import os
+import traceback
 from typing import Any
 
 
@@ -50,6 +52,33 @@ class BedrockErrorCategory:
     DEPENDENCY_FAILURE = "dependency_failure"  # downstream service error — backoff
 
 
+class ShellError(Exception):
+    """Structured shell execution error carrying stdout/stderr/code."""
+
+    def __init__(self, message: str, *, stdout: str = "", stderr: str = "", code: int | None = None):
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
+        self.code = code
+
+
+class ConfigParseError(Exception):
+    """Structured config parse error carrying path/default metadata."""
+
+    def __init__(self, message: str, *, path: str = "", default: Any = None):
+        super().__init__(message)
+        self.path = path
+        self.default = default
+
+
+class TelemetrySafeError(Exception):
+    """Error whose telemetry payload is safe to serialize."""
+
+    def __init__(self, message: str, *, telemetry: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.telemetry = telemetry or {}
+
+
 # Block L: which categories are retryable. Used by categorize_retryable().
 # Per Runnable R4 categorization.
 _RETRYABLE_CATEGORIES = frozenset({
@@ -72,6 +101,82 @@ _RETRYABLE_CATEGORIES = frozenset({
 def categorize_retryable(category: str) -> bool:
     """Return True iff `category` is in the retryable set (Block L PORT_LOG #100)."""
     return category in _RETRYABLE_CATEGORIES
+
+
+def to_error(value: Any) -> Exception:
+    """Runnable `toError` analogue: coerce any thrown value to Exception."""
+    if isinstance(value, Exception):
+        return value
+    return Exception(str(value))
+
+
+def short_error_stack(exc: BaseException, max_frames: int = 5) -> str:
+    """Return a short stack string capped to the last N frames."""
+    frames = traceback.format_exception(type(exc), exc, exc.__traceback__)
+    if len(frames) <= max_frames + 1:
+        return "".join(frames).strip()
+    return "".join([frames[0], *frames[-max_frames:]]).strip()
+
+
+def is_fs_inaccessible(exc_or_text: Any) -> bool:
+    """True for common filesystem-inaccessible errors."""
+    text = str(exc_or_text).lower()
+    return any(token in text for token in (
+        "enoent", "eacces", "eperm", "enotdir", "eisdir",
+        "permission denied", "no such file", "file not found",
+    ))
+
+
+def classify_axios_error(exc_or_text: Any) -> str:
+    """Small Axios-style classifier adapted for Bedrock/offline use."""
+    text = str(exc_or_text).lower()
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    if "ssl" in text or "certificate" in text or "zscaler" in text:
+        return "ssl"
+    if "connection" in text or "econnreset" in text or "network" in text:
+        return "network"
+    if "status code 5" in text or " 5" in text:
+        return "server"
+    if "status code 4" in text or " 4" in text:
+        return "client"
+    return "unknown"
+
+
+def get_prompt_too_long_token_gap(exc_or_text: Any) -> int:
+    """Parse how many tokens a prompt exceeds the accepted context by."""
+    import re
+
+    text = str(exc_or_text).lower().replace(",", "")
+    patterns = (
+        r"(\d+)\s*tokens?\s*(?:>|exceeds|over|above)\s*(\d+)",
+        r"context(?:\s+length)?\s*(\d+)\s*(?:>|exceeds|over|above)\s*(\d+)",
+        r"prompt is too long.*?(\d+).*?(?:limit|max|context).*?(\d+)",
+    )
+    for pattern in patterns:
+        m = re.search(pattern, text)
+        if m:
+            used = int(m.group(1))
+            limit = int(m.group(2))
+            return max(0, used - limit)
+    return 0
+
+
+def drop_prompt_too_long_message_groups(
+    groups: list[Any],
+    token_gap: int,
+    estimate_tokens,
+) -> list[Any]:
+    """Drop oldest groups until their estimated tokens cover `token_gap`."""
+    remaining = list(groups)
+    dropped = 0
+    while remaining and dropped < max(0, int(token_gap)):
+        first = remaining.pop(0)
+        try:
+            dropped += max(0, int(estimate_tokens(first)))
+        except Exception:
+            dropped += 0
+    return remaining
 
 
 def extract_nested_error_message(exc_or_text) -> str:
@@ -207,6 +312,84 @@ def get_retry_after_ms(exc) -> int:
         except (ValueError, TypeError):
             return 0
     return 0
+
+
+def get_rate_limit_reset_delay_ms(exc_or_text: Any) -> int:
+    """Parse Anthropic unified-reset Unix seconds into delay milliseconds."""
+    import re
+    import time
+
+    text = str(exc_or_text)
+    m = re.search(
+        r"anthropic-ratelimit-unified-reset\s*:?\s*(\d{10}(?:\.\d+)?)",
+        text,
+        re.IGNORECASE,
+    )
+    if not m:
+        return 0
+    reset_at = float(m.group(1))
+    return max(0, int((reset_at - time.time()) * 1000))
+
+
+def is_529_error(exc_or_text: Any) -> bool:
+    text = str(exc_or_text).lower()
+    return "529" in text or "overloaded" in text or "capacity" in text
+
+
+def should_retry_529(query_source: str, attempt: int = 0) -> bool:
+    """Retry user-facing 529s briefly; drop recursive/internal cascades."""
+    if str(query_source or "").lower() in {"compact", "session_memory", "memory"}:
+        return False
+    return attempt < 3
+
+
+def fallback_model_for_529(model_id: str, consecutive_529: int) -> str:
+    """Return Sonnet fallback model after 3 consecutive Opus 529s."""
+    if consecutive_529 < 3:
+        return ""
+    mid = str(model_id or "")
+    if "opus" not in mid.lower():
+        return ""
+    return mid.replace("opus", "sonnet").replace("Opus", "Sonnet")
+
+
+def extract_connection_error_details(exc_or_text: Any) -> dict[str, str]:
+    """Walk connection/SSL text and return a human hint."""
+    text = str(exc_or_text)
+    low = text.lower()
+    hint = ""
+    kind = "connection"
+    if "ssl" in low or "certificate" in low or "zscaler" in low:
+        kind = "ssl"
+        hint = "Check corporate proxy/Zscaler certificate trust or AWS CA bundle."
+    elif "timed out" in low or "timeout" in low:
+        kind = "timeout"
+        hint = "Network timeout while contacting Bedrock; retry or rebuild client."
+    elif "econnreset" in low or "connection reset" in low:
+        kind = "reset"
+        hint = "Connection was reset; rebuild the runtime client before retry."
+    return {"kind": kind, "message": text[:500], "hint": hint}
+
+
+def sanitize_api_error(exc_or_text: Any) -> str:
+    """Human-safe Bedrock API error text with HTML/JSON extraction."""
+    return extract_nested_error_message(exc_or_text)
+
+
+def humanize_api_error(exc_or_text: Any, status_code: int | None = None) -> str:
+    """Bedrock-only API error humanizer."""
+    message = sanitize_api_error(exc_or_text)
+    if status_code:
+        return f"Bedrock API error {status_code}: {message}"
+    return f"Bedrock API error: {message}"
+
+
+def rollback_to_last_assistant_turn(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return conversation history through the last assistant turn."""
+    for idx in range(len(messages) - 1, -1, -1):
+        if messages[idx].get("role") == "assistant":
+            return list(messages[: idx + 1])
+    return []
 
 
 class ErrorClassifier:

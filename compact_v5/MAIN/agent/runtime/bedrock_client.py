@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -99,14 +101,107 @@ BEDROCK_EXTRA_PARAMS_HEADERS: frozenset = frozenset({
 # ============================================================
 
 # botocore Config preset for retry tuning (v4 default).
-def _bedrock_client_config():
+_RUNTIME_CLIENT_CACHE: Dict[str, Any] = {}
+
+
+def _bedrock_client_config(disable_keepalive: bool = False):
     """Return a botocore Config with v4's retry tuning. Local-imports botocore."""
-    from botocore.config import Config as _BotoConfig
-    return _BotoConfig(
-        retries={"max_attempts": 1, "mode": "standard"},  # we handle retries ourselves
-        read_timeout=120,
-        connect_timeout=10,
-    )
+    kwargs = {
+        "retries": {"max_attempts": 1, "mode": "standard"},  # we handle retries ourselves
+        "read_timeout": 120,
+        "connect_timeout": 10,
+    }
+    # botocore supports tcp_keepalive on current runtimes. If an older runtime
+    # rejects it, fall back to the base config rather than blocking import.
+    if disable_keepalive:
+        kwargs["tcp_keepalive"] = False
+    try:
+        from botocore.config import Config as _BotoConfig
+    except ModuleNotFoundError:
+        class _LocalConfig:
+            def __init__(self, **values):
+                self.__dict__.update(values)
+
+        return _LocalConfig(**kwargs)
+    try:
+        return _BotoConfig(**kwargs)
+    except TypeError:
+        kwargs.pop("tcp_keepalive", None)
+        return _BotoConfig(**kwargs)
+
+
+def invalidate_runtime_client(region: str) -> bool:
+    """Drop a cached bedrock-runtime client for a region after stale failures."""
+    removed = False
+    for key in list(_RUNTIME_CLIENT_CACHE):
+        if key == region or key.startswith(f"{region}|"):
+            _RUNTIME_CLIENT_CACHE.pop(key, None)
+            removed = True
+    return removed
+
+
+def get_runtime_client(region: str, disable_keepalive: bool = False):
+    """Return a cached bedrock-runtime client unless keep-alive must be disabled."""
+    import boto3
+
+    key = f"{region}|keepalive={'off' if disable_keepalive else 'on'}"
+    if disable_keepalive:
+        return boto3.client(
+            "bedrock-runtime",
+            region_name=region,
+            config=_bedrock_client_config(disable_keepalive=True),
+        )
+    if key not in _RUNTIME_CLIENT_CACHE:
+        _RUNTIME_CLIENT_CACHE[key] = boto3.client(
+            "bedrock-runtime",
+            region_name=region,
+            config=_bedrock_client_config(),
+        )
+    return _RUNTIME_CLIENT_CACHE[key]
+
+
+def context_scaled_deadline_seconds(context_tokens: int, base_seconds: int = 120) -> int:
+    """Scale stale-call detection deadline with large prompt contexts."""
+    if context_tokens <= 0:
+        return base_seconds
+    extra = min(240, int(context_tokens / 50_000) * 30)
+    return base_seconds + extra
+
+
+def run_bedrock_call_daemon(
+    call_fn,
+    *,
+    stale_deadline_s: float,
+    heartbeat_callback=None,
+    heartbeat_interval_s: float = 30.0,
+):
+    """Run a Bedrock call in a daemon thread and remain heartbeat/timeout aware."""
+    results: "queue.Queue[tuple[str, Any]]" = queue.Queue(maxsize=1)
+
+    def target() -> None:
+        try:
+            results.put(("ok", call_fn()))
+        except BaseException as exc:  # noqa: BLE001 - preserve raised value
+            results.put(("err", exc))
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    start = time.monotonic()
+    last_heartbeat = start
+    poll_s = min(0.1, max(0.005, heartbeat_interval_s / 10.0))
+    while True:
+        try:
+            status, value = results.get(timeout=poll_s)
+            if status == "ok":
+                return value
+            raise value
+        except queue.Empty:
+            now = time.monotonic()
+            if heartbeat_callback and now - last_heartbeat >= heartbeat_interval_s:
+                heartbeat_callback()
+                last_heartbeat = now
+            if stale_deadline_s > 0 and now - start >= stale_deadline_s:
+                raise TimeoutError(f"Bedrock call stale after {stale_deadline_s:.1f}s")
 
 
 class BedrockClient:
@@ -146,15 +241,23 @@ class BedrockClient:
         self.mock_mode = mock_mode
         self.prompt_cache_supported = True  # set False after first cache fallback
         self._cache_threshold_warned = False
+        self._last_rebuild_disable_keepalive = False
+        self._external_client = client is not None
         if mock_mode:
             self.client = None
         elif client is not None:
             self.client = client
         else:
-            import boto3
-            self.client = boto3.client(
-                "bedrock-runtime", region_name=region, config=_bedrock_client_config()
-            )
+            self.client = get_runtime_client(region)
+
+    def _rebuild_bedrock_client(self, disable_keepalive: bool = False) -> bool:
+        """Rebuild the Bedrock runtime client, optionally disabling keep-alive."""
+        if self.mock_mode or self._external_client:
+            self._last_rebuild_disable_keepalive = disable_keepalive
+            return False
+        self.client = get_runtime_client(self.region, disable_keepalive=disable_keepalive)
+        self._last_rebuild_disable_keepalive = disable_keepalive
+        return True
 
     # ---------- mock-mode helpers ----------
 
@@ -298,17 +401,38 @@ class BedrockClient:
         # Cache-validation: strip cache blocks and retry once (existing v4.1 #14).
         attempt = 0
         last_exc: Optional[Exception] = None
+        consecutive_529 = 0
         while True:
             try:
-                response = self.client.invoke_model(
-                    modelId=self.model_id,
-                    body=json.dumps(body, separators=(",", ":")),
-                    contentType="application/json",
-                )
+                invoke_kwargs = {
+                    "modelId": self.model_id,
+                    "body": json.dumps(body, separators=(",", ":")),
+                    "contentType": "application/json",
+                }
+                if getattr(CONFIG, "bedrock_guardrail_identifier", ""):
+                    invoke_kwargs["guardrailIdentifier"] = CONFIG.bedrock_guardrail_identifier
+                    if getattr(CONFIG, "bedrock_guardrail_version", ""):
+                        invoke_kwargs["guardrailVersion"] = CONFIG.bedrock_guardrail_version
+                    if getattr(CONFIG, "bedrock_guardrail_trace", ""):
+                        invoke_kwargs["trace"] = CONFIG.bedrock_guardrail_trace
+                response = self.client.invoke_model(**invoke_kwargs)
                 break  # success
             except Exception as e:
                 last_exc = e
                 category, recovery, debug_msg = ErrorClassifier.classify(e)
+                from core.errors import fallback_model_for_529, is_529_error
+
+                if is_529_error(e):
+                    consecutive_529 += 1
+                    target_model = fallback_model_for_529(self.model_id, consecutive_529)
+                    if target_model:
+                        from core.query_engine import FallbackTriggeredError
+                        raise FallbackTriggeredError(
+                            target_model,
+                            f"3 consecutive 529/capacity errors from {self.model_id}",
+                        ) from e
+                else:
+                    consecutive_529 = 0
 
                 # Cache-validation: strip cache blocks, retry once
                 if (
@@ -331,12 +455,24 @@ class BedrockClient:
 
                 # Throttle / transient / etc.: retry with jitter
                 if RetryPolicy.should_retry(attempt, recovery):
+                    if (
+                        category in {BedrockErrorCategory.NETWORK, BedrockErrorCategory.REQUEST_TIMEOUT}
+                        and getattr(CONFIG, "bedrock_disable_keepalive_on_retry", True)
+                    ):
+                        invalidate_runtime_client(self.region)
+                        self._rebuild_bedrock_client(disable_keepalive=True)
                     sleep_s = RetryPolicy.backoff_seconds(attempt)
                     logging.warning(
                         f"[BEDROCK] {category} (recovery={recovery}, attempt={attempt + 1}/"
-                        f"{RetryPolicy.MAX_RETRIES + 1}, sleep={sleep_s:.1f}s): {debug_msg}"
+                        f"{RetryPolicy.max_retries() + 1}, sleep={sleep_s:.1f}s): {debug_msg}"
                     )
                     time.sleep(sleep_s)
+                    attempt += 1
+                    continue
+
+                if RetryPolicy.allow_primary_recovery_after_max(attempt, recovery):
+                    invalidate_runtime_client(self.region)
+                    self._rebuild_bedrock_client(disable_keepalive=True)
                     attempt += 1
                     continue
 
