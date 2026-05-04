@@ -1,5 +1,19 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-04 — CRITICAL SCOPE INVESTIGATION OPENED
+
+R-tier R4 ESCALATION-R4.md surfaced A-16 (PS#3 cold-cache fix) NOT IMPLEMENTED in v5.0.1 despite being in Wave-5-DEEP plan. Spot-check expanded to all Blocks: Block A 9-of-43 PORT_LOG rows + 24-of-25 named items missing in grep; Block H+ 1-of-20 rows; Block L 3-of-28 rows. Significant scope-narrowing despite explicit user "no deferred items" directive + 50 prior Codex APPROVE iterations.
+
+Created `compact_v5/_status/PS_CRITICAL_WORKER_PROBLEM.md` documenting:
+- Per-Block planned-vs-shipped table
+- Verified missing items (Block A spot-check)
+- Root causes (Codex template gap; PORT_LOG row format misleading; no scope-checkpoint pre-tag)
+- Test-suite implications (5-8 of 19 R-tests may ESCALATE)
+- 3 options (A full audit + fix; B continue + document; C critical-only fix)
+- Codex audit request (line-by-line per X-N item)
+
+R-tier PAUSED pending user decision A/B/C + Codex full audit.
+
 ## 2026-05-04 — R-tier R5 READY NEAR_IDEAL ($0.0157); cumulative $0.3819 / $14.25 — PAUSED per user
 
 R5 = "exec session limit + OTHER-TOOLS-STILL-WORK recovery" (PS#7 / Block C exec gate + Block N failure-as-instruction). Final verdict: GENUINE_PASS NEAR_IDEAL (worker 5.00, Codex 4.5). 1 AWS call.
