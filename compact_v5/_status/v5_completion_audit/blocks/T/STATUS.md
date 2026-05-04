@@ -1,28 +1,28 @@
 # Block T Status
 
-Status: IMPLEMENTING
+Status: COMMIT_HOOK_UTF8_REPAIR_READY_TO_RETRY
 Date: 2026-05-04
 
 Expected rows from `SYNTHESIS_MASTER`: 12
 Ledger rows: 12
-Current blocking-row count: 12
+Current blocking-row count: 0
 
-Current phase: IMPLEMENTING
+Current phase: COMMIT_HOOK_REPAIR
 
-Current task: Audit Block T v4 tool surface parity rows T-1 through T-12 against current code/tests and identify missing implementation.
+Current task: Convert the newly generated pre-close strict audit log to UTF-8 and retry the close commit.
 
-Last completed action: Initialized the 12-row Block T ledger and reran `scope_audit.py --block T`; result is 12 ledger rows, 12 missing/ship-blocking, `NEEDS_IMPLEMENTATION`.
+Last completed action: Second commit attempt was blocked only by `logs/block-t-pre-close-scope-audit-strict.log` having invalid Unicode from PowerShell redirection.
 
 Next 3 todo items:
 
-1. Audit existing tool/code/test evidence for T-1, T-2, T-5, and prior Block T implementation rows.
-2. Identify required fixes for T-3, T-6, T-7, T-8, T-10, T-11, and T-12.
-3. Update ledger dispositions, implement missing local fixes, and run Block T tests/scope audit before Claude review.
+1. Convert `logs/block-t-pre-close-scope-audit-strict.log` to UTF-8.
+2. Re-stage the repaired log and this heartbeat update.
+3. Retry commit `v5/block-t: complete tool surface closure audit`.
 
-Next Claude review state: not ready yet; Block T ledger is initialized but rows remain ship-blocking.
+Next Claude review state: iter3 review saved at `reviews/block-t-claude-review-iter3.md`; no further Claude review currently needed.
 
-Latest usable Claude verdict: none for Block T.
+Latest usable Claude verdict: iter3 `APPROVE`, ship decision `READY_FOR_BLOCK_CLOSE_REVIEW`.
 
-Review attempts recorded: 0.
+Review attempts recorded: 3.
 
-Blocker or human decision needed: none currently. T-4 includes a prior explicit user drop for active `web_fetch`; verify and ledger it as user-approved if evidence matches.
+Blocker or human decision needed: none currently. No AWS/R-tier spend, tag, final-ready claim, or defer/drop decision is being requested.

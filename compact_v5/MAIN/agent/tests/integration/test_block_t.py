@@ -545,3 +545,144 @@ def test_block_t_active_tools_registered():
     assert _find_tool("web_fetch") is None, (
         "web_fetch must remain disabled per user decision 2026-05-03"
     )
+
+
+# ============================================================
+# Block T completion-audit utility rows T-6 through T-12
+# ============================================================
+
+def test_block_t_semantic_coerce_helpers_and_read_file_quoted_offsets(workspace_tmp):
+    from runtime.tool_surface import semantic_boolean, semantic_number
+
+    assert semantic_boolean("yes") is True
+    assert semantic_boolean("off") is False
+    assert semantic_number("2,000", integer=True) == 2000
+
+    fp = workspace_tmp / "quoted.txt"
+    fp.write_text("zero\none\ntwo\nthree\n", encoding="utf-8")
+    tool = _find_tool("read_file")
+    out = tool.execute(
+        {"file_path": str(fp), "offset": "1", "limit": "2"},
+        context={},
+    )
+    assert "[quoted.txt] Lines 2-3 of 4" in out
+    assert "   2| one" in out
+    assert "   3| two" in out
+
+
+def test_block_t_read_file_in_range_and_too_large_error(workspace_tmp):
+    from runtime.config import CONFIG
+    from runtime.tool_surface import FileTooLargeError, read_file_in_range
+
+    fp = workspace_tmp / "range.txt"
+    fp.write_text("a\nb\nc\n", encoding="utf-8")
+    result = read_file_in_range(str(fp), offset=1, limit=1, max_bytes=100)
+    assert result.lines == ["b"]
+    assert result.total_lines == 3
+
+    with pytest.raises(FileTooLargeError):
+        read_file_in_range(str(fp), offset=0, limit=1, max_bytes=2)
+
+    saved = CONFIG.max_file_size
+    CONFIG.max_file_size = 2
+    try:
+        tool = _find_tool("read_file")
+        out = tool.execute({"file_path": str(fp)}, context={})
+        assert out.startswith("Error: File too large")
+    finally:
+        CONFIG.max_file_size = saved
+
+
+def test_block_t_lockfile_lazy_wrapper_creates_and_releases(tmp_path):
+    from runtime.tool_surface import lockfile
+
+    lock_path = tmp_path / "agent.lock"
+    with lockfile(str(lock_path), timeout=0.5) as acquired:
+        assert acquired.path == str(lock_path)
+        assert lock_path.exists()
+        with pytest.raises(TimeoutError):
+            with lockfile(str(lock_path), timeout=0.05):
+                pass
+
+    with lockfile(str(lock_path), timeout=0.5):
+        assert lock_path.exists()
+
+
+def test_block_t_api_limits_constants_and_view_image_5mb_cap(workspace_tmp):
+    from runtime.tool_surface import MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_PDF_PAGES
+
+    assert MAX_IMAGE_BYTES == 5 * 1024 * 1024
+    assert MAX_PDF_BYTES == 20 * 1024 * 1024
+    assert MAX_PDF_PAGES == 100
+
+    fp = workspace_tmp / "too-large.png"
+    with open(fp, "wb") as handle:
+        handle.seek(MAX_IMAGE_BYTES)
+        handle.write(b"x")
+    tool = _find_tool("view_image")
+    out = tool.execute({"file_path": str(fp)}, context={})
+    assert out.startswith("Error: image too large")
+    assert "max 5 MB" in out
+
+
+def test_block_t_query_engine_enforces_tool_result_message_budget():
+    from core.query_engine import QueryEngine
+    from runtime.bedrock_client import Response, ToolCall
+    from runtime.tool_surface import (
+        MAX_TOOL_RESULT_MESSAGE_CHARS,
+        TOOL_RESULT_BUDGET_MARKER,
+    )
+    from tools.registry import build_tool
+
+    class _Client:
+        mock_mode = True
+
+        def __init__(self):
+            self.turn = 0
+
+        def chat(self, *args, **kwargs):
+            self.turn += 1
+            if self.turn == 1:
+                return Response(
+                    "",
+                    [
+                        ToolCall("a", "read_file", {"file_path": "a"}),
+                        ToolCall("b", "read_file", {"file_path": "b"}),
+                    ],
+                    "tool_use",
+                    {},
+                )
+            return Response("done", [], "end_turn", {})
+
+    tool = build_tool(
+        "read_file",
+        "read",
+        {},
+        lambda args, context=None: "x" * 150_000,
+        is_read_only=True,
+        is_concurrency_safe=True,
+        max_result_size_chars=250_000,
+    )
+    engine = QueryEngine(_Client(), max_turns=3)
+    result = engine.run("go", "sys", [tool], output_fn=lambda _: None)
+    tool_results = result.messages[-2]["content"]
+    aggregate = sum(len(block["content"]) for block in tool_results)
+    assert aggregate <= MAX_TOOL_RESULT_MESSAGE_CHARS
+    assert TOOL_RESULT_BUDGET_MARKER in tool_results[1]["content"]
+
+
+def test_block_t_xml_tag_constants_used_by_tool_search_and_query_engine():
+    from core.query_engine import QueryEngine
+    from runtime.tool_surface import XML_FUNCTIONS_TAG, XML_SYSTEM_REMINDER_TAG
+    from tools.tool_search import _format_functions_block
+
+    reminder = QueryEngine._inject_deferred_reminder(
+        [{"role": "user", "content": "hi"}],
+        ["view_image"],
+    )[-1]["content"][1]["text"]
+    assert reminder.startswith(f"<{XML_SYSTEM_REMINDER_TAG}>")
+    assert reminder.endswith(f"</{XML_SYSTEM_REMINDER_TAG}>")
+
+    block = _format_functions_block([], [])
+    assert block.startswith(f"<{XML_FUNCTIONS_TAG}>")
+    assert f"</{XML_FUNCTIONS_TAG}>" in block

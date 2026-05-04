@@ -14,6 +14,7 @@ K-8 A41 hermetic test parity
 from __future__ import annotations
 
 import re
+import importlib.util
 from pathlib import Path
 
 
@@ -32,6 +33,7 @@ _CHANGELOG = _V5_ROOT / "CHANGELOG.md"
 _PREFLIGHT = _V5_ROOT / "docs" / "PREFLIGHT_PROTOCOL.md"
 _THREE_CRITIC = _V5_ROOT / "docs" / "audits" / "THREE_CRITIC_REVIEW.md"
 _AGENTS = _REPO_ROOT / "AGENTS.md"
+_SCOPE_AUDIT = _STATUS_DIR / "scripts" / "scope_audit.py"
 
 
 def _read(path: Path) -> str:
@@ -170,6 +172,17 @@ def test_k8_a41_hermetic_test_parity_policy():
     assert "host timezone" in text
     assert "locale" in text
     assert "AWS/R-tier behavior stays behind explicit env gates" in text
+
+
+def test_scope_audit_counts_na_constraint_key():
+    """Lock the N/A_CONSTRAINT summary counter used by block close gates."""
+    spec = importlib.util.spec_from_file_location("scope_audit_for_test", _SCOPE_AUDIT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+
+    assert module.disposition_count_key("N/A_CONSTRAINT") == "na_constraint"
+    assert module.disposition_count_key("DROPPED_USER_APPROVED") == "dropped_user_approved"
 
 
 def test_block_k_8_of_8_test_count():

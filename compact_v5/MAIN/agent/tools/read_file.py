@@ -23,6 +23,11 @@ from typing import Any, Dict, Optional
 
 from .registry import build_tool, register
 from . import _path_validation as path_security
+from runtime.tool_surface import (
+    FileTooLargeError,
+    read_file_in_range,
+    semantic_number,
+)
 
 
 # ============================================================
@@ -95,11 +100,11 @@ def _read_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
     raw_offset = args.get("offset", 0) if args.get("offset") is not None else 0
     raw_limit = args.get("limit", 2000) if args.get("limit") is not None else 2000
     try:
-        offset = int(raw_offset)
+        offset = int(semantic_number(raw_offset, integer=True))
     except (TypeError, ValueError):
         return f"Error: offset must be a non-negative integer; got {raw_offset!r}"
     try:
-        limit = int(raw_limit)
+        limit = int(semantic_number(raw_limit, integer=True))
     except (TypeError, ValueError):
         return f"Error: limit must be a positive integer; got {raw_limit!r}"
     if offset < 0:
@@ -121,18 +126,19 @@ def _read_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
     from runtime.config import CONFIG
     max_file_size = getattr(CONFIG, "max_file_size", _MAX_FILE_SIZE_DEFAULT)
     try:
-        file_size = os.path.getsize(abs_path)
-    except OSError as e:
-        return f"Error: cannot stat file: {e}"
-    if file_size > max_file_size:
+        range_read = read_file_in_range(
+            abs_path,
+            offset=0,
+            limit=None,
+            max_bytes=max_file_size,
+        )
+        content = range_read.text
+        file_size = range_read.file_size
+    except FileTooLargeError as e:
         return (
-            f"Error: File too large ({file_size:,} bytes, max {max_file_size:,}). "
+            f"Error: File too large ({e.size:,} bytes, max {e.max_bytes:,}). "
             f"Use grep to search inside it, or read_file with offset/limit."
         )
-
-    try:
-        with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
     except OSError as e:
         return f"Error: cannot read file: {e}"
 

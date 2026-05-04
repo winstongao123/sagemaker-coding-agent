@@ -1,0 +1,1 @@
+﻿py_compile PASS: runtime/tool_surface.py tools/read_file.py tools/view_image.py tools/tool_search.py core/query_engine.py tests/integration/test_block_t.py

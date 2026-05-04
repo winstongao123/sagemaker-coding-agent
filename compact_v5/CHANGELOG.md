@@ -22,6 +22,39 @@ What changed, including the primary code or process artifact.
 Which local test, scope audit, reviewer verdict, or explicit no-test
 justification proves the fix.
 
+## v5.0.1-block-t completion-audit utility closure (2026-05-04)
+
+### Symptom
+
+Block T previously had aggregate tool-surface evidence but no row-level closure
+for the v4/Runnable utility fold-ins T-1 through T-12. The missing rows included
+semantic coercion, range-read errors, lockfiles, API limits, tool-result
+budgets, XML tag constants, and explicit disposition for web_fetch/UI-only
+tagging.
+
+### Root cause
+
+Earlier Block T work closed the visible v4 tools as a bundle. That left several
+small utility rows unimplemented or undocumented, and it did not prove the
+already-present tools against the canonical SYNTHESIS_MASTER row list.
+
+### Fix
+
+Added `runtime/tool_surface.py` for shared Block T constants/helpers, wired the
+helpers into `read_file`, `view_image`, `tool_search`, and QueryEngine
+tool-result turn assembly, and updated Block T ledger/PORT_LOG/ADR evidence for
+all 12 canonical rows. The user-highlighted Block N parallel dispatch risk was
+rechecked with the existing single-tool dispatch pipeline and regression tests.
+
+### Verification
+
+Local zero-cost validation: py_compile PASS; Block T suite 17 passed/14 skipped;
+Phase 4 tools 39 passed; tool_search 32 passed; skills 12 passed; Block N
+parallel-risk subset 3 passed/25 deselected. Claude iter1 LOW audit counter
+finding fixed with a scope_audit normalization helper and Block K process lock
+test; refreshed Block T strict audit reports 10 shipped, 1 dropped, 1 N/A, 0
+blocking. No AWS/R-tier test was run.
+
 ## v5.0.1-block-e-f — env_block + ADR-020 0-2/0-4/0-6 remap closure (2026-05-03)
 
 Codex review: 2-iter cycle (gpt-5.3-codex throughout):

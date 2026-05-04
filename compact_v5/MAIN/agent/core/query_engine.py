@@ -46,6 +46,11 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .budget import IterationBudget
 from .errors import BedrockErrorCategory, ErrorClassifier
+from runtime.tool_surface import (
+    XML_SYSTEM_REMINDER_TAG,
+    enforce_tool_result_message_budget,
+    xml_tag,
+)
 
 
 # ============================================================
@@ -995,6 +1000,7 @@ class QueryEngine:
                             )
                         )
                     self._partial_tool_names.clear()
+                    tool_results = enforce_tool_result_message_budget(tool_results)
                     self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
                     continue
                 _dispatch_calls = _plan.get("parallel", []) + _plan.get("sequential", [])
@@ -1022,6 +1028,7 @@ class QueryEngine:
                     )
                 finally:
                     self._partial_tool_names.clear()
+            tool_results = enforce_tool_result_message_budget(tool_results)
             self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
 
         else:  # for-loop fell through without break
@@ -1532,14 +1539,13 @@ class QueryEngine:
         """
         if not deferred_names:
             return messages
-        reminder = (
-            "<system-reminder>\n"
+        reminder_body = (
             "The following deferred tools are available via tool_search. Their schemas "
             "are NOT loaded â€” calling them directly will fail. Use tool_search with "
             "query \"select:<name>[,<name>...]\" to load tool schemas before calling them:\n"
             + "\n".join(sorted(deferred_names))
-            + "\n</system-reminder>"
         )
+        reminder = xml_tag(XML_SYSTEM_REMINDER_TAG, reminder_body)
         # Transient append: copy the trailing user message and add the reminder
         # as an extra text block. If the trailing turn is not user-role, we
         # append a fresh user message â€” but this should never happen because

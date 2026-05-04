@@ -3143,6 +3143,100 @@ For A-21, compaction changes what the model can legitimately rely on. Clearing r
 
 No AWS/R-tier test was run.
 
+## ADR-048 - Block T completion-audit tool-surface utility closure
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block T completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+Block T had 12 canonical rows in `SYNTHESIS_MASTER.md:354-371`. Existing v5
+code already shipped several v4 tools, but the completion audit required
+explicit row-level evidence and lock tests. The missing rows were small
+Runnable utility surfaces: semantic coercion, range file reads, lockfiles, API
+limits, tool-result budgets, and XML tag constants.
+
+### Decision
+
+Add `runtime/tool_surface.py` as the shared home for the utility rows and wire
+them into runtime paths where they affect behavior:
+
+- `tools/read_file.py` uses `semantic_number()` for quoted `offset`/`limit`
+  values and `read_file_in_range()` / `FileTooLargeError` for byte-gated reads.
+- `tools/view_image.py` imports `MAX_IMAGE_BYTES`, changing the active image
+  limit to the canonical 5 MB.
+- `core/query_engine.py` clamps aggregate tool-result content with
+  `MAX_TOOL_RESULT_MESSAGE_CHARS=200000` before appending tool-result turns in
+  both parallel and sequential paths.
+- `tools/tool_search.py` and `core/query_engine.py` use centralized XML tag
+  constants for `<functions>` and `<system-reminder>`.
+- `LazyLockFile` uses `portalocker` when available and stdlib `msvcrt`/`fcntl`
+  otherwise.
+
+Existing v4 tool rows are closed with explicit evidence rather than relying on
+old aggregate Block T claims:
+
+- T-1 notebook_edit: Phase 4 executor/registry tests.
+- T-2 view_image: Phase 4 executor/queue tests plus the new 5 MB cap lock.
+- T-3 semantic_search: existing TF-IDF index/search/status adaptation.
+- T-4 web_fetch: remains `DROPPED_USER_APPROVED` by the explicit 2026-05-03
+  user directive recorded in PORT_LOG #103-A and ADR-038.
+- T-5 skill tools: Phase 10 skill and skill_propose_patch registry tests.
+- T-9 tagMessagesWithToolUseID: `N/A_CONSTRAINT`; v5 has no streaming UI
+  placeholder layer, and QueryEngine already emits Bedrock tool_result blocks
+  with `tool_use_id` directly.
+
+### Parallel Dispatch Risk
+
+The user-highlighted Block N risk was rechecked before Block T review:
+parallel-safe QueryEngine dispatch already calls `_dispatch_single_tool_call`
+for each parallel worker, the same function used by sequential dispatch. This
+preserves audit logging, repetition tracking, JSON argument repair,
+tool_search discovery, approval checks, and error forensics. The Block N
+regression subset covering audit/error, JSON repair, and repetition tracking
+passed and is included as Block T review evidence.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+The v5 runtime is synchronous Bedrock/SageMaker, not Runnable's streaming UI
+surface. The utility behavior is preserved where it affects real runtime
+contracts; UI-only tagging is explicitly constrained out because there is no
+streaming placeholder path to tag.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/runtime/tool_surface.py`
+- `compact_v5/MAIN/agent/tools/read_file.py`
+- `compact_v5/MAIN/agent/tools/view_image.py`
+- `compact_v5/MAIN/agent/tools/tool_search.py`
+- `compact_v5/MAIN/agent/core/query_engine.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_t.py`
+- `compact_v5/_status/v5_completion_audit/blocks/T/*`
+
+### Linked port-log rows
+
+- #123 through #134 - Block T completion-audit closure rows.
+
+### Validation
+
+- `py -3.10 -m py_compile runtime/tool_surface.py tools/read_file.py tools/view_image.py tools/tool_search.py core/query_engine.py tests/integration/test_block_t.py`
+- Result: PASS.
+- `py -3.10 -m pytest tests/integration/test_block_t.py -q`
+- Result: 17 passed, 14 skipped.
+- `py -3.10 -m pytest tests/tools/test_phase4_mutating_tools.py -q`
+- Result: 39 passed.
+- `py -3.10 -m pytest tests/unit/test_tool_search.py -q`
+- Result: 32 passed.
+- `py -3.10 -m pytest tests/integration/test_skills.py -q`
+- Result: 12 passed.
+- `py -3.10 -m pytest tests/integration/test_block_n.py -q -k "parallel_dispatch_audits_success_and_error or parallel_dispatch_repairs_json_string_args or parallel_dispatch_keeps_repetition_guard"`
+- Result: 3 passed, 25 deselected.
+
+No AWS/R-tier test was run.
+
 ## ADR-043 - Block A iter10 LOW-finding fixes
 
 **Date**: 2026-05-04

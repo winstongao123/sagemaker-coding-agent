@@ -59,6 +59,11 @@ USER_APPROVED_NONBLOCKING = {"DEFERRED_USER_APPROVED", "DROPPED_USER_APPROVED", 
 FINAL_DISPOSITIONS = {"SHIPPED", *SHIP_BLOCKING, *USER_APPROVED_NONBLOCKING}
 
 
+def disposition_count_key(disposition: str) -> str:
+    """Map ledger dispositions to internal summary-count keys."""
+    return disposition.strip().lower().replace("/", "")
+
+
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
@@ -215,7 +220,7 @@ def audit_block(block: str) -> dict[str, Any]:
             continue
 
         disposition = ledger_row.get("disposition", "").strip()
-        disposition_key = disposition.lower()
+        disposition_key = disposition_count_key(disposition)
         if disposition_key in counts:
             counts[disposition_key] += 1
         elif disposition not in FINAL_DISPOSITIONS:

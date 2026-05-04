@@ -25,13 +25,14 @@ from typing import Any, Dict, List, Optional
 
 from .registry import build_tool, register
 from . import _path_validation as path_security
+from runtime.tool_surface import MAX_IMAGE_BYTES
 
 
 _DESCRIPTION = """Load an image file so the model can see it visually.
 
 Usage:
 - file_path must be an absolute path to an image file (PNG, JPG, JPEG, GIF, WEBP).
-- Maximum size: 20 MB.
+- Maximum size: 5 MB.
 - The image is base64-encoded and queued for inclusion in the next model turn so the model can describe / analyse it. The model is multimodal and can interpret the visual content directly.
 - Approval is NOT required (read-only operation; no filesystem mutation).
 
@@ -49,7 +50,7 @@ _INPUT_SCHEMA: Dict[str, Any] = {
     "properties": {
         "file_path": {
             "type": "string",
-            "description": "Absolute path to a PNG / JPG / GIF / WEBP image (max 20 MB).",
+            "description": "Absolute path to a PNG / JPG / GIF / WEBP image (max 5 MB).",
         },
     },
     "required": ["file_path"],
@@ -63,7 +64,7 @@ _MEDIA_TYPES = {
     ".gif": "image/gif",
     ".webp": "image/webp",
 }
-_MAX_IMAGE_SIZE = 20 * 1024 * 1024
+_MAX_IMAGE_SIZE = MAX_IMAGE_BYTES
 
 
 # ============================================================
@@ -123,7 +124,7 @@ def _view_image_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]]
     except OSError as e:
         return f"Error: cannot stat image: {e}"
     if size > _MAX_IMAGE_SIZE:
-        return f"Error: image too large: {size / (1024 * 1024):.1f} MB (max 20 MB)"
+        return f"Error: image too large: {size / (1024 * 1024):.1f} MB (max 5 MB)"
 
     try:
         with open(abs_path, "rb") as f:

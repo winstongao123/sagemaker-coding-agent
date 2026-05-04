@@ -40,6 +40,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .registry import build_tool, register, find_tool_by_name, all_registered, ToolRecord
+from runtime.tool_surface import XML_FUNCTIONS_TAG
 
 
 # ============================================================
@@ -233,10 +234,10 @@ def _format_functions_block(matched_names: List[str], all_active: List[ToolRecor
         # Still embed the (empty) discovered marker so query_engine has a
         # consistent extraction path.
         return (
-            "<functions>\n(no matches)\n</functions>\n"
+            f"<{XML_FUNCTIONS_TAG}>\n(no matches)\n</{XML_FUNCTIONS_TAG}>\n"
             f"{_DISCOVERED_NAMES_TAG}{_DISCOVERED_NAMES_TAG_END}"
         )
-    lines = ["<functions>"]
+    lines = [f"<{XML_FUNCTIONS_TAG}>"]
     for name in matched_names:
         tool = next((t for t in all_active if t.name == name), None)
         if tool is None:
@@ -247,7 +248,7 @@ def _format_functions_block(matched_names: List[str], all_active: List[ToolRecor
             "parameters": tool.input_schema,
         }
         lines.append(json.dumps(entry, ensure_ascii=False))
-    lines.append("</functions>")
+    lines.append(f"</{XML_FUNCTIONS_TAG}>")
     # Hidden marker for Phase 8 query_engine extraction.
     discovered_csv = ",".join(matched_names)
     lines.append(f"{_DISCOVERED_NAMES_TAG}{discovered_csv}{_DISCOVERED_NAMES_TAG_END}")
