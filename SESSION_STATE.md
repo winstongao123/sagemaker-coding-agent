@@ -1,5 +1,33 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-04 — R-tier R5 READY NEAR_IDEAL ($0.0157); cumulative $0.3819 / $14.25 — PAUSED per user
+
+R5 = "exec session limit + OTHER-TOOLS-STILL-WORK recovery" (PS#7 / Block C exec gate + Block N failure-as-instruction). Final verdict: GENUINE_PASS NEAR_IDEAL (worker 5.00, Codex 4.5). 1 AWS call.
+
+Per-test discipline:
+- PHASE A: 3 iters (iter1 REJECT 2 fixes [transcript-order + docstring], iter2 REJECT 1 doc, iter3 APPROVE_WITH_FIXES non-blocking).
+- PHASE B: 1 AWS call, PASS first attempt.
+- PHASE C: 1 iter, GENUINE_PASS.
+
+R-tier scope decision: cap lowered from production 200 to 2 for cheap validation. Same code path at query_engine.py:805 (`>= cap` branch); only the trigger threshold differs. Production cap-200 endurance test would be ~100x more expensive with no additional empirical value.
+
+Empirical evidence (3-channel recovery proof):
+- Block marker found at agent.messages[6] (the "OTHER TOOLS STILL WORK" tool_result).
+- read_file(data.csv) tool_use at later index (transcript-order recovery, NOT coincidence early-read).
+- Final assistant text contains "carol" (manager's name from data.csv) — only present if read_file actually retrieved content.
+
+Agent's own narrative explicitly acknowledges + explains the block:
+  "✗ 3 + 3 — blocked by session limit (2/session for python_exec)"
+followed by recovery synthesis. Direct evidence the failure-as-instruction message reached and was understood by the model.
+
+Cumulative R-tier spend: $0.0632 (R1) + $0.222 (R2) + $0.0810 (R3) + $0.0 (R4 DEFERRED) + $0.0157 (R5) = **$0.3819 / $14.25 (2.7%)**.
+
+R-tier progress: R1 ✓, R2 ✓, R3 ✓, R4 DEFERRED, R5 ✓. R6-R17 + R18 batch + R19 batch pending (12 named + 25 sub-cases = ~$13.87 headroom remaining).
+
+User STOP directive received during R5 PHASE C. Resume next session with R6 (memory.md /dream consolidation, $0.30 cap).
+
+---
+
 ## 2026-05-04 — R-tier R4 DEFERRED-NOT-IMPLEMENTED (PS#3 / A-16 missing in v5.0.1)
 
 R4 claim: "30-min idle → cold-cache microcompact fires" (PS#3 structural fix).
