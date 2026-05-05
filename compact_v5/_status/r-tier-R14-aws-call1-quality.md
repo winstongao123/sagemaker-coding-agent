@@ -22,8 +22,9 @@ Functional result:
 Process quality:
 - Positive: The agent searched for the stale symbol before editing, read all relevant source/test/doc files, completed the cross-file rename, and verified pytest plus stale-symbol cleanup.
 - Negative: The agent first attempted a blocked `cd` shell command.
-- Negative: It repeatedly attempted edit_file/write_file operations that failed due read-before-edit/read-before-write guards, creating a long failure loop before recovering with python_exec.
-- Telemetry recorded 30 tool calls, 12 repeated calls, 0 subagents, and 35 failure-loop events. This is inefficient but did not compromise the final artifact proof.
+- Negative: It repeatedly attempted edit_file/write_file operations that failed due read-before-edit/read-before-write guards, creating a serious process-quality failure loop before recovering with python_exec.
+- Telemetry recorded 30 tool calls, 12 repeated calls, 0 subagents, and 35 failure-loop events. This did not compromise the final artifact proof for R14, but it is a production-readiness risk if repeated in later AWS tests.
+- Follow-up: `compact_v5/_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md` tracks investigation and verification requirements. R19-U7 and R16 quality reviews must treat recurrence of this pattern as a potential production-readiness blocker.
 
 Cost and cap:
 - Call 1 spent $0.0900, below the $0.75 R14 cap.

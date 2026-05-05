@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "test": "R19-U2",
+  "call": 2,
+  "audit_log_path": "compact_v5\\_status\\r_tier_runtime\\R19-U2-call2-audit\\2026-05-06_4337ba56e344.jsonl",
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R19-U1+U2-aws-call2.log",
+  "side_channel_path": "compact_v5\\_status\\r-tier-R19-U2-aws-call2-side-metrics.json",
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [
+        {
+          "name": "tool_search",
+          "args_summary": "{'query': 'select:ask_user'}",
+          "args_hash": "78379082f74c",
+          "user_approved": true,
+          "result_summary": "<functions>\n{\"description\": \"Ask the user a clarifying question; blocks until they respond.\", \"name\": \"ask_user\", \"parameters\": {\"type\": \"object\", \"properties\":"
+        },
+        {
+          "name": "ask_user",
+          "args_summary": "{'question': 'Which timeout value should I set: 5 seconds for development/testing, or 30 seconds for production? Or do you need different timeouts for different",
+          "args_hash": "36c43f32a68f",
+          "user_approved": true,
+          "result_summary": "(no response)"
+        }
+      ],
+      "wallclock_s": 1.256,
+      "tokens_in": 5,
+      "tokens_out": 247,
+      "cache_read_tokens": 7597,
+      "cache_write_tokens": 9535,
+      "cache_hit_pct": 0.4433,
+      "agent_text_chars": 285,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 2,
+    "REPEATED_calls": 0,
+    "per_tool": {
+      "tool_search": 1,
+      "ask_user": 1
+    },
+    "unique_calls": 2
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": 0.4433,
+    "last_5_turns_avg_hit_pct": 0.4433,
+    "session_avg_hit_pct": 0.4433
+  },
+  "agent_attribution": {
+    "parent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0
+    },
+    "subagents": {},
+    "reviewers": {}
+  },
+  "failure_loop_events": [],
+  "outcome": {
+    "completed": true,
+    "stop_reason": "user_stop",
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 5,
+    "tokens_out_total": 247,
+    "cost_usd": 0.0153,
+    "wallclock_s_total": 2.68,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 4,
+  "turns_seen": 1
+}
