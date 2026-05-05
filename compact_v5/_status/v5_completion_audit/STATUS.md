@@ -402,6 +402,22 @@ Current SOFTWARE-SHELL state:
   `1e38495f512fbfbc66a5cf22dd5f56730a68dcf6`.
 - Next action: continue `SOFTWARE-RESULTS` from files.
 
+Current SOFTWARE-RESULTS state:
+
+- Manual rows: 3. Shipped rows: 3. Blocking rows before Claude: 0.
+- Added durable `.sageagent_state/tool_results/` storage for large tool-result
+  artifacts with stable `sageagent-result://...` references and JSONL metadata.
+- Added read-only `result_replay` for replaying persisted tool results by ref.
+- `QueryEngine` now persists oversized per-tool and aggregate over-budget tool
+  results before the final model-visible message-budget clamp.
+- Local tests passed: SOFTWARE-RESULTS focused suite `4 passed`; regression
+  and AWS-plan contract checks `3 passed`; py_compile PASS.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Worker applied Claude's non-blocking LOW storage-disabled metadata cleanup
+  and reran focused tests plus py_compile.
+- Next action: specific-file SOFTWARE-RESULTS close commit and push.
+
 Previous Block B state:
 
 - Local implementation and audit artifacts are complete for 16/16 rows.

@@ -625,13 +625,11 @@ def test_block_t_api_limits_constants_and_view_image_5mb_cap(workspace_tmp):
     assert "max 5 MB" in out
 
 
-def test_block_t_query_engine_enforces_tool_result_message_budget():
+def test_block_t_query_engine_enforces_tool_result_message_budget(tmp_path):
     from core.query_engine import QueryEngine
     from runtime.bedrock_client import Response, ToolCall
-    from runtime.tool_surface import (
-        MAX_TOOL_RESULT_MESSAGE_CHARS,
-        TOOL_RESULT_BUDGET_MARKER,
-    )
+    from runtime.config import CONFIG
+    from runtime.tool_surface import MAX_TOOL_RESULT_MESSAGE_CHARS
     from tools.registry import build_tool
 
     class _Client:
@@ -663,12 +661,21 @@ def test_block_t_query_engine_enforces_tool_result_message_budget():
         is_concurrency_safe=True,
         max_result_size_chars=250_000,
     )
-    engine = QueryEngine(_Client(), max_turns=3)
-    result = engine.run("go", "sys", [tool], output_fn=lambda _: None)
+    old_workspace = CONFIG.workspace
+    old_traces = CONFIG.disable_local_traces
+    CONFIG.workspace = str(tmp_path)
+    CONFIG.disable_local_traces = False
+    try:
+        engine = QueryEngine(_Client(), max_turns=3)
+        result = engine.run("go", "sys", [tool], output_fn=lambda _: None)
+    finally:
+        CONFIG.workspace = old_workspace
+        CONFIG.disable_local_traces = old_traces
     tool_results = result.messages[-2]["content"]
     aggregate = sum(len(block["content"]) for block in tool_results)
     assert aggregate <= MAX_TOOL_RESULT_MESSAGE_CHARS
-    assert TOOL_RESULT_BUDGET_MARKER in tool_results[1]["content"]
+    assert all("sageagent-result://" in block["content"] for block in tool_results)
+    assert all("result_replay" in block["content"] for block in tool_results)
 
 
 def test_block_t_xml_tag_constants_used_by_tool_search_and_query_engine():

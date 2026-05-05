@@ -75,6 +75,8 @@ from . import semantic_search as _semantic_search        # noqa: F401  defines _
 # and the bootstrap call below + delete the raise in tools/web_fetch.py.
 # from . import web_fetch as _web_fetch                    # noqa: F401  defines _register()
 from . import ask_user as _ask_user                      # noqa: F401  defines _register()
+# SOFTWARE-RESULTS: stable replay for persisted large tool outputs.
+from . import result_replay as _result_replay            # noqa: F401  defines _register()
 
 
 def bootstrap_built_ins():
@@ -113,6 +115,7 @@ def bootstrap_built_ins():
     _semantic_search._register()
     # _web_fetch._register()  # DISABLED 2026-05-03 per user decision (see import block above).
     _ask_user._register()
+    _result_replay._register()
     return all_registered()
 
 

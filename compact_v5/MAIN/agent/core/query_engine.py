@@ -47,6 +47,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from .budget import IterationBudget
 from .errors import BedrockErrorCategory, ErrorClassifier
 from runtime.tool_surface import (
+    MAX_TOOL_RESULT_MESSAGE_CHARS,
     XML_SYSTEM_REMINDER_TAG,
     enforce_tool_result_message_budget,
     xml_tag,
@@ -212,6 +213,42 @@ def _truncate_tool_result(text: str, max_chars: int) -> str:
         + f"\n\n[... truncated: tool_result exceeded {max_chars} chars; "
         f"original size {len(text)} chars ...]"
     )
+
+
+def _persist_large_tool_results_for_message(
+    blocks: List[Dict[str, Any]],
+    *,
+    session_id: str,
+    per_tool_limit: int,
+) -> List[Dict[str, Any]]:
+    """Persist large result bodies before any model-visible truncation.
+
+    Best-effort: a storage failure must not break tool dispatch, but successful
+    storage gives long-running sessions a stable replay reference instead of
+    silent loss from per-tool or aggregate message budgets.
+    """
+    try:
+        from runtime.results import persist_large_tool_results
+        return persist_large_tool_results(
+            blocks,
+            session_id=session_id,
+            per_tool_limit=per_tool_limit,
+            message_budget=MAX_TOOL_RESULT_MESSAGE_CHARS,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(
+            "[tool-results] failed to persist large tool results: %s: %s",
+            type(exc).__name__, exc,
+        )
+        return [
+            {
+                k: v for k, v in block.items()
+                if k not in {"_sageagent_tool_name", "_sageagent_max_result_chars"}
+            }
+            if isinstance(block, dict)
+            else block
+            for block in blocks
+        ]
 
 
 def _make_unicode_safe_output_fn(fn: Callable[[str], None]) -> Callable[[str], None]:
@@ -1002,6 +1039,14 @@ class QueryEngine:
                             )
                         )
                     self._partial_tool_names.clear()
+                    tool_results = _persist_large_tool_results_for_message(
+                        tool_results,
+                        session_id=self.session_id,
+                        per_tool_limit=max(
+                            [getattr(t, "max_result_size_chars", 0) for t in tools]
+                            or [0]
+                        ),
+                    )
                     tool_results = enforce_tool_result_message_budget(tool_results)
                     self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
                     continue
@@ -1030,6 +1075,14 @@ class QueryEngine:
                     )
                 finally:
                     self._partial_tool_names.clear()
+            tool_results = _persist_large_tool_results_for_message(
+                tool_results,
+                session_id=self.session_id,
+                per_tool_limit=max(
+                    [getattr(t, "max_result_size_chars", 0) for t in tools]
+                    or [0]
+                ),
+            )
             tool_results = enforce_tool_result_message_budget(tool_results)
             self.messages.append({"role": "user", "content": tool_results, "is_meta": False})
 
@@ -1274,7 +1327,6 @@ class QueryEngine:
                 "abort_events": self.abort_events,
             })
             text = _coerce_tool_result_to_text(raw)
-            text = _truncate_tool_result(text, tool.max_result_size_chars)
             try:
                 from runtime.audit import AUDIT as _AUDIT
                 _AUDIT.log(
@@ -1295,6 +1347,8 @@ class QueryEngine:
             return {
                 "type": "tool_result",
                 "tool_use_id": call.id,
+                "_sageagent_tool_name": call.name,
+                "_sageagent_max_result_chars": tool.max_result_size_chars,
                 "content": text,
             }
         except Exception as exc:  # noqa: BLE001 - surface to model

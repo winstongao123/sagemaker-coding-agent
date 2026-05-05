@@ -50,7 +50,7 @@ real model behavior is the point being evaluated.
 | 2 | R15 debugging | finds planted bugs without false positives | failing-to-passing tests, diagnosis trace, no unrelated edits, checkpoint/verify/done flow | covers repair behavior, distinct from R13 generation |
 | 3 | R14 multi-file refactor | changes a realistic cross-file project safely | grep/search evidence, pytest, stale-reference cleanup, repeated-call telemetry | covers project navigation and dependency discovery |
 | 4 | R19-U1 + R19-U2 ambiguity gate | asks clarification on ambiguity/contradiction | no speculative edit, conflict reporting, status note | cheap UX/safety gate before long app work |
-| 5 | R19-U3 + R19-U6 + R19-U7 recovery gate | handles hidden deps, bad output, repeated-call traps | alternative path, retry discipline, repeated-call counters, checkpoint/verify | bundles recovery failures instead of one AWS call per trap |
+| 5 | R19-U3 + R19-U6 + R19-U7 + R18-E7 recovery/results gate | handles hidden deps, bad output, repeated-call traps, and large-output replay | alternative path, retry discipline, repeated-call counters, stable `sageagent-result://` refs, `result_replay`, checkpoint/verify | bundles recovery/result-inspection failures instead of one AWS call per trap |
 | 6 | R16 long app build | completes a small real app across a long session | app tests, `/status`, `/phase`, `/save`, `/resume`, `/checkpoint`, `/verify`, `/done`, `/cost`, `/context`, compaction/cache telemetry | broadest end-to-end software-builder proof |
 | 7 | R19-U10 long coherence | preserves final task intent after compactions | final-task coherence, memory/status integrity, compaction events, cache trend, quality review | isolates long-coherence risk after R16 proves app build |
 
@@ -106,6 +106,9 @@ Every selected AWS run must write:
   model id, cost, retries, repeated-call signals, and parent/subagent/reviewer
   attribution when delegation or review agents are used;
 - compaction/cache evidence when the scenario exercises long context;
+- large-output evidence when a scenario exercises R18-E7, including
+  `sageagent-result://` refs, replayed content checks, artifact metadata, and
+  proof the model did not rely on a marker-only truncation;
 - reviewer/subagent breakdown when the scenario uses reviewer, verify, explore,
   build, fork, or other `task` roles. The evidence must include tokens, cost,
   cache read/write, dispatch count, and whether the delegation was useful;
