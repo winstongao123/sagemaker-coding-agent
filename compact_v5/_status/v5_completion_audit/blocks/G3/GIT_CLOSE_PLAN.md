@@ -1,6 +1,6 @@
 # Block G3 Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_COMMIT
+Status: CLOSED_PUSHED
 
 Remote target:
 
@@ -35,3 +35,12 @@ Specific file candidates for Block G3 close:
 Do not stage unrelated dirty files.
 
 No tag, no force push, no AWS/R-tier spend.
+
+Close commit:
+
+- `72542b8b36f5e98ebe3ff29bee5b2852365862ee`
+
+Remote verification:
+
+- `git ls-remote sageagent refs/heads/v5-build` returned
+  `72542b8b36f5e98ebe3ff29bee5b2852365862ee`.

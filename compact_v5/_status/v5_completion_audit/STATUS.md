@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, AND G2 CLOSED/PUSHED; BLOCK G3 NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, AND G3 CLOSED/PUSHED; BLOCK H NEXT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -210,6 +210,23 @@ Current Block G state:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `f59376040c7c3f3238d6a3a9a0a8ca8c37575188`.
 - Next action: continue Block G3 from files.
+
+Current Block G3 state:
+
+- Expected rows: 2. Ledger rows: 2.
+- `scope_audit.py --block G3` reports 2 shipped rows and 0 ship-blocking rows.
+- Focused G3 tests passed: `15 passed, 1 skipped`.
+- Claude review iter1 returned `VERDICT: APPROVE_WITH_FIXES`,
+  `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, and
+  `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Worker applied Claude LOW cleanup notes for stale test-count docs and
+  generated log encoding.
+- Block G3 specific-file close commit was created and pushed to
+  `sageagent/v5-build`: `72542b8b36f5e98ebe3ff29bee5b2852365862ee`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `72542b8b36f5e98ebe3ff29bee5b2852365862ee`.
+- Next action: continue Block H from files.
 
 Previous Block B state:
 
