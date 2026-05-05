@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, H, AND H+ CLOSED/PUSHED; BLOCK M NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, H, AND H+ CLOSED/PUSHED; BLOCK M APPROVED/PENDING PUSH; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -275,6 +275,21 @@ Current Block H+ state:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `f2e5a35fe9512a011f5c5eaf99ba5aad7b6045e8`.
 - Next action: continue Block M from files.
+
+Current Block M state:
+
+- Expected rows: 0. Ledger rows: 0.
+- `scope_audit.py --block M --strict` reports `NO_SPEC_ROWS_FOUND` and 0
+  ship-blocking rows.
+- Focused Block M regression tests passed: `11 passed`.
+- M py_compile passed.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Block M has no required code changes; this is a zero-row closure block
+  because `SYNTHESIS_MASTER.md` says no additional Wave-5-DEEP changes are
+  needed beyond Plan v3.
+- Next action: commit/push the specific Block M closure artifacts, verify the
+  remote SHA, then continue Block J from files.
 
 Previous Block B state:
 
