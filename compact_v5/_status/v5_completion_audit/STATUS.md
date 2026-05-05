@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, AND C+ CLOSED/PUSHED; BLOCK D CLAUDE-APPROVED, PENDING CLOSE COMMIT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, AND D CLOSED/PUSHED; BLOCK F2 ACTIVE; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -127,9 +127,36 @@ Current Block D state:
   `/init-verifiers` dispatch coverage and rerunning local gates.
 - D specific-file close commit was created and pushed to `sageagent/v5-build`:
   `b972492d198c7fa63865949f1d09eb425bc65f7d`.
-- Next action: push D checkpoint evidence update, then continue to Block F2.
+- D checkpoint evidence update commit was pushed to `sageagent/v5-build`:
+  `373beacc974943447123f5e87d602212b957a7f3`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `373beacc974943447123f5e87d602212b957a7f3`.
+- Next action: continue Block F2 from files.
   Do not run AWS/R-tier, tag, Codex review, nested `codex exec`, force push, or
   unrelated staging.
+
+Current Block F2 state:
+
+- F2 canonical scope has 1 expected row: F2-1 TokenBudget auto-continuation.
+- F2 block artifacts were created under
+  `compact_v5/_status/v5_completion_audit/blocks/F2/`.
+- Existing implementation evidence is in `compact_v5/MAIN/agent/core/budget_continuation.py`,
+  `compact_v5/MAIN/agent/core/query_engine.py`, and
+  `compact_v5/MAIN/agent/runtime/config.py`.
+- Existing lock-test evidence is in
+  `compact_v5/MAIN/agent/tests/integration/test_block_f2.py`.
+- Initial root-context pytest collection failed on `ModuleNotFoundError: core`;
+  rerun with `PYTHONPATH=compact_v5/MAIN/agent` passed: `20 passed`.
+- F2 py_compile passed.
+- The zero-cost software-project readiness suite passed with `py -3.11 -m pytest`:
+  `112 passed`. A first bare `python -m pytest` attempt used Swift Python
+  without pytest and failed before collection.
+- `scope_audit.py --block F2` reports 1 shipped row and 0 ship-blocking rows.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Next action: final consistency checks, then specific-file F2 close commit and
+  push to `sageagent/v5-build`.
 
 Previous Block B state:
 
