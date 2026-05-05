@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION APPROVED/PENDING PUSH; SOFTWARE-STATE NEXT AFTER PUSH; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE NEXT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -343,8 +343,11 @@ Current SOFTWARE-ASYNC-DECISION state:
 - Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
 - Worker applied Claude's non-blocking manual-ledger footer recommendation.
-- Next action: commit/push the specific SOFTWARE-ASYNC-DECISION artifacts,
-  verify the remote SHA, then continue `SOFTWARE-STATE` from files.
+- Specific-file close commit `710f8d3e5f9740788d8802986f5a5c147f0c2c84`
+  pushed to `sageagent/v5-build`; `git ls-remote sageagent
+  refs/heads/v5-build` returned
+  `710f8d3e5f9740788d8802986f5a5c147f0c2c84`.
+- Next action: continue `SOFTWARE-STATE` from files.
 
 Previous Block B state:
 

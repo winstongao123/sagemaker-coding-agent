@@ -1,27 +1,26 @@
 # SOFTWARE-ASYNC-DECISION Status
 
-Status: CLOSED_READY_FOR_GIT_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Current phase: CLOSURE_APPROVED
 
-Current task: Commit and push the async/background subagent scope decision,
-then continue to `SOFTWARE-STATE`.
+Current task: Continue to `SOFTWARE-STATE`.
 
 Expected manual rows: 3
 Ledger rows: 3
 Current blocking-row count: 0
 
-Last completed action: Claude review iter1 returned `VERDICT: APPROVE` and
-`SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`; worker applied Claude's minor
-manual-ledger footer recommendation.
+Last completed action: specific-file close commit
+`710f8d3e5f9740788d8802986f5a5c147f0c2c84` pushed to
+`sageagent/v5-build` and verified by `git ls-remote`.
 
 Next 3 todo items:
 
-1. Run final local/stale-marker checks.
-2. Commit/push only SOFTWARE-ASYNC-DECISION artifacts, prompt/review/logs, and
-   the new lock test.
-3. Verify remote SHA and continue to `SOFTWARE-STATE`.
+1. Reconstruct `SOFTWARE-STATE` scope from the third-deep-scan docs.
+2. Audit existing durable-state/resume behavior from files.
+3. Implement and review missing behavior under the active `SOFTWARE-STATE`
+   block.
 
 Local validation:
 
