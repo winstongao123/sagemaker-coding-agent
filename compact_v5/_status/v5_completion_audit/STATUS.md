@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, H, H+, M, AND J CLOSED/PUSHED; BLOCK 0 NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS THROUGH J CLOSED/PUSHED EXCEPT BLOCK 0 APPROVED/PENDING PUSH; SOFTWARE-* QUEUE NEXT AFTER BLOCK 0 PUSH; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -314,6 +314,21 @@ Current Block J state:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `f199d052457c483dcf9ec7bfbbeb24a121187fce`.
 - Next action: continue Block 0 from files.
+
+Current Block 0 state:
+
+- Expected rows: 10. Ledger rows: 10.
+- `scope_audit.py --block 0 --strict` reports 10 shipped rows and 0
+  ship-blocking rows.
+- Focused Block 0 remap tests passed: `30 passed`.
+- Block 0 py_compile passed.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Claude reviewed every row 0-1 through 0-10 individually and accepted the
+  ADR-020 remap evidence for rows implemented in B, B+, C, and E+F.
+- No AWS/R-tier spend was run or claimed.
+- Next action: commit/push the specific Block 0 closure artifacts, verify the
+  remote SHA, then continue `SOFTWARE-ASYNC-DECISION` from files.
 
 Previous Block B state:
 
