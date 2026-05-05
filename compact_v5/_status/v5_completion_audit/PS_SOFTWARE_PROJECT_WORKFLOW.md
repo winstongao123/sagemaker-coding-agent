@@ -74,6 +74,15 @@ Relevant remaining blocks should preserve this consolidation:
 Before AWS/R-tier, the coding-ability test hardening must verify this workflow
 through existing commands rather than adding new command names.
 
+Block revisit policy:
+
+- `compact_v5/_status/v5_completion_audit/SOFTWARE_BUILDER_BLOCK_REVISIT_PLAN.md`
+
+That file is authoritative for whether completed/pushed blocks must be reopened.
+Completed blocks are not reopened automatically; they are reopened only when a
+local test, optimized AWS scenario, strict audit, Claude final review, or
+telemetry evidence points to a concrete block-level gap.
+
 ## Required Final Test Evidence
 
 Before claiming v5 is ready for real software-coding use, the test suite must

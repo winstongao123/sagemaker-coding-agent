@@ -77,6 +77,10 @@ Read these first:
 19. `compact_v5/_status/V5_RUNNABLE_PORT_LOG.md`
 20. `compact_v5/_status/V5_DESIGN_DECISIONS.md`
 21. `compact_v5/_status/v5_completion_audit/TEST_CASE_PREP.md`
+22. `compact_v5/_status/v5_completion_audit/BLOCK_ORDER_AND_COVERAGE.md`
+23. `compact_v5/_status/v5_completion_audit/PS_SOFTWARE_PROJECT_WORKFLOW.md`
+24. `compact_v5/_status/v5_completion_audit/SOFTWARE_BUILDER_BLOCK_REVISIT_PLAN.md`
+25. `compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md`
 
 ## Current Resume Point
 
@@ -117,13 +121,29 @@ Every Claude review prompt you create must:
    - `final all-block review`
 5. List changed files and block artifacts to inspect.
 6. Tell Claude to reconstruct scope directly from `SYNTHESIS_MASTER.md`.
-7. Tell Claude to return text only to stdout, with `VERDICT:` and
+7. Tell Claude to review every canonical row individually. The review output
+   must include `REVIEWED ROWS` with every expected row id exactly once; an
+   omitted row makes the review incomplete and non-approving.
+8. Tell Claude to return text only to stdout, with `VERDICT:` and
    `SHIP DECISION:`.
-8. Save the exact prompt under
+9. Save the exact prompt under
    `compact_v5/_status/v5_completion_audit/prompts/`.
 
 The worker may add context but may not narrow the review below canonical block
 scope.
+
+The worker must not paste repository file contents into the Claude prompt as a
+substitute for review. The prompt may include:
+
+- target block and review purpose
+- canonical row ids expected for the block
+- changed-file paths and block artifact paths
+- concise worker evidence/navigation notes
+- exact commands/tests run and log paths
+
+Claude must independently locate and read the relevant files from disk with
+read-only tools before trusting the worker notes. Worker notes are navigation
+aid, not reviewer evidence by themselves.
 
 ## Claude Review Execution Rule
 
@@ -134,6 +154,11 @@ Before invoking Claude, follow
 In particular, temporarily clear `ANTHROPIC_API_KEY` for the Claude subprocess
 so the review uses the user's Claude Code subscription auth path instead of API
 credit billing.
+
+Do not request sandbox/approval escalation for the Claude reviewer command.
+Use the non-escalated read-only command shape from
+`PS_CLI_WOKER_DESIGN/CLAUDE_REVIEWER_AUTH.md`. Escalation can be denied before
+Claude executes as private-repo egress, yielding no usable review.
 
 Use read-only settings:
 
@@ -146,6 +171,31 @@ Use read-only settings:
 - `--settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json`
 - allow read/grep/glob/bash only
 - deny writes, Codex, git commit/push/tag/reset/checkout
+- use `claude.cmd` or `claude -p`; pipe the saved prompt via stdin
+
+Before each Claude review attempt, prove the Claude CLI reviewer path is live
+with a tiny non-escalated child-process smoke test from repo root:
+
+```powershell
+$old=$env:ANTHROPIC_API_KEY
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+"Reply exactly: CLAUDE_REVIEWER_READY pre_review_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --tools "" --output-format text
+if ($old) { $env:ANTHROPIC_API_KEY=$old }
+```
+
+The smoke command must pass
+`--settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json`
+or an equivalent settings file with `disableAllHooks: true`. A smoke that lets
+Claude user/session hooks run is not reliable for this audit, because hook
+failures can mask a working reviewer path.
+
+Save the smoke stdout/stderr or command note under
+`compact_v5/_status/v5_completion_audit/logs/block-<slug>-claude-smoke-before-review-iter<N>.*`.
+If the smoke fails or times out, do not run the full review attempt yet. Record
+the failed smoke in block status/matrix as a reviewer handoff problem and retry
+per `FAILURE_MODES.md`. Continue local implementation/scope work if the next
+action does not require Claude, but do not claim reviewer approval without a
+successful smoke plus successful full review.
 
 Save stdout to:
 
@@ -172,6 +222,27 @@ empty file:
 6. If there are 3 consecutive reviewer handoff failures, stop and write
    `REVIEW_LOOP_BLOCKED.md`.
 
+Claude handoff retry policy:
+
+- `ConnectionRefused`, timeout, or transient network failure: retry up to 3
+  times with the same intended prompt content, a new iteration number, and
+  saved prompt/review/log artifacts for each attempt.
+- API credit, balance, or billing-route error: clear `ANTHROPIC_API_KEY` for
+  the Claude subprocess and retry through the Claude Code subscription-auth
+  path documented in `PS_CLI_WOKER_DESIGN/CLAUDE_REVIEWER_AUTH.md`.
+- malformed command, bad `--setting-sources`, or PowerShell argument issue:
+  fix the command shape and retry with a new iteration number.
+- empty review, missing `VERDICT:`, missing `SHIP DECISION:`, or plan-mode
+  output: record `NO_VERDICT`, fix prompt/stdin/permission mode, and retry.
+- policy denial: do not bypass silently. If the user has already authorized
+  read-only Claude review for this audit, retry using the approved
+  subscription-auth/read-only path. If policy still denies the review, stop
+  with `REVIEW_LOOP_BLOCKED.md`.
+
+Every failed retry must be saved as prompt, review/stdout, stderr/log, matrix
+row, block verdict note, and block heartbeat. Failed handoffs never count as a
+usable review verdict.
+
 ## Per-Block Loop
 
 For each block:
@@ -193,6 +264,12 @@ For each block:
     `sageagent/v5-build`, and then proceed to the next block. Stop only before
     AWS/R-tier spend, tags, final-ready claims, defer/drop approvals, broad
     architecture decisions, or changes outside block ownership.
+    Before the close commit, perform the documentation consistency pass from
+    `PS_CLI_WOKER_DESIGN/GIT_CHECKPOINT_POLICY.md`: STATUS review counts must
+    match REVIEWER_VERDICT, latest verdict/ship decision must match the latest
+    usable review artifact, blocking count must match `scope_audit.py`, and no
+    stale `NOT_YET_CLAUDE_REVIEWED`, `reviewer_verdict pending`, or invalid
+    pre-checkpoint `git_evidence` markers may remain unexplained.
 12. If you disagree with a Claude finding, do not silently override it. Record
     the finding as unresolved, write a `DISPUTED_FINDING` note with exact
     file:line/test evidence, and send a fresh Claude dispute-review prompt that
@@ -212,7 +289,26 @@ For each block:
     blockers, evidence of where progress stopped, and the exact next human
     decision needed.
 
+## Software-Project Workflow Constraint
+
+v5.0.1 should support long-running software-writing work without adding an
+overlapping `/project-*` command family. When remaining blocks touch commands,
+skills, subagents, memory, continuation, or tests, follow
+`PS_SOFTWARE_PROJECT_WORKFLOW.md`:
+
+- enhance existing commands such as `/status`, `/save`, `/resume`,
+  `/checkpoint`, `/verify`, `/done`, `/phase`, `/cost`, `/context`, and
+  `/dream`;
+- avoid duplicative command names for the same user need;
+- ensure tests for software-project behavior use the existing command surface;
+- do not expand scope beyond the current block without ledger evidence and
+  Claude review.
+
 ## Block Order
+
+This is the active redo order. It is not the original build order from
+`SYNTHESIS_MASTER.md:641-665`, but it covers all 21 audit blocks. Use
+`BLOCK_ORDER_AND_COVERAGE.md` when resuming or explaining the order.
 
 `A -> E+F -> L -> N -> K -> T -> C -> B -> B+ -> C+ -> D -> F2 -> I -> G -> G2 -> G3 -> H -> H+ -> M -> J -> 0`
 
@@ -249,6 +345,8 @@ heartbeat, latest reviews, and latest logs.
 After all blocks have Claude approval and zero ship-blocking rows:
 
 1. Run zero-cost local gates only.
+   - `py -3.11 compact_v5/_status/scripts/scope_audit.py --all --summary`
+   - `py -3.11 compact_v5/_status/scripts/scope_audit.py --all --strict`
 2. Update all status/matrix/memory/git-close docs.
 3. Write `FINAL_READY_FOR_AWS_REVIEW.md`.
 4. Stop and ask the user before any AWS/R-tier test.

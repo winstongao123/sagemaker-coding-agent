@@ -20,3 +20,5 @@ Self-review notes:
 - The implementation supports the long-running coding goal by reducing premature end-turn completion under an explicit budget, but final real coding-ability proof remains pre-AWS hardening.
 - No AWS/R-tier test has been run.
 - Claude iter1 approved F2-1 with 0 ship-blocking rows.
+- F2 close commit was pushed at `6e3a0dd86ec49b869bf3b579d52daac79603af27`.
+- Zero-cost software-project readiness suite now reports `114 passed` after optimized AWS/revisit-plan checks were added.

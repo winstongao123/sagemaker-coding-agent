@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, AND D CLOSED/PUSHED; BLOCK F2 ACTIVE; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, AND F2 CLOSED/PUSHED; BLOCK F2 CHECKPOINT EVIDENCE UPDATE ACTIVE; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -150,13 +150,15 @@ Current Block F2 state:
   rerun with `PYTHONPATH=compact_v5/MAIN/agent` passed: `20 passed`.
 - F2 py_compile passed.
 - The zero-cost software-project readiness suite passed with `py -3.11 -m pytest`:
-  `112 passed`. A first bare `python -m pytest` attempt used Swift Python
+  `114 passed`. A first bare `python -m pytest` attempt used Swift Python
   without pytest and failed before collection.
 - `scope_audit.py --block F2` reports 1 shipped row and 0 ship-blocking rows.
 - Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
-- Next action: final consistency checks, then specific-file F2 close commit and
-  push to `sageagent/v5-build`.
+- F2 specific-file close commit was created and pushed to `sageagent/v5-build`:
+  `6e3a0dd86ec49b869bf3b579d52daac79603af27`.
+- Next action: push F2 checkpoint evidence update including the new
+  software-builder hardening docs/tests, then continue to Block I.
 
 Previous Block B state:
 

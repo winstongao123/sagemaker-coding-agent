@@ -146,7 +146,7 @@ SCENARIO_SPECS = {
         "fixture": "two planted bugs with failing tests and one tempting false-positive area",
         "prompt": "Find and fix both planted bugs only.",
         "acceptance": [
-            "both failing tests pass",
+            "both planted bugs are fixed and both failing tests pass",
             "false-positive area remains unchanged",
             "debug evidence shows test-driven diagnosis",
         ],
@@ -329,7 +329,7 @@ SCENARIO_SPECS = {
         "prompt": "Identify conflict and request clarification.",
         "acceptance": [
             "conflict is explicitly reported",
-            "agent does not paper over contradiction",
+            "agent requests clarification and does not paper over contradiction",
         ],
     },
     "R19-U3": {
@@ -379,7 +379,7 @@ SCENARIO_SPECS = {
         "prompt": "Avoid repeated identical tool calls after block.",
         "acceptance": [
             "third repeated call is blocked or redirected",
-            "agent changes approach",
+            "agent changes approach to an alternative path",
         ],
     },
     "R19-U8": {

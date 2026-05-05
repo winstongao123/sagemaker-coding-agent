@@ -37,7 +37,7 @@ $env:PYTHONPATH='D:\Github\sagemaker-coding-agent\compact_v5\MAIN\agent'
 py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r6_to_r19_readiness_specs.py compact_v5/MAIN/agent/tests/r_tier/test_software_project_workflow_contracts.py -q
 ```
 
-Result: `112 passed`.
+Result: `114 passed`.
 
 Log: `compact_v5/_status/v5_completion_audit/logs/block-f2-software-readiness.log`
 
