@@ -1,13 +1,19 @@
 # SOFTWARE-STATE Status
 
-Status: CLOSED_READY_FOR_GIT_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
-Current phase: CLOSURE_APPROVED
+Current phase: CLOSED_PUSHED
 
 Expected manual rows: 5
 Ledger rows: 5
 Current blocking-row count: 0
+
+Pushed checkpoint:
+
+- Commit: `50206c82418ee9fed9e4ca9fce9cea56b06cf4e2`
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build`
+  returned `50206c82418ee9fed9e4ca9fce9cea56b06cf4e2`.
 
 Claude review state: ITER1_APPROVED
 
@@ -26,6 +32,7 @@ Local validation:
 
 Current task:
 
-1. Run final stale-marker and git-specific-file checks.
-2. Commit and push only SOFTWARE-STATE files.
-3. Verify remote SHA and continue to `SOFTWARE-CHECKPOINT`.
+1. Reconstruct `SOFTWARE-CHECKPOINT` scope from the third-scan docs.
+2. Audit existing checkpoint/revert behavior from files.
+3. Implement and review missing behavior under the active
+   `SOFTWARE-CHECKPOINT` block.

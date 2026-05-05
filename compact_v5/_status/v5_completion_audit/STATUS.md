@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE APPROVED/PENDING PUSH; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT NEXT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -361,8 +361,11 @@ Current SOFTWARE-STATE state:
   regressions `4 passed`; py_compile PASS.
 - Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
-- Next action: commit/push the specific SOFTWARE-STATE files, verify remote
-  SHA, then continue `SOFTWARE-CHECKPOINT`.
+- Specific-file close commit `50206c82418ee9fed9e4ca9fce9cea56b06cf4e2`
+  pushed to `sageagent/v5-build`; `git ls-remote sageagent
+  refs/heads/v5-build` returned
+  `50206c82418ee9fed9e4ca9fce9cea56b06cf4e2`.
+- Next action: continue `SOFTWARE-CHECKPOINT` from files.
 
 Previous Block B state:
 
