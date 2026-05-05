@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, AND B+ CLOSED/PUSHED; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, AND B+ CLOSED/PUSHED; BLOCK C+ APPROVED BY CLAUDE ITER1 AND READY FOR SPECIFIC-FILE CHECKPOINT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -97,8 +97,22 @@ Current Block B+ state:
   `ledger/CLAUDE_REVIEW_MATRIX.md`, and `REVIEW_LOOP_BLOCKED.md` record the
   iter7 outcome.
 - B+ checkpoint evidence fields record the close commit SHA.
-- Next action: continue to C+ from files. Do not run AWS/R-tier, tag, Codex
-  review, nested `codex exec`, force push, or unrelated staging.
+- B+ evidence update commit was pushed to `sageagent/v5-build`:
+  `9ca5570ebf97a0ed0f1b26bd2036c2c93863e709`.
+
+Current Block C+ state:
+
+- C+ local audit artifacts cover 3/3 rows.
+- `scope_audit.py --block C+` reports 2 shipped rows, 1 dropped row, and 0
+  ship-blocking rows.
+- Local gates pass: Block C+ suite 17 passed, targeted C+2/C+3 tests 2 passed,
+  py_compile PASS.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Next C+ action: final scope/doc consistency, specific-file commit, push to
+  `sageagent/v5-build`, then replace pending checkpoint evidence with the
+  actual SHA if needed. Do not run AWS/R-tier, tag, Codex review, nested
+  `codex exec`, force push, or unrelated staging.
 
 Previous Block B state:
 
