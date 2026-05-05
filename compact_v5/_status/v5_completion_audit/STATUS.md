@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, AND B CLOSE COMMIT PUSHED; BLOCK B CHECKPOINT EVIDENCE UPDATE PENDING; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, AND B CLOSED/PUSHED; NEXT BLOCK B+; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -110,8 +110,12 @@ Current Block B state:
 - Remote verification succeeded:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`.
-- Block B checkpoint evidence update is pending specific-file commit and push,
-  then continue to Block B+.
+- Block B checkpoint evidence update was pushed:
+  `315b9dd..a8b394d  v5-build -> v5-build`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `a8b394d36e530f17ccf36d1a910ae4baef90b108`.
+- Next block is B+ in `BLOCK_ORDER_AND_COVERAGE.md`.
 
 Worker-led loop docs:
 

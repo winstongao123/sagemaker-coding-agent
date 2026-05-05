@@ -1,6 +1,6 @@
 # Block B Git Close Plan
 
-Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Close preconditions:
@@ -98,13 +98,17 @@ Stage only this Block B-specific file list:
 - Push result: `c5be85f..315b9dd  v5-build -> v5-build`.
 - Remote verification: `git ls-remote sageagent refs/heads/v5-build` returned
   `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`.
-- Post-push git status: unrelated pre-existing dirty files remain unstaged;
-  Block B evidence files are modified for this checkpoint evidence update.
+- Post-push git status before evidence update: unrelated pre-existing dirty
+  files remained unstaged; Block B evidence files were modified for checkpoint
+  evidence update.
 
 ## Evidence Update Commit
 
 - Commit message: `v5/block-b: record checkpoint evidence`
-- Evidence commit SHA: pending evidence update commit.
+- Evidence commit SHA: `a8b394d36e530f17ccf36d1a910ae4baef90b108`.
 - Push remote/branch: `sageagent v5-build`
-- Push result: pending evidence push.
-- Post-push git status: pending evidence push.
+- Push result: `315b9dd..a8b394d  v5-build -> v5-build`.
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build` returned
+  `a8b394d36e530f17ccf36d1a910ae4baef90b108`.
+- Post-push git status: unrelated pre-existing dirty files remain unstaged; no
+  Block B code/test/review close files remain staged.
