@@ -1,37 +1,35 @@
-"""V5 memory/ — Block H Memory extraction + session memory + compaction.
+"""V5 memory package - Block H.
 
-Block H ports Runnable's extractMemories.ts + sessionMemory.ts +
-sessionMemoryCompact.ts patterns to a v5 sync-only module.
-
-Source: _archive/compare_code/gg-claude-code-runnable/src/services/extractMemories.ts
-        _archive/compare_code/gg-claude-code-runnable/src/services/sessionMemory.ts
-        _archive/compare_code/gg-claude-code-runnable/src/services/sessionMemoryCompact.ts
-        _archive/compare_code/gg-claude-code-runnable/src/services/sessionMemoryUtils.ts
-
-Public surface:
-- extract.py — extract_memories + closure-scoped throttle state + race guard
-- session_memory.py — sessionMemoryUtils.dedup + hasToolCallsInLastAssistantTurn
-- compact.py — adjustIndexToPreserveAPIInvariants + calculateMessagesToKeepIndex
-
-Block H deferral note: H-18 getUserContext, H-19 getSystemContext, H-20
-Onboarding-step model are CONTEXT BLOCK features that architecturally
-fit Block N's dynamic-section + AGENTS.md infrastructure. Per ADR-034
-§4 they are explicitly DEFERRED to Block N. No silent scope narrowing.
+Block H ports Runnable memory extraction, session memory, session-memory
+compaction, context, and onboarding helpers to v5's synchronous runtime.
 """
 from __future__ import annotations
 
-from .extract import (  # noqa: F401
-    MemoryExtractor,
-    extract_memories,
-    create_memory_extractor,
-)
-from .session_memory import (  # noqa: F401
-    deduplicate_memory_entries,
-    has_tool_calls_in_last_assistant_turn,
-    count_tool_calls_since,
-)
 from .compact import (  # noqa: F401
+    SessionMemoryCompactConfig,
     adjust_index_to_preserve_api_invariants,
     calculate_messages_to_keep_index,
     has_text_blocks,
+    is_session_memory_empty,
+    should_use_session_memory_compaction,
+    truncate_session_memory_for_compact,
+)
+from .context import (  # noqa: F401
+    OnboardingState,
+    get_system_context,
+    get_user_context,
+    should_show_onboarding,
+)
+from .extract import (  # noqa: F401
+    MemoryExtractor,
+    create_auto_mem_can_use_tool,
+    create_memory_extractor,
+    extract_memories,
+)
+from .session_memory import (  # noqa: F401
+    count_tool_calls_since,
+    create_memory_file_can_use_tool,
+    deduplicate_memory_entries,
+    has_tool_calls_in_last_assistant_turn,
+    wait_for_session_memory_extraction,
 )

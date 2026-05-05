@@ -1745,6 +1745,32 @@ post-Block-N.
   wiring is small (~20 LOC) but needs Block N's dynamic-section first
   to have a clean home. Tracked in PORT_LOG #098.
 
+### Completion-Audit Addendum (2026-05-05)
+
+The v5.0.1 completion-audit redo supersedes the earlier Block H deferral
+decision for canonical rows H-5, H-8, H-10, H-13, H-15, H-16, H-17, H-18,
+H-19, and H-20. These rows now ship in Block H rather than relying on a
+post-N follow-up:
+
+- H-5: `create_auto_mem_can_use_tool` scopes memory extractor writes to the
+  memory directory while allowing read-only discovery tools.
+- H-8/H-10: `wait_for_session_memory_extraction` and
+  `create_memory_file_can_use_tool` close the sessionMemoryUtils isolation
+  rows.
+- H-13/H-15/H-16/H-17: `SessionMemoryCompactConfig`,
+  `truncate_session_memory_for_compact`, `is_session_memory_empty`, and
+  `should_use_session_memory_compaction` provide config-file defaults,
+  truncation caps, template-empty detection, and
+  `SAGEMAKER_SM_COMPACT_ENABLE` override behavior.
+- H-18/H-19: `get_user_context` and `get_system_context` aggregate CLAUDE.md
+  hierarchy and memoized read-only git-status context into the dynamic prompt
+  tail.
+- H-20: `OnboardingState` models first-run steps and auto-suppresses after
+  completion.
+
+PORT_LOG #196 records the completion-audit closure row. The earlier #098 row
+is historical only and no longer represents the Block H close state.
+
 ---
 
 ## ADR-033 â€” Block G2 (v5.0.1): forkSubagent cache-prefix replay

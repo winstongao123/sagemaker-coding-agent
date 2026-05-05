@@ -4,13 +4,9 @@ sessionMemory).
 Source: Runnable services/extractMemories.ts + sessionMemory.ts +
 sessionMemoryCompact.ts + sessionMemoryUtils.ts.
 
-Tests per TEST_DESIGN §Block H (6 tests, $0):
-- test_extract_and_append_memories_v4_session_end
-- test_extract_memories_closure_scoped_state
-- test_session_memory_dedup_before_write
-- test_adjust_index_preserves_api_invariants
-- test_memory_extraction_handles_empty_session
-- test_session_memory_compact_no_400_sequence
+Tests per TEST_DESIGN and completion-audit Block H:
+- Original 6 zero-cost TEST_DESIGN rows remain covered.
+- Completion-audit locks now cover all H-1 through H-20 rows.
 """
 from __future__ import annotations
 
@@ -515,3 +511,171 @@ def test_scan_memory_files_lists_md_under_workspace(tmp_path):
     # Both files appear (relative paths, forward-slashed).
     assert "memory.md" in files
     assert "skills/x/SKILL.md" in files
+
+
+def test_create_auto_mem_can_use_tool_scopes_writes_to_memory_dir(tmp_path):
+    """H-5: memory extractor permissions allow reads and scope writes."""
+    from memory import create_auto_mem_can_use_tool
+
+    mem_dir = tmp_path / "memory"
+    mem_dir.mkdir()
+    can_use = create_auto_mem_can_use_tool(str(mem_dir))
+
+    assert can_use("Read", {"path": str(tmp_path / "anything.py")}) is True
+    assert can_use("Grep", {"pattern": "x"}) is True
+    assert can_use("Glob", {"pattern": "*.md"}) is True
+    assert can_use("Edit", {"file_path": str(mem_dir / "memory.md")}) is True
+    assert can_use("Write", {"file_path": str(tmp_path / "outside.md")}) is False
+    assert can_use("Bash", {"command": "rg TODO"}) is True
+    assert can_use("Bash", {"command": "Remove-Item x"}) is False
+
+
+def test_wait_for_session_memory_extraction_delegates_to_drain(tmp_path):
+    """H-8: wrapper waits through the extractor drain API."""
+    from memory import create_memory_extractor, wait_for_session_memory_extraction
+
+    ext = create_memory_extractor(workspace=str(tmp_path))
+    assert wait_for_session_memory_extraction(ext, timeout_s=0.01) is True
+
+
+def test_create_memory_file_can_use_tool_limits_writes_to_one_file(tmp_path):
+    """H-10: single-file writer predicate rejects sibling writes."""
+    from memory import create_memory_file_can_use_tool
+
+    memory_file = tmp_path / "memory.md"
+    can_use = create_memory_file_can_use_tool(str(memory_file))
+
+    assert can_use("Read", {"path": str(tmp_path / "notes.md")}) is True
+    assert can_use("Edit", {"file_path": str(memory_file)}) is True
+    assert can_use("Write", {"file_path": str(tmp_path / "other.md")}) is False
+
+
+def test_session_memory_compact_config_reads_file_defaults(tmp_path):
+    """H-13: config loads session-memory compaction defaults from file."""
+    from memory import SessionMemoryCompactConfig
+
+    (tmp_path / "agent_config.jsonc").write_text(
+        """
+        {
+          // GrowthBook replacement: local config file.
+          "session_memory_compaction": {
+            "enabled": false,
+            "max_messages_to_keep": 12,
+            "max_section_chars": 50,
+            "max_total_chars": 100
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+    cfg = SessionMemoryCompactConfig.from_workspace(str(tmp_path))
+    assert cfg.enabled is False
+    assert cfg.max_messages_to_keep == 12
+    assert cfg.max_section_chars == 50
+    assert cfg.max_total_chars == 100
+
+
+def test_truncate_session_memory_for_compact_caps_sections_and_total():
+    """H-15: session memory truncation respects section and total caps."""
+    from memory import SessionMemoryCompactConfig, truncate_session_memory_for_compact
+
+    cfg = SessionMemoryCompactConfig(max_section_chars=30, max_total_chars=70)
+    out = truncate_session_memory_for_compact(
+        {"Facts": "x" * 100, "Tasks": "y" * 100},
+        config=cfg,
+    )
+    assert len(out) <= 70 + len("\n...[truncated]")
+    assert "## Facts" in out
+    assert "[truncated]" in out
+
+
+def test_session_memory_empty_and_env_override(monkeypatch):
+    """H-16/H-17: empty predicate and env override behavior."""
+    from memory import (
+        SessionMemoryCompactConfig,
+        is_session_memory_empty,
+        should_use_session_memory_compaction,
+    )
+
+    assert is_session_memory_empty("") is True
+    assert is_session_memory_empty("# Session Memory\n\n") is True
+    assert is_session_memory_empty("# Session Memory\n\n- fact") is False
+
+    cfg = SessionMemoryCompactConfig(enabled=True)
+    monkeypatch.setenv("SAGEMAKER_SM_COMPACT_ENABLE", "false")
+    assert should_use_session_memory_compaction(cfg) is False
+    monkeypatch.setenv("SAGEMAKER_SM_COMPACT_ENABLE", "true")
+    assert should_use_session_memory_compaction(cfg) is True
+    monkeypatch.delenv("SAGEMAKER_SM_COMPACT_ENABLE")
+    assert should_use_session_memory_compaction(SessionMemoryCompactConfig(enabled=False)) is False
+
+
+def test_get_user_context_aggregates_claude_md_hierarchy(tmp_path):
+    """H-18: CLAUDE.md files aggregate from workspace to current dir."""
+    from memory import get_user_context
+
+    (tmp_path / "CLAUDE.md").write_text("root rules", encoding="utf-8")
+    child = tmp_path / "src" / "pkg"
+    child.mkdir(parents=True)
+    (tmp_path / "src" / "CLAUDE.md").write_text("src rules", encoding="utf-8")
+
+    out = get_user_context(workspace=str(tmp_path), current_dir=str(child))
+    assert "### CLAUDE.md" in out
+    assert "root rules" in out
+    assert "### src/CLAUDE.md" in out
+    assert "src rules" in out
+
+
+def test_get_system_context_is_memoized_and_truncated(monkeypatch, tmp_path):
+    """H-19: git status context is memoized and capped."""
+    from memory import context as memory_context
+
+    calls = []
+
+    def fake_status(workspace):
+        calls.append(workspace)
+        return "\n".join(f" M file_{i}.py" for i in range(100))
+
+    monkeypatch.setattr(memory_context, "_read_git_status", fake_status)
+    memory_context._SYSTEM_CONTEXT_CACHE.clear()
+
+    first = memory_context.get_system_context(str(tmp_path), max_chars=2000)
+    second = memory_context.get_system_context(str(tmp_path), max_chars=2000)
+    assert first == second
+    assert len(calls) == 1
+    assert len(first) <= 2000 + len("\n...[truncated]")
+    assert "Git status" in first
+
+
+def test_prompt_builds_h_context_in_dynamic_tail(tmp_path, monkeypatch):
+    """H-18/H-19 wiring: prompt dynamic tail includes context helpers."""
+    from prompt import CACHE_BOUNDARY, build_system_prompt
+    from memory import context as memory_context
+
+    (tmp_path / "CLAUDE.md").write_text("project rule", encoding="utf-8")
+    monkeypatch.setattr(memory_context, "_read_git_status", lambda workspace: " M x.py")
+    memory_context._SYSTEM_CONTEXT_CACHE.clear()
+
+    prompt = build_system_prompt(ctx={"workspace": str(tmp_path)})
+    dynamic = prompt.split(CACHE_BOUNDARY, 1)[1]
+    assert "project rule" in dynamic
+    assert "Git status" in dynamic
+
+
+def test_onboarding_state_auto_suppresses_when_complete(tmp_path):
+    """H-20: onboarding state auto-suppresses after all steps complete."""
+    from memory import OnboardingState, should_show_onboarding
+
+    state = OnboardingState(steps=["workspace", "verify"])
+    assert state.next_step() == "workspace"
+    state.mark_complete("workspace")
+    assert should_show_onboarding(state) is True
+    state.mark_complete("verify")
+    assert state.suppressed is True
+    assert should_show_onboarding(state) is False
+
+    path = tmp_path / ".agent_onboarding.json"
+    state.to_file(str(path))
+    loaded = OnboardingState.from_file(str(path))
+    assert loaded.suppressed is True
+    assert loaded.completed_steps == {"workspace", "verify"}

@@ -118,6 +118,28 @@ def build_system_prompt(ctx: Optional[Dict[str, Any]] = None) -> str:
         except Exception:
             pass
 
+    # Block H: add CLAUDE.md hierarchy context and memoized git status in the
+    # dynamic tail. Best-effort so prompt assembly remains reliable in tests,
+    # zip-flattened deployments, and non-git workspaces.
+    if not ctx.get("skip_memory_context"):
+        try:
+            from runtime.config import CONFIG as _CFG
+            workspace = ctx.get("workspace") or getattr(_CFG, "workspace", None)
+            if workspace:
+                from memory.context import get_system_context, get_user_context
+                current_dir = ctx.get("current_dir") or workspace
+                user_context = get_user_context(
+                    workspace=workspace,
+                    current_dir=current_dir,
+                    filenames=ctx.get("user_context_filenames") or ("CLAUDE.md",),
+                )
+                system_context = get_system_context(workspace=workspace)
+                for block in (user_context, system_context):
+                    if block and block not in dynamic_blocks:
+                        dynamic_blocks.append(block)
+        except Exception:
+            pass
+
     # Always include the boundary marker even if dynamic_blocks is empty.
     # BedrockClient handles "boundary present, no dynamic content" by caching
     # the full static prefix as one block.

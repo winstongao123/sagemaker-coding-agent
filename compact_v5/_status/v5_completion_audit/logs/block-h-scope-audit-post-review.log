@@ -1,0 +1,31 @@
+﻿=== Block H ===
+Expected rows: 20
+Ledger rows: 20
+SHIPPED: 20  PARTIAL: 0  MISSING: 0  DEFERRED: 0  DROPPED: 0  N/A: 0
+Ledger missing: 0  Weak shipped evidence: 0  Unknown disposition: 0
+Ship-blocking rows: NONE
+Verdict: READY_TO_REVIEW_CLOSE
+
+| row_id | disposition | ship_blocking | evidence_problems | capability |
+|---|---|---:|---|---|
+| H-1 | SHIPPED | NO |  | `hasMemoryWritesSince` race guard (R4 #45) |
+| H-2 | SHIPPED | NO |  | `countModelVisibleMessagesSince` cursor fallback (R4 #46) |
+| H-3 | SHIPPED | NO |  | In-flight extraction tracking + drainPendingExtraction (R4 #47) |
+| H-4 | SHIPPED | NO |  | turnsSinceLastExtraction throttle (R4 #48) |
+| H-5 | SHIPPED | NO |  | `createAutoMemCanUseTool` scoped permission (R4 #49) |
+| H-6 | SHIPPED | NO |  | `scanMemoryFiles` + `formatMemoryManifest` pre-injected (R4 #50) |
+| H-7 | SHIPPED | NO |  | `countToolCallsSince` thresholded extraction (R4 #52) |
+| H-8 | SHIPPED | NO |  | `waitForSessionMemoryExtraction` (R4 #53) |
+| H-9 | SHIPPED | NO |  | `hasToolCallsInLastAssistantTurn` predicate (R4 #54) |
+| H-10 | SHIPPED | NO |  | `createMemoryFileCanUseTool` single-file (R4 #55) |
+| H-11 | SHIPPED | NO |  | `adjustIndexToPreserveAPIInvariants` (R4 #56) |
+| H-12 | SHIPPED | NO |  | `calculateMessagesToKeepIndex` (R4 #57) |
+| H-13 | SHIPPED | NO |  | `SessionMemoryCompactConfig` file-based defaults (R4 #58) |
+| H-14 | SHIPPED | NO |  | `hasTextBlocks` predicate (R4 #59) |
+| H-15 | SHIPPED | NO |  | `truncateSessionMemoryForCompact` (R4 #60) |
+| H-16 | SHIPPED | NO |  | `isSessionMemoryEmpty` template-equality (R4 #61) |
+| H-17 | SHIPPED | NO |  | `shouldUseSessionMemoryCompaction` env-override (R4 #81) |
+| H-18 | SHIPPED | NO |  | `getUserContext` CLAUDE.md aggregation (R7 N12) |
+| H-19 | SHIPPED | NO |  | `getSystemContext` git-status injection memoized + parallel + 2K truncate (R11 N15-N20) |
+| H-20 | SHIPPED | NO |  | Onboarding step model + auto-suppress (R11 N21) |
+

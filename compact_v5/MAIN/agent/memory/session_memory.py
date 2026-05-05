@@ -11,7 +11,41 @@ Public functions:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Callable, Dict, List
+
+
+READ_ONLY_TOOL_NAMES = {
+    "read",
+    "read_file",
+    "grep",
+    "glob",
+    "ls",
+    "listdir",
+    "list_dir",
+}
+WRITE_TOOL_NAMES = {"edit", "write", "edit_file", "write_file"}
+
+
+def _input_path(tool_input: Any) -> str:
+    if isinstance(tool_input, str):
+        return tool_input
+    if not isinstance(tool_input, dict):
+        return ""
+    for key in ("path", "file_path", "filepath", "target_path"):
+        value = tool_input.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _same_file(expected: str, actual: str) -> bool:
+    if not actual:
+        return False
+    try:
+        return Path(expected).resolve() == Path(actual).resolve()
+    except Exception:
+        return False
 
 
 def deduplicate_memory_entries(entries: List[str]) -> List[str]:
@@ -93,3 +127,32 @@ def count_tool_calls_since(
                 continue
             count += 1
     return count
+
+
+def wait_for_session_memory_extraction(
+    extractor: Any,
+    timeout_s: float = 5.0,
+) -> bool:
+    """H-8: wait for any in-flight session-memory extraction to drain."""
+    drain = getattr(extractor, "drain_pending_extraction", None)
+    if not callable(drain):
+        return True
+    return bool(drain(timeout_s=timeout_s))
+
+
+def create_memory_file_can_use_tool(memory_file_path: str) -> Callable[[str, Any], bool]:
+    """H-10: permission predicate for a single memory file.
+
+    Read-only discovery tools are allowed. Edit/Write are allowed only when the
+    target path resolves to exactly `memory_file_path`.
+    """
+
+    def can_use(tool_name: str, tool_input: Any = None) -> bool:
+        name = (tool_name or "").strip().lower()
+        if name in READ_ONLY_TOOL_NAMES:
+            return True
+        if name in WRITE_TOOL_NAMES:
+            return _same_file(memory_file_path, _input_path(tool_input))
+        return False
+
+    return can_use

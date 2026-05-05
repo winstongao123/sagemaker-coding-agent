@@ -142,7 +142,10 @@ class Agent:
                 self._agent_status_text = None
             self._agent_status_loaded = True
 
-        system_prompt = self._system_prompt or build_system_prompt(ctx={})
+        from runtime.config import CONFIG as _CFG_PROMPT
+        system_prompt = self._system_prompt or build_system_prompt(
+            ctx={"workspace": getattr(_CFG_PROMPT, "workspace", None)}
+        )
         if self._agent_status_text:
             # Append to the dynamic tail (after CACHE_BOUNDARY) so the
             # cache-aware prefix replay (Block G2 territory) still works.

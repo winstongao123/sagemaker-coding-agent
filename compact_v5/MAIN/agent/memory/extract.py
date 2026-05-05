@@ -20,6 +20,7 @@ v4's single-shot extraction lacked. Combines:
 from __future__ import annotations
 
 import os
+import shlex
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +34,81 @@ DEFAULT_TURNS_SINCE_LAST_EXTRACTION = 5
 # H-7: tool-call threshold. Extract at "natural break" — after N tool calls
 # elapsed without an extraction. Runnable extractMemories.ts:316.
 DEFAULT_TOOL_CALL_THRESHOLD = 25
+
+
+READ_ONLY_TOOL_NAMES = {
+    "read",
+    "read_file",
+    "grep",
+    "glob",
+    "ls",
+    "listdir",
+    "list_dir",
+}
+WRITE_TOOL_NAMES = {"edit", "write", "edit_file", "write_file"}
+
+
+def _resolve_under(base: str, candidate: str) -> bool:
+    if not candidate:
+        return False
+    try:
+        base_path = Path(base).resolve()
+        candidate_path = Path(candidate).resolve()
+        candidate_path.relative_to(base_path)
+        return True
+    except Exception:
+        return False
+
+
+def _tool_path(tool_input: Any) -> str:
+    if isinstance(tool_input, str):
+        return tool_input
+    if not isinstance(tool_input, dict):
+        return ""
+    for key in ("path", "file_path", "filepath", "target_path"):
+        value = tool_input.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _is_readonly_bash_command(command: str) -> bool:
+    try:
+        parts = shlex.split(command or "", posix=False)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    program = Path(parts[0]).name.lower()
+    if program in {"cat", "type", "more", "less", "head", "tail", "findstr", "select-string", "rg", "grep", "dir", "ls", "pwd", "get-content", "get-childitem"}:
+        return True
+    return False
+
+
+def create_auto_mem_can_use_tool(memory_dir: str) -> Callable[[str, Any], bool]:
+    """H-5: scoped permissions for the auto-memory extractor.
+
+    Read/Grep/Glob/listing tools are allowed because the extractor needs to
+    inspect project memory context. Edit/Write are constrained to `memory_dir`.
+    Bash is allowed only for simple read-only inspection commands.
+    """
+
+    def can_use(tool_name: str, tool_input: Any = None) -> bool:
+        name = (tool_name or "").strip().lower()
+        if name in READ_ONLY_TOOL_NAMES:
+            return True
+        if name in WRITE_TOOL_NAMES:
+            return _resolve_under(memory_dir, _tool_path(tool_input))
+        if name == "bash":
+            command = ""
+            if isinstance(tool_input, dict):
+                command = str(tool_input.get("command") or "")
+            elif isinstance(tool_input, str):
+                command = tool_input
+            return _is_readonly_bash_command(command)
+        return False
+
+    return can_use
 
 
 def _make_set_event() -> threading.Event:
