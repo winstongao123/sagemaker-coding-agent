@@ -42,6 +42,12 @@ class _ScriptedClient:
                 stop_reason="tool_use",
                 usage={},
             )
+        if kind == "tools":
+            calls = [
+                ToolCall(cid, name, args)
+                for cid, name, args in rest[0]
+            ]
+            return Response(text="", tool_calls=calls, stop_reason="tool_use", usage={})
         raise AssertionError(f"unknown script kind: {kind}")
 
 
@@ -169,3 +175,184 @@ def test_repeated_tool_failure_loop_is_audited_and_blocked(audit_logger):
     assert "tool_failure_loop_blocked" in names
     blocked = [a for a in actions if a["action"] == "tool_failure_loop_blocked"][-1]
     assert blocked["parameters"]["previous_failures"] == 2
+
+
+def test_read_file_marks_file_read_for_edit_path(tmp_path, monkeypatch, audit_logger):
+    from core import IterationBudget, QueryEngine
+    from runtime.config import CONFIG
+    from tools import _file_read_tracking, all_registered
+    import security.manager as sec_mgr
+
+    target = tmp_path / "app.py"
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+    _file_read_tracking.reset_for_tests()
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    sec_mgr.rebuild_singleton_for_tests()
+
+    engine = QueryEngine(
+        client=_ScriptedClient([
+            ("tool", "r1", "read_file", {"file_path": str(target)}),
+            ("tool", "e1", "edit_file", {
+                "file_path": str(target),
+                "old_string": "VALUE = 1",
+                "new_string": "VALUE = 2",
+            }),
+            ("text", "done"),
+        ]),
+        max_turns=4,
+        budget=IterationBudget(max_iterations=10),
+        session_id="readmarksedit",
+    )
+
+    result = engine.run("update", system_prompt="system", tools=list(all_registered()))
+
+    assert result.stop_reason == "end_turn"
+    assert target.read_text(encoding="utf-8") == "VALUE = 2\n"
+    actions = _audit_actions(audit_logger, "readmarksedit")
+    failures = [a for a in actions if a["action"] == "tool_failure_recorded"]
+    assert failures == []
+
+
+def test_guard_class_breaker_blocks_batched_unread_edit_loop(tmp_path, monkeypatch, audit_logger):
+    from core import IterationBudget, QueryEngine
+    from runtime.config import CONFIG
+    from tools import _file_read_tracking, all_registered
+    import security.manager as sec_mgr
+
+    targets = []
+    for idx in range(3):
+        target = tmp_path / f"file{idx}.py"
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+        targets.append(target)
+    _file_read_tracking.reset_for_tests()
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    sec_mgr.rebuild_singleton_for_tests()
+
+    calls = [
+        (f"e{idx}", "edit_file", {
+            "file_path": str(target),
+            "old_string": "VALUE = 1",
+            "new_string": "VALUE = 2",
+        })
+        for idx, target in enumerate(targets)
+    ]
+    engine = QueryEngine(
+        client=_ScriptedClient([("tools", calls), ("text", "done")]),
+        max_turns=3,
+        budget=IterationBudget(max_iterations=10),
+        session_id="guardbatchedit",
+    )
+
+    result = engine.run("bad edits", system_prompt="system", tools=list(all_registered()))
+
+    assert result.stop_reason == "end_turn"
+    assert all(target.read_text(encoding="utf-8") == "VALUE = 1\n" for target in targets)
+    actions = _audit_actions(audit_logger, "guardbatchedit")
+    failures = [a for a in actions if a["action"] == "tool_failure_recorded"]
+    blocked = [a for a in actions if a["action"] == "tool_failure_loop_blocked"]
+    assert len([a for a in failures if a["tool_name"] == "edit_file"]) == 2
+    assert blocked[-1]["parameters"]["failure_class"] == "read_before_edit"
+
+
+def test_guard_class_breaker_blocks_batched_unread_write_loop(tmp_path, monkeypatch, audit_logger):
+    from core import IterationBudget, QueryEngine
+    from runtime.config import CONFIG
+    from tools import _file_read_tracking, all_registered
+    import security.manager as sec_mgr
+
+    targets = []
+    for idx in range(3):
+        target = tmp_path / f"file{idx}.txt"
+        target.write_text("old\n", encoding="utf-8")
+        targets.append(target)
+    _file_read_tracking.reset_for_tests()
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    sec_mgr.rebuild_singleton_for_tests()
+
+    calls = [
+        (f"w{idx}", "write_file", {"file_path": str(target), "content": "new\n"})
+        for idx, target in enumerate(targets)
+    ]
+    engine = QueryEngine(
+        client=_ScriptedClient([("tools", calls), ("text", "done")]),
+        max_turns=3,
+        budget=IterationBudget(max_iterations=10),
+        session_id="guardbatchwrite",
+    )
+
+    result = engine.run("bad writes", system_prompt="system", tools=list(all_registered()))
+
+    assert result.stop_reason == "end_turn"
+    assert all(target.read_text(encoding="utf-8") == "old\n" for target in targets)
+    actions = _audit_actions(audit_logger, "guardbatchwrite")
+    failures = [a for a in actions if a["action"] == "tool_failure_recorded"]
+    blocked = [a for a in actions if a["action"] == "tool_failure_loop_blocked"]
+    assert len([a for a in failures if a["tool_name"] == "write_file"]) == 2
+    assert blocked[-1]["parameters"]["failure_class"] == "read_before_write"
+
+
+def test_guard_class_breaker_blocks_repeated_python_exec_errors(audit_logger):
+    from core import IterationBudget, QueryEngine
+    from tools import all_registered
+
+    calls = [
+        ("p1", "python_exec", {"code": "if True print('bad')"}),
+        ("p2", "python_exec", {"code": "for"}),
+        ("p3", "python_exec", {"code": "def nope(:\n    pass"}),
+    ]
+    engine = QueryEngine(
+        client=_ScriptedClient([("tools", calls), ("text", "done")]),
+        max_turns=3,
+        budget=IterationBudget(max_iterations=10),
+        session_id="guardpythonexec",
+    )
+
+    result = engine.run("bad python", system_prompt="system", tools=list(all_registered()))
+
+    assert result.stop_reason == "end_turn"
+    actions = _audit_actions(audit_logger, "guardpythonexec")
+    failures = [a for a in actions if a["action"] == "tool_failure_recorded"]
+    blocked = [a for a in actions if a["action"] == "tool_failure_loop_blocked"]
+    assert len([a for a in failures if a["tool_name"] == "python_exec"]) == 2
+    assert blocked[-1]["parameters"]["failure_class"] == "python_exec_error"
+
+
+def test_python_exec_error_class_allows_later_script_after_success(tmp_path, monkeypatch, audit_logger):
+    from core import IterationBudget, QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+    import security.manager as sec_mgr
+
+    marker = tmp_path / "marker.txt"
+    marker.write_text("ok\n", encoding="utf-8")
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    sec_mgr.rebuild_singleton_for_tests()
+
+    calls = [
+        ("p1", "python_exec", {"code": "if True print('bad')"}),
+        ("p2", "python_exec", {"code": "for"}),
+        ("r1", "read_file", {"file_path": str(marker)}),
+        ("p3", "python_exec", {"code": "print('recovered')"}),
+    ]
+    engine = QueryEngine(
+        client=_ScriptedClient([
+            ("tool", *calls[0]),
+            ("tool", *calls[1]),
+            ("tool", *calls[2]),
+            ("tool", *calls[3]),
+            ("text", "done"),
+        ]),
+        max_turns=6,
+        budget=IterationBudget(max_iterations=10),
+        session_id="guardpythonexecrecovery",
+    )
+
+    result = engine.run("bad then recovered python", system_prompt="system", tools=list(all_registered()))
+
+    assert result.stop_reason == "end_turn"
+    actions = _audit_actions(audit_logger, "guardpythonexecrecovery")
+    failures = [a for a in actions if a["action"] == "tool_failure_recorded"]
+    blocked = [a for a in actions if a["action"] == "tool_failure_loop_blocked"]
+    python_failures = [a for a in failures if a["tool_name"] == "python_exec"]
+    assert len(python_failures) == 2
+    assert blocked == []

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -24,8 +25,16 @@ if str(_AGENT_ROOT) not in sys.path:
 
 _HAIKU_45_AU = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
 _R14_COST_CAP_USD = 0.75
+_USER_APPROVED_RETRY_BUFFER_MULTIPLIER = 1.20
+_R14_HARD_CEILING_USD = _R14_COST_CAP_USD * _USER_APPROVED_RETRY_BUFFER_MULTIPLIER
 _OLD_SYMBOL = "compute_discounted_total"
 _NEW_SYMBOL = "calculate_order_total"
+_GUARD_FAILURE_CLASSES = {
+    "read_before_edit",
+    "read_before_write",
+    "bash_cd_blocked",
+    "python_exec_error",
+}
 
 _FIXTURE_FILES = {
     "inventory_app/__init__.py": '''\
@@ -158,6 +167,56 @@ def _r14_ready(workspace: Path) -> bool:
     return code == 0 and not _grep_stale_symbol(workspace) and _new_symbol_visible(workspace)
 
 
+def _audit_events(audit_dir: Path) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for fp in sorted(audit_dir.glob("*.jsonl")):
+        for line in fp.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return events
+
+
+def _tool_order(events: list[dict[str, Any]]) -> list[str]:
+    return [
+        str(ev.get("tool_name") or ev.get("parameters", {}).get("tool_name") or "")
+        for ev in events
+        if ev.get("action") == "tool_dispatch"
+    ]
+
+
+def _failure_loop_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        ev
+        for ev in events
+        if str(ev.get("action")) in {
+            "tool_failure_recorded",
+            "tool_failure_loop_warning",
+            "tool_failure_loop_blocked",
+        }
+    ]
+
+
+def _guard_failure_class_counts(events: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for ev in _failure_loop_events(events):
+        params = ev.get("parameters", {})
+        if not isinstance(params, dict):
+            params = {}
+        failure_class = str(params.get("failure_class") or "")
+        if failure_class not in _GUARD_FAILURE_CLASSES:
+            continue
+        try:
+            count = int(params.get("failure_class_count") or params.get("previous_failures") or 1)
+        except (TypeError, ValueError):
+            count = 1
+        counts[failure_class] = max(counts.get(failure_class, 0), count)
+    return counts
+
+
 @pytest.mark.skipif(
     not os.getenv("RUN_REAL_BEDROCK"),
     reason="RUN_REAL_BEDROCK not set; R14 is real-AWS gated.",
@@ -194,7 +253,7 @@ def test_r14_multifile_refactor(tmp_path):
     try:
         CONFIG.workspace = str(tmp_path)
         CONFIG.audit_dir = str(audit_dir)
-        CONFIG.session_cost_limit = _R14_COST_CAP_USD
+        CONFIG.session_cost_limit = _R14_HARD_CEILING_USD
         CONFIG.model_id = _HAIKU_45_AU
         CONFIG.max_tokens = 2048
         CONFIG.require_tool_approval = False
@@ -209,7 +268,7 @@ def test_r14_multifile_refactor(tmp_path):
 
         def _hard_cost_halt() -> bool:
             over_budget = TOKENS.is_over_budget() if hasattr(TOKENS, "is_over_budget") else (
-                TOKENS.session_cost >= _R14_COST_CAP_USD
+                TOKENS.session_cost >= _R14_HARD_CEILING_USD
             )
             return over_budget or _r14_ready(tmp_path)
 
@@ -238,6 +297,39 @@ def test_r14_multifile_refactor(tmp_path):
         expected_files = sorted(_FIXTURE_FILES.keys())
         unexpected_files = sorted(set(workspace_files) - set(expected_files))
         cost_used = float(TOKENS.session_cost)
+        events = _audit_events(audit_dir)
+        order = _tool_order(events)
+        failure_events = _failure_loop_events(events)
+        guard_failure_class_counts = _guard_failure_class_counts(events)
+        edit_count = sum(1 for name in order if name in {"edit_file", "write_file", "notebook_edit"})
+        exec_count = sum(1 for name in order if name in {"bash", "python_exec"})
+        first_read_or_search = min(
+            [i for i, name in enumerate(order) if name in {"read_file", "grep", "glob"}],
+            default=None,
+        )
+        first_edit = min(
+            [i for i, name in enumerate(order) if name in {"edit_file", "write_file", "notebook_edit"}],
+            default=None,
+        )
+        read_or_search_before_edit = (
+            first_read_or_search is not None
+            and first_edit is not None
+            and first_read_or_search < first_edit
+        )
+        repeated_guard_loop = any(count >= 2 for count in guard_failure_class_counts.values())
+        process_quality_ok = bool(
+            read_or_search_before_edit
+            and not repeated_guard_loop
+            and result.stop_reason != "max_turns"
+        )
+        artifact_ok = bool(
+            result.stop_reason in {"end_turn", "user_stop"}
+            and post_code == 0
+            and not stale_hits
+            and new_symbol_visible
+            and not unexpected_files
+            and cost_used <= _R14_HARD_CEILING_USD
+        )
 
         metrics = {
             "test": "R14",
@@ -248,7 +340,7 @@ def test_r14_multifile_refactor(tmp_path):
             "tokens_out": int(TOKENS.session_output),
             "cache_hit_pct": 0.0,
             "wallclock_s": round(wallclock_s, 2),
-            "tool_calls": int(getattr(result, "turns_used", 0)),
+            "tool_calls": len(order),
             "api_calls": int(TOKENS.api_calls),
             "subagent_calls": 0,
             "reviewer_calls": 0,
@@ -268,24 +360,18 @@ def test_r14_multifile_refactor(tmp_path):
             "new_symbol_visible": bool(new_symbol_visible),
             "fixture_note_visible_call_sites": True,
             "unexpected_files": unexpected_files,
-            "completed": bool(
-                result.stop_reason in {"end_turn", "user_stop"}
-                and post_code == 0
-                and not stale_hits
-                and new_symbol_visible
-                and not unexpected_files
-                and cost_used <= _R14_COST_CAP_USD
-            ),
+            "edit_tool_count": edit_count,
+            "exec_tool_count": exec_count,
+            "read_or_search_before_edit": read_or_search_before_edit,
+            "failure_loop_event_count": len(failure_events),
+            "guard_failure_class_counts": guard_failure_class_counts,
+            "process_quality_ok": process_quality_ok,
+            "completed": bool(artifact_ok and process_quality_ok),
             "cost_usd": round(cost_used, 4),
-            "verdict": "GENUINE_PASS" if (
-                post_code == 0
-                and not stale_hits
-                and new_symbol_visible
-                and not unexpected_files
-                and cost_used <= _R14_COST_CAP_USD
-            ) else "FAIL",
+            "verdict": "GENUINE_PASS" if artifact_ok and process_quality_ok else "FAIL",
             "stop_reason": result.stop_reason,
             "audit_dir": str(audit_dir),
+            "tool_order": order,
         }
         side_metrics.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
         print(f"\n[R14_AUDIT_DIR] {audit_dir}")
@@ -299,8 +385,11 @@ def test_r14_multifile_refactor(tmp_path):
         assert not stale_hits, f"R14 stale-symbol grep found old names. metrics={metrics}"
         assert new_symbol_visible, f"R14 new symbol missing from visible call sites. metrics={metrics}"
         assert not unexpected_files, f"R14 produced unexpected files {unexpected_files}. metrics={metrics}"
-        assert cost_used <= _R14_COST_CAP_USD, (
-            f"R14 cost ${cost_used:.4f} exceeded cap ${_R14_COST_CAP_USD}. metrics={metrics}"
+        assert read_or_search_before_edit, f"R14 did not show read/search before edit. metrics={metrics}"
+        assert not repeated_guard_loop, f"R14 repeated guard-class failure loop recurred. metrics={metrics}"
+        assert cost_used <= _R14_HARD_CEILING_USD, (
+            f"R14 cost ${cost_used:.4f} exceeded cap ${_R14_COST_CAP_USD} "
+            f"plus 20% retry buffer (${_R14_HARD_CEILING_USD:.2f}). metrics={metrics}"
         )
     finally:
         os.chdir(cwd_before)

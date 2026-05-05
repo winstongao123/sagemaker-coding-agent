@@ -391,6 +391,7 @@ class QueryEngine:
         # run() calls for this engine so repeated tool failures leave durable
         # audit evidence instead of being only an in-turn repetition guard.
         self._tool_failure_counts: Dict[Tuple[str, str], int] = {}
+        self._tool_failure_class_counts: Dict[Tuple[str, str], int] = {}
         self._consecutive_tool_failures = 0
 
     # ------------------------------------------------------------
@@ -1277,6 +1278,17 @@ class QueryEngine:
         with _guard():
             _recent = self._recent_tool_calls[-6:]
             if _recent.count(_key) >= 2:
+                self._audit_engine_event(
+                    "tool_failure_loop_blocked",
+                    tool_name=call.name,
+                    parameters={
+                        "tool_name": call.name,
+                        "args_hash": _args_hash,
+                        "previous_failures": self._tool_failure_counts.get(_key, 0),
+                        "repeated_recent_calls": _recent.count(_key),
+                    },
+                    result_summary="blocked third identical tool call",
+                )
                 return {
                     "type": "tool_result",
                     "tool_use_id": call.id,
@@ -1324,6 +1336,38 @@ class QueryEngine:
                 ),
                 "is_error": True,
             }
+
+        _predicted_failure_class = self._predict_guard_failure_class(call.name, _repaired_input)
+        if _predicted_failure_class is not None:
+            _class_key = (call.name, _predicted_failure_class)
+            _class_count = self._tool_failure_class_counts.get(_class_key, 0)
+            _should_block_class = _class_count >= 2
+            if _predicted_failure_class == "python_exec_error":
+                _should_block_class = (
+                    _should_block_class
+                    and self._consecutive_tool_failures >= 2
+                )
+            if _should_block_class:
+                self._audit_engine_event(
+                    "tool_failure_loop_blocked",
+                    tool_name=call.name,
+                    parameters={
+                        "tool_name": call.name,
+                        "failure_class": _predicted_failure_class,
+                        "previous_failures": _class_count,
+                    },
+                    result_summary="blocked repeated guard-class tool call",
+                )
+                return {
+                    "type": "tool_result",
+                    "tool_use_id": call.id,
+                    "content": self._failure_class_block_message(
+                        call.name,
+                        _predicted_failure_class,
+                        _class_count,
+                    ),
+                    "is_error": True,
+                }
 
         from runtime.config import CONFIG as _CFG_AT
         _is_mock = bool(
@@ -1556,7 +1600,96 @@ class QueryEngine:
             "blocked:",
             "approval gate error",
             "user denied approval",
-        )) or " timed out after " in t
+        )) or " timed out after " in t or (
+            "[exit code:" in t and "[exit code: 0]" not in t
+        )
+
+    @staticmethod
+    def _failure_class(tool_name: str, text: str) -> Optional[str]:
+        t = (text or "").lower()
+        if tool_name == "edit_file" and "must read file before editing" in t:
+            return "read_before_edit"
+        if tool_name == "write_file" and "must read file before overwriting" in t:
+            return "read_before_write"
+        if tool_name == "bash" and "command not allowed: 'cd'" in t:
+            return "bash_cd_blocked"
+        if tool_name == "python_exec" and (
+            "syntaxerror" in t
+            or "unicodeencodeerror" in t
+            or "error_during_execution" in t
+        ):
+            return "python_exec_error"
+        return None
+
+    @staticmethod
+    def _failure_class_block_message(
+        tool_name: str,
+        failure_class: str,
+        previous_failures: int,
+    ) -> str:
+        hints = {
+            "read_before_edit": (
+                "read_file has not established a readable current-state marker "
+                "for this target. Stop retrying edit_file; call read_file on the "
+                "exact target path and then retry one edit, or use a different "
+                "documented strategy."
+            ),
+            "read_before_write": (
+                "write_file is trying to overwrite an existing file without a "
+                "current read marker. Stop retrying write_file; call read_file "
+                "on the exact target path, use append for append-only work, or "
+                "switch strategy."
+            ),
+            "bash_cd_blocked": (
+                "cd is not allowed in bash. Stop retrying cd variants; run the "
+                "allowed command directly from the current workspace or use the "
+                "dedicated file tools."
+            ),
+            "python_exec_error": (
+                "python_exec has failed repeatedly. Stop retrying near-identical "
+                "scripts; simplify the script, remove non-ASCII/path escaping "
+                "hazards, or use file tools instead."
+            ),
+        }
+        return (
+            f"Blocked: '{tool_name}' has already hit {previous_failures} "
+            f"{failure_class} failures. {hints.get(failure_class, 'Change strategy before retrying.')}"
+        )
+
+    @staticmethod
+    def _predict_guard_failure_class(tool_name: str, args: Any) -> Optional[str]:
+        if not isinstance(args, dict):
+            return None
+        if tool_name == "python_exec":
+            return "python_exec_error"
+        if tool_name == "bash":
+            command = str(args.get("command", "")).strip().lower()
+            if command == "cd" or command.startswith("cd ") or "&& cd " in command or command.startswith("cd\t"):
+                return "bash_cd_blocked"
+            return None
+        if tool_name not in {"edit_file", "write_file"}:
+            return None
+        if tool_name == "write_file" and args.get("mode", "write") != "write":
+            return None
+        file_path = args.get("file_path")
+        if not isinstance(file_path, str) or not file_path:
+            return None
+        try:
+            import os as _os
+            from tools import _file_read_tracking as _read_tracking
+            from tools import _path_validation as _path_security
+            ok, _msg = _path_security.validate_path(file_path)
+            if not ok:
+                return None
+            abs_path = _os.path.abspath(_path_security.resolve_path(file_path))
+            if tool_name == "edit_file":
+                if _os.path.isfile(abs_path) and not _read_tracking.was_read(abs_path):
+                    return "read_before_edit"
+            elif _os.path.exists(abs_path) and not _read_tracking.was_read(abs_path):
+                return "read_before_write"
+        except Exception:
+            return None
+        return None
 
     def _record_tool_success(self) -> None:
         self._consecutive_tool_failures = 0
@@ -1569,6 +1702,12 @@ class QueryEngine:
     ) -> None:
         count = self._tool_failure_counts.get(failure_key, 0) + 1
         self._tool_failure_counts[failure_key] = count
+        failure_class = self._failure_class(tool_name, result_summary)
+        class_count = None
+        if failure_class is not None:
+            class_key = (tool_name, failure_class)
+            class_count = self._tool_failure_class_counts.get(class_key, 0) + 1
+            self._tool_failure_class_counts[class_key] = class_count
         self._consecutive_tool_failures += 1
         self._audit_engine_event(
             "tool_failure_recorded",
@@ -1577,6 +1716,8 @@ class QueryEngine:
                 "tool_name": tool_name,
                 "args_hash": failure_key[1],
                 "failure_count": count,
+                "failure_class": failure_class,
+                "failure_class_count": class_count,
                 "consecutive_failures": self._consecutive_tool_failures,
             },
             result_summary=str(result_summary)[:500],

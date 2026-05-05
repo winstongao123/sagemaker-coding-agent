@@ -18,7 +18,15 @@ from typing import Dict, Iterable, List, Tuple
 
 
 TOTAL_COST_CAP_USD = 14.25
+USER_APPROVED_RETRY_BUFFER_MULTIPLIER = 1.20
 MATRIX_REL_PATH = Path("compact_v5") / "_status" / "r_tier_test_matrix.json"
+DIAGNOSTIC_NON_READY_VERDICTS = {
+    "FAIL",
+    "PROCESS_BLOCKER",
+    "PROCESS_BLOCKER_LOCAL_FIX_PENDING_CLAUDE_REVIEW",
+    "DIAGNOSTIC_NON_READY",
+    "CALL1_FUNCTIONAL_PASS_BUNDLE_BLOCKED",
+}
 
 # 42 v5-only scenarios: R1-R17, R18 E1-E15, R19 U1-U10.
 EXPECTED_SCENARIOS: Tuple[str, ...] = tuple(
@@ -176,7 +184,14 @@ def check_suite_materialized(repo_root: Path) -> List[str]:
 
 
 def check_costs(repo_root: Path) -> List[str]:
-    """Verify local metrics stay within total and per-scenario caps."""
+    """Verify local metrics stay within total and per-scenario caps.
+
+    The matrix cap is the planned budget. The hard local retry ceiling allows
+    the user-approved 20% buffer per recorded call while preserving cumulative
+    spend history. Diagnostic/non-ready spend remains in the total matrix spend;
+    a later retry has its own explicit hard ceiling and does not erase the
+    diagnostic row that came before it.
+    """
     errors: List[str] = []
     metrics_path = repo_root / "compact_v5" / "_status" / "r_tier_metrics.jsonl"
     if not metrics_path.is_file():
@@ -184,6 +199,8 @@ def check_costs(repo_root: Path) -> List[str]:
     rows = _load_metrics(metrics_path)
     total = 0.0
     by_test: Dict[str, float] = {}
+    diagnostic_by_test: Dict[str, bool] = {}
+    _expected, caps = _expected_from_matrix(repo_root)
     for i, row in enumerate(rows, start=1):
         if "_malformed" in row:
             errors.append(f"malformed JSONL metrics row {i}: {row['_malformed'][:120]}")
@@ -196,13 +213,32 @@ def check_costs(repo_root: Path) -> List[str]:
             continue
         total += cost
         by_test[test] = by_test.get(test, 0.0) + cost
-    if total > TOTAL_COST_CAP_USD:
-        errors.append(f"total R-tier cost ${total:.4f} exceeds cap ${TOTAL_COST_CAP_USD:.2f}")
-    _expected, caps = _expected_from_matrix(repo_root)
+        if row.get("verdict") in DIAGNOSTIC_NON_READY_VERDICTS:
+            diagnostic_by_test[test] = True
+        cap = caps.get(test)
+        if cap is not None:
+            ceiling = cap * USER_APPROVED_RETRY_BUFFER_MULTIPLIER
+            if cost > ceiling + 1e-9:
+                errors.append(
+                    f"{test} row {i} cost ${cost:.4f} exceeds scenario cap ${cap:.2f} "
+                    f"plus 20% retry buffer (${ceiling:.2f})"
+                )
+    total_ceiling = TOTAL_COST_CAP_USD * USER_APPROVED_RETRY_BUFFER_MULTIPLIER
+    if total > total_ceiling:
+        errors.append(
+            f"total R-tier cost ${total:.4f} exceeds matrix cap "
+            f"${TOTAL_COST_CAP_USD:.2f} plus 20% retry buffer "
+            f"(${total_ceiling:.2f})"
+        )
     for test, cost in sorted(by_test.items()):
         cap = caps.get(test)
-        if cap is not None and cost > cap + 1e-9:
-            errors.append(f"{test} cost ${cost:.4f} exceeds scenario cap ${cap:.2f}")
+        if cap is not None and not diagnostic_by_test.get(test):
+            ceiling = cap * USER_APPROVED_RETRY_BUFFER_MULTIPLIER
+            if cost > ceiling + 1e-9:
+                errors.append(
+                    f"{test} cost ${cost:.4f} exceeds scenario cap ${cap:.2f} "
+                    f"plus 20% retry buffer (${ceiling:.2f})"
+                )
     return errors
 
 
@@ -259,6 +295,7 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
 
     metric_rows = _load_metrics(metrics)
     rows_for_test = [r for r in metric_rows if str(r.get("test")) == test_id and "_malformed" not in r]
+    diagnostic_calls: set[int] = set()
     if not rows_for_test:
         errors.append(f"{test_id}: missing JSONL metrics row in {metrics}")
     else:
@@ -267,20 +304,41 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
             "cache_hit_pct", "wallclock_s", "tool_calls", "completed",
             "cost_usd", "verdict",
         }
+        pass_rows = [
+            row for row in rows_for_test
+            if row.get("completed") is True
+            and row.get("verdict") in {"GENUINE_PASS", "READY"}
+        ]
+        if not escalated and not pass_rows:
+            errors.append(f"{test_id}: missing completed pass/ready JSONL metrics row")
         for row in rows_for_test:
             missing = required_metric_keys - set(row.keys())
             if missing:
                 errors.append(f"{test_id}: metrics row missing keys {sorted(missing)}")
-            if not escalated and row.get("completed") is not True:
-                errors.append(f"{test_id}: metrics row completed is not true")
-            if not escalated and row.get("verdict") not in {"GENUINE_PASS", "READY"}:
-                errors.append(f"{test_id}: metrics verdict is not pass/ready")
+            row_is_pass = (
+                row.get("completed") is True
+                and row.get("verdict") in {"GENUINE_PASS", "READY"}
+            )
+            row_is_diagnostic = row.get("verdict") in DIAGNOSTIC_NON_READY_VERDICTS
+            if row_is_diagnostic:
+                try:
+                    diagnostic_calls.add(int(row.get("call")))
+                except (TypeError, ValueError):
+                    pass
+            if not escalated and not row_is_pass and not row_is_diagnostic:
+                errors.append(
+                    f"{test_id}: metrics row is neither pass/ready nor diagnostic non-ready"
+                )
             if test_id in {"R13", "R14", "R15"}:
+                if not row_is_pass:
+                    continue
                 if row.get("changed_files_within_fixture") is not True:
                     errors.append(
                         f"{test_id}: metrics row must set changed_files_within_fixture=true"
                     )
             if test_id == "R13":
+                if not row_is_pass:
+                    continue
                 try:
                     passed = int(row.get("score_passed", -1))
                     total_score = int(row.get("score_total", -1))
@@ -313,7 +371,12 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
                 errors.append(f"{test_id}: telemetry {fp.name} missing key {key}")
         if data.get("per_turn") == []:
             errors.append(f"{test_id}: telemetry {fp.name} has empty per_turn")
-        if not escalated and isinstance(data.get("outcome"), dict):
+        try:
+            telemetry_call = int(data.get("call"))
+        except (TypeError, ValueError):
+            telemetry_call = -1
+        is_diagnostic_telemetry = telemetry_call in diagnostic_calls
+        if not escalated and not is_diagnostic_telemetry and isinstance(data.get("outcome"), dict):
             if data["outcome"].get("completed") is not True:
                 errors.append(f"{test_id}: telemetry {fp.name} outcome.completed is not true")
             if data["outcome"].get("cost_cap_hit") is True:

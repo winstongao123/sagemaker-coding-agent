@@ -22,37 +22,56 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import Dict, Set, Tuple
+from typing import Any, Dict, Set, Tuple
 
 # Process-global state, threadsafe. Single-threaded ipynb is the primary
 # target but the lock is cheap insurance.
 _LOCK = threading.Lock()
 _FILES_READ: Set[str] = set()
 _FILE_READ_TIMES: Dict[str, float] = {}
+_FILE_READ_SNAPSHOTS: Dict[str, Dict[str, Any]] = {}
 
 
-def mark_read(abs_path: str) -> None:
+def _canonical(abs_path: str) -> str:
+    return os.path.normcase(os.path.abspath(abs_path))
+
+
+def mark_read(abs_path: str, content: str | None = None) -> None:
     """Record that the agent has read this file in the current session."""
     if not abs_path:
         return
+    key = _canonical(abs_path)
     with _LOCK:
-        _FILES_READ.add(abs_path)
+        _FILES_READ.add(key)
         try:
-            _FILE_READ_TIMES[abs_path] = os.path.getmtime(abs_path)
+            mtime = os.path.getmtime(key)
+            _FILE_READ_TIMES[key] = mtime
+            if content is not None:
+                _FILE_READ_SNAPSHOTS[key] = {"mtime": mtime, "content": content}
         except OSError:
             pass
 
 
 def was_read(abs_path: str) -> bool:
     """Return True if `mark_read(abs_path)` was called this session."""
+    key = _canonical(abs_path)
     with _LOCK:
-        return abs_path in _FILES_READ
+        return key in _FILES_READ
 
 
 def get_read_mtime(abs_path: str) -> float | None:
     """Return the file's mtime captured at read time, or None if not tracked."""
+    key = _canonical(abs_path)
     with _LOCK:
-        return _FILE_READ_TIMES.get(abs_path)
+        return _FILE_READ_TIMES.get(key)
+
+
+def get_last_read_snapshot(abs_path: str) -> Dict[str, Any] | None:
+    """Return the last read snapshot for staleness false-positive checks."""
+    key = _canonical(abs_path)
+    with _LOCK:
+        snap = _FILE_READ_SNAPSHOTS.get(key)
+        return dict(snap) if snap is not None else None
 
 
 def is_stale(abs_path: str) -> Tuple[bool, str]:
@@ -90,6 +109,7 @@ def clear_tracked_reads() -> None:
     with _LOCK:
         _FILES_READ.clear()
         _FILE_READ_TIMES.clear()
+        _FILE_READ_SNAPSHOTS.clear()
 
 
 def reset_for_tests() -> None:

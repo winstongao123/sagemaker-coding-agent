@@ -61,6 +61,22 @@ def test_r_tier_gate_detects_cost_cap_excess(tmp_path):
     assert any("R1 cost" in e for e in errors)
 
 
+def test_r_tier_gate_allows_diagnostic_plus_retry_over_single_call_ceiling(tmp_path):
+    gate = _load_gate()
+    status = tmp_path / "compact_v5" / "_status"
+    status.mkdir(parents=True)
+    rows = [
+        {"test": "R18-E7", "call": 1, "cost_usd": 0.1022, "verdict": "PROCESS_BLOCKER"},
+        {"test": "R18-E7", "call": 2, "cost_usd": 0.0226, "verdict": "GENUINE_PASS"},
+    ]
+    (status / "r_tier_metrics.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    assert gate.check_costs(tmp_path) == []
+
+
 def test_r_tier_gate_allows_initialized_empty_metrics(tmp_path):
     gate = _load_gate()
     status = tmp_path / "compact_v5" / "_status"
@@ -117,6 +133,79 @@ def test_r_tier_gate_accepts_complete_single_test_evidence(tmp_path):
             "cost_usd": 0.01,
             "verdict": "GENUINE_PASS",
         }) + "\n",
+        encoding="utf-8",
+    )
+
+    assert gate.check_test_evidence(tmp_path, "R1") == []
+
+
+def test_r_tier_gate_preserves_diagnostic_rows_before_later_pass(tmp_path):
+    gate = _load_gate()
+    status = tmp_path / "compact_v5" / "_status"
+    reviews = status / "codex_reviews"
+    reviews.mkdir(parents=True)
+
+    (reviews / "r-tier-R1-phaseA-iter1-prompt.txt").write_text("prompt", encoding="utf-8")
+    (reviews / "r-tier-R1-phaseA-iter1.md").write_text(
+        "PRE-FLIGHT VERDICT: APPROVE_FOR_AWS_CALL", encoding="utf-8"
+    )
+    (reviews / "r-tier-R1-aws-call1.log").write_text("failed", encoding="utf-8")
+    (reviews / "r-tier-R1-aws-call2.log").write_text("passed", encoding="utf-8")
+    (reviews / "r-tier-R1-phaseC-iter1.md").write_text(
+        "POST-PASS VERDICT: GENUINE_PASS", encoding="utf-8"
+    )
+    for call, completed in ((1, False), (2, True)):
+        (status / f"r-tier-R1-aws-call{call}-telemetry.json").write_text(
+            json.dumps({
+                "test": "R1", "call": call,
+                "per_turn": [{"turn": 1}],
+                "tool_call_summary": {"TOTAL_calls": 0, "REPEATED_calls": 0},
+                "compaction_events": [],
+                "subagent_dispatches": [],
+                "cache_efficiency_trend": {},
+                "outcome": {"completed": completed, "cost_cap_hit": False},
+            }),
+            encoding="utf-8",
+        )
+    (status / "r-tier-R1-aws-call2-quality.md").write_text(
+        "Codex conclusion: NEAR_IDEAL", encoding="utf-8"
+    )
+    (status / "r_tier_review_log.md").write_text(
+        "| R1 | PROCESS_BLOCKER | $0.01 |\n| R1 | READY | $0.02 |\n",
+        encoding="utf-8",
+    )
+    rows = [
+        {
+            "test": "R1",
+            "call": 1,
+            "date": "2026-05-03T00:00:00Z",
+            "model": "claude-haiku-4-5",
+            "tokens_in": 100,
+            "tokens_out": 20,
+            "cache_hit_pct": 0.5,
+            "wallclock_s": 1.0,
+            "tool_calls": 2,
+            "completed": False,
+            "cost_usd": 0.01,
+            "verdict": "PROCESS_BLOCKER",
+        },
+        {
+            "test": "R1",
+            "call": 2,
+            "date": "2026-05-03T00:01:00Z",
+            "model": "claude-haiku-4-5",
+            "tokens_in": 100,
+            "tokens_out": 20,
+            "cache_hit_pct": 0.5,
+            "wallclock_s": 1.0,
+            "tool_calls": 2,
+            "completed": True,
+            "cost_usd": 0.02,
+            "verdict": "GENUINE_PASS",
+        },
+    ]
+    (status / "r_tier_metrics.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
         encoding="utf-8",
     )
 

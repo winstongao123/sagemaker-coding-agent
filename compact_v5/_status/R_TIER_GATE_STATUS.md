@@ -88,6 +88,17 @@ Completed and pushed:
   chat-text clarification instead of `ask_user`.
 - R19-U2: Stage 4 bundle call2 Phase C `GENUINE_PASS`,
   `r_tier_gate.py --test R19-U2` passed.
+- R19-U3: Stage 5 bundle call2 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R19-U3` passed. R14/R19-U3 process blocker did not
+  recur; one isolated `bash_cd_blocked` event remains a quality penalty, not a
+  blocker.
+- R19-U6: Stage 5 bundle call2 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R19-U6` passed.
+- R19-U7: Stage 5 bundle call2 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R19-U7` passed with `breaker_fired=true`.
+- R18-E7: Stage 5 bundle call2 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R18-E7` passed. Call1 diagnostic cap exceed remains
+  preserved; call2 passed under the $0.10 planned cap.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -108,6 +119,28 @@ has Claude-reviewed Phase A approval, allowed AWS/mock execution, phase C
 review, telemetry, quality evidence, metrics, and `r_tier_gate.py --test
 <TEST>` pass, and the open process-quality follow-ups are resolved or accepted
 by final review.
+
+## Stage 5 Call1 Diagnostic Stop And Call2 Resolution
+
+Stage 5 call1 ran on 2026-05-06 and stopped correctly:
+
+- R19-U3: diagnostic/non-ready spend `$0.1090`; artifact path mostly succeeded
+  but the R14 repeated failed tool-loop class recurred. Status:
+  `PROCESS_BLOCKER_LOCAL_FIX_PENDING_CLAUDE_REVIEW`.
+- R18-E7: diagnostic/non-ready spend `$0.1022`; exceeded the `$0.10` cap before
+  READY evidence. Status: `PROCESS_BLOCKER_LOCAL_FIX_PENDING_CLAUDE_REVIEW`.
+- R19-U6: functional member pass inside blocked bundle.
+- R19-U7: functional member pass inside blocked bundle with `breaker_fired=true`.
+
+No prior failed/non-ready spend may be deleted, hidden, or globally reset.
+The R14/R19-U3 process blocker was fixed locally, approved by Claude CLI, and
+verified by Stage 5 call2 on Haiku. Continue recurrence watch in R16 and later
+software-builder tests; any non-intentional repeated guard-class loop remains a
+matrix stop condition.
+
+Local blocker fix summary:
+
+- `compact_v5/_status/codex_reviews/r-tier-R14-R19-U3-process-blocker-fix-summary.md`
 
 ## Fixes landed in this hardening pass
 

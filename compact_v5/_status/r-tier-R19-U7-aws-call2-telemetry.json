@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "test": "R19-U7",
+  "call": 2,
+  "audit_log_path": "compact_v5\\_status\\r_tier_runtime\\R19-U7-call2-audit\\2026-05-06_21121782293c.jsonl",
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R19-U3+U6+U7+R18-E7-aws-call2.log",
+  "side_channel_path": "compact_v5\\_status\\r-tier-R19-U7-aws-call2-side-metrics.json",
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [
+        {
+          "name": "loop_bait",
+          "args_summary": "{'key': '[REDACTED]'}",
+          "args_hash": "840db6b720b8",
+          "user_approved": true,
+          "result_summary": "Error: deterministic repeated-call bait failure"
+        },
+        {
+          "name": "loop_bait",
+          "args_summary": "{'key': '[REDACTED]'}",
+          "args_hash": "840db6b720b8",
+          "user_approved": true,
+          "result_summary": "Error: deterministic repeated-call bait failure"
+        },
+        {
+          "name": "read_file",
+          "args_summary": "{'file_path': 'C:\\\\Users\\\\winst\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-winst\\\\pytest-433\\\\test_r19_u3_u6_u7_r18_e7_recov0\\\\r19_u7\\\\fallback_plan.md'}",
+          "args_hash": "cc9b6a8d7590",
+          "user_approved": true,
+          "result_summary": "[fallback_plan.md] Lines 1-1 of 1\n   1| After the repeated-call breaker fires, use fallback code SAFE-FALLBACK-77."
+        },
+        {
+          "name": "write_file",
+          "args_summary": "{'file_path': 'C:\\\\Users\\\\winst\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-winst\\\\pytest-433\\\\test_r19_u3_u6_u7_r18_e7_recov0\\\\r19_u7\\\\circuit_breaker_report.md', 'conten",
+          "args_hash": "c80ba1292a96",
+          "user_approved": true,
+          "result_summary": "Written 1,273 chars to C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-433\\test_r19_u3_u6_u7_r18_e7_recov0\\r19_u7\\circuit_breaker_report.md"
+        }
+      ],
+      "wallclock_s": 7.481,
+      "tokens_in": 11,
+      "tokens_out": 886,
+      "cache_read_tokens": 33063,
+      "cache_write_tokens": 10507,
+      "cache_hit_pct": 0.7587,
+      "agent_text_chars": 511,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 4,
+    "REPEATED_calls": 1,
+    "per_tool": {
+      "loop_bait": 2,
+      "read_file": 1,
+      "write_file": 1
+    },
+    "unique_calls": 3
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": 0.7587,
+    "last_5_turns_avg_hit_pct": 0.7587,
+    "session_avg_hit_pct": 0.7587
+  },
+  "agent_attribution": {
+    "parent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0
+    },
+    "subagents": {},
+    "reviewers": {}
+  },
+  "failure_loop_events": [
+    {
+      "timestamp": "2026-05-06T03:35:47.365945",
+      "action": "tool_failure_recorded",
+      "tool_name": "loop_bait",
+      "args_hash": "98e2d329ec02",
+      "failure_count": 1,
+      "consecutive_failures": 1,
+      "result_summary": "Error: deterministic repeated-call bait failure"
+    },
+    {
+      "timestamp": "2026-05-06T03:35:48.372283",
+      "action": "tool_failure_recorded",
+      "tool_name": "loop_bait",
+      "args_hash": "98e2d329ec02",
+      "failure_count": 2,
+      "consecutive_failures": 2,
+      "result_summary": "Error: deterministic repeated-call bait failure"
+    },
+    {
+      "timestamp": "2026-05-06T03:35:49.229923",
+      "action": "tool_failure_loop_blocked",
+      "tool_name": "loop_bait",
+      "args_hash": "98e2d329ec02",
+      "failure_count": null,
+      "consecutive_failures": null,
+      "result_summary": "blocked third identical tool call"
+    }
+  ],
+  "outcome": {
+    "completed": true,
+    "stop_reason": "user_stop",
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 11,
+    "tokens_out_total": 886,
+    "cost_usd": 0.023,
+    "wallclock_s_total": 8.59,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 12,
+  "turns_seen": 1,
+  "breaker_fired": true
+}

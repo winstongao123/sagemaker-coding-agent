@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional
 
 from .registry import build_tool, register
 from . import _path_validation as path_security
+from . import _file_read_tracking as read_tracking
 from runtime.tool_surface import (
     FileTooLargeError,
     read_file_in_range,
@@ -170,6 +171,7 @@ def _read_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
             pass
 
     if not content:
+        read_tracking.mark_read(abs_path, content)
         return f"[{os.path.basename(abs_path)}] (empty file — no content to display)"
 
     lines = content.split("\n")
@@ -177,6 +179,7 @@ def _read_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
 
     # v4 large-file guard: >500 lines + no explicit offset/limit → first 50 + last 30
     if total_lines > 500 and offset == 0 and limit >= 2000:
+        read_tracking.mark_read(abs_path, content)
         head = lines[:50]
         tail = lines[-30:]
         head_text = "\n".join(f"{i + 1:4}| {ln[:2000]}" for i, ln in enumerate(head))
@@ -204,6 +207,7 @@ def _read_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] 
     if offset + limit < total_lines:
         header += f" [use offset={offset + limit} for more]"
 
+    read_tracking.mark_read(abs_path, content)
     return f"{header}\n{body}"
 
 

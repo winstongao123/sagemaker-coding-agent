@@ -15,7 +15,10 @@ Execution loop: `compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LO
 Every test must pass worker preflight, Claude Phase A design review, explicit
 spend approval, AWS execution, metadata capture, worker post-run review, Claude
 Phase C review, and the fix/retry/escalation loop before it can count toward
-production readiness.
+production readiness. Passing means more than a correct final artifact: the
+test must also provide acceptable evidence for process quality, including
+efficient tool use, coding discipline, context/memory continuity, useful
+subagent/reviewer coordination, compaction/cache behavior, and cost control.
 
 ## Confidence Rule
 
@@ -31,9 +34,12 @@ true:
 5. This optimized AWS plan is Claude-reviewed and approved before spend.
 6. Each selected AWS software-writing scenario passes with required evidence.
 7. Telemetry shows acceptable tool, token, cache, compaction, subagent/reviewer,
-   and recovery behavior.
-8. Final independent review approves the complete code, docs, test, telemetry,
-   and AWS evidence package.
+   memory/status/checkpoint, and recovery behavior.
+8. Any functional pass with weak process quality is tracked in
+   `_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md` and is resolved, explicitly
+   accepted, or promoted to a blocker before the final readiness claim.
+9. Final independent review approves the complete code, docs, test, telemetry,
+   process-quality, and AWS evidence package.
 
 ## Optimization Principle
 
@@ -41,6 +47,13 @@ Use small zero-cost tests to catch simple breakage first.
 Use AWS only for tests that reveal multiple production qualities in one run.
 Do not duplicate a simple local assertion in a separate AWS test unless the
 real model behavior is the point being evaluated.
+
+An optimized run must not hide process defects behind a correct output. If a
+test passes functionally but shows repeated failed tool calls, poor coding
+discipline, lost status/memory, missing subagent/reviewer attribution, or
+uncontrolled token/cache/cost behavior, the pass may be genuine for the narrow
+artifact but it is not enough for final production readiness until the process
+issue is closed or explicitly accepted.
 
 ## AWS Software-Builder Matrix
 
@@ -76,6 +89,11 @@ misleading failure.
 Current caps remain intentionally small, but they are interpreted through a
 token-budget model at Phase A:
 
+The listed cap is the planned budget. The hard retry ceiling is the listed cap
+plus the user-approved 20% buffer (`cap * 1.20`). The buffer is active in the
+local R-tier gate and must preserve cumulative spend history; it must not be
+used to hide failed diagnostic calls or bypass a process-quality blocker.
+
 | Test | Cap | Phase A budget model |
 |---|---:|---|
 | R13 | $0.50 | 5 bounded tasks, max 1 model attempt per task plus one verification/synthesis turn. READY requires at least 4/5 passing tasks and no unrelated edits; 5/5 is the target. |
@@ -85,7 +103,8 @@ token-budget model at Phase A:
 Bundle policy:
 
 - Stage 4 can bundle R19-U1+R19-U2. Cap is the sum: $0.40.
-- Stage 5 can bundle R19-U3+R19-U6+R19-U7+R18-E7. Cap is the sum: $1.00.
+- Stage 5 can bundle R19-U3+R19-U6+R19-U7+R18-E7. Cap is the sum: $1.00,
+  buffered hard ceiling $1.20.
 - Stage 6 can bundle R3+R19-U4+R19-U5. Cap is the sum: $1.20.
 - Bundled runs may share one raw log, but must write per-test telemetry,
   metrics, quality rows, and review-log rows.
@@ -109,6 +128,9 @@ Every selected AWS run must write:
 - telemetry with `tool_call_summary`, token counts, cache read/write counts,
   model id, cost, retries, repeated-call signals, and parent/subagent/reviewer
   attribution when delegation or review agents are used;
+- process-quality evidence that separately grades artifact correctness, coding
+  quality, tool/path efficiency, wasted calls, context/memory continuity,
+  subagent/reviewer usefulness, and recovery discipline;
 - compaction/cache evidence when the scenario exercises long context;
 - large-output evidence when a scenario exercises R18-E7, including
   `sageagent-result://` refs, replayed content checks, artifact metadata, and
@@ -156,6 +178,42 @@ Stop AWS execution and return to implementation/review if:
   uncontrolled repeated calls, lost status, lost memory, wasteful subagent or
   reviewer use, missing reviewer/subagent token attribution, or unexplained
   unrelated edits.
+- a pattern like the R14 tool-failure loop recurs in R19-U7, R16, R19-U10, or
+  any later software-builder run without a clear fix or user-accepted
+  disposition.
+
+2026-05-06 Stage 5 stop:
+
+- Stage 5 call1 correctly stopped after R19-U3 reproduced the R14 repeated
+  failed tool-loop class and R18-E7 exceeded its $0.10 cap.
+- Before any additional AWS call, the R14/R19-U3 process blocker must be fixed
+  locally and Claude CLI must approve the fix/retry path from disk.
+- R14/R19-U3 retries must remain on Haiku 4.5 AU. Do not switch them to Sonnet
+  to bypass the process-quality blocker.
+- The retry must prove acceptable Haiku tool use: visible search/read before
+  edit where applicable, reviewed tool count and failure-loop telemetry, no
+  repeated non-intentional read-before-edit/write guard loop, and no repeated
+  failed exec recovery loop. Final artifact correctness is insufficient by
+  itself.
+- Prior failed/non-ready costs remain diagnostic spend. Do not delete, hide, or
+  reset them. Any retry allowance must be explicit to the affected item and
+  preserve cumulative history.
+
+2026-05-06 Stage 5 call2 resolution:
+
+- Claude approved the Haiku-only fix/retry path and Phase A call2.
+- Stage 5 call2 passed on Haiku:
+  - R19-U3: $0.0501, `search_before_edit=true`, `process_quality_ok=true`,
+    no repeated guard/exec loop.
+  - R19-U6: $0.0175, malformed-output recovery.
+  - R19-U7: $0.0230, `breaker_fired=true`, exactly two actual bait calls.
+  - R18-E7: $0.0226, `result_replay_used=true`, under the original $0.10
+    planned cap.
+- Claude Phase C returned `GENUINE_PASS` and per-test gates passed.
+- R14 immediate rerun is not required; keep recurrence watch active for R16,
+  R19-U10, and later software-builder runs.
+- Next optimized stage is Stage 6: R3 + R19-U4 + R19-U5 subagent/reviewer
+  bundle, subject to fresh Phase A approval and AWS Budget/headroom check.
 
 ## Expected Confidence
 

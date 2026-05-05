@@ -504,7 +504,7 @@ def build_telemetry(
     agent_attr = _agent_attribution(side_channel)
     outcome = _parse_outcome_from_log(raw_log_path, side_channel)
 
-    return {
+    telemetry = {
         "schema_version": 1,
         "test": test,
         "call": call,
@@ -522,6 +522,9 @@ def build_telemetry(
         "events_seen": len(events),
         "turns_seen": len(turns),
     }
+    if side_channel and side_channel.get("breaker_fired") is not None:
+        telemetry["breaker_fired"] = bool(side_channel.get("breaker_fired"))
+    return telemetry
 
 
 def main() -> int:
