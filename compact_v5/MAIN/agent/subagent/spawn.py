@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .env import build_env_details
 from .handoff import build_handoff_block
@@ -63,6 +64,102 @@ class SubagentResult:
     error: Optional[str] = None
     agent_type: str = "general"
     depth: int = 1
+    child_session_id: str = ""
+    duration_ms: int = 0
+    heartbeat_count: int = 0
+    heartbeat_last_at: str = ""
+    timeout_seconds: Optional[int] = None
+    timed_out: bool = False
+    files_changed: List[str] = field(default_factory=list)
+    token_delta: Dict[str, Any] = field(default_factory=dict)
+    recovery_hint: str = ""
+
+    def to_envelope(self) -> Dict[str, Any]:
+        return {
+            "schema": "sageagent.subagent_result.v1",
+            "agent_type": self.agent_type,
+            "role": self.agent_type,
+            "depth": self.depth,
+            "child_session_id": self.child_session_id,
+            "stop_reason": self.stop_reason,
+            "turns_used": self.turns_used,
+            "duration_ms": self.duration_ms,
+            "heartbeat": {
+                "count": self.heartbeat_count,
+                "last_at": self.heartbeat_last_at,
+                "timeout_seconds": self.timeout_seconds,
+                "timed_out": self.timed_out,
+            },
+            "files_changed": list(self.files_changed),
+            "tokens": dict(self.token_delta),
+            "cost_usd": self.token_delta.get("cost_usd", 0.0),
+            "cache": {
+                "read_tokens": self.token_delta.get("cache_read_tokens", 0),
+                "write_tokens": self.token_delta.get("cache_write_tokens", 0),
+            },
+            "error": self.error or "",
+            "recovery_hint": self.recovery_hint,
+            "summary": self.text[:1000],
+        }
+
+
+def _utc_now() -> str:
+    from datetime import datetime
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _token_delta(before: Dict[str, Any], after: Dict[str, Any], agent_type: str) -> Dict[str, Any]:
+    before_in = before.get("subagent_input_tokens", {}) or {}
+    before_out = before.get("subagent_output_tokens", {}) or {}
+    before_read = before.get("subagent_cache_read_tokens", {}) or {}
+    before_write = before.get("subagent_cache_write_tokens", {}) or {}
+    before_cost = before.get("subagent_cost_usd", {}) or {}
+    after_in = after.get("subagent_input_tokens", {}) or {}
+    after_out = after.get("subagent_output_tokens", {}) or {}
+    after_read = after.get("subagent_cache_read_tokens", {}) or {}
+    after_write = after.get("subagent_cache_write_tokens", {}) or {}
+    after_cost = after.get("subagent_cost_usd", {}) or {}
+    return {
+        "input_tokens": int(after_in.get(agent_type, 0)) - int(before_in.get(agent_type, 0)),
+        "output_tokens": int(after_out.get(agent_type, 0)) - int(before_out.get(agent_type, 0)),
+        "cache_read_tokens": int(after_read.get(agent_type, 0)) - int(before_read.get(agent_type, 0)),
+        "cache_write_tokens": int(after_write.get(agent_type, 0)) - int(before_write.get(agent_type, 0)),
+        "cost_usd": round(
+            float(after_cost.get(agent_type, 0.0)) - float(before_cost.get(agent_type, 0.0)),
+            6,
+        ),
+    }
+
+
+def _extract_files_changed(messages: List[Any]) -> List[str]:
+    changed: List[str] = []
+    for msg in messages or []:
+        if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        blocks = content if isinstance(content, list) else []
+        for block in blocks:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            if block.get("name") not in {"write_file", "edit_file", "notebook_edit"}:
+                continue
+            args = block.get("input") if isinstance(block.get("input"), dict) else {}
+            path = args.get("file_path") or args.get("filepath") or args.get("notebook_path")
+            if isinstance(path, str) and path:
+                changed.append(path)
+    return sorted(dict.fromkeys(changed))
+
+
+def _recovery_hint(stop_reason: str, error: Optional[str]) -> str:
+    if stop_reason in {"end_turn", ""} and not error:
+        return "completed"
+    if stop_reason in {"budget_exhausted", "max_turns"}:
+        return "parent_should_resume_or_spawn_followup_with_previous_summary"
+    if stop_reason == "parent_context_mutated":
+        return "parent_state_was_preserved_by_recovery_guard"
+    if error:
+        return "parent_should_inspect_error_and_retry_or_handle_locally"
+    return "parent_should_review_subagent_envelope"
 
 
 def _new_child_engine(parent_engine: Any, max_turns: int, agent_type: str = "general") -> Any:
@@ -146,6 +243,7 @@ def spawn_subagent(
             ),
             agent_type=agent_type,
             depth=child_depth,
+            recovery_hint="parent_should_handle_locally_or_reduce_recursion",
         )
 
     # Validate prompt — empty prompt is a programming error in the caller.
@@ -157,6 +255,7 @@ def spawn_subagent(
             error="Error: prompt is required",
             agent_type=agent_type,
             depth=child_depth,
+            recovery_hint="parent_should_retry_with_non_empty_prompt",
         )
 
     # Validate agent type. The task tool already gates on this at the
@@ -176,6 +275,7 @@ def spawn_subagent(
             ),
             agent_type=agent_type,
             depth=child_depth,
+            recovery_hint="parent_should_retry_with_supported_agent_type",
         )
 
     # Block G — resolve the AgentType row for per-type max_turns / worktree
@@ -370,6 +470,15 @@ def spawn_subagent(
             _saved_workspace = None
 
     try:
+        from runtime.tokens import TOKENS as _TOKENS
+        _tokens_before = _TOKENS.get_stats()
+    except Exception:
+        _tokens_before = {}
+    _started = time.monotonic()
+    _heartbeat_count = 1
+    _heartbeat_last = _utc_now()
+
+    try:
         # The child runs synchronously to completion or budget exhaustion.
         result = child.run(
             user_message=p,
@@ -378,6 +487,8 @@ def spawn_subagent(
             plan_mode=plan_mode,
             output_fn=output_fn,
         )
+        _heartbeat_count += 1
+        _heartbeat_last = _utc_now()
     finally:
         # Always restore parent's in-context set, even if child raised.
         if _file_cache_saved is not None:
@@ -421,7 +532,20 @@ def spawn_subagent(
             child_messages=result.messages,
             agent_type=agent_type,
             depth=child_depth,
+            child_session_id=getattr(child, "session_id", ""),
+            duration_ms=int((time.monotonic() - _started) * 1000),
+            heartbeat_count=_heartbeat_count,
+            heartbeat_last_at=_heartbeat_last,
+            files_changed=_extract_files_changed(result.messages),
+            token_delta={},
+            recovery_hint="parent_state_was_preserved_by_recovery_guard",
         )
+
+    try:
+        from runtime.tokens import TOKENS as _TOKENS
+        _tokens_after = _TOKENS.get_stats()
+    except Exception:
+        _tokens_after = {}
 
     return SubagentResult(
         text=result.text,
@@ -431,4 +555,13 @@ def spawn_subagent(
         error=result.error,
         agent_type=agent_type,
         depth=child_depth,
+        child_session_id=getattr(child, "session_id", ""),
+        duration_ms=int((time.monotonic() - _started) * 1000),
+        heartbeat_count=_heartbeat_count,
+        heartbeat_last_at=_heartbeat_last,
+        timeout_seconds=None,
+        timed_out=result.stop_reason in {"max_turns", "budget_exhausted"},
+        files_changed=_extract_files_changed(result.messages),
+        token_delta=_token_delta(_tokens_before, _tokens_after, agent_type),
+        recovery_hint=_recovery_hint(result.stop_reason, result.error),
     )

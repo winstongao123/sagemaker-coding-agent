@@ -25,6 +25,7 @@ the parent's IterationBudget — see acceptance test
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional
 
 from .registry import build_tool, register
@@ -131,15 +132,35 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         plan_mode=bool(context.get("plan_mode", False)),
     )
 
+    envelope = json.dumps(result.to_envelope(), indent=2, sort_keys=True)
+    envelope_block = f"\n\n[subagent_result_envelope]\n{envelope}"
+    try:
+        from runtime.audit import AUDIT as _AUDIT
+        _AUDIT.log(
+            session_id=str(context.get("session_id", "")) if isinstance(context, dict) else "",
+            action="subagent_result",
+            tool_name="task",
+            parameters={
+                "subagent_type": subagent_type,
+                "description": description,
+                "child_session_id": result.child_session_id,
+            },
+            result_summary=json.dumps(result.to_envelope(), sort_keys=True)[:500],
+            user_approved=True,
+        )
+    except Exception:
+        pass
+
     if result.error and result.stop_reason in ("depth_exceeded", "invalid_args"):
-        return result.error
+        return result.error + envelope_block
     if result.stop_reason in ("budget_exhausted", "max_turns", "context_overflow"):
         # Surface partial work + reason so the parent can react.
         return (
             f"[Sub-agent stopped: {result.stop_reason}]\n"
             f"{result.text or '(no partial output)'}"
+            f"{envelope_block}"
         )
-    return result.text or "(sub-agent returned no text)"
+    return (result.text or "(sub-agent returned no text)") + envelope_block
 
 
 def _register():

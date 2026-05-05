@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT READY_FOR_CLOSE_COMMIT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -416,8 +416,19 @@ Current SOFTWARE-RESULTS state:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
 - Worker applied Claude's non-blocking LOW storage-disabled metadata cleanup
   and reran focused tests plus py_compile.
-- Next action: specific-file SOFTWARE-RESULTS close commit and push.
+- Specific-file SOFTWARE-RESULTS close commit `743147f4b375a0b42aaf805f60a0fef6e36c2ffe` was pushed to `sageagent/v5-build`; remote verification returned the same SHA. Next action: commit/push SOFTWARE-SUBAGENT, then continue `SOFTWARE-COMPACT-TELEMETRY`.
 
+
+Current SOFTWARE-SUBAGENT state:
+
+- Manual rows: 4. Shipped rows: 4. Blocking rows after Claude: 0.
+- Added `sageagent.subagent_result.v1` structured envelopes for direct subagent results and `task` tool returns.
+- Envelope covers role/agent type, child session, stop reason, turns, duration, heartbeat/timed-out metadata, files changed, token/cost/cache deltas, error/recovery hint, and bounded summary.
+- Local tests passed: SOFTWARE-SUBAGENT focused suite `3 passed`; subagent regression suite `16 passed`; py_compile PASS.
+- Original-block scope audits remain clean: summary and strict both report `TOTAL_SHIP_BLOCKING_ROWS: 0`.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Non-blocking findings were recorded for null timeout seconds under the synchronous contract, start/end-only heartbeat, and bash mutation visibility in `files_changed`.
+- Next action: specific-file close commit and push to `sageagent/v5-build`, then continue `SOFTWARE-COMPACT-TELEMETRY`.
 Previous Block B state:
 
 - Local implementation and audit artifacts are complete for 16/16 rows.
