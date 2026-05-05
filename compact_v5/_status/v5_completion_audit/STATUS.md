@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, AND G CLOSED/PUSHED; BLOCK G2 NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, AND G2 CLOSED/PUSHED; BLOCK G3 NEXT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -204,7 +204,12 @@ Current Block G state:
 - Remote verification succeeded:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `5aa618887521ea0669c1e34e3720f0102fc5a317`.
-- Next action: continue Block G2 from files.
+- Block G2 specific-file close commit was created and pushed to
+  `sageagent/v5-build`: `f59376040c7c3f3238d6a3a9a0a8ca8c37575188`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `f59376040c7c3f3238d6a3a9a0a8ca8c37575188`.
+- Next action: continue Block G3 from files.
 
 Previous Block B state:
 
