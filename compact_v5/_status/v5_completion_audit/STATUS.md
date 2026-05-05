@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS THROUGH J CLOSED/PUSHED EXCEPT BLOCK 0 APPROVED/PENDING PUSH; SOFTWARE-* QUEUE NEXT AFTER BLOCK 0 PUSH; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION NEXT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -327,8 +327,12 @@ Current Block 0 state:
 - Claude reviewed every row 0-1 through 0-10 individually and accepted the
   ADR-020 remap evidence for rows implemented in B, B+, C, and E+F.
 - No AWS/R-tier spend was run or claimed.
-- Next action: commit/push the specific Block 0 closure artifacts, verify the
-  remote SHA, then continue `SOFTWARE-ASYNC-DECISION` from files.
+- Block 0 specific-file close commit was created and pushed to
+  `sageagent/v5-build`: `d01d567df56baa3ce2a4f32b671e0dfb8b69c097`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `d01d567df56baa3ce2a4f32b671e0dfb8b69c097`.
+- Next action: continue `SOFTWARE-ASYNC-DECISION` from files.
 
 Previous Block B state:
 

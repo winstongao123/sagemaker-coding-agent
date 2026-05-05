@@ -13,7 +13,8 @@ Checklist:
   0 blockers.
 - [x] Run Claude confirmation review: iter1 `APPROVE`,
   `READY_FOR_BLOCK_CLOSE_REVIEW`.
-- [ ] Commit/push Block 0 closure artifacts after approval.
+- [x] Commit/push Block 0 closure artifacts after approval:
+  `d01d567df56baa3ce2a4f32b671e0dfb8b69c097`.
 
 Self-reflection checklist:
 

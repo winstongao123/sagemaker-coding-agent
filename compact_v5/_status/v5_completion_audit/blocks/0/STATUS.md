@@ -1,6 +1,6 @@
 # Block 0 Status
 
-Status: CLOSED_READY_FOR_GIT_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Expected rows from `SYNTHESIS_MASTER`: 10
@@ -8,22 +8,19 @@ Ledger rows: 10 canonical rows
 Current blocking-row count: 0 (`scope_audit.py --block 0 --strict`
 `READY_TO_REVIEW_CLOSE`)
 
-Current phase: CLOSURE_APPROVED
+Current phase: CLOSURE_PUSHED
 
-Current task: Commit and push Block 0 closure artifacts, then continue to
-`SOFTWARE-ASYNC-DECISION` from files.
+Current task: Continue to `SOFTWARE-ASYNC-DECISION` from files.
 
-Last completed action: Claude review iter1 returned `VERDICT: APPROVE` and
-`SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW` with 0 remaining ship-blocking
-rows.
+Last completed action: Block 0 close commit
+`d01d567df56baa3ce2a4f32b671e0dfb8b69c097` was pushed to
+`sageagent/v5-build` and verified with `git ls-remote`.
 
 Next 3 todo items:
 
-1. Run final Block 0 documentation/scope consistency gates.
-2. Commit only the Block 0 closure artifacts, prompt/review/log evidence, and
-   status/matrix updates.
-3. Push to `sageagent/v5-build` and verify the remote SHA before starting
-   `SOFTWARE-ASYNC-DECISION`.
+1. Reconstruct `SOFTWARE-ASYNC-DECISION` from the third-deep-scan sources.
+2. Create the `SOFTWARE-ASYNC-DECISION` manual ledger and local evidence.
+3. Run local gates and Claude review for the software-builder block.
 
 Local validation:
 
