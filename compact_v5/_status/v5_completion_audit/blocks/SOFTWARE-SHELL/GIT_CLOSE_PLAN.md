@@ -1,6 +1,6 @@
 # SOFTWARE-SHELL Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_CHECKPOINT
+Status: SPECIFIC_FILE_CHECKPOINT_PUSHED
 Date: 2026-05-05
 
 Specific-file candidate list:
@@ -15,3 +15,11 @@ Specific-file candidate list:
 - `compact_v5/_status/v5_completion_audit/logs/software-shell-*`
 - `compact_v5/_status/v5_completion_audit/ledger/CLAUDE_REVIEW_MATRIX.md`
 - `compact_v5/_status/v5_completion_audit/STATUS.md`
+
+Checkpoint evidence:
+
+- Commit: `1e38495f512fbfbc66a5cf22dd5f56730a68dcf6`
+- Branch: `v5-build`
+- Remote: `sageagent`
+- Verification: `git ls-remote sageagent refs/heads/v5-build` returned
+  `1e38495f512fbfbc66a5cf22dd5f56730a68dcf6`.
