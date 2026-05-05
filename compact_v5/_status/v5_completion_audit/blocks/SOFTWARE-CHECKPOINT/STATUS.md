@@ -1,13 +1,19 @@
 # SOFTWARE-CHECKPOINT Status
 
-Status: CLOSED_READY_FOR_GIT_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
-Current phase: CLOSURE_APPROVED
+Current phase: CLOSED_PUSHED
 
 Expected manual rows: 4
 Ledger rows: 4
 Current blocking-row count: 0
+
+Pushed checkpoint:
+
+- Commit: `4e0f2c3cc78f5a3dfcff2d8f0ba761da255596f9`
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build`
+  returned `4e0f2c3cc78f5a3dfcff2d8f0ba761da255596f9`.
 
 Local validation:
 
@@ -24,4 +30,4 @@ Latest usable Claude verdict:
 - Ship decision: `READY_FOR_BLOCK_CLOSE_REVIEW`
 - Remaining ship-blocking rows: 0
 
-Next action: commit/push specific SOFTWARE-CHECKPOINT files.
+Next action: continue `SOFTWARE-SHELL` from files.

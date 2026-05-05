@@ -1,6 +1,6 @@
 # SOFTWARE-CHECKPOINT Ledger
 
-Status: CLOSED_READY_FOR_GIT_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Manual software-builder ledger:
