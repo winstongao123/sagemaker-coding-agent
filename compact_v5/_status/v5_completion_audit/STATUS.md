@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, AND C CLOSED/PUSHED; BLOCK B LOCAL IMPLEMENTATION SCOPE-AUDIT CLEAN AND CLAUDE ITER8 APPROVED FROM MONITOR-SESSION REVIEW, NOW IN CLOSE CHECKPOINT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, AND B CLOSE COMMIT PUSHED; BLOCK B CHECKPOINT EVIDENCE UPDATE PENDING; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -103,8 +103,15 @@ Current Block B state:
   `reviews/block-b-claude-review-iter8.md`.
 - Iter8 returned `VERDICT: APPROVE`, `SHIP DECISION:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
-- Block B is in close checkpoint: documentation consistency pass, strict
-  scope audit, specific-file commit, push, then continue to next block.
+- Block B local close commit was created at
+  `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`.
+- Required push to `sageagent/v5-build` succeeded:
+  `c5be85f..315b9dd  v5-build -> v5-build`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`.
+- Block B checkpoint evidence update is pending specific-file commit and push,
+  then continue to Block B+.
 
 Worker-led loop docs:
 

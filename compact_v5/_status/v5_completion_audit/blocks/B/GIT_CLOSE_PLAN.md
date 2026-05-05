@@ -1,6 +1,6 @@
 # Block B Git Close Plan
 
-Status: READY_FOR_CLOSE_COMMIT
+Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
 Date: 2026-05-05
 
 Close preconditions:
@@ -93,15 +93,18 @@ Stage only this Block B-specific file list:
 ## Close Commit
 
 - Commit message: `v5/block-b: complete token accounting closure audit`
-- Commit SHA: pending close commit.
+- Commit SHA: `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`.
 - Push remote/branch: `sageagent v5-build`
-- Push result: pending close push.
-- Post-push git status: pending close push.
+- Push result: `c5be85f..315b9dd  v5-build -> v5-build`.
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build` returned
+  `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`.
+- Post-push git status: unrelated pre-existing dirty files remain unstaged;
+  Block B evidence files are modified for this checkpoint evidence update.
 
 ## Evidence Update Commit
 
 - Commit message: `v5/block-b: record checkpoint evidence`
-- Evidence commit SHA: pending evidence update.
+- Evidence commit SHA: pending evidence update commit.
 - Push remote/branch: `sageagent v5-build`
 - Push result: pending evidence push.
 - Post-push git status: pending evidence push.

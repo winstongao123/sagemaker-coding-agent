@@ -56,7 +56,7 @@ SHIP_BLOCKING_ROWS: 0
 
 ## Git Evidence
 
-Pending Block B close checkpoint. No tag was created.
+Block B close commit: `315b9ddf25bbe7ff17dc4428265f5ba89b63a9a7`; pushed to `sageagent/v5-build`. No tag was created.
 
 ## Open Risk
 
