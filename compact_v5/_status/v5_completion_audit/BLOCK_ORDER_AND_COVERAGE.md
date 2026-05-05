@@ -21,18 +21,20 @@ Current mechanical totals from the audit script:
 TOTAL_EXPECTED_ROWS: 233
 ```
 
-Blocks A, E+F, L, N, K, T, and C are closed/pushed. The remaining audit rows are
-still ship-blocking until each block is ledgered, implemented or explicitly
-user-dispositioned, Claude-reviewed, and pushed.
+Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, and I are closed/pushed. Block G
+has complete local scope coverage and is waiting for Claude row-by-row closure
+review. The remaining audit rows are still ship-blocking until each block is
+ledgered, implemented or explicitly user-dispositioned, Claude-reviewed, and
+pushed.
 
-Latest post-Block-C summary:
+Latest current summary:
 
 ```text
 TOTAL_EXPECTED_ROWS: 233
-TOTAL_SHIP_BLOCKING_ROWS: 96
+TOTAL_SHIP_BLOCKING_ROWS: 42
 ```
 
-Evidence: `compact_v5/_status/v5_completion_audit/logs/post-block-c-scope-audit-all-summary.log`.
+Evidence: fresh `scope_audit.py --all --summary` run on 2026-05-05.
 
 ## Redo Order
 
@@ -71,19 +73,19 @@ Rows currently parsed from `SYNTHESIS_MASTER.md`:
 |---|---:|---|
 | 0 | 10 | Audit rows exist in scope parser. |
 | A | 43 | Closed and pushed. |
-| B | 16 | Pending. |
-| B+ | 8 | Pending. |
+| B | 16 | Closed and pushed. |
+| B+ | 8 | Closed and pushed. |
 | C | 19 | Closed and pushed. |
-| C+ | 3 | Pending. |
-| D | 13 | Pending. |
+| C+ | 3 | Closed and pushed. |
+| D | 13 | Closed and pushed. |
 | E+F | 8 | Closed and pushed. |
-| F2 | 1 | Pending. |
-| G | 8 | Pending. |
+| F2 | 1 | Closed and pushed. |
+| G | 8 | Local scope clean; pending Claude closure review/push. |
 | G2 | 1 | Pending. |
 | G3 | 2 | Pending. |
 | H | 20 | Pending. |
 | H+ | 1 | Pending. |
-| I | 13 | Pending. |
+| I | 13 | Closed and pushed. |
 | L | 28 | Closed and pushed. |
 | M | 0 | No rows in current parser; still needs closure note/reviewer confirmation if protocol requires. |
 | N | 19 | Closed and pushed. |

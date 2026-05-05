@@ -700,3 +700,87 @@ def test_agent_max_turns_clamped_by_per_type_ceiling():
     assert result.stop_reason == "end_turn"
     # explore.max_turns = 20 ceiling — even though caller asked for 100.
     assert AGENT_TYPES["explore"].max_turns == 20
+
+
+def test_agent_memory_prompt_reads_project_scoped_memory(tmp_path):
+    """Block G-1 lock: load_agent_memory_prompt reads per-agent MEMORY.md."""
+    from subagent.agent_memory import (
+        get_agent_memory_entrypoint,
+        load_agent_memory_prompt,
+    )
+
+    entrypoint = get_agent_memory_entrypoint(
+        "review",
+        "project",
+        workspace=str(tmp_path),
+    )
+    os.makedirs(os.path.dirname(entrypoint), exist_ok=True)
+    with open(entrypoint, "w", encoding="utf-8") as f:
+        f.write("- Prefer narrow, file:line review findings.")
+
+    prompt = load_agent_memory_prompt(
+        "review",
+        "project",
+        workspace=str(tmp_path),
+    )
+
+    assert "Persistent Agent Memory" in prompt
+    assert "MEMORY.md" in prompt
+    assert "Prefer narrow" in prompt
+    assert ".claude" in prompt
+
+
+def test_is_agent_memory_path_rejects_traversal_and_siblings(tmp_path):
+    """Block G-2 lock: normalized commonpath checks block traversal."""
+    from subagent.agent_memory import is_agent_memory_path
+
+    inside = tmp_path / ".claude" / "agent-memory" / "review" / "MEMORY.md"
+    sibling = tmp_path / ".claude" / "agent-memory-other" / "review" / "MEMORY.md"
+    traversal = (
+        tmp_path
+        / ".claude"
+        / "agent-memory"
+        / "review"
+        / ".."
+        / ".."
+        / "outside"
+        / "MEMORY.md"
+    )
+
+    assert is_agent_memory_path(str(inside), workspace=str(tmp_path))
+    assert not is_agent_memory_path(str(sibling), workspace=str(tmp_path))
+    assert not is_agent_memory_path(str(traversal), workspace=str(tmp_path))
+
+
+def test_review_agent_loads_project_memory_prompt(tmp_path):
+    """Block G-1 runtime lock: review subagent gets scoped memory appendix."""
+    from core import QueryEngine
+    from core.budget import IterationBudget
+    from subagent.agent_memory import get_agent_memory_entrypoint
+    from subagent.spawn import spawn_subagent
+
+    entrypoint = get_agent_memory_entrypoint(
+        "review",
+        "project",
+        workspace=str(tmp_path),
+    )
+    os.makedirs(os.path.dirname(entrypoint), exist_ok=True)
+    with open(entrypoint, "w", encoding="utf-8") as f:
+        f.write("- Review memory loaded.")
+
+    client = _ScriptedClient([("text", "review done")])
+    parent = QueryEngine(
+        client=client,
+        max_turns=5,
+        budget=IterationBudget(max_iterations=10),
+    )
+    result = spawn_subagent(
+        parent_engine=parent,
+        prompt="review x",
+        agent_type="review",
+        workspace=str(tmp_path),
+    )
+
+    assert result.stop_reason == "end_turn"
+    assert client.calls
+    assert "Review memory loaded" in client.calls[0]["system"]

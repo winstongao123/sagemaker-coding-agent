@@ -64,6 +64,7 @@ class AgentType:
     one_shot: bool = False
     auto_load_skill: Optional[str] = None
     needs_worktree: bool = False
+    memory_scope: Optional[str] = None
     # Block G iter-2 (Codex finding #2 HIGH): allowed_tools allowlist enforced
     # at spawn time (was: prompt-only "Do NOT edit files" wording, which the
     # model could ignore). When None, the child gets the full registry.
@@ -154,6 +155,7 @@ AGENT_TYPES: dict = {
         max_turns=20,
         one_shot=True,
         allowed_tools=_READ_ONLY_TOOLS,
+        memory_scope="project",
     ),
     "fork": AgentType(
         name="fork",

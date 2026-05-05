@@ -327,6 +327,27 @@ def spawn_subagent(
                 "[subagent] verify-skill auto-load failed: %s", _sk_exc,
             )
 
+    # Block G-1/G-2: per-agent memory prompt for agent types with memory
+    # enabled. Keep this best-effort so a corrupt memory file never blocks a
+    # subagent from running.
+    if agent_def is not None and getattr(agent_def, "memory_scope", None):
+        try:
+            from .agent_memory import load_agent_memory_prompt
+            from runtime.config import CONFIG as _CFG_M
+
+            _memory_workspace = workspace or getattr(_CFG_M, "workspace", os.getcwd())
+            child_prompt = (
+                child_prompt
+                + "\n\n"
+                + load_agent_memory_prompt(
+                    agent_type=agent_type,
+                    scope=agent_def.memory_scope,
+                    workspace=_memory_workspace,
+                )
+            )
+        except Exception as _mem_exc:
+            logging.warning("[subagent] agent memory load failed: %s", _mem_exc)
+
     # Block G iter-2 (Codex finding #1 BLOCKER): swap CONFIG.workspace to
     # the worktree path so tools that read `CONFIG.workspace` (bash cwd,
     # security path checks, edit_file allowed-paths) actually run inside

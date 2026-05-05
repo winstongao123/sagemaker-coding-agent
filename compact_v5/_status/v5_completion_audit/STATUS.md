@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, AND I CLOSED/PUSHED; BLOCK G NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, F2, AND I CLOSED/PUSHED; BLOCK G READY_FOR_GIT_CLOSE; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -184,6 +184,23 @@ Current Block I state:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `2a136b4c25704eebf86f7337d5014925fbdbc154`.
 - Next action: continue Block G from files.
+
+Current Block G state:
+
+- G canonical scope has 8 expected rows: G-1 through G-8.
+- G block artifacts were created under
+  `compact_v5/_status/v5_completion_audit/blocks/G/`.
+- Historical G-1/G-2 deferral in PORT_LOG #090 was superseded by shipped
+  per-agent memory prompt/path-safety evidence in PORT_LOG #195.
+- Combined Block G/G2/subagent tests passed: `49 passed, 1 skipped`.
+- G py_compile passed.
+- `scope_audit.py --block G` reports 8 shipped rows and 0 ship-blocking rows.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Worker applied Claude LOW cleanup notes for G-8 ledger citation and ADR-031
+  stale G-2 prose.
+- Next action: specific-file Block G checkpoint commit and push to
+  `sageagent/v5-build`.
 
 Previous Block B state:
 

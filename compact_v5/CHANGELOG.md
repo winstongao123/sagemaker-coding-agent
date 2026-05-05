@@ -47,6 +47,33 @@ PORT_LOG/ADR evidence. No `/project-*` commands were added.
 
 - `py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_block_i.py -q`: 23 passed, 1 skipped.
 
+## v5.0.1-block-g completion-audit redo (2026-05-05)
+
+### Symptom
+
+Block G had no v5 completion-audit artifact folder or row ledger, and G-1/G-2
+were still described as a historical memory deferral even though the canonical
+scope treats them as Block G rows.
+
+### Root cause
+
+The earlier Block G work shipped subagent role, prompt, worktree, and budget
+behavior, but per-agent memory prompt loading and memory-path safety had been
+split away from the block without a user-approved disposition.
+
+### Fix
+
+Added `subagent/agent_memory.py` for scoped per-agent `MEMORY.md` prompt
+loading and normalized agent-memory path checks. Added `AgentType.memory_scope`
+and wired review-agent project memory prompt injection into `spawn_subagent`.
+Updated PORT_LOG/ADR evidence and created the Block G audit artifacts.
+
+### Verification
+
+- `py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_block_g.py compact_v5/MAIN/agent/tests/integration/test_block_g2.py compact_v5/MAIN/agent/tests/integration/test_subagent.py -q`: 49 passed, 1 skipped.
+- `py -3.11 -m py_compile ...`: PASS.
+- `py -3.11 compact_v5/_status/scripts/scope_audit.py --block G`: READY_TO_REVIEW_CLOSE, 8 shipped, 0 ship-blocking rows.
+
 ## v5.0.1-block-d completion-audit redo (2026-05-05)
 
 ### Symptom

@@ -8,6 +8,7 @@ Public surface (re-exported below):
 - spawn_subagent / SubagentResult — core spawn entry
 - AGENT_TYPES / get_agent_type / get_agent_prompt / ONE_SHOT_BUILTIN_AGENT_TYPES
 - create_worktree / cleanup_worktree
+- load_agent_memory_prompt / is_agent_memory_path
 - build_env_details / build_handoff_block
 """
 from __future__ import annotations
@@ -23,6 +24,15 @@ from .agent_types import (  # noqa: F401
     get_agent_prompt,
 )
 from .worktree import create_worktree, cleanup_worktree, WORKTREE_SUBDIR  # noqa: F401
+from .agent_memory import (  # noqa: F401
+    AGENT_MEMORY_SCOPES,
+    MEMORY_ENTRYPOINT,
+    get_agent_memory_dir,
+    get_agent_memory_entrypoint,
+    is_agent_memory_path,
+    load_agent_memory_prompt,
+    sanitize_agent_type_for_path,
+)
 from .fork import (  # noqa: F401
     build_forked_messages,
     build_child_message,
