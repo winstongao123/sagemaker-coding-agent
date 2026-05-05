@@ -1,25 +1,25 @@
 # Block I Status
 
-Status: READY_FOR_GIT_CLOSE
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Expected rows from `SYNTHESIS_MASTER`: 13
 Ledger rows: 13
 Current blocking-row count: 0 (`scope_audit.py --block I` READY_TO_REVIEW_CLOSE)
 
-Current phase: GIT_CLOSE_PREP
+Current phase: FINAL_CLOSE_ARTIFACTS
 
-Current task: Create and push the specific-file Block I close checkpoint.
+Current task: Continue to Block G from files.
 
-Last completed action: Claude review iter1 independently reconstructed I-1 through I-13, reran the combined Block I/D/skills tests (`66 passed, 1 skipped`) and `scope_audit.py --block I`, returned `VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, and reported 0 blockers.
+Last completed action: Block I close commit `2a136b4c25704eebf86f7337d5014925fbdbc154` was pushed to `sageagent/v5-build`; remote verification matched `2a136b4c25704eebf86f7337d5014925fbdbc154`.
 
 Latest usable Claude verdict: `reviews/block-i-claude-review-iter1.md` APPROVE / READY_FOR_BLOCK_CLOSE_REVIEW
 
 Next 3 todo items:
 
-1. Run final local scope/doc consistency checks.
-2. Stage only the Block I specific file list plus already-approved F2 status cleanup.
-3. Commit and push Block I to `sageagent/v5-build`, then update git evidence.
+1. Continue Block G from files.
+2. Do not reopen Block I unless strict audit, Claude final review, or optimized AWS/local evidence identifies a concrete I gap.
+3. Preserve Block I evidence in final all-block review.
 
 Claude review state: APPROVED_ZERO_BLOCKERS
 

@@ -12,7 +12,7 @@ Checklist:
 - [x] Run fresh `scope_audit.py --block I`.
 - [x] Run Claude independent row-by-row review.
 - [x] Update artifacts with final verdict.
-- [ ] Update artifacts with git checkpoint.
+- [x] Update artifacts with git checkpoint.
 
 Self-review notes:
 
@@ -20,3 +20,4 @@ Self-review notes:
 - Block I adds no `/project-*` commands.
 - No AWS/R-tier test has been run.
 - Claude iter1 approved all 13 rows with 0 blockers.
+- Specific-file close commit `2a136b4c25704eebf86f7337d5014925fbdbc154` was pushed to `sageagent/v5-build`.

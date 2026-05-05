@@ -1,6 +1,6 @@
 # Block I Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_COMMIT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Target remote/branch:
@@ -34,4 +34,12 @@ Current gate state:
 - Tests: PASS (`66 passed, 1 skipped`; py_compile PASS).
 - Scope audit: PASS (`READY_TO_REVIEW_CLOSE`, 13 shipped, 0 blockers).
 - Claude review: PASS (`VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`).
-- Git evidence: pending close commit SHA.
+- Git evidence: close commit pushed and remote verified.
+
+Close commit:
+
+- Message: `Close block I skill audit`
+- Commit SHA: `2a136b4c25704eebf86f7337d5014925fbdbc154`
+- Push: `sageagent/v5-build`
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build` returned `2a136b4c25704eebf86f7337d5014925fbdbc154`
+- Tag: none created.
