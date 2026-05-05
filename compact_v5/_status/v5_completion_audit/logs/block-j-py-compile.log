@@ -1,0 +1,2 @@
+py -3.11 -m py_compile compact_v5/MAIN/agent/tests/integration/test_block_j_ship_gate.py compact_v5/_rebuild_zip.py compact_v5/verify_ship_zip.py
+PASS
