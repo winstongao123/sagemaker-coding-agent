@@ -19,7 +19,7 @@ PORT_LOG: #031.
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from core import IterationBudget, QueryEngine
 from core.query_engine import QueryResult
@@ -55,6 +55,38 @@ def _load_agent_status_text() -> Optional[str]:
     if len(text) > 8000:
         text = text[:8000] + "\n\n…[truncated; AGENT_STATUS.md exceeds 8 KB]"
     return text
+
+
+def _load_agent_memory_text() -> Optional[str]:
+    """Return the contents of `<workspace>/memory.md`, or None."""
+    import os
+    from runtime.config import CONFIG
+    memory_path = os.path.join(CONFIG.workspace, "memory.md")
+    if not os.path.isfile(memory_path):
+        return None
+    try:
+        with open(memory_path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    text = text.strip()
+    if not text:
+        return None
+    if len(text) > 8000:
+        text = text[:8000] + "\n\n...[truncated; memory.md exceeds 8 KB]"
+    return text
+
+
+def _load_agent_state_context_blocks() -> List[str]:
+    """Load fresh durable status/memory context for a top-level turn."""
+    blocks: List[str] = []
+    status_text = _load_agent_status_text()
+    if status_text:
+        blocks.append("## Handoff: AGENT_STATUS\n\n" + status_text)
+    memory_text = _load_agent_memory_text()
+    if memory_text:
+        blocks.append("## Persistent Memory: memory.md\n\n" + memory_text)
+    return blocks
 
 
 class Agent:
@@ -111,7 +143,8 @@ class Agent:
         self._plan_mode = bool(plan_mode)
         self._thinking_enabled = bool(thinking_enabled)
         self._thinking_budget = int(thinking_budget)
-        # Block B+: AGENT_STATUS auto-load runs once on the first run() call.
+        # Historical B+ state retained for compatibility with tests that
+        # inspect the attribute; SOFTWARE-STATE refreshes context per run.
         self._agent_status_loaded = False
         self._agent_status_text: Optional[str] = None
 
@@ -130,15 +163,17 @@ class Agent:
         from prompt import build_system_prompt, CACHE_BOUNDARY
         from tools import all_registered
 
-        # Block B+: AGENT_STATUS auto-load on first run() call. Reads
-        # `<workspace>/AGENT_STATUS.md` (or CONFIG.status_doc) and
-        # appends it to the dynamic tail of the system prompt so the
-        # agent picks up handoff context from a previous session.
-        # Reads file ONCE per Agent instance (idempotent).
-        if not self._agent_status_loaded and self._system_prompt is None:
+        state_blocks: List[str] = []
+        if self._system_prompt is None:
             try:
-                self._agent_status_text = _load_agent_status_text()
+                state_blocks = _load_agent_state_context_blocks()
+                self._agent_status_text = (
+                    state_blocks[0].split("\n\n", 1)[1]
+                    if state_blocks and state_blocks[0].startswith("## Handoff")
+                    else None
+                )
             except Exception:
+                state_blocks = []
                 self._agent_status_text = None
             self._agent_status_loaded = True
 
@@ -146,20 +181,14 @@ class Agent:
         system_prompt = self._system_prompt or build_system_prompt(
             ctx={"workspace": getattr(_CFG_PROMPT, "workspace", None)}
         )
-        if self._agent_status_text:
+        if state_blocks:
+            state_text = "\n\n".join(state_blocks)
             # Append to the dynamic tail (after CACHE_BOUNDARY) so the
             # cache-aware prefix replay (Block G2 territory) still works.
             if CACHE_BOUNDARY in system_prompt:
-                system_prompt = (
-                    system_prompt + "\n\n## Handoff: AGENT_STATUS\n\n"
-                    + self._agent_status_text
-                )
+                system_prompt = system_prompt + "\n\n" + state_text
             else:
-                system_prompt = (
-                    system_prompt + CACHE_BOUNDARY
-                    + "\n\n## Handoff: AGENT_STATUS\n\n"
-                    + self._agent_status_text
-                )
+                system_prompt = system_prompt + CACHE_BOUNDARY + "\n\n" + state_text
         active_tools = list(tools) if tools is not None else all_registered()
 
         self._stop_requested = False  # reset between runs
@@ -171,6 +200,23 @@ class Agent:
         from runtime.config import CONFIG as _CFG
         _max_tokens = getattr(_CFG, "max_tokens", 4096)
         _temperature = getattr(_CFG, "temperature", 0.0)
+        status_memory: Dict[str, Any] = {}
+        try:
+            from runtime.state import STATE
+            from tools.todo import get_current_todos
+
+            status_memory = STATE.capture_status_memory()
+            STATE.append_journal(
+                "turn_start",
+                {
+                    "message_chars": len(message or ""),
+                    "todos": len(get_current_todos(load_disk=True)),
+                    "status_sha256": status_memory.get("status", {}).get("sha256", ""),
+                    "memory_sha256": status_memory.get("memory", {}).get("sha256", ""),
+                },
+            )
+        except Exception:
+            pass
         result = self._engine.run(
             user_message=message,
             system_prompt=system_prompt,
@@ -181,7 +227,34 @@ class Agent:
             thinking_budget=self._thinking_budget,
             max_tokens=_max_tokens,
             temperature=_temperature,
+            prompt_cache_now=bool(state_blocks),
         )
+        try:
+            from runtime.state import STATE
+            from runtime.tokens import TOKENS
+            from tools.todo import get_current_todos
+
+            STATE.save_turn_recovery(
+                messages=result.messages,
+                todos=get_current_todos(load_disk=True),
+                token_stats=TOKENS.get_stats(),
+                status_memory=status_memory or STATE.capture_status_memory(),
+                result={
+                    "stop_reason": result.stop_reason,
+                    "turns_used": result.turns_used,
+                    "text_chars": len(result.text or ""),
+                },
+            )
+            STATE.append_journal(
+                "turn_finish",
+                {
+                    "stop_reason": result.stop_reason,
+                    "turns_used": result.turns_used,
+                    "messages": len(result.messages),
+                },
+            )
+        except Exception:
+            pass
         return result
 
     def stop(self) -> None:

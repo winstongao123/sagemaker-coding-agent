@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE APPROVED/PENDING PUSH; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -348,6 +348,21 @@ Current SOFTWARE-ASYNC-DECISION state:
   refs/heads/v5-build` returned
   `710f8d3e5f9740788d8802986f5a5c147f0c2c84`.
 - Next action: continue `SOFTWARE-STATE` from files.
+
+Current SOFTWARE-STATE state:
+
+- Manual rows: 5. Shipped rows: 5. Blocking rows before Claude: 0.
+- Implemented durable workspace state for todos, status/memory capture, turn
+  journal, and last-turn recovery.
+- `/save` and `/resume` now preserve todos and status/memory recovery metadata.
+- Top-level `Agent.run()` refreshes `AGENT_STATUS.md` and `memory.md` on every
+  default-prompt turn.
+- Local tests passed: SOFTWARE-STATE focused suite `4 passed`; related B+
+  regressions `4 passed`; py_compile PASS.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Next action: commit/push the specific SOFTWARE-STATE files, verify remote
+  SHA, then continue `SOFTWARE-CHECKPOINT`.
 
 Previous Block B state:
 

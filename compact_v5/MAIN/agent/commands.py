@@ -328,13 +328,33 @@ def _restore_messages_to_ctx(
 
 def cmd_save(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
     from runtime.session import SESSIONS
+    from runtime.state import STATE
     from runtime.tokens import TOKENS
+    from tools.todo import get_current_todos
 
     title = args.strip() or "Saved Session"
+    messages = _messages_from_ctx(ctx)
+    _maybe_extract_memory_on_save(ctx, messages)
+    status_memory = STATE.capture_status_memory()
+    todos = get_current_todos(load_disk=True)
     session = SESSIONS.create(title=title)
-    session.messages = _messages_from_ctx(ctx)
+    session.messages = messages
+    session.todos = todos
     session.metadata["tokens_stats"] = TOKENS.get_stats()
+    session.metadata["status_memory"] = status_memory
+    session.metadata["recovery"] = {
+        "todos_path": str(STATE.todos_path),
+        "journal_path": str(STATE.journal_path),
+        "last_turn_path": str(STATE.recovery_path),
+    }
     SESSIONS.save(session)
+    STATE.save_turn_recovery(
+        messages=messages,
+        todos=todos,
+        token_stats=TOKENS.get_stats(),
+        status_memory=status_memory,
+        result={"command": "save", "session_id": session.id},
+    )
     return CommandResult(
         text=f"Saved session {session.id} ({len(session.messages)} messages).",
         side_effect=f"session_saved:{session.id}",
@@ -343,7 +363,9 @@ def cmd_save(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
 
 def cmd_resume(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
     from runtime.session import SESSIONS
+    from runtime.state import STATE
     from runtime.tokens import TOKENS
+    from tools.todo import restore_todos
 
     session_id = args.strip()
     if not session_id:
@@ -352,21 +374,64 @@ def cmd_resume(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult
     if session is None:
         return CommandResult(text=f"Session not found: {session_id}")
     _restore_messages_to_ctx(ctx, session.messages)
+    restore_todos(session.todos or [], persist=True)
     token_stats = session.metadata.get("tokens_stats")
+    STATE.append_journal(
+        "resume",
+        {
+            "session_id": session.id,
+            "messages": len(session.messages),
+            "todos": len(session.todos or []),
+            "has_status_memory": isinstance(
+                session.metadata.get("status_memory"), dict
+            ),
+        },
+    )
     if isinstance(token_stats, dict):
         TOKENS.restore(token_stats)
     else:
         return CommandResult(
             text=(
-                f"Resumed session {session.id} ({len(session.messages)} messages); "
+                f"Resumed session {session.id} "
+                f"({len(session.messages)} messages, {len(session.todos or [])} todos); "
                 "no token stats found."
             ),
             side_effect=f"session_resumed:{session.id}:messages_only",
         )
     return CommandResult(
-        text=f"Resumed session {session.id} ({len(session.messages)} messages).",
+        text=(
+            f"Resumed session {session.id} "
+            f"({len(session.messages)} messages, {len(session.todos or [])} todos)."
+        ),
         side_effect=f"session_resumed:{session.id}",
     )
+
+
+def _maybe_extract_memory_on_save(
+    ctx: Optional[Dict[str, Any]],
+    messages: List[Dict[str, Any]],
+) -> List[str]:
+    """Optional session-end memory extraction path.
+
+    The default extractor remains zero-cost and writes nothing unless tests or
+    callers provide `ctx["memory_extract_fn"]`. This wires the path without
+    making `/save` call an LLM.
+    """
+    from runtime.config import CONFIG
+
+    if not getattr(CONFIG, "enable_memory_extraction", False):
+        return []
+    try:
+        from memory import create_memory_extractor
+        extractor = create_memory_extractor(workspace=CONFIG.workspace)
+        extract_fn = ctx.get("memory_extract_fn") if ctx else None
+        return extractor.extract_memories(
+            messages,
+            extract_fn=extract_fn,
+            force=True,
+        )
+    except Exception:
+        return []
 
 
 # ============================================================
