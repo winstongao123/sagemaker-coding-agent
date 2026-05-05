@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, AND F2 CLOSED/PUSHED; BLOCK F2 CHECKPOINT EVIDENCE UPDATE ACTIVE; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, C+, D, AND F2 CLOSED/PUSHED; BLOCK I READY_FOR_GIT_CLOSE; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -157,8 +157,29 @@ Current Block F2 state:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
 - F2 specific-file close commit was created and pushed to `sageagent/v5-build`:
   `6e3a0dd86ec49b869bf3b579d52daac79603af27`.
-- Next action: push F2 checkpoint evidence update including the new
-  software-builder hardening docs/tests, then continue to Block I.
+- F2 evidence/software-builder checkpoint was pushed to `sageagent/v5-build`:
+  `2a099dff0501e14c1e9f31d765602261cf2868f1`.
+- Remote verification succeeded:
+  `git ls-remote sageagent refs/heads/v5-build` returned
+  `2a099dff0501e14c1e9f31d765602261cf2868f1`.
+- Next action: continue Block I from files.
+
+Current Block I state:
+
+- I canonical scope has 13 expected rows: I-1 through I-13.
+- I block artifacts were created under
+  `compact_v5/_status/v5_completion_audit/blocks/I/`.
+- I-12 frontmatter parser evidence was patched so the redo no longer relies on
+  the historical parser-deferral note.
+- Combined Block I/D/skills tests passed: `66 passed, 1 skipped`.
+- I py_compile passed.
+- `scope_audit.py --block I` reports 13 shipped rows and 0 ship-blocking rows.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Claude independently reran the combined Block I/D/skills tests
+  (`66 passed, 1 skipped`) and `scope_audit.py --block I`.
+- Next action: specific-file Block I checkpoint commit and push to
+  `sageagent/v5-build`.
 
 Previous Block B state:
 

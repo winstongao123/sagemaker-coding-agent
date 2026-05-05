@@ -1,6 +1,6 @@
 # Block F2 Status
 
-Status: CLOSED_PUSHED_EVIDENCE_UPDATE_ACTIVE
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Expected rows from `SYNTHESIS_MASTER`: 1
@@ -9,17 +9,17 @@ Current blocking-row count: 0 (`scope_audit.py --block F2` READY_TO_REVIEW_CLOSE
 
 Current phase: FINAL_CLOSE_ARTIFACTS
 
-Current task: Push F2 checkpoint evidence update with actual close commit SHA and software-builder pre-AWS hardening docs/tests.
+Current task: Continue to Block I from files.
 
-Last completed action: F2 specific-file close commit `6e3a0dd86ec49b869bf3b579d52daac79603af27` was pushed to `sageagent/v5-build`; remote verification matched the same SHA. The zero-cost software-project readiness suite was rerun after the new optimized AWS/revisit-plan checks and now reports `114 passed`.
+Last completed action: F2 close commit `6e3a0dd86ec49b869bf3b579d52daac79603af27` and evidence/software-builder checkpoint `2a099dff0501e14c1e9f31d765602261cf2868f1` were pushed to `sageagent/v5-build`; remote verification matched `2a099dff0501e14c1e9f31d765602261cf2868f1`.
 
 Latest usable Claude verdict: `reviews/block-f2-claude-review-iter1.md`
 
 Next 3 todo items:
 
-1. Commit and push F2 checkpoint evidence update with close SHA and 114-pass readiness evidence.
-2. Verify remote branch tip after evidence update push.
-3. Continue to Block I from files.
+1. Continue Block I from files.
+2. Do not reopen F2 unless strict audit, Claude final review, or optimized AWS/local evidence identifies a concrete F2 gap.
+3. Preserve F2 evidence in final all-block review.
 
 Claude review state: ITER1_APPROVED
 

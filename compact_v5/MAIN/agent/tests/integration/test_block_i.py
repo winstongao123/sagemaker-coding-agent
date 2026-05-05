@@ -440,6 +440,52 @@ def test_skill_debug_and_remember_skills_load(fresh_skills_dir):
     assert "debug" in model_invocable
 
 
+def test_frontmatter_parser_expands_brace_paths_and_coerces_description(fresh_skills_dir):
+    """Block I-12 lock: loose frontmatter path syntax is normalized.
+
+    Runnable's parser accepts practical skill metadata drift. v5 keeps a small
+    parser but must handle the high-value cases from SYNTHESIS_MASTER I-12:
+    bracketed list-ish scalars, brace expansion, quoted tokens, and non-string
+    descriptions.
+    """
+    from skills.manager import SkillManager
+
+    workspace, skills_dir = fresh_skills_dir
+    skill_dir = skills_dir / "brace-paths"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: brace-paths\n"
+        "description: 12345\n"
+        "paths: [src/{api,ui}/**, 'docs/*.md']\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    sm = SkillManager(workspace=str(workspace), skills_dir=str(skills_dir))
+    sm.discover()
+
+    info = sm._cache["brace-paths"]
+    assert info.description == "12345"
+    assert info.paths == ["src/api", "src/ui", "docs/*.md"]
+
+    assert sm.activate_for_path(str(workspace / "src" / "api" / "handler.py")) == [
+        "brace-paths"
+    ]
+
+
+def test_frontmatter_parser_preserves_brace_commas_in_csv_fields():
+    """Block I-12 lock: CSV splitting must not split inside brace groups."""
+    from skills.manager import SkillManager
+
+    assert SkillManager._split_csv_field("src/{one,two}/**, tests/*.py") == [
+        "src/one/**",
+        "src/two/**",
+        "tests/*.py",
+    ]
+
+
 # ============================================================
 # Codex iter-1 finding-lock tests
 # ============================================================

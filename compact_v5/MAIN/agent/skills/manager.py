@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -179,8 +180,8 @@ class SkillManager:
         try:
             text = fp.read_text(encoding="utf-8", errors="ignore")
             meta, content = self._parse_frontmatter(text)
-            name = meta.get("name", fp.parent.name)
-            desc = meta.get("description", "")
+            name = str(meta.get("name", fp.parent.name)).strip() or fp.parent.name
+            desc = str(meta.get("description", "")).strip()
             if not desc and content:
                 for line in content.split("\n"):
                     line = line.strip()
@@ -300,7 +301,53 @@ class SkillManager:
         return {"description": first[:120]}, text
 
     @staticmethod
-    def _split_csv_field(raw: Any) -> Optional[List[str]]:
+    def _split_preserving_braces(value: str) -> List[str]:
+        """Split CSV-ish frontmatter without splitting inside `{a,b}`."""
+        parts: List[str] = []
+        buf: List[str] = []
+        depth = 0
+        for ch in value:
+            if ch == "{":
+                depth += 1
+            elif ch == "}" and depth > 0:
+                depth -= 1
+            if ch == "," and depth == 0:
+                token = "".join(buf).strip()
+                if token:
+                    parts.append(token)
+                buf = []
+                continue
+            buf.append(ch)
+        token = "".join(buf).strip()
+        if token:
+            parts.append(token)
+        return parts
+
+    @staticmethod
+    def _clean_frontmatter_token(value: str) -> str:
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1].strip()
+        return value
+
+    @classmethod
+    def _expand_brace_token(cls, value: str) -> List[str]:
+        """Expand one simple brace group in path-like skill metadata."""
+        value = cls._clean_frontmatter_token(value)
+        match = re.search(r"\{([^{}]+)\}", value)
+        if not match:
+            return [value] if value else []
+        prefix = value[:match.start()]
+        suffix = value[match.end():]
+        expanded: List[str] = []
+        for choice in match.group(1).split(","):
+            choice = cls._clean_frontmatter_token(choice)
+            if choice:
+                expanded.append(f"{prefix}{choice}{suffix}")
+        return expanded
+
+    @classmethod
+    def _split_csv_field(cls, raw: Any) -> Optional[List[str]]:
         """Normalize a frontmatter list-shaped field to List[str] or None.
 
         Codex Phase-10 finding (HIGH): accept both forms — CSV scalar
@@ -310,18 +357,28 @@ class SkillManager:
         if raw is None:
             return None
         if isinstance(raw, list):
-            cleaned = [str(t).strip() for t in raw if str(t).strip()]
+            cleaned: List[str] = []
+            for t in raw:
+                cleaned.extend(cls._expand_brace_token(str(t)))
             return cleaned or None
         if isinstance(raw, str):
             s = raw.strip()
             if not s:
                 return None
-            return [t.strip() for t in s.split(",") if t.strip()]
+            if len(s) >= 2 and s[0] == "[" and s[-1] == "]":
+                s = s[1:-1].strip()
+            cleaned = []
+            for token in cls._split_preserving_braces(s):
+                cleaned.extend(cls._expand_brace_token(token))
+            return cleaned or None
         # Anything else — coerce to str then split
         s = str(raw).strip()
         if not s:
             return None
-        return [t.strip() for t in s.split(",") if t.strip()]
+        cleaned = []
+        for token in cls._split_preserving_braces(s):
+            cleaned.extend(cls._expand_brace_token(token))
+        return cleaned or None
 
     # ------------------------------------------------------------
     # discover() — verbatim from v4 + Phase 10 requires_tools parsing

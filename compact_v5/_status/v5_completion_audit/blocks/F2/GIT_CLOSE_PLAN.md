@@ -1,6 +1,6 @@
 # Block F2 Git Close Plan
 
-Status: CLOSE_COMMIT_PUSHED_EVIDENCE_UPDATE_PENDING
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Target remote/branch:
@@ -59,3 +59,11 @@ Evidence update scope:
 - Records the close SHA in the F2 ledger/status.
 - Refreshes the zero-cost software-project readiness result to `114 passed`.
 - Includes the optimized AWS validation plan, software-builder block revisit plan, and command-consolidated software-project workflow docs/tests as pre-AWS hardening evidence.
+
+Evidence update commit:
+
+- Message: `Update F2 evidence and software builder prep`
+- Commit SHA: `2a099dff0501e14c1e9f31d765602261cf2868f1`
+- Push: `sageagent/v5-build`
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build` returned `2a099dff0501e14c1e9f31d765602261cf2868f1`
+- Tag: none created.

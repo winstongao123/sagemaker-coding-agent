@@ -22,6 +22,31 @@ What changed, including the primary code or process artifact.
 Which local test, scope audit, reviewer verdict, or explicit no-test
 justification proves the fix.
 
+## v5.0.1-block-i completion-audit redo (2026-05-05)
+
+### Symptom
+
+Block I had no v5 completion-audit artifact folder or row ledger, and the
+existing ADR still described I-12 frontmatter parser improvements as deferred.
+
+### Root cause
+
+The earlier Block I implementation landed most skill discovery and activation
+behavior, but the redo process requires every canonical row to be ledgered and
+the no-deferrals rule means I-12 needed concrete parser/test evidence instead
+of a historical remap note.
+
+### Fix
+
+Extended `skills/manager.py` frontmatter normalization for I-12: bracketed
+CSV-like scalars, quoted tokens, one-level brace expansion for path globs, and
+non-string description coercion. Added Block I parser lock tests and updated
+PORT_LOG/ADR evidence. No `/project-*` commands were added.
+
+### Verification
+
+- `py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_block_i.py -q`: 23 passed, 1 skipped.
+
 ## v5.0.1-block-d completion-audit redo (2026-05-05)
 
 ### Symptom

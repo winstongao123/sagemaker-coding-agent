@@ -1266,6 +1266,8 @@ Codex iter-1 surfaced 2 HIGH + 1 LOW. All closed:
 ### Linked port-log rows
 - #104 — Block J real-AWS ship gate.
 
+Linked port-log update: #194 closes Block I-12 frontmatter parser improvements.
+
 ### Validation
 - 775 pass + 17 skipped (was 770 + 14 at end of Block T iter-6; +5 net
   pass: +5 Block J T4 tests; +3 net skip: 3 Block J T5 env-gated tests).
@@ -1494,6 +1496,11 @@ in Block J.
 - verify_ship_zip.py: PASS (127 files / 357.2 KB / 36%).
 
 ### Notes / not in scope here
+Completion-audit update on 2026-05-05: the old I-12 parser-deferral note below
+is superseded by PORT_LOG #194 and current Block I tests. Runnable's inline
+shell-command execution from skill markdown remains intentionally out of scope
+because v5 treats skills as text-only context in the Bedrock/SageMaker runtime.
+
 - Daemon-thread + heartbeat integration with the actual chat() call
   is wired in Block J (real-AWS gate) where the long-running call
   context is naturally available.
@@ -2218,7 +2225,7 @@ commands embedded in skill markdown bodies. v5's hard constraints #10
 is no path through which `${CLAUDE_SKILL_DIR}` substitution can reach
 a shell, so no R9 #26 LOW-priority security risk applies.
 
-#### 6. Block I-12 scoped to minimum
+#### 6. Block I-12 scoped to minimum (superseded by completion-audit redo)
 The full Runnable frontmatter parser improvement set (auto-quote /
 brace-expand / coerce desc / R8 #24 #50) is ~150 LOC. v5 Phase 10's
 parser already handles CSV scalar + YAML list forms (the two shapes
@@ -2227,6 +2234,13 @@ expand the parser — Block N (where dynamic-section + AGENTS.md ports
 land) is the architectural fit for further frontmatter expansion if
 the existing skill set ever needs it. Documented as a remap row in
 the PORT_LOG.
+
+Completion-audit update on 2026-05-05: I-12 is no longer deferred.
+`skills/manager.py` now covers the high-value parser drift from
+SYNTHESIS_MASTER I-12 without adding shell execution or a heavyweight YAML
+dependency: bracketed CSV-like scalars, simple quoted tokens, one-level brace
+expansion for path globs, and non-string `description` coercion. See PORT_LOG
+#194 and the Block I redo tests.
 
 #### 7. Bundled debug/remember skills
 Two new SKILL.md files under `skills/debug/` and `skills/remember/`:
@@ -2268,9 +2282,9 @@ Two new SKILL.md files under `skills/debug/` and `skills/remember/`:
   test_skill_manager.py / test_skills.py all green.
 
 ### Notes / not in scope here
-- Frontmatter parser improvements (I-12 R8 #24 #50) deferred to Block
-  N along with the dynamic-section / AGENTS.md infrastructure where it
-  architecturally fits.
+- Historical I-12 parser deferral is superseded by completion-audit row
+  #194: Block I now covers the high-value parser drift without adding
+  shell execution or a heavyweight YAML dependency.
 - write_file.py was NOT given the activate_for_path hook this Block
   (only edit_file.py). write_file is the rare path; deferral does not
   break the contract since path-triggered activation tests use
