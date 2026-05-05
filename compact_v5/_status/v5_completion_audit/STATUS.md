@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION APPROVED/PENDING PUSH; SOFTWARE-STATE NEXT AFTER PUSH; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -333,6 +333,18 @@ Current Block 0 state:
   `git ls-remote sageagent refs/heads/v5-build` returned
   `d01d567df56baa3ce2a4f32b671e0dfb8b69c097`.
 - Next action: continue `SOFTWARE-ASYNC-DECISION` from files.
+
+Current SOFTWARE-ASYNC-DECISION state:
+
+- Manual rows: 3. Shipped rows: 3. Blocking rows: 0.
+- Local tests passed: `2 passed`; py_compile PASS.
+- Decision: true async/background subagents are post-v5.0.1; v5.0.1 must
+  honestly validate strengthened synchronous supervision instead.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Worker applied Claude's non-blocking manual-ledger footer recommendation.
+- Next action: commit/push the specific SOFTWARE-ASYNC-DECISION artifacts,
+  verify the remote SHA, then continue `SOFTWARE-STATE` from files.
 
 Previous Block B state:
 
