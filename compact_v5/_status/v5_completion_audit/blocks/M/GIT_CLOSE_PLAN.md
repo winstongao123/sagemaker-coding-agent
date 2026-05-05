@@ -1,9 +1,9 @@
 # Block M Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_CHECKPOINT
+Status: CHECKPOINT_PUSHED
 Date: 2026-05-05
 
-Block M can be committed and pushed after final local consistency gates because:
+Block M was committed and pushed after final local consistency gates because:
 
 1. Claude iter1 confirmed Block M has 0 expected Wave-5-DEEP rows.
 2. `scope_audit.py --block M --strict` remains 0 blockers.
@@ -20,3 +20,10 @@ Specific-file candidate list:
 - `compact_v5/_status/v5_completion_audit/STATUS.md`
 
 No code changes are expected unless Claude identifies concrete missing scope.
+
+Checkpoint:
+
+- Commit: `8f9e6d1945003d3a7f619c0b2b40b1db8be0213c`
+- Remote: `sageagent/v5-build`
+- Verification: `git ls-remote sageagent refs/heads/v5-build` returned the
+  same SHA.
