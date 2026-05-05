@@ -1220,7 +1220,9 @@ class Compactor:
 
         if skill_manager is not None:
             try:
-                if hasattr(skill_manager, "clear_listing_cache"):
+                if hasattr(skill_manager, "invalidate_cache"):
+                    skill_manager.invalidate_cache("all")
+                elif hasattr(skill_manager, "clear_listing_cache"):
                     skill_manager.clear_listing_cache()
                 elif hasattr(skill_manager, "_cache"):
                     skill_manager._cache.clear()

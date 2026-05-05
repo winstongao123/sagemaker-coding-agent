@@ -423,7 +423,7 @@ def test_tool_todo_write_round_trip():
 
 def test_tool_todo_read_empty():
     from tools.todo import _reset_todos_for_tests
-    _reset_todos_for_tests()
+    _reset_todos_for_tests(clear_disk=True)
     read_tool = _find_tool("todo_read")
     out = read_tool.execute({}, context={})
     assert "no todos" in out.lower()

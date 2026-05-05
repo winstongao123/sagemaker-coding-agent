@@ -315,7 +315,7 @@ def test_a28_a39_a41_a42_compact_metadata_and_todo_restoration():
     from core.compactor import Compactor, ContentReplacementEntry
     from tools.todo import _reset_todos_for_tests, _todo_write_executor
 
-    _reset_todos_for_tests()
+    _reset_todos_for_tests(clear_disk=True)
     _todo_write_executor({
         "todos": [{"content": "finish audit", "status": "pending", "activeForm": "Finishing audit"}],
     })
@@ -545,7 +545,7 @@ def test_compactor_compact_with_summary():
     from core.compactor import Compactor
     from tools.todo import _reset_todos_for_tests
 
-    _reset_todos_for_tests()
+    _reset_todos_for_tests(clear_disk=True)
 
     msgs = [
         {"role": "user", "content": f"msg {i}"}
