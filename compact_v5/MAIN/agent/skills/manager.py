@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +67,8 @@ class SkillInfo:
     # skill loads only when CONFIG.<enabled_when> is truthy. Lets a skill
     # be conditionally available behind an opt-in feature flag.
     enabled_when: Optional[str] = None
+    # Block D-7: source label used in listings and budget filters.
+    source: str = "project"
 
 
 # ============================================================
@@ -151,6 +154,89 @@ class SkillManager:
         self._pending_activations: List[str] = []
         self._pending_lock = threading.Lock()
         self._enable_auto_trigger = bool(enable_auto_trigger)
+        self._listing_cache: Dict[Tuple[int, int, Tuple[str, ...], bool], str] = {}
+        self._proposal_listing_cache: List[Dict] = []
+        self._active_prompt_cache: Dict[Tuple[str, str], str] = {}
+
+    def _search_dirs(self) -> List[Tuple[Path, str]]:
+        """Return skill search directories with Runnable-style source labels."""
+        bundled_dir = Path(__file__).resolve().parent
+        pairs: List[Tuple[Path, str]] = []
+        primary_source = "bundled" if self.skills_dir == bundled_dir else "project"
+        pairs.append((self.skills_dir, primary_source))
+        for sub, source in (
+            (".agent/skills", "project"),
+            (".claude/skills", "user"),
+            (".agent/dynamic_skills", "dynamic"),
+            ("skills/dynamic", "dynamic"),
+        ):
+            d = (self.workspace / sub).resolve()
+            if d.is_dir() and d not in [p for p, _ in pairs]:
+                pairs.append((d, source))
+        return pairs
+
+    def _parse_skill_file(self, fp: Path, source: str) -> Optional[SkillInfo]:
+        try:
+            text = fp.read_text(encoding="utf-8", errors="ignore")
+            meta, content = self._parse_frontmatter(text)
+            name = meta.get("name", fp.parent.name)
+            desc = meta.get("description", "")
+            if not desc and content:
+                for line in content.split("\n"):
+                    line = line.strip()
+                    if line.startswith("#"):
+                        desc = line.lstrip("#").strip()
+                        break
+            auto_trigger = str(meta.get("auto_trigger", "false")).strip().lower() == "true"
+            raw_triggers = meta.get("triggers")
+            triggers_list = self._split_csv_field(raw_triggers) or []
+            triggers = (
+                [t.lower() for t in triggers_list]
+                if (triggers_list and auto_trigger) else None
+            )
+            requires_tools = self._split_csv_field(meta.get("requires_tools"))
+            raw_paths = self._split_csv_field(meta.get("paths"))
+            paths: Optional[List[str]] = None
+            if raw_paths:
+                normalized = []
+                for p in raw_paths:
+                    if p.endswith("/**"):
+                        p = p[:-3]
+                    if p:
+                        normalized.append(p)
+                if normalized and not all(p == "**" for p in normalized):
+                    paths = normalized
+            disable_model_invocation = (
+                str(meta.get("disable_model_invocation", "false"))
+                .strip().lower() == "true"
+            )
+            enabled_when_raw = meta.get("enabled_when", "")
+            enabled_when = str(enabled_when_raw).strip() if enabled_when_raw else None
+            if enabled_when and not self._enabled_when_truthy(enabled_when):
+                logging.debug(
+                    f"[skill-gate] skipping '{name}' "
+                    f"(enabled_when={enabled_when} is falsy)"
+                )
+                return None
+            if desc and not desc.lower().lstrip().startswith("use when"):
+                logging.debug(
+                    f"[CSO-CHECK] skill '{name}' description does not start with 'Use when'"
+                )
+            return SkillInfo(
+                name=name,
+                description=desc,
+                location=str(fp),
+                base_dir=str(fp.parent),
+                triggers=triggers,
+                auto_trigger=auto_trigger,
+                requires_tools=requires_tools,
+                paths=paths,
+                disable_model_invocation=disable_model_invocation,
+                enabled_when=enabled_when,
+                source=source,
+            )
+        except Exception:
+            return None
 
     # ------------------------------------------------------------
     # Frontmatter parser (v4 verbatim)
@@ -248,106 +334,49 @@ class SkillManager:
         duplicate parent paths are de-duplicated by their resolved real
         path so the same SKILL.md isn't loaded twice (which previously
         produced double tool-listing entries).
+
+        Block D-2/D-3: parse SKILL.md files in parallel, then merge in a
+        deterministic first-wins order across bundled/project/user/dynamic
+        sources. This keeps self-patched dynamic skills from duplicating a
+        bundled skill entry while avoiding serial filesystem reads.
         """
         self._cache.clear()
+        self._listing_cache.clear()
+        self._proposal_listing_cache.clear()
+        self._active_prompt_cache.clear()
         # Block I-4 lock: track real paths we've already seen this discovery
         # cycle. First-wins ordering matches Runnable's
         # `seenFileIds` Map at loadSkillsDir.ts:736-763.
         seen_realpaths: Set[str] = set()
-        search_dirs = [self.skills_dir]
-        for sub in (".agent/skills", ".claude/skills"):
-            d = self.workspace / sub
-            if d.is_dir():
-                search_dirs.append(d)
+        search_dirs = self._search_dirs()
+        skill_files: List[Tuple[Path, str]] = []
+        for search_dir, source in search_dirs:
+            skill_files.extend((fp, source) for fp in sorted(search_dir.rglob("SKILL.md")))
 
-        for search_dir in search_dirs:
-            for fp in sorted(search_dir.rglob("SKILL.md")):
-                try:
-                    real = os.path.realpath(str(fp))
-                    if real in seen_realpaths:
-                        logging.debug(
-                            f"[skill-dedup] skipping '{fp}' (same realpath "
-                            f"as already-loaded skill)"
-                        )
-                        continue
-                    seen_realpaths.add(real)
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(skill_files)))) as executor:
+            parsed = list(executor.map(lambda item: self._parse_skill_file(*item), skill_files))
 
-                    text = fp.read_text(encoding="utf-8", errors="ignore")
-                    meta, content = self._parse_frontmatter(text)
-                    name = meta.get("name", fp.parent.name)
-                    desc = meta.get("description", "")
-                    if not desc and content:
-                        for line in content.split("\n"):
-                            line = line.strip()
-                            if line.startswith("#"):
-                                desc = line.lstrip("#").strip()
-                                break
-                    auto_trigger = str(meta.get("auto_trigger", "false")).strip().lower() == "true"
-                    # triggers + requires_tools both accept CSV scalar OR YAML list
-                    raw_triggers = meta.get("triggers")
-                    triggers_list = self._split_csv_field(raw_triggers) or []
-                    triggers = (
-                        [t.lower() for t in triggers_list]
-                        if (triggers_list and auto_trigger) else None
-                    )
-                    requires_tools = self._split_csv_field(meta.get("requires_tools"))
-                    # Block I-1 / R9 #1: paths frontmatter. Strip trailing
-                    # /** (Runnable's transform: a directory pattern matches
-                    # both itself and its descendants). All-`**` patterns
-                    # collapse to None so the skill is unconditional.
-                    raw_paths = self._split_csv_field(meta.get("paths"))
-                    paths: Optional[List[str]] = None
-                    if raw_paths:
-                        normalized = []
-                        for p in raw_paths:
-                            if p.endswith("/**"):
-                                p = p[:-3]
-                            if p:
-                                normalized.append(p)
-                        if normalized and not all(p == "**" for p in normalized):
-                            paths = normalized
-                    # Block I-2 / R9 #3
-                    disable_model_invocation = (
-                        str(meta.get("disable_model_invocation", "false"))
-                        .strip().lower() == "true"
-                    )
-                    # Block I-3 / R9 #4
-                    enabled_when_raw = meta.get("enabled_when", "")
-                    enabled_when = (
-                        str(enabled_when_raw).strip() if enabled_when_raw else None
-                    )
-
-                    # Block I-3: skip the skill entirely when its
-                    # enabled_when CONFIG flag is falsy. Loading is
-                    # conditional on the gate, not just visibility.
-                    if enabled_when and not self._enabled_when_truthy(enabled_when):
-                        logging.debug(
-                            f"[skill-gate] skipping '{name}' "
-                            f"(enabled_when={enabled_when} is falsy)"
-                        )
-                        continue
-
-                    if desc and not desc.lower().lstrip().startswith("use when"):
-                        logging.debug(
-                            f"[CSO-CHECK] skill '{name}' description does not start with 'Use when'"
-                        )
-
-                    self._cache[name] = SkillInfo(
-                        name=name,
-                        description=desc,
-                        location=str(fp),
-                        base_dir=str(fp.parent),
-                        triggers=triggers,
-                        auto_trigger=auto_trigger,
-                        requires_tools=requires_tools,
-                        paths=paths,
-                        disable_model_invocation=disable_model_invocation,
-                        enabled_when=enabled_when,
-                    )
-                except Exception:
-                    continue
+        for (fp, _source), info in zip(skill_files, parsed):
+            if info is None:
+                continue
+            real = os.path.realpath(str(fp))
+            if real in seen_realpaths:
+                logging.debug(
+                    f"[skill-dedup] skipping '{fp}' (same realpath "
+                    f"as already-loaded skill)"
+                )
+                continue
+            seen_realpaths.add(real)
+            if info.name in self._cache:
+                logging.debug(
+                    f"[skill-dedup] skipping '{fp}' (skill name "
+                    f"{info.name!r} already loaded)"
+                )
+                continue
+            self._cache[info.name] = info
 
             # Legacy flat *.md fallback (skills_dir only)
+        for search_dir, source in search_dirs:
             if search_dir == self.skills_dir:
                 for fp in sorted(search_dir.glob("*.md")):
                     if fp.name == "SKILL.md":
@@ -363,6 +392,7 @@ class SkillManager:
                                 description=desc,
                                 location=str(fp),
                                 base_dir=str(fp.parent),
+                                source=source,
                             )
                     except Exception:
                         continue
@@ -370,7 +400,39 @@ class SkillManager:
 
     def clear_listing_cache(self) -> None:
         """Clear cached skill listings while preserving active skill choice."""
-        self._cache.clear()
+        self.invalidate_cache("skill_listing")
+
+    def invalidate_cache(self, name: str) -> List[str]:
+        """Invalidate one named cache or all skill-manager caches.
+
+        Block D-4 ports Runnable's named invalidation instead of a broad
+        "clear everything" path. The four names are `discovery`,
+        `skill_listing`, `proposal_listing`, and `active_prompt`.
+        """
+        aliases = {
+            "skills": "discovery",
+            "listing": "skill_listing",
+            "proposals": "proposal_listing",
+            "prompt": "active_prompt",
+        }
+        requested = aliases.get((name or "").strip(), (name or "").strip())
+        valid = {"discovery", "skill_listing", "proposal_listing", "active_prompt"}
+        targets = sorted(valid) if requested == "all" else [requested]
+        cleared: List[str] = []
+        for target in targets:
+            if target == "discovery":
+                self._cache.clear()
+                cleared.append(target)
+            elif target == "skill_listing":
+                self._listing_cache.clear()
+                cleared.append(target)
+            elif target == "proposal_listing":
+                self._proposal_listing_cache.clear()
+                cleared.append(target)
+            elif target == "active_prompt":
+                self._active_prompt_cache.clear()
+                cleared.append(target)
+        return cleared
 
     # ------------------------------------------------------------
     # Public read surface
@@ -380,7 +442,12 @@ class SkillManager:
         if not self._cache:
             self.discover()
         return [
-            {"name": s.name, "description": s.description, "path": s.location}
+            {
+                "name": s.name,
+                "description": s.description,
+                "path": s.location,
+                "source": s.source,
+            }
             for s in self._cache.values()
         ]
 
@@ -712,11 +779,18 @@ class SkillManager:
     # list_for_prompt() — token-budgeted listing for tool description
     # ------------------------------------------------------------
 
-    def list_for_prompt(self, budget_tokens: int = 0, context_max_tokens: int = 200000) -> str:
+    def list_for_prompt(
+        self,
+        budget_tokens: int = 0,
+        context_max_tokens: int = 200000,
+        sources: Optional[Iterable[str]] = None,
+        include_sources: bool = False,
+    ) -> str:
         """Compact skill listing for LLM tool description (token-efficient).
 
         v4 verbatim with `context_max_tokens` taken as a parameter (v4 read
-        from CONFIG)."""
+        from CONFIG), plus Block D-5 source filters for bundled/user/project/
+        dynamic skill groups."""
         if not self._cache:
             self.discover()
         if not self._cache:
@@ -726,29 +800,45 @@ class SkillManager:
             budget_tokens = max(1, int(ctx_max * SKILL_LISTING_BUDGET_PERCENT))
         budget_tokens = min(budget_tokens, SKILL_LISTING_HARD_CAP_TOKENS)
 
-        names = list(self._cache.keys())
-        n_total = len(names)
+        source_filter = tuple(sorted(sources or ()))
+        cache_key = (budget_tokens, context_max_tokens, source_filter, include_sources)
+        if cache_key in self._listing_cache:
+            return self._listing_cache[cache_key]
+
+        skills = list(self._cache.values())
+        if source_filter:
+            allowed = set(source_filter)
+            skills = [s for s in skills if s.source in allowed]
+        labels = [
+            f"{s.name} ({s.source})" if include_sources else s.name
+            for s in skills
+        ]
+        n_total = len(labels)
         hint_reserve = _estimate_tokens(f"...(+{n_total} more), ")
 
         out_names: List[str] = []
         used = _estimate_tokens("Available: ")
         truncated = False
-        for name in names:
-            cost = _estimate_tokens(name + ", ")
+        for label in labels:
+            cost = _estimate_tokens(label + ", ")
             if used + cost + hint_reserve > budget_tokens:
                 truncated = True
                 break
-            out_names.append(name)
+            out_names.append(label)
             used += cost
 
         if truncated:
             omitted = n_total - len(out_names)
             if not out_names:
                 hint_only = f"Available: ...(+{omitted} more)"
-                return hint_only if _estimate_tokens(hint_only) <= budget_tokens else ""
+                result = hint_only if _estimate_tokens(hint_only) <= budget_tokens else ""
+                self._listing_cache[cache_key] = result
+                return result
             out_names.append(f"...(+{omitted} more)")
 
-        return "Available: " + ", ".join(out_names)
+        result = "Available: " + ", ".join(out_names)
+        self._listing_cache[cache_key] = result
+        return result
 
     # ============================================================
     # Self-patching surface (v4.9.5 verbatim — opt-in via CONFIG flag)

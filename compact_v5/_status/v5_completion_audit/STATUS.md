@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, AND C+ CLOSED/PUSHED; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, AND C+ CLOSED/PUSHED; BLOCK D CLAUDE-APPROVED, PENDING CLOSE COMMIT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -114,6 +114,20 @@ Current Block C+ state:
 - C+ checkpoint evidence fields record the close commit SHA.
 - Next action: continue to Block D from files. Do not run AWS/R-tier, tag,
   Codex review, nested `codex exec`, force push, or unrelated staging.
+
+Current Block D state:
+
+- D local audit artifacts cover 13/13 rows.
+- `scope_audit.py --block D` reports 13 shipped rows and 0 ship-blocking rows.
+- Local gates pass: Block D suite 31 passed, targeted H+/I cross-block tests
+  2 passed, py_compile PASS.
+- Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Worker fixed the non-blocking INFO test symmetry note by adding direct
+  `/init-verifiers` dispatch coverage and rerunning local gates.
+- Next action: specific-file close commit and push D to `sageagent/v5-build`.
+  Do not run AWS/R-tier, tag, Codex review, nested `codex exec`, force push, or
+  unrelated staging.
 
 Previous Block B state:
 

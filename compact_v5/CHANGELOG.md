@@ -22,6 +22,37 @@ What changed, including the primary code or process artifact.
 Which local test, scope audit, reviewer verdict, or explicit no-test
 justification proves the fix.
 
+## v5.0.1-block-d completion-audit redo (2026-05-05)
+
+### Symptom
+
+Block D had no v5 completion-audit artifact folder or row ledger. The scope
+audit therefore reported D-1 through D-13 as ship-blocking even though the older
+dispatcher covered only the aggregate slash-command surface.
+
+### Root cause
+
+The earlier Block D evidence predated the Wave-5-DEEP row split and did not
+cover Runnable deltas for parallel skill discovery, source-aware skill listing,
+named cache invalidation, `/q` alias/helpful unknown-command UX, bundled
+scaffolder prompt skills, or custom slash argument parsing.
+
+### Fix
+
+Finished the D rows in `commands.py`, `skills/manager.py`, and the new
+`runtime/slash_args.py`. Added bundled user-invoked prompt skills for `init`,
+`init-verifiers`, and `skillify`; source labels and budget filters for skill
+listing; named cache invalidation; `/quit` plus `/q`; and indexed/named
+argument substitution. The implementation follows the software-project workflow
+constraint by consolidating behavior into existing commands rather than adding
+new `/project-*` commands.
+
+### Verification
+
+- `py -3.11 -m pytest tests/integration/test_block_d.py -q`: 31 passed.
+- `py -3.11 -m pytest tests/integration/test_block_h_plus.py::test_dream_invoked_via_console_chat_ui tests/integration/test_block_i.py::test_skillify_4_round_interview -q`: 2 passed.
+- `py -3.11 -m py_compile commands.py skills/manager.py runtime/slash_args.py`: PASS.
+
 ## v5.0.1-block-b-plus completion-audit redo (2026-05-05)
 
 ### Symptom

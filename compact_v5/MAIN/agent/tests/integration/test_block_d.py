@@ -30,7 +30,7 @@ if _AGENT_ROOT not in sys.path:
 # T1 — Dispatch table coverage
 # ============================================================
 
-def test_dispatch_table_canonical_count_is_exact_26():
+def test_dispatch_table_canonical_count_is_exact_27():
     """19 v4/B+ advertised + /auth + 6 LF = exactly 26 canonical commands.
 
     Codex iter-2 finding #2 lock: assert EXACTLY this count (not a
@@ -49,15 +49,15 @@ def test_dispatch_table_canonical_count_is_exact_26():
         "/skill suggestions", "/skill apply", "/skill reject",
             "/save", "/resume", "/revert", "/cost", "/context", "/status",
         "/verify", "/checkpoint", "/phase", "/diffs",
-        "/regression", "/done",
+        "/regression", "/done", "/quit",
         # /auth gate (1):
         "/auth",
         # LF additions (6):
         "/simplify", "/init", "/init-verifiers",
         "/skillify", "/dream", "/promote-to-skill",
     }
-    assert len(expected_prefixes) == 26, (
-        f"expected_prefixes set should be exactly 26; got {len(expected_prefixes)}"
+    assert len(expected_prefixes) == 27, (
+        f"expected_prefixes set should be exactly 27; got {len(expected_prefixes)}"
     )
     assert set(canonical) == expected_prefixes, (
         f"canonical mismatch:\n"
@@ -66,9 +66,9 @@ def test_dispatch_table_canonical_count_is_exact_26():
     )
     # The alias IS present in the full listing.
     assert "/skill suggestion" in full
-    # Full listing is exactly 27 (canonical 26 + 1 alias).
-    assert len(full) == 27
-    assert len(canonical) == 26
+    assert "/q" in full
+    assert len(full) == 29
+    assert len(canonical) == 27
 
 
 def test_is_command_recognises_prefixes():
@@ -77,6 +77,7 @@ def test_is_command_recognises_prefixes():
     assert is_command("/cost")
     assert is_command("/skill use clara")
     assert is_command("/auth tok123")
+    assert is_command("/q")
     assert not is_command("hello")
     assert not is_command("/unknown")
 
@@ -87,6 +88,7 @@ def test_dispatch_unknown_command_returns_not_consumed():
     cr = dispatch_command("/never-heard-of-this")
     assert not cr.consumed
     assert "Unknown command" in cr.text
+    assert "Known commands:" in cr.text
 
 
 # ============================================================
@@ -181,6 +183,7 @@ def test_skills_command_lists_available(tmp_path, monkeypatch):
     assert cr.consumed
     assert "alpha" in cr.text
     assert "beta" in cr.text
+    assert "(project)" in cr.text
 
 
 def test_skill_use_activates(tmp_path, monkeypatch):
@@ -290,6 +293,14 @@ def test_skillify_command_requires_name():
     cr = dispatch_command("/skillify")
     assert cr.consumed
     assert "Usage" in cr.text
+
+
+def test_init_verifiers_command_dispatches():
+    from commands import dispatch_command
+
+    cr = dispatch_command("/init-verifiers")
+    assert cr.consumed
+    assert "Verifier-script install scaffolding ready" in cr.text
 
 
 def test_dream_command_returns_explanation():
@@ -408,13 +419,174 @@ def test_skill_suggestion_alias_routes_correctly():
 
 
 def test_list_commands_canonical_count_excludes_alias():
-    """list_commands(include_aliases=False) returns 27 canonical
-    prefixes (alias collapsed); default returns 28 (alias included)."""
+    """A44 exception: command count is an explicit v4/Runnable parity contract."""
     from commands import list_commands
 
     canonical = list_commands(include_aliases=False)
     full = list_commands()  # default: include_aliases=True
     assert "/skill suggestion" not in canonical
     assert "/skill suggestion" in full
-    # Full listing has exactly one more entry than canonical.
-    assert len(full) == len(canonical) + 1
+    assert "/q" not in canonical
+    assert "/q" in full
+    assert len(canonical) == 27
+    assert len(full) == len(canonical) + 2
+
+
+def test_q_alias_routes_to_quit():
+    from commands import dispatch_command
+
+    cr = dispatch_command("/q")
+    assert cr.consumed
+    assert cr.side_effect == "quit_requested"
+
+
+def test_d1_skill_manager_is_lazy_loaded(monkeypatch):
+    import importlib
+
+    sys.modules.pop("skills.manager", None)
+    import commands as cmd_mod
+    cmd_mod._SKILLS_SINGLETON = None
+    importlib.reload(cmd_mod)
+
+    assert "skills.manager" not in sys.modules
+    cmd_mod._get_skill_manager()
+    assert "skills.manager" in sys.modules
+
+
+def test_d2_d3_skill_discovery_parallel_and_dedupes_dynamic(tmp_path, monkeypatch):
+    import skills.manager as manager_mod
+    from skills.manager import SkillManager
+
+    calls = {"entered": False, "mapped": False}
+
+    class FakeExecutor:
+        def __init__(self, *args, **kwargs):
+            calls["entered"] = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, fn, items):
+            calls["mapped"] = True
+            return [fn(item) for item in items]
+
+    monkeypatch.setattr(manager_mod, "ThreadPoolExecutor", FakeExecutor)
+
+    primary = tmp_path / "skills"
+    user = tmp_path / ".claude" / "skills"
+    dynamic = tmp_path / ".agent" / "dynamic_skills"
+    for root, name, desc in (
+        (primary, "alpha", "Use when alpha."),
+        (user, "beta", "Use when beta."),
+        (dynamic, "alpha", "Use when dynamic duplicate."),
+    ):
+        d = root / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: {desc}\n---\nbody",
+            encoding="utf-8",
+        )
+
+    sm = SkillManager(workspace=str(tmp_path), skills_dir=str(primary))
+    discovered = sm.discover()
+
+    assert calls == {"entered": True, "mapped": True}
+    assert set(discovered) == {"alpha", "beta"}
+    assert discovered["alpha"].source == "project"
+    assert discovered["beta"].source == "user"
+
+
+def test_d4_named_cache_invalidation(tmp_path):
+    from skills.manager import SkillManager
+
+    sm = SkillManager(workspace=str(tmp_path), skills_dir=str(tmp_path / "skills"))
+    sm._cache["x"] = object()
+    sm._listing_cache[(1, 2, (), False)] = "cached"
+    sm._proposal_listing_cache.append({"skill": "x"})
+    sm._active_prompt_cache[("x", "s")] = "prompt"
+
+    assert sm.invalidate_cache("skill_listing") == ["skill_listing"]
+    assert sm._cache
+    assert not sm._listing_cache
+
+    cleared = sm.invalidate_cache("all")
+    assert cleared == ["active_prompt", "discovery", "proposal_listing", "skill_listing"]
+    assert not sm._cache
+    assert not sm._proposal_listing_cache
+    assert not sm._active_prompt_cache
+
+
+def test_d5_d7_skill_listing_filters_budget_and_annotates_sources(tmp_path):
+    from skills.manager import SkillManager
+
+    primary = tmp_path / "skills"
+    user = tmp_path / ".claude" / "skills"
+    dynamic = tmp_path / ".agent" / "dynamic_skills"
+    for root, name in (
+        (primary, "project_one"),
+        (user, "user_one"),
+        (dynamic, "dynamic_one"),
+    ):
+        d = root / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: Use when {name}.\n---\nbody",
+            encoding="utf-8",
+        )
+
+    sm = SkillManager(workspace=str(tmp_path), skills_dir=str(primary))
+    sm.discover()
+
+    user_listing = sm.list_for_prompt(
+        budget_tokens=200,
+        sources=["user"],
+        include_sources=True,
+    )
+    assert "user_one (user)" in user_listing
+    assert "project_one" not in user_listing
+    assert "dynamic_one" not in user_listing
+
+    tiny = sm.list_for_prompt(budget_tokens=2, include_sources=True)
+    assert tiny == "" or "...(+" in tiny
+
+
+def test_d8_d9_d10_bundled_prompt_skills_are_discoverable():
+    from skills.manager import SkillManager
+
+    bundled = os.path.join(_AGENT_ROOT, "skills")
+    sm = SkillManager(workspace=_AGENT_ROOT, skills_dir=bundled)
+    discovered = sm.discover()
+
+    for name in ("init", "init-verifiers", "skillify"):
+        assert name in discovered
+        assert discovered[name].source == "bundled"
+        assert discovered[name].disable_model_invocation
+
+
+def test_d12_parse_slash_command_mcp_namespace():
+    from runtime.slash_args import parse_slash_command
+
+    parsed = parse_slash_command("/tool(MCP) run this")
+    assert parsed is not None
+    assert parsed.command == "/tool"
+    assert parsed.namespace == "MCP"
+    assert parsed.args == "run this"
+
+
+def test_d13_substitute_arguments_indexed_short_and_named():
+    from runtime.slash_args import substitute_arguments
+
+    assert (
+        substitute_arguments(
+            "all=$ARGUMENTS first=$ARGUMENTS[0] also=$0",
+            "alpha beta",
+        )
+        == "all=alpha beta first=alpha also=alpha"
+    )
+    assert (
+        substitute_arguments("hello ${name} from $place", {"name": "Ada", "place": "lab"})
+        == "hello Ada from lab"
+    )

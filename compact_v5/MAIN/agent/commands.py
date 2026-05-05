@@ -13,15 +13,16 @@ when a user message starts with `/`.
   - +6 LF additions:
     /simplify, /init, /init-verifiers, /skillify, /dream, /promote-to-skill
   - +1 /auth gate (separate path; runs BEFORE custom dispatch)
-  = **26 canonical commands**.
+  - +1 /quit command with /q alias
+  = **27 canonical commands**.
 
 The dispatch table contains one extra entry (`/skill suggestion` —
 singular alias of `/skill suggestions`) for v4 parity with sagemaker_agent.py:10874
 which accepts both spellings. The alias is NOT counted toward the 26.
 
 Therefore:
-  - `list_commands()` (default include_aliases=True) returns 27 strings.
-  - `list_commands(include_aliases=False)` returns 26 strings.
+  - `list_commands()` (default include_aliases=True) returns 29 strings.
+  - `list_commands(include_aliases=False)` returns 27 strings.
   - Tests assert exactly these numbers.
 
 Earlier docs in this module said "27 canonical commands" — that was an
@@ -67,7 +68,10 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from difflib import get_close_matches
 from typing import Any, Callable, Dict, List, Optional
+
+from runtime.slash_args import parse_slash_command
 
 
 # ============================================================
@@ -150,7 +154,10 @@ def cmd_skills(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult
     discovered = sm.discover()
     if not discovered:
         return CommandResult(text="(no skills found)")
-    lines = [f"  {n}: {info.description[:80]}" for n, info in sorted(discovered.items())]
+    lines = [
+        f"  {n} ({info.source}): {info.description[:80]}"
+        for n, info in sorted(discovered.items())
+    ]
     return CommandResult(text="Available skills:\n" + "\n".join(lines))
 
 
@@ -178,6 +185,20 @@ def cmd_skill_use(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandRes
 
 def cmd_skill_clear(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
     sm = _get_skill_manager()
+    target = args.strip()
+    if target:
+        cleared = sm.invalidate_cache(target) if hasattr(sm, "invalidate_cache") else []
+        if cleared:
+            return CommandResult(
+                text="Cleared skill cache(s): " + ", ".join(cleared),
+                side_effect=f"skill_cache_cleared:{','.join(cleared)}",
+            )
+        return CommandResult(
+            text=(
+                "Unknown skill cache. Valid caches: discovery, skill_listing, "
+                "proposal_listing, active_prompt, all."
+            )
+        )
     prev = sm.active_skill
     sm.active_skill = None
     return CommandResult(
@@ -645,6 +666,10 @@ def cmd_promote_to_skill(args: str, ctx: Optional[Dict[str, Any]] = None) -> Com
     )
 
 
+def cmd_quit(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
+    return CommandResult(text="Quit requested.", side_effect="quit_requested")
+
+
 # ============================================================
 # Dispatch table (single source of truth)
 # ============================================================
@@ -679,14 +704,45 @@ _DISPATCH: List[tuple] = [
     ("/skillify", cmd_skillify),
     ("/dream", cmd_dream),
     ("/promote-to-skill", cmd_promote_to_skill),
+    ("/quit", cmd_quit),
     # /auth handled BEFORE custom dispatch in caller (separate path)
 ]
+
+_ALIASES: Dict[str, str] = {
+    "/skill suggestion": "/skill suggestions",
+    "/q": "/quit",
+}
+
+
+def _canonicalize_alias(message: str) -> str:
+    parsed = parse_slash_command(message)
+    if not parsed:
+        return message
+    for alias, target in sorted(_ALIASES.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if message == alias or message.startswith(alias + " "):
+            return target + message[len(alias):]
+    if parsed.command in _ALIASES:
+        return _ALIASES[parsed.command] + (
+            (" " + parsed.args) if parsed.args else ""
+        )
+    return message
+
+
+def _unknown_command_text(command: str) -> str:
+    canonical = list_commands(include_aliases=False)
+    matches = get_close_matches(command, canonical, n=1, cutoff=0.6)
+    hint = f" Did you mean {matches[0]}?" if matches else ""
+    return (
+        f"Unknown command: {command}.{hint}\n"
+        "Known commands: " + ", ".join(canonical)
+    )
 
 
 def is_command(message: str) -> bool:
     """True iff `message` starts with `/` and matches a known prefix."""
     if not message or not message.startswith("/"):
         return False
+    message = _canonicalize_alias(message)
     return any(message.startswith(p) for p, _ in _DISPATCH) \
         or message.startswith("/auth ") or message == "/auth"
 
@@ -704,6 +760,7 @@ def dispatch_command(message: str, ctx: Optional[Dict[str, Any]] = None) -> Comm
     # /auth runs BEFORE the custom dispatch (per v4 :11314 explicit check).
     if message == "/auth" or message.startswith("/auth "):
         return cmd_auth(message[len("/auth"):].strip(), ctx)
+    message = _canonicalize_alias(message)
     for prefix, handler in _DISPATCH:
         if message == prefix or message.startswith(prefix + " "):
             args = message[len(prefix):].strip()
@@ -712,15 +769,17 @@ def dispatch_command(message: str, ctx: Optional[Dict[str, Any]] = None) -> Comm
             except Exception as exc:  # noqa: BLE001
                 logging.warning(f"command {prefix} raised: {exc}")
                 return CommandResult(text=f"Command error: {type(exc).__name__}: {exc}")
-    return CommandResult(text=f"Unknown command: {message.split()[0]}", consumed=False)
+    parsed = parse_slash_command(message)
+    cmd = parsed.command if parsed else message.split()[0]
+    return CommandResult(text=_unknown_command_text(cmd), consumed=False)
 
 
 def list_commands(include_aliases: bool = True) -> List[str]:
     """Return registered command prefixes (for /help-style listings).
 
-    By default returns ALL dispatch entries + /auth (27 strings; this
+    By default returns ALL dispatch entries + /auth + /q (29 strings; this
     includes the `/skill suggestion` singular alias for v4 parity).
-    Pass `include_aliases=False` to get the 26 canonical prefixes
+    Pass `include_aliases=False` to get the 27 canonical prefixes
     (alias collapsed) — useful for headline command counts.
 
     Counts reconciled against actual dispatch table per
@@ -728,8 +787,9 @@ def list_commands(include_aliases: bool = True) -> List[str]:
     """
     prefixes = [p for p, _ in _DISPATCH]
     if not include_aliases:
-        prefixes = [p for p in prefixes if p != "/skill suggestion"]
-    return prefixes + ["/auth"]
+        prefixes = [p for p in prefixes if p not in _ALIASES]
+        return prefixes + ["/auth"]
+    return prefixes + ["/auth"] + [a for a in _ALIASES if a not in prefixes]
 
 
 __all__ = [
@@ -737,4 +797,5 @@ __all__ = [
     "is_command",
     "dispatch_command",
     "list_commands",
+    "parse_slash_command",
 ]

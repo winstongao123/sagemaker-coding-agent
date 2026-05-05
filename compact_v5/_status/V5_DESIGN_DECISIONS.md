@@ -3143,6 +3143,52 @@ For A-21, compaction changes what the model can legitimately rely on. Clearing r
 
 No AWS/R-tier test was run.
 
+## ADR-052 — Block D Completion Audit: Slash Commands + Custom Expander
+
+**Date**: 2026-05-05
+
+**Phase ID**: v5.0.1 Block D
+
+**Rows covered**: D-1 through D-13.
+
+**Decision**: Keep the existing v5 Python slash dispatcher as the command
+surface, but finish the Wave-5-DEEP Runnable deltas in the Python-owned modules:
+`commands.py`, `skills/manager.py`, and `runtime/slash_args.py`.
+
+**Adaptation notes**:
+
+- Runnable's command module is TypeScript/Promise-based; v5 uses synchronous
+  Python for the SageMaker notebook loop. Parallel skill scan is therefore a
+  bounded `ThreadPoolExecutor` read/parse stage followed by deterministic
+  first-wins merge.
+- MCP execution remains dropped by hard constraint, but the parser still
+  recognizes `(MCP)` namespace suffixes so custom-command parsing remains
+  compatible with Runnable inputs.
+- The `/q -> /quit` alias is implemented as dispatcher aliasing, not as a
+  second canonical command. The canonical command is `/quit`; aliases are
+  included only in the full listing.
+- Skill source labels are adapted to v5 directories: bundled agent skills,
+  project `.agent/skills`, user `.claude/skills`, and dynamic
+  `.agent/dynamic_skills` or `skills/dynamic`.
+- `/init`, `/init-verifiers`, and `/skillify` are user-invoked prompt skills
+  plus slash-command entries. They are marked `disable_model_invocation: true`
+  so model auto-discovery does not silently invoke workspace scaffolding.
+- `/dream` remains manual-only. Block D owns the command trigger; Block H+
+  owns the consolidation engine and lock semantics.
+- Per `PS_SOFTWARE_PROJECT_WORKFLOW.md`, D does not add a `/project-*` command
+  family. Long-running coding workflow hardening must use the existing
+  `/status`, `/save`, `/resume`, `/checkpoint`, `/verify`, `/done`, `/phase`,
+  `/cost`, `/context`, and `/dream` surfaces.
+
+**Evidence**:
+
+- PORT_LOG rows #181-#193.
+- `compact_v5/MAIN/agent/tests/integration/test_block_d.py` covers all D rows.
+- Targeted cross-block locks cover `/dream` UI invocation and `/skillify`
+  side-effect compatibility.
+
+**Fidelity**: FAITHFUL-WITH-JUSTIFIED-ADAPTATION.
+
 ## ADR-051 - Block B+ completion-audit cost/session redo
 
 **Date**: 2026-05-05
