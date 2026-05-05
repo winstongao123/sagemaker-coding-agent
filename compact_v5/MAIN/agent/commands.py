@@ -514,22 +514,23 @@ def cmd_status(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult
 # ============================================================
 
 def cmd_verify(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
-    """v4 /verify is a wrapper that activates the `verify` skill — the
-    actual gate logic runs through the skill-aware agent loop. Here we
-    just stage that activation and return a placeholder so the chat
-    surface is consistent with v4."""
+    """Run the deterministic local verify gate and arm the verify skill."""
+    from runtime.gate import format_gate_result, run_verify_gate
+
     sm = _get_skill_manager()
     discovered = sm.discover()
     if "verify" not in discovered:
         return CommandResult(text="`verify` skill not installed.")
     sm.active_skill = "verify"
     mode = (args.strip() or "full").lower()
+    gate = run_verify_gate(mode, ctx)
+    text = format_gate_result(gate, command="verify")
+    if gate.ok:
+        text += "\nActivated `verify` skill for follow-up verification work."
     return CommandResult(
-        text=(f"Activated `verify` skill (mode: {mode}). "
-              "Send a message describing what to verify."),
-        side_effect="verify_armed",
+        text=text,
+        side_effect="verify_passed" if gate.ok else "verify_blocked",
     )
-
 
 def cmd_checkpoint(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
     from runtime.snapshot import SNAPSHOTS
@@ -658,6 +659,8 @@ def cmd_regression(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandRe
 
 def cmd_done(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
     """Run simplify + verify gate. Returns a READY-TO-SHIP verdict."""
+    from runtime.gate import format_gate_result, run_done_gate
+
     sm = _get_skill_manager()
     discovered = sm.discover()
     missing = [s for s in ("simplify", "verify") if s not in discovered]
@@ -666,13 +669,13 @@ def cmd_done(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
             text=f"Cannot run /done: missing skills {missing}",
         )
     mode = (args.strip() or "full").lower()
+    gate = run_done_gate(mode, ctx)
+    text = format_gate_result(gate, command="done")
+    if gate.ok:
+        text += "\nREADY-TO-SHIP: local status, test, review, result, subagent, and telemetry evidence are fresh."
     return CommandResult(
-        text=(
-            f"Pre-ship gate (mode: {mode}). Run /simplify then /verify "
-            "and address any findings. /done returns READY-TO-SHIP "
-            "only when both gates report clean."
-        ),
-        side_effect=f"done_armed:{mode}",
+        text=text,
+        side_effect="done_ready" if gate.ok else "done_blocked",
     )
 
 

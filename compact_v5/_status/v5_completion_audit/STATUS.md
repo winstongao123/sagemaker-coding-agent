@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT CLOSED/PUSHED; SOFTWARE-COMPACT-TELEMETRY READY_FOR_CLOSE_COMMIT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT CLOSED/PUSHED; SOFTWARE-GATE READY_FOR_CLOSE_COMMIT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -503,3 +503,14 @@ Current SOFTWARE-COMPACT-TELEMETRY state:
 - Claude iter1 returned `APPROVE_WITH_FIXES` with 0 blockers and two LOW findings; worker fixed both.
 - Claude iter2 returned `VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
 - Next action: specific-file close commit and push to `sageagent/v5-build`, then continue `SOFTWARE-GATE`.
+
+Current SOFTWARE-GATE state:
+
+- Manual rows: 4. Shipped rows: 4. Blocking rows after Claude: 0.
+- `/verify` and `/done` are now deterministic local evidence gates rather than advisory prompts.
+- Full mode consumes fresh status, test, review, large-result, subagent, and telemetry evidence; unresolved failure-loop telemetry blocks close.
+- Local tests passed: SOFTWARE-GATE focused suite `4 passed`; Block D command regression `31 passed`; py_compile PASS.
+- Original-block scope audits remain clean: summary and strict both report `TOTAL_SHIP_BLOCKING_ROWS: 0`.
+- Claude iter1 returned `APPROVE_WITH_FIXES` with 0 blockers and INFO bookkeeping follow-ups.
+- Claude iter2 returned `VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Next action: specific-file close commit and push to `sageagent/v5-build`, then run final all-block local/readiness gates.
