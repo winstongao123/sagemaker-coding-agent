@@ -39,6 +39,24 @@ R-tier test preparation:
   review and explicit approval before any real Bedrock call.
 - Details: `compact_v5/_status/v5_completion_audit/TEST_CASE_PREP.md`
 
+Third deep scan:
+
+- The third deep scan for long-running software-builder readiness is documented
+  in `compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`.
+- The user-facing requirements for v5 to work like this long-running
+  worker/reviewer audit loop are documented in
+  `compact_v5/_status/v5_completion_audit/PS_CODEX_3RD_SCAN_SOFTWARE_BUILDER_REQUIREMENTS.md`.
+- Claude final worker-readiness review returned `APPROVE_WITH_FIXES`; the
+  required queue/documentation wiring was applied.
+- After M, J, and 0 close, the worker must continue through:
+  `SOFTWARE-ASYNC-DECISION -> SOFTWARE-STATE -> SOFTWARE-CHECKPOINT ->
+  SOFTWARE-SHELL -> SOFTWARE-RESULTS -> SOFTWARE-SUBAGENT ->
+  SOFTWARE-COMPACT-TELEMETRY -> SOFTWARE-GATE`.
+- These software-builder blocks are pre-AWS hardening gates. Do not run
+  AWS/R-tier spend, tag, or claim production readiness until they are
+  implemented or explicitly classified as future/non-goal, locally tested,
+  Claude-reviewed, committed, and pushed.
+
 Loop decision:
 
 - The full-auto PowerShell supervisor loop is no longer the primary workflow.

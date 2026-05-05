@@ -49,6 +49,24 @@ cross-cutting behavior through final local/AWS tests.
 | H+ | `/dream` memory consolidation must preserve durable project facts |
 | M/J/0 | Closure/meta blocks must not weaken the final evidence gate or AWS stop rules |
 
+## New Third-Deep-Scan Software-Builder Blocks
+
+After canonical Block 0 closes, continue into these cross-cutting hardening
+blocks. Do not reopen completed blocks unless a concrete test/review/audit
+failure points back to them; instead implement the new behavior through the
+existing command/tool/runtime surfaces.
+
+| Block | Required Software-Builder Check |
+|---|---|
+| SOFTWARE-ASYNC-DECISION | Decide and document true async/background subagent scope; current recommendation is defer true async for v5.0.1. |
+| SOFTWARE-STATE | Durable todos, `/save`, `/resume`, per-turn status/memory, crash-safe journal, auto-restore, memory extraction path. |
+| SOFTWARE-CHECKPOINT | Durable named checkpoint index, safe preview/confirm restore/revert, restart-safe listing. |
+| SOFTWARE-SHELL | Foreground process kill-on-timeout/stop, managed background shell lifecycle, durable logs, no-orphan proof. |
+| SOFTWARE-RESULTS | Large output persistence/replay and stable content-replacement references. |
+| SOFTWARE-SUBAGENT | Structured synchronous subagent/reviewer envelope with files/tokens/cost/cache/duration/heartbeat/recovery metadata. |
+| SOFTWARE-COMPACT-TELEMETRY | Typed compaction/recovery/cache telemetry and broader tool-failure loop evidence. |
+| SOFTWARE-GATE | Enforced `/verify` and `/done` gate using fresh state, result, subagent, compaction, test, and review evidence. |
+
 ## Final Verification
 
 Before production-readiness or 98% confidence:

@@ -8,12 +8,21 @@ This file prevents confusion between the original build sequence in
 
 ## Canonical Scope
 
-The canonical scope is still:
+The canonical scope for the original 21 audit blocks is still:
 
 `compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md`
 
 Every row parsed by `scope_audit.py --all --summary` must be accounted for
 before any AWS/R-tier spend, final ready-for-testing claim, or tag.
+
+The canonical scope for the third-deep-scan software-builder hardening blocks
+is:
+
+`compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`
+
+Those `SOFTWARE-*` blocks are not parsed from `SYNTHESIS_MASTER.md`. Workers
+must create explicit ledgers under `blocks/<SOFTWARE-BLOCK>/` using the DS3-S*
+to SOFTWARE-* traceability table until/unless `scope_audit.py` supports them.
 
 Current mechanical totals from the audit script:
 
@@ -21,10 +30,11 @@ Current mechanical totals from the audit script:
 TOTAL_EXPECTED_ROWS: 233
 ```
 
-Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, H, and H+ are closed/pushed. Block M
-is next. The remaining audit rows are still ship-blocking until each block is
-ledgered, implemented or explicitly user-dispositioned, Claude-reviewed, and
-pushed.
+Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, H, and H+
+are closed/pushed. Block M is next. After M, J, and 0 close, the worker must
+continue into the `SOFTWARE-*` hardening queue below before AWS/R-tier spend.
+The remaining audit rows are still ship-blocking until each block is ledgered,
+implemented or explicitly user-dispositioned, Claude-reviewed, and pushed.
 
 Latest current summary:
 
@@ -42,7 +52,7 @@ critical failure. After A, the worker continues through the remaining blocks in
 the active redo order below:
 
 ```text
-A -> E+F -> L -> N -> K -> T -> C -> B -> B+ -> C+ -> D -> F2 -> I -> G -> G2 -> G3 -> H -> H+ -> M -> J -> 0
+A -> E+F -> L -> N -> K -> T -> C -> B -> B+ -> C+ -> D -> F2 -> I -> G -> G2 -> G3 -> H -> H+ -> M -> J -> 0 -> SOFTWARE-ASYNC-DECISION -> SOFTWARE-STATE -> SOFTWARE-CHECKPOINT -> SOFTWARE-SHELL -> SOFTWARE-RESULTS -> SOFTWARE-SUBAGENT -> SOFTWARE-COMPACT-TELEMETRY -> SOFTWARE-GATE
 ```
 
 This order is not the original build order. It is acceptable because every
@@ -91,6 +101,22 @@ Rows currently parsed from `SYNTHESIS_MASTER.md`:
 | T | 12 | Closed and pushed. |
 | J | 0 | No rows in current parser; no AWS spend without explicit user approval. |
 | K | 8 | Closed and pushed. |
+
+## Third Deep Scan Software-Builder Blocks
+
+These blocks are required after canonical Block 0 closes and before AWS/R-tier
+spend or production-readiness claims:
+
+| Block | Canonical source | Required purpose |
+|---|---|---|
+| SOFTWARE-ASYNC-DECISION | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Record async/background subagent decision; current recommendation is defer true async and validate strengthened sync supervision. |
+| SOFTWARE-STATE | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Durable todos, save/resume, per-turn status/memory, crash-safe journal, memory extraction path. |
+| SOFTWARE-CHECKPOINT | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Durable named checkpoint index, safe restore/revert preview, restart-safe listing. |
+| SOFTWARE-SHELL | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Foreground process kill-on-timeout/stop, background shell lifecycle, no-orphan proof. |
+| SOFTWARE-RESULTS | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Large tool-result persistence/replay and content-replacement references. |
+| SOFTWARE-SUBAGENT | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Structured synchronous subagent/reviewer envelope, files/tokens/cost/cache/heartbeat/recovery. |
+| SOFTWARE-COMPACT-TELEMETRY | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Typed compaction telemetry, cache evidence, broader failure-loop telemetry. |
+| SOFTWARE-GATE | `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` | Enforced `/verify` and `/done` gate consuming state/result/subagent/telemetry evidence. |
 
 ## Coverage Gate
 

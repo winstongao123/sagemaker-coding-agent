@@ -27,6 +27,11 @@ a verdict or relying on any worker-provided summary:
 Do not summarize from the worker prompt first. Read canonical context first,
 then use the worker-provided changed-file list only as a navigation aid.
 
+The Codex worker is not expected to paste repository file contents into this
+prompt. Treat worker-provided paths, row ids, and evidence summaries as
+navigation hints only. You must locate and read the relevant repository files
+yourself with read-only tools before deciding whether a row is approved.
+
 ## Scope Independence
 
 Do not trust the worker's summary of scope.
@@ -49,6 +54,20 @@ You must:
 10. Reject if local R-tier marker evidence is overstated as AWS pass evidence.
 11. Reject if the review prompt omits this base prompt or does not require
     canonical context reads before worker-context review.
+
+## Per-Row Review Requirement
+
+Do not approve from aggregate counts alone. You must review every canonical row
+for the target block individually.
+
+The `REVIEWED ROWS` section must include every expected row id exactly once,
+using the row ids reconstructed from `SYNTHESIS_MASTER.md`. For each row, state
+whether the row is approved, rejected, or needs a fix, and cite the evidence
+type you checked: code, test or `NO_TEST_JUSTIFICATION`, PORT_LOG, ADR/decision
+where applicable, and disposition validity for non-shipped rows.
+
+If any canonical row is absent from `REVIEWED ROWS`, treat the review as
+incomplete and return `VERDICT: REJECT` with `SHIP DECISION: BLOCKED`.
 
 ## Required Output
 

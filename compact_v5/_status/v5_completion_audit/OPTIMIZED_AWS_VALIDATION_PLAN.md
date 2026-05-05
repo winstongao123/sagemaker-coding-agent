@@ -17,13 +17,16 @@ Do not claim 98% confidence or production readiness unless all of these are
 true:
 
 1. All completion-audit blocks are closed, pushed, and Claude row-reviewed.
-2. Full strict scope audit is clean.
-3. Local and mock tests are green.
-4. This optimized AWS plan is Claude-reviewed and approved before spend.
-5. Each selected AWS software-writing scenario passes with required evidence.
-6. Telemetry shows acceptable tool, token, cache, compaction, and recovery
-   behavior.
-7. Final independent review approves the complete code, docs, test, telemetry,
+2. Accepted implement-now gaps from
+   `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md` are implemented, documented,
+   locally tested, and independently reviewed.
+3. Full strict scope audit is clean.
+4. Local and mock tests are green.
+5. This optimized AWS plan is Claude-reviewed and approved before spend.
+6. Each selected AWS software-writing scenario passes with required evidence.
+7. Telemetry shows acceptable tool, token, cache, compaction, subagent/reviewer,
+   and recovery behavior.
+8. Final independent review approves the complete code, docs, test, telemetry,
    and AWS evidence package.
 
 ## Optimization Principle
@@ -52,12 +55,32 @@ Every selected AWS run must write:
 - Phase A Claude review approving `APPROVE_FOR_AWS_CALL`;
 - raw Bedrock log;
 - telemetry with `tool_call_summary`, token counts, cache read/write counts,
-  model id, cost, retries, and repeated-call signals;
+  model id, cost, retries, repeated-call signals, and parent/subagent/reviewer
+  attribution when delegation or review agents are used;
 - compaction/cache evidence when the scenario exercises long context;
+- reviewer/subagent breakdown when the scenario uses reviewer, verify, explore,
+  build, fork, or other `task` roles. The evidence must include tokens, cost,
+  cache read/write, dispatch count, and whether the delegation was useful;
 - quality review with pass/fail reasoning;
 - metrics JSONL row;
 - review-log row;
 - `r_tier_gate.py --test <TEST>` pass result.
+
+R16 must also report separable sub-checks so a failure is actionable without
+rerunning the whole matrix:
+
+- status round-trip;
+- todo round-trip;
+- named-checkpoint round-trip;
+- verify/done stale-evidence block;
+- compaction event emitted;
+- shell background start/poll/kill if `SOFTWARE-SHELL` ships background
+  lifecycle;
+- final artifact quality.
+
+For cache evidence, if Bedrock/model output does not expose cache-hit/read/write
+fields for a run, the evidence package must record an explicit model-side
+limitation row instead of leaving the metric silently blank.
 
 ## Stop Rules
 
@@ -69,7 +92,8 @@ Stop AWS execution and return to implementation/review if:
 - a scenario needs more than the approved call budget;
 - telemetry is missing or cannot be trusted;
 - the model passes final artifacts but shows unsafe process behavior such as
-  uncontrolled repeated calls, lost status, lost memory, or unexplained
+  uncontrolled repeated calls, lost status, lost memory, wasteful subagent or
+  reviewer use, missing reviewer/subagent token attribution, or unexplained
   unrelated edits.
 
 ## Expected Confidence

@@ -19,6 +19,38 @@ Recovery:
 5. Record the failed iter as `NO_VERDICT` in the matrix/status instead of
    pretending it reviewed anything.
 
+## Claude Handoff Retry Policy
+
+Failed handoffs are not usable review verdicts, but they are still audit
+artifacts. Save prompt, stdout/review, stderr/log, matrix row, block verdict
+note, and block heartbeat for every attempt.
+
+- `ConnectionRefused`, timeout, or transient network failure: retry up to 3
+  times with the same intended prompt content, a new iteration number, and
+  saved artifacts for each attempt.
+- API credit, balance, or billing-route error: clear `ANTHROPIC_API_KEY` for
+  the Claude subprocess and retry through the Claude Code subscription-auth
+  path in `CLAUDE_REVIEWER_AUTH.md`.
+- Malformed command, bad `--setting-sources`, or PowerShell argument issue:
+  fix the command shape and retry with a new iteration number.
+- Empty output, missing `VERDICT:`, missing `SHIP DECISION:`, or plan-mode
+  output: record `NO_VERDICT`, fix prompt/stdin/permission mode, and retry.
+- Failed or timed-out pre-review Claude smoke: do not run the full review yet.
+  Record the smoke failure under the current block logs/status. If the smoke
+  output includes hook errors such as `SessionEnd hook`, `EPERM`, or
+  `uv_spawn`, retry with the documented smoke command that passes
+  `claude-reviewer-settings.json` so `disableAllHooks: true` applies. Then
+  retry the smoke using the documented non-escalated command shape, and
+  continue only local implementation/scope work until the reviewer path is
+  proven live.
+- Policy denial: do not bypass silently. If the user has already authorized
+  read-only Claude review for this audit, retry using the approved
+  non-escalated subscription-auth/read-only path. Do not request
+  sandbox/approval escalation for the Claude reviewer command; escalation can
+  be denied before Claude executes as private-repo egress. If the
+  non-escalated path is still policy-denied, stop with
+  `REVIEW_LOOP_BLOCKED.md`.
+
 ## Claude Writes A Plan Instead Of A Verdict
 
 Symptom:

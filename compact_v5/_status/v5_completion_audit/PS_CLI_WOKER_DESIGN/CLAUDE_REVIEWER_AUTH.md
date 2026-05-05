@@ -37,6 +37,27 @@ Before running Claude review from Codex/PowerShell:
 5. In PowerShell, do not pass `--setting-sources user,project,local`; the comma
    list can be split/mangled by the wrapper. The tested working form is
    `--setting-sources user`.
+6. Do not request sandbox/approval escalation for the Claude reviewer command.
+   Run the non-escalated read-only command shape below. If the non-escalated
+   command fails due network/auth, record and retry per `FAILURE_MODES.md`.
+   Escalation can be denied as private-repo egress before Claude executes, which
+   produces no usable review.
+7. Use `claude.cmd` or `claude -p` with the saved prompt piped through stdin.
+   The command must remain read-only: allowed tools are `Read,Grep,Glob,Bash`;
+   disallowed tools include `Edit`, `Write`, `NotebookEdit`, git
+   commit/push/tag/reset/checkout, `codex`, `aws`, and `sam`.
+
+## Review Context Boundary
+
+Codex must not paste or bundle repository file contents into the Claude prompt
+as a replacement for independent review. The prompt should give Claude the
+target block, canonical row ids, changed-file paths, artifact paths, command
+outputs/log paths, and a concise summary of what the worker believes changed.
+
+Claude Code is responsible for locating and reading the relevant files itself
+through read-only tools before producing `REVIEWED ROWS`, `VERDICT`, and
+`SHIP DECISION`. This preserves independence while avoiding the misleading
+pattern of treating the worker prompt as the source of truth.
 
 ## Tested Smoke Result
 

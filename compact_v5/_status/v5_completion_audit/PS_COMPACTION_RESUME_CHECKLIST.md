@@ -87,7 +87,24 @@ memory.
    - If there is an unresolved Claude finding, resolve/dispute/re-review before
      claiming closure.
 
-11. Before sending the next Claude review after resume, verify the prompt
+11. Before sending the next Claude review after resume, run a tiny Claude
+    child-process smoke test from repo root using the documented non-escalated
+    subscription-auth path:
+
+    ```powershell
+    $old=$env:ANTHROPIC_API_KEY
+    Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+    "Reply exactly: CLAUDE_REVIEWER_READY resume_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json --tools "" --output-format text
+    if ($old) { $env:ANTHROPIC_API_KEY=$old }
+    ```
+
+    Record the result in the current block status/log note. The settings file
+    disables Claude hooks; do not omit it, because hook failures can mask a
+    working reviewer path. If the smoke fails, follow
+    `PS_CLI_WOKER_DESIGN/FAILURE_MODES.md`; do not request sandbox/approval
+    escalation for the Claude reviewer command.
+
+12. Before sending the next Claude review after resume, verify the prompt
     includes `CLAUDE_REVIEWER_BASE_PROMPT.md` and instructs Claude to reread
     `SYNTHESIS_MASTER.md` directly before trusting worker context.
 

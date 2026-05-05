@@ -23,6 +23,24 @@ A clean close state means:
    automatically, or explicitly recorded as user-approved follow-up.
 7. Block docs, matrix, prompts, reviews, logs, status, changelog, tests, and
    self-review artifacts are updated.
+8. Documentation consistency check passes:
+   - `blocks/<BLOCK>/STATUS.md` review-attempt count matches
+     `blocks/<BLOCK>/REVIEWER_VERDICT.md`.
+   - latest usable Claude verdict and ship decision match the latest usable
+     review artifact.
+   - current blocking-row count matches `scope_audit.py --block <BLOCK>`.
+   - `blocks/<BLOCK>/LEDGER.md` has no stale `NOT_YET_CLAUDE_REVIEWED` or
+     `reviewer_verdict` = `pending` after a usable Claude approval.
+   - `git_evidence` remains an honest pending value before the close commit
+     and is replaced with the actual commit SHA in the checkpoint evidence
+     update after push.
+
+Before every close commit, grep the block artifacts for stale markers and
+either fix them or explicitly document why they are still valid:
+
+```powershell
+rg -n "NOT_YET_CLAUDE_REVIEWED|reviewer_verdict.*pending|Review attempts counted.*0|pending Block .* checkpoint" compact_v5/_status/v5_completion_audit/blocks/<BLOCK>
+```
 
 ## Checkpoint Commits During Long Blocks
 

@@ -18,6 +18,45 @@ codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -m g
 $old=$env:ANTHROPIC_API_KEY; Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue; claude -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "" --add-dir D:\Github\sagemaker-coding-agent --output-format text "Say CLAUDE_REVIEWER_READY and the model alias you are using. Do not run tools."; if ($old) { $env:ANTHROPIC_API_KEY=$old }
 ```
 
+## Claude Review Invocation Shape
+
+Before a block review, run the pre-review smoke below. Do not request
+sandbox/approval escalation for either command; if either fails, record the
+failed attempt and retry according to `FAILURE_MODES.md`.
+
+```powershell
+$old=$env:ANTHROPIC_API_KEY
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+"Reply exactly: CLAUDE_REVIEWER_READY pre_review_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json --tools "" --output-format text
+if ($old) { $env:ANTHROPIC_API_KEY=$old }
+```
+
+The smoke must include the reviewer settings file so `disableAllHooks: true`
+applies. Do not use a hook-enabled smoke as the gate for review readiness.
+
+Then use this shape for block reviews.
+
+```powershell
+$savedAnthropicApiKey = $env:ANTHROPIC_API_KEY
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+try {
+  Get-Content -Raw $promptPath | claude -p `
+    --model opus `
+    --effort xhigh `
+    --permission-mode dontAsk `
+    --setting-sources user `
+    --settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json `
+    --tools "Read,Grep,Glob,Bash" `
+    --disallowedTools "Edit,Write,NotebookEdit,Bash(git commit*),Bash(git push*),Bash(git tag*),Bash(git reset*),Bash(git checkout*),Bash(codex*),Bash(aws*),Bash(sam*)" `
+    > $reviewPath 2> $logPath
+}
+finally {
+  if ($null -ne $savedAnthropicApiKey) {
+    $env:ANTHROPIC_API_KEY = $savedAnthropicApiKey
+  }
+}
+```
+
 ## Monitor Review Output
 
 ```powershell

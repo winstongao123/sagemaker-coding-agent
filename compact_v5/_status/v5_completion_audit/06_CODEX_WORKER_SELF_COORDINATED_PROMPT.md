@@ -81,6 +81,11 @@ Read these first:
 23. `compact_v5/_status/v5_completion_audit/PS_SOFTWARE_PROJECT_WORKFLOW.md`
 24. `compact_v5/_status/v5_completion_audit/SOFTWARE_BUILDER_BLOCK_REVISIT_PLAN.md`
 25. `compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md`
+26. `compact_v5/_status/v5_completion_audit/PS_CODEX_3RD_SCAN_SOFTWARE_BUILDER_REQUIREMENTS.md`
+27. `compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`
+28. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-claude-architecture-review-2026-05-05.md`
+29. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-final-worker-readiness-claude-review-2026-05-05.md`
+30. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-final-worker-readiness-recheck-2026-05-05.md`
 
 ## Current Resume Point
 
@@ -304,13 +309,28 @@ skills, subagents, memory, continuation, or tests, follow
 - do not expand scope beyond the current block without ledger evidence and
   Claude review.
 
+Also follow `SOFTWARE_BUILDER_BLOCK_REVISIT_PLAN.md`. Completed/pushed blocks
+do not need to be reopened just because the software-builder goal was clarified,
+but they must be revisited if a new local test, optimized AWS test, Claude final
+review, strict scope audit, or telemetry evidence points to a concrete gap in
+that block. The goal is that v5 can perform long-running software engineering
+work like this audit loop: durable status/todos/memory, subagent/reviewer
+coordination, saved review prompts/logs/verdicts, token/cost/cache telemetry,
+checkpoint/resume, and an enforced verify/done gate.
+
 ## Block Order
 
 This is the active redo order. It is not the original build order from
 `SYNTHESIS_MASTER.md:641-665`, but it covers all 21 audit blocks. Use
 `BLOCK_ORDER_AND_COVERAGE.md` when resuming or explaining the order.
 
-`A -> E+F -> L -> N -> K -> T -> C -> B -> B+ -> C+ -> D -> F2 -> I -> G -> G2 -> G3 -> H -> H+ -> M -> J -> 0`
+`A -> E+F -> L -> N -> K -> T -> C -> B -> B+ -> C+ -> D -> F2 -> I -> G -> G2 -> G3 -> H -> H+ -> M -> J -> 0 -> SOFTWARE-ASYNC-DECISION -> SOFTWARE-STATE -> SOFTWARE-CHECKPOINT -> SOFTWARE-SHELL -> SOFTWARE-RESULTS -> SOFTWARE-SUBAGENT -> SOFTWARE-COMPACT-TELEMETRY -> SOFTWARE-GATE`
+
+The `SOFTWARE-*` blocks are third-deep-scan hardening blocks. Their canonical
+scope source is `THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`, not
+`SYNTHESIS_MASTER.md`. For these blocks, create explicit manual ledgers under
+`blocks/<SOFTWARE-BLOCK>/` using the DS3-S* to SOFTWARE-* traceability table
+until/unless `scope_audit.py` is extended to parse them mechanically.
 
 ## Progress Reporting
 

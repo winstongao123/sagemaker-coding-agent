@@ -91,6 +91,25 @@ The R-tier gate proves the 42-scenario matrix and zero-cost readiness contracts
 are materialized. It does not by itself prove that every software-writing
 scenario is already an executable real-AWS task.
 
+The third deep scan for long-running software-builder readiness is now a
+pre-AWS input:
+
+- `compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`
+
+Accepted implement-now gaps from that scan must be implemented, locally tested,
+documented, and independently reviewed before using AWS results to claim
+production readiness.
+
+Required zero-cost local tests from the Claude third-scan review:
+
+- `todo_write` state survives `/save` + `/resume` in a fresh process/session.
+- `/done` refuses with explicit reason when status is stale, required tests are
+  missing, required review evidence is missing, or last verification failed.
+- shell timeout kills a real sleeping child process tree; sentinel-file tests
+  must prove no orphan process survives.
+- an actual auto-compact or microcompact run emits typed audit actions consumed
+  by `build_telemetry.py`.
+
 The optimized pre-spend validation plan is:
 
 - `compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md`
@@ -133,6 +152,8 @@ Each scenario must have:
 - fixture files that resemble a real software project;
 - acceptance assertions over produced code/tests/artifacts;
 - telemetry and quality-review expectations;
+- reviewer/subagent token, cost, cache, and usefulness evidence when a
+  scenario uses `task` or reviewer-style subagents;
 - Phase A Claude approval before any Bedrock spend;
 - `r_tier_gate.py --test <TEST>` pass after execution.
 

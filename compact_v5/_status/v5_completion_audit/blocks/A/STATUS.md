@@ -39,22 +39,22 @@ Next Claude review state: no review running. No further Claude review needed bef
 
 ## Progress Heartbeat
 
-Current phase: CHECKPOINT_PUSHED
+Current phase: CHECKPOINT_PUSHED_AND_EVIDENCE_PUSHED
 
-Current task: Block A checkpoint was committed and pushed; checkpoint evidence is being saved in `blocks/A/GIT_CLOSE_PLAN.md`.
+Current task: Block A checkpoint and evidence commits are pushed. Awaiting next block instruction under the same worker/reviewer protocol.
 
-Last completed action: Commit `0f9ec6a81ae2998b2d11fec93d0d3bf24fa6128d` (`v5/block-a: complete compactor closure audit`) pushed successfully to `sageagent v5-build`.
+Last completed action: Evidence commit `05f85f442c47c49f0bf1e6e34871b653e13ff7f3` (`v5/block-a: record checkpoint evidence`) pushed successfully to `sageagent v5-build` after checkpoint commit `0f9ec6a81ae2998b2d11fec93d0d3bf24fa6128d`.
 
 Next 3 todo items:
 
-1. Save checkpoint evidence in `GIT_CLOSE_PLAN.md`.
-2. Optionally commit only `GIT_CLOSE_PLAN.md` and this heartbeat as evidence artifacts if needed for remote traceability.
-3. Continue with the next block only under the same worker/reviewer protocol; no AWS/R-tier spend or tag.
+1. Resume the v5 audit from files plus `scope_audit.py`, not memory.
+2. Start the next block only after reading its ledger/status/control files.
+3. Continue Claude read-only review handoffs with canonical-scope reconstruction; no AWS/R-tier spend, Codex review, nested `codex exec`, tag, or final-ready approval.
 
 Current review iteration count: 11 recorded attempts; latest usable review is iter11.
 
 Current ship-blocking row count: 0 after final scope audit and Claude iter11 review.
 
-Blocker or human decision needed: No human decision needed currently. Block A checkpoint push succeeded. Do not run AWS/R-tier spend, git tag, Codex review, nested codex exec, git reset/checkout, force push, or final-ready approval.
+Blocker or human decision needed: No human decision needed currently. Block A checkpoint and evidence pushes succeeded. Do not run AWS/R-tier spend, git tag, Codex review, nested codex exec, git reset/checkout, force push, or final-ready approval.
 
 Learning Factory / AGENTS.md state rule: Codex remains the only writer; Claude remains read-only reviewer; goals/status live in files; reviewer must reconstruct canonical scope first; any compaction/resume must use files plus `scope_audit.py`, not chat memory.

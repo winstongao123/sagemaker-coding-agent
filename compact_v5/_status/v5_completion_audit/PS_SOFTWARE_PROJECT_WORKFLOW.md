@@ -58,7 +58,10 @@ The long-task path must preserve:
 - task progress after auto-compaction;
 - evidence that tool calls were purposeful, not repeated waste;
 - telemetry for token use, cache behavior, compaction events, tool calls, and
-  subagent dispatches.
+  subagent/reviewer dispatches;
+- reviewer/subagent token, cost, cache, and usefulness breakdown whenever v5
+  delegates review, verification, exploration, build, fork, or other worker
+  roles.
 
 ## Block/Test Implications
 
@@ -99,6 +102,8 @@ include and execute scenarios that prove:
 9. Subagent/reviewer use is appropriate and not wasteful.
 10. Telemetry/quality review shows efficient prompt, token, cache, and tool
     usage.
+11. Reviewer/subagent token and cost attribution is visible in `/cost`,
+    telemetry, and R-tier metrics when those roles are used.
 
 These requirements map primarily to R13, R14, R15, R16, and R19-U1 through
 R19-U10. If those scenarios are only readiness specs, they must be hardened
