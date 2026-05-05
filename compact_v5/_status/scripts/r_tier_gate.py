@@ -275,6 +275,22 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
                 errors.append(f"{test_id}: metrics row completed is not true")
             if not escalated and row.get("verdict") not in {"GENUINE_PASS", "READY"}:
                 errors.append(f"{test_id}: metrics verdict is not pass/ready")
+            if test_id in {"R13", "R14", "R15"}:
+                if row.get("changed_files_within_fixture") is not True:
+                    errors.append(
+                        f"{test_id}: metrics row must set changed_files_within_fixture=true"
+                    )
+            if test_id == "R13":
+                try:
+                    passed = int(row.get("score_passed", -1))
+                    total_score = int(row.get("score_total", -1))
+                except (TypeError, ValueError):
+                    passed = -1
+                    total_score = -1
+                if total_score != 5 or passed < 4:
+                    errors.append(
+                        "R13: READY metrics must show score_total=5 and score_passed>=4"
+                    )
 
     # If an escalation exists, it must be reflected in the review log.
     if escalated:
@@ -302,6 +318,36 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
                 errors.append(f"{test_id}: telemetry {fp.name} outcome.completed is not true")
             if data["outcome"].get("cost_cap_hit") is True:
                 errors.append(f"{test_id}: telemetry {fp.name} reports cost_cap_hit")
+        if test_id == "R16":
+            subchecks = data.get("software_builder_subchecks")
+            required_subchecks = {
+                "status_round_trip",
+                "todo_round_trip",
+                "named_checkpoint_round_trip",
+                "verify_done_stale_evidence_blocked",
+                "compaction_event_emitted",
+                "cache_evidence_recorded",
+                "cost_context_reported",
+                "final_artifact_quality_passed",
+            }
+            if not isinstance(subchecks, dict):
+                errors.append(
+                    f"R16: telemetry {fp.name} missing software_builder_subchecks object"
+                )
+            else:
+                missing_subchecks = [
+                    key for key in sorted(required_subchecks)
+                    if subchecks.get(key) is not True
+                ]
+                if missing_subchecks:
+                    errors.append(
+                        f"R16: telemetry {fp.name} missing/false subchecks {missing_subchecks}"
+                    )
+        if test_id == "R19-U7":
+            if data.get("breaker_fired") is not True:
+                errors.append(
+                    f"R19-U7: telemetry {fp.name} must set breaker_fired=true"
+                )
     return errors
 
 

@@ -11,6 +11,12 @@ Every AWS run still needs Phase A Claude approval, explicit user approval,
 budget headroom, raw logs, telemetry, quality review, metrics, and
 `r_tier_gate.py --test <TEST>` pass.
 
+Execution loop: `compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md`.
+Every test must pass worker preflight, Claude Phase A design review, explicit
+spend approval, AWS execution, metadata capture, worker post-run review, Claude
+Phase C review, and the fix/retry/escalation loop before it can count toward
+production readiness.
+
 ## Confidence Rule
 
 Do not claim 98% confidence or production readiness unless all of these are
@@ -48,6 +54,48 @@ real model behavior is the point being evaluated.
 | 6 | R16 long app build | completes a small real app across a long session | app tests, `/status`, `/phase`, `/save`, `/resume`, `/checkpoint`, `/verify`, `/done`, `/cost`, `/context`, compaction/cache telemetry | broadest end-to-end software-builder proof |
 | 7 | R19-U10 long coherence | preserves final task intent after compactions | final-task coherence, memory/status integrity, compaction events, cache trend, quality review | isolates long-coherence risk after R16 proves app build |
 
+## Precondition Gate For Long-Run Tests
+
+R16 and R19-U10 must not receive per-test Phase A approval until these
+software-builder blocks are closed, pushed, locally tested, and Claude-reviewed:
+
+- `SOFTWARE-STATE`
+- `SOFTWARE-CHECKPOINT`
+- `SOFTWARE-SHELL` if background shell lifecycle is accepted for v5.0.1
+- `SOFTWARE-RESULTS`
+- `SOFTWARE-SUBAGENT`
+- `SOFTWARE-COMPACT-TELEMETRY`
+- `SOFTWARE-GATE`
+
+This prevents AWS from testing missing infrastructure and then producing a
+misleading failure.
+
+## Cost-Cap And Bundle Policy
+
+Current caps remain intentionally small, but they are interpreted through a
+token-budget model at Phase A:
+
+| Test | Cap | Phase A budget model |
+|---|---:|---|
+| R13 | $0.50 | 5 bounded tasks, max 1 model attempt per task plus one verification/synthesis turn. READY requires at least 4/5 passing tasks and no unrelated edits; 5/5 is the target. |
+| R16 | $1.00 | Bounded small Flask CRUD fixture, max 8 primary model turns, local tests after edits, forced/local compaction evidence where possible. If Phase A estimates exceed cap, do not spend; ask user to approve cap change or shrink fixture. |
+| R19-U10 | $0.50 | 150 logical turns may be represented by a prebuilt transcript/churn fixture plus a small number of real model turns that must use pre-compaction facts. If true 150 Bedrock calls are required, this cap is not valid and Phase A must stop for user approval. |
+
+Bundle policy:
+
+- Stage 4 can bundle R19-U1+R19-U2. Cap is the sum: $0.40.
+- Stage 5 can bundle R19-U3+R19-U6+R19-U7. Cap is the sum: $0.90.
+- Bundled runs may share one raw log, but must write per-test telemetry,
+  metrics, quality rows, and review-log rows.
+
+Determinism policy:
+
+- one `GENUINE_PASS` is enough only when quality review finds no flakiness,
+  missing evidence, or suspicious process behavior;
+- rerun once if the pass is marginal or telemetry is incomplete;
+- cost-cap-hit counts as one failed attempt unless no model call occurred;
+- after 3 failed meaningful attempts, stop and escalate.
+
 ## Required Evidence Per AWS Run
 
 Every selected AWS run must write:
@@ -77,6 +125,9 @@ rerunning the whole matrix:
 - shell background start/poll/kill if `SOFTWARE-SHELL` ships background
   lifecycle;
 - final artifact quality.
+
+These sub-checks must be typed evidence in telemetry as
+`software_builder_subchecks`, not only prose in a quality review.
 
 For cache evidence, if Bedrock/model output does not expose cache-hit/read/write
 fields for a run, the evidence package must record an explicit model-side

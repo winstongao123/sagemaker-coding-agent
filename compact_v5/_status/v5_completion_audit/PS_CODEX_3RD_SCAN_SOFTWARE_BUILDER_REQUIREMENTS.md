@@ -88,6 +88,15 @@ Before AWS spend:
 - run Claude final review over code, docs, tests, logs, telemetry, and the
   software-builder evidence.
 
+Real AWS/R-tier execution must follow:
+
+- `compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md`
+
+That loop requires worker preflight, Claude Phase A design review, explicit
+spend approval, AWS execution, metadata capture, worker post-run review, Claude
+Phase C genuine-pass review, fix/retry, and escalation after 3 unsuccessful
+meaningful attempts on the same test.
+
 AWS/R-tier testing may start only after those local gates pass and the user
 explicitly approves spend.
 
@@ -116,4 +125,3 @@ The project may claim high production confidence only after:
 
 Before that, the correct claim is: the plan is ready and the worker can
 continue, but production readiness is not yet proven.
-

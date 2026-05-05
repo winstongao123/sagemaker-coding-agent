@@ -81,11 +81,12 @@ Read these first:
 23. `compact_v5/_status/v5_completion_audit/PS_SOFTWARE_PROJECT_WORKFLOW.md`
 24. `compact_v5/_status/v5_completion_audit/SOFTWARE_BUILDER_BLOCK_REVISIT_PLAN.md`
 25. `compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md`
-26. `compact_v5/_status/v5_completion_audit/PS_CODEX_3RD_SCAN_SOFTWARE_BUILDER_REQUIREMENTS.md`
-27. `compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`
-28. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-claude-architecture-review-2026-05-05.md`
-29. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-final-worker-readiness-claude-review-2026-05-05.md`
-30. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-final-worker-readiness-recheck-2026-05-05.md`
+26. `compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md`
+27. `compact_v5/_status/v5_completion_audit/PS_CODEX_3RD_SCAN_SOFTWARE_BUILDER_REQUIREMENTS.md`
+28. `compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md`
+29. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-claude-architecture-review-2026-05-05.md`
+30. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-final-worker-readiness-claude-review-2026-05-05.md`
+31. `compact_v5/_status/v5_completion_audit/reviews/third-deep-scan-final-worker-readiness-recheck-2026-05-05.md`
 
 ## Current Resume Point
 

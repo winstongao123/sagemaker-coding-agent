@@ -42,6 +42,14 @@ _REVISIT_PLAN = (
     / "v5_completion_audit"
     / "SOFTWARE_BUILDER_BLOCK_REVISIT_PLAN.md"
 )
+_AWS_TEST_LOOP = (
+    _REPO_ROOT
+    / "compact_v5"
+    / "_status"
+    / "v5_completion_audit"
+    / "PS_AWS_TEST_EXECUTION_LOOP.md"
+)
+_EVIDENCE_CONTRACT = _REPO_ROOT / "compact_v5" / "_status" / "R_TIER_EVIDENCE_CONTRACT.md"
 
 if str(_AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(_AGENT_ROOT))
@@ -63,7 +71,7 @@ def _load_readiness_specs():
 SOFTWARE_PROJECT_CONTRACTS = {
     "R13": {
         "purpose": "coding accuracy",
-        "must_include": ["tests", "score", "unrelated"],
+        "must_include": ["tests", "score", "unrelated", "4/5"],
         "telemetry": ["outcome", "tool_call_summary", "quality_review"],
         "commands": ["/verify", "/done"],
     },
@@ -81,12 +89,13 @@ SOFTWARE_PROJECT_CONTRACTS = {
     },
     "R16": {
         "purpose": "long app build",
-        "must_include": ["app tests", "compaction", "cache"],
+        "must_include": ["app tests", "compaction", "cache", "software_builder_subchecks"],
         "telemetry": [
             "compaction_events",
             "cache_efficiency_trend",
             "tool_call_summary",
             "quality_review",
+            "software_builder_subchecks",
         ],
         "commands": [
             "/status",
@@ -261,6 +270,54 @@ def test_save_resume_status_phase_preserve_long_task_state(tmp_path, monkeypatch
     assert TOKENS.session_cache_write == 50
 
 
+def test_reviewer_subagent_token_cost_attribution_is_visible(monkeypatch):
+    """Reviewer/subagent usage must be visible before AWS evidence is trusted."""
+    from runtime.config import CONFIG
+    from runtime.tokens import TokenTracker
+
+    tracker = TokenTracker(config=CONFIG)
+    tracker.add(
+        {
+            "input_tokens": 1000,
+            "output_tokens": 200,
+            "cache_read_input_tokens": 100,
+            "cache_creation_input_tokens": 50,
+        },
+        model_id=CONFIG.model_id,
+        agent_kind="parent",
+    )
+    tracker.add(
+        {
+            "input_tokens": 500,
+            "output_tokens": 120,
+            "cache_read_input_tokens": 40,
+            "cache_creation_input_tokens": 20,
+        },
+        model_id=CONFIG.model_id,
+        agent_kind="review",
+    )
+
+    stats = tracker.get_stats()
+    assert stats["subagent_input_tokens"]["review"] == 500
+    assert stats["subagent_output_tokens"]["review"] == 120
+    assert stats["subagent_cache_read_tokens"]["review"] == 40
+    assert stats["subagent_cache_write_tokens"]["review"] == 20
+    assert stats["subagent_cost_usd"]["review"] > 0
+
+    cost_block = tracker.get_cost_block()
+    assert "parent=$" in cost_block
+    assert "review=$" in cost_block
+    assert "review=$" in cost_block and "cache=40/20" in cost_block
+    assert "Cache: read=140 write=70 total=210" in cost_block
+
+    otel = tracker.get_otel_counters()
+    assert otel["agents.subagent.cost_usd"]["review"] > 0
+    assert otel["agents.subagent.cache_read"]["review"] == 40
+    assert otel["agents.subagent.cache_write"]["review"] == 20
+    assert otel["tokens.cache_read"] == 140
+    assert otel["tokens.cache_write"] == 70
+
+
 def test_software_project_workflow_doc_is_persistent_and_command_consolidated():
     text = _WORKFLOW_DOC.read_text(encoding="utf-8")
 
@@ -272,6 +329,7 @@ def test_software_project_workflow_doc_is_persistent_and_command_consolidated():
         "R13",
         "R16",
         "R19-U10",
+        "Reviewer/subagent token and cost attribution",
     ]:
         assert token in text
 
@@ -287,10 +345,20 @@ def test_optimized_aws_validation_plan_supports_98_percent_confidence_gate():
         "tool_call_summary",
         "token counts",
         "cache read/write counts",
+        "parent/subagent/reviewer",
+        "reviewer/subagent breakdown",
         "compaction/cache evidence",
         "uncontrolled repeated calls",
         "lost status",
         "lost memory",
+        "missing reviewer/subagent token attribution",
+        "SOFTWARE-STATE",
+        "SOFTWARE-CHECKPOINT",
+        "SOFTWARE-COMPACT-TELEMETRY",
+        "software_builder_subchecks",
+        "R19-U1+R19-U2",
+        "R19-U3+R19-U6+R19-U7",
+        "cost-cap-hit counts as one failed attempt",
     ]:
         assert token in text
 
@@ -310,6 +378,45 @@ def test_optimized_aws_validation_plan_supports_98_percent_confidence_gate():
 
     assert "Do not duplicate" in text
     assert "Use AWS only for tests that reveal multiple production qualities" in text
+
+
+def test_aws_test_execution_loop_requires_review_fix_retry_and_escalation():
+    text = _AWS_TEST_LOOP.read_text(encoding="utf-8")
+
+    for token in [
+        "worker preflight",
+        "Claude Phase A",
+        "explicit spend approval",
+        "AWS execution",
+        "Metadata capture",
+        "Worker post-run review",
+        "Claude Phase C",
+        "3 meaningful fix/retry attempts",
+        "ESCALATION-<TEST>.md",
+    ]:
+        assert token in text
+
+
+def test_r_tier_evidence_contract_has_typed_software_builder_fields():
+    text = _EVIDENCE_CONTRACT.read_text(encoding="utf-8")
+
+    for token in [
+        "software_builder_subchecks",
+        "status_round_trip",
+        "todo_round_trip",
+        "named_checkpoint_round_trip",
+        "verify_done_stale_evidence_blocked",
+        "compaction_event_emitted",
+        "cache_evidence_recorded",
+        "changed_files_within_fixture",
+        "score_passed>=4",
+        "breaker_fired=true",
+        "MODEL_LIMITATION",
+        "R19-U1+R19-U2",
+        "R19-U3+R19-U6+R19-U7",
+        "cost-cap-hit counts as one failed attempt",
+    ]:
+        assert token in text
 
 
 def test_software_builder_block_revisit_plan_is_explicit():

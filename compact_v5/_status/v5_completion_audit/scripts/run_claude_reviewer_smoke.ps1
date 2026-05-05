@@ -3,6 +3,7 @@ param(
     [string]$Label = "pre_review_smoke",
     [string]$OutPath = "",
     [string]$ErrPath = "",
+    [string]$SettingsPath = "compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json",
     [int]$TimeoutSeconds = 120
 )
 
@@ -41,9 +42,7 @@ $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 $psi.CreateNoWindow = $true
 
-$psi.ArgumentList.Add("/d")
-$psi.ArgumentList.Add("/c")
-$psi.ArgumentList.Add("`"$ClaudeCmd`" -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --tools `"`" --output-format text")
+$psi.Arguments = "/d /c `"`"$ClaudeCmd`" -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings `"$SettingsPath`" --tools `"`"`" --output-format text`""
 
 if ($psi.Environment.ContainsKey("ANTHROPIC_API_KEY")) {
     $psi.Environment.Remove("ANTHROPIC_API_KEY") | Out-Null

@@ -124,7 +124,7 @@ SCENARIO_SPECS = {
         "fixture": "five HumanEval-mini Python tasks with deterministic unit tests",
         "prompt": "Implement five small functions and run their tests.",
         "acceptance": [
-            "all five task tests pass or scored failure is logged",
+            "at least 4/5 task tests pass, target 5/5, or the run is escalated",
             "no unrelated file edits occur",
             "final score is recorded in metrics/quality evidence",
         ],
@@ -160,6 +160,7 @@ SCENARIO_SPECS = {
             "app tests pass",
             "routes, persistence, validation, and errors are covered",
             "compaction/cache behavior is reviewed for long-session coherence",
+            "software_builder_subchecks typed evidence records status/todo/checkpoint/verify/done/cache/cost/artifact quality",
         ],
     },
     "R18-E1": {
