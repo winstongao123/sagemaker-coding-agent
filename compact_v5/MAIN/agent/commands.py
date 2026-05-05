@@ -297,6 +297,12 @@ def cmd_revert(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult
             seen.setdefault(s["file"], s["snapshot"])
         lines = [f"  {f}" for f in sorted(seen)]
         return CommandResult(text="Files with snapshots:\n" + "\n".join(lines))
+    confirmed = target.endswith(" --yes")
+    if confirmed:
+        target = target[:-6].strip()
+    if not confirmed:
+        _ok, msg = SNAPSHOTS.preview_revert(target)
+        return CommandResult(text=msg)
     ok, msg = SNAPSHOTS.revert(target)
     return CommandResult(text=msg, side_effect=f"reverted:{target}" if ok else "")
 
@@ -538,25 +544,57 @@ def cmd_checkpoint(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandRe
         files = sorted({s["file"] for s in snaps})
         if not files:
             return CommandResult(text="(no files to checkpoint — nothing edited yet)")
-        for f in files:
-            SNAPSHOTS.save(f)
+        checkpoint = SNAPSHOTS.create_checkpoint(name, files)
         return CommandResult(
-            text=f"Checkpoint '{name}': re-snapshotted {len(files)} files.",
+            text=(
+                f"Checkpoint '{name}': snapshotted "
+                f"{len(checkpoint.get('entries', []))} files."
+            ),
             side_effect=f"checkpoint:{name}",
         )
     if sub == "list":
         snaps = SNAPSHOTS.list_snapshots()
-        if not snaps:
+        checkpoints = SNAPSHOTS.list_checkpoints()
+        if not snaps and not checkpoints:
             return CommandResult(text="(no snapshots available)")
-        lines = [f"  {s['file']} @ {s.get('time', 0):.0f}" for s in snaps[-20:]]
-        return CommandResult(text="Recent snapshots:\n" + "\n".join(lines))
+        lines: List[str] = []
+        if checkpoints:
+            lines.append("Named checkpoints:")
+            lines.extend(
+                f"  {c.get('name')} ({len(c.get('entries', []))} files)"
+                for c in checkpoints[-20:]
+            )
+        if snaps:
+            lines.append("Recent snapshots:")
+            lines.extend(
+                f"  {s['file']} @ {s.get('time', 0):.0f}"
+                for s in snaps[-20:]
+            )
+        return CommandResult(text="\n".join(lines))
     if sub == "restore":
         if len(parts) < 2:
-            return CommandResult(text="Usage: /checkpoint restore <file>")
-        target = " ".join(parts[1:])
+            return CommandResult(text="Usage: /checkpoint restore <name-or-file> [--yes]")
+        confirmed = parts[-1] == "--yes"
+        restore_parts = parts[1:-1] if confirmed else parts[1:]
+        target = " ".join(restore_parts)
+        checkpoint_names = {c.get("name") for c in SNAPSHOTS.list_checkpoints()}
+        if target in checkpoint_names:
+            if not confirmed:
+                _ok, msg = SNAPSHOTS.preview_checkpoint_restore(target)
+                return CommandResult(text=msg)
+            ok, msg = SNAPSHOTS.restore_checkpoint(target)
+            return CommandResult(
+                text=msg,
+                side_effect=f"checkpoint_restored:{target}" if ok else "",
+            )
+        if not confirmed:
+            _ok, msg = SNAPSHOTS.preview_revert(target)
+            return CommandResult(text=msg)
         ok, msg = SNAPSHOTS.revert(target)
         return CommandResult(text=msg, side_effect="checkpoint_restored" if ok else "")
-    return CommandResult(text="Usage: /checkpoint [create <name>|list|restore <file>]")
+    return CommandResult(
+        text="Usage: /checkpoint [create <name>|list|restore <name-or-file> [--yes]]"
+    )
 
 
 def cmd_phase(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:

@@ -8,9 +8,11 @@ PORT_LOG: see #044.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import tempfile
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,7 +34,9 @@ class SnapshotManager:
         self._workspace = workspace or self._config.workspace
         self._dir = os.path.join(self._workspace, ".snapshots")
         self._log: List[Dict[str, Any]] = []
+        self._checkpoints: List[Dict[str, Any]] = []
         self._lock = threading.Lock()
+        self._load_index()
 
     @property
     def _config(self):
@@ -45,6 +49,51 @@ class SnapshotManager:
     # --------------------------------------------------------
     # Save
     # --------------------------------------------------------
+
+    @property
+    def index_path(self) -> str:
+        return os.path.join(self._dir, "index.json")
+
+    def _load_index(self) -> None:
+        path = self.index_path
+        if not os.path.isfile(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError, TypeError):
+            return
+        snapshots = data.get("snapshots", [])
+        checkpoints = data.get("checkpoints", [])
+        if isinstance(snapshots, list):
+            self._log = [dict(s) for s in snapshots if isinstance(s, dict)]
+        if isinstance(checkpoints, list):
+            self._checkpoints = [
+                dict(c) for c in checkpoints if isinstance(c, dict)
+            ]
+
+    def _persist_index_locked(self) -> None:
+        if self._config.disable_local_traces:
+            return
+        os.makedirs(self._dir, exist_ok=True)
+        payload = {
+            "schema": "sageagent.snapshots.v1",
+            "updated_at": time.time(),
+            "snapshots": list(self._log),
+            "checkpoints": list(self._checkpoints),
+        }
+        fd, tmp_path = tempfile.mkstemp(suffix=".tmp", dir=self._dir)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, sort_keys=True)
+                f.write("\n")
+            os.replace(tmp_path, self.index_path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def save(self, filepath: str) -> Optional[str]:
         """Snapshot a file before modification. Returns snapshot path or None.
@@ -78,6 +127,7 @@ class SnapshotManager:
                 snap_path = os.path.join(self._dir, f"{ts}_{suffix}_{safe_name}")
                 shutil.copy2(filepath, snap_path)
                 entry = {
+                    "id": f"{ts}_{suffix}",
                     "file": filepath,
                     "rel": rel,
                     "snapshot": snap_path,
@@ -86,6 +136,7 @@ class SnapshotManager:
                 self._log.append(entry)
                 if len(self._log) > self.MAX_SNAPSHOTS:
                     evicted_path = self._evict_oldest_locked()
+                self._persist_index_locked()
             # Remove evicted snapshot file outside lock (I/O can be slow).
             if evicted_path:
                 try:
@@ -120,6 +171,45 @@ class SnapshotManager:
                 return [e for e in self._log if e["file"] == filepath]
             return list(self._log)
 
+    def list_checkpoints(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            return list(self._checkpoints)
+
+    def create_checkpoint(self, name: str, files: List[str]) -> Dict[str, Any]:
+        entries: List[Dict[str, Any]] = []
+        for filepath in files:
+            snap_path = self.save(filepath)
+            if not snap_path:
+                continue
+            with self._lock:
+                matching = [e for e in self._log if e.get("snapshot") == snap_path]
+                if matching:
+                    entries.append(dict(matching[-1]))
+        checkpoint = {
+            "name": name,
+            "time": time.time(),
+            "entries": entries,
+        }
+        with self._lock:
+            self._checkpoints = [
+                c for c in self._checkpoints if c.get("name") != name
+            ]
+            self._checkpoints.append(checkpoint)
+            self._persist_index_locked()
+        return checkpoint
+
+    def preview_revert(self, filepath: str) -> Tuple[bool, str]:
+        with self._lock:
+            matching = [e for e in self._log if e["file"] == filepath]
+        if not matching:
+            return False, f"No snapshots for {filepath}"
+        latest = matching[-1]
+        return (
+            True,
+            "Preview only; re-run with `--yes` to restore "
+            f"{filepath} from snapshot {latest['snapshot']}",
+        )
+
     def revert(self, filepath: str) -> Tuple[bool, str]:
         """Revert a file to its most recent snapshot."""
         with self._lock:
@@ -138,6 +228,45 @@ class SnapshotManager:
             )
         except OSError as e:
             return False, f"Revert failed: {e}"
+
+    def preview_checkpoint_restore(self, name: str) -> Tuple[bool, str]:
+        with self._lock:
+            matches = [c for c in self._checkpoints if c.get("name") == name]
+        if not matches:
+            return False, f"Checkpoint not found: {name}"
+        entries = matches[-1].get("entries", [])
+        files = [e.get("file", "") for e in entries if isinstance(e, dict)]
+        if not files:
+            return False, f"Checkpoint '{name}' has no restorable files"
+        lines = "\n".join(f"  {f}" for f in files)
+        return (
+            True,
+            f"Preview only; re-run with `--yes` to restore checkpoint '{name}'.\n"
+            f"Files that would be restored:\n{lines}",
+        )
+
+    def restore_checkpoint(self, name: str) -> Tuple[bool, str]:
+        with self._lock:
+            matches = [c for c in self._checkpoints if c.get("name") == name]
+        if not matches:
+            return False, f"Checkpoint not found: {name}"
+        checkpoint = matches[-1]
+        restored: List[str] = []
+        for entry in checkpoint.get("entries", []):
+            if not isinstance(entry, dict):
+                continue
+            filepath = entry.get("file")
+            snapshot = entry.get("snapshot")
+            if not filepath or not snapshot or not os.path.isfile(snapshot):
+                continue
+            try:
+                shutil.copy2(snapshot, filepath)
+                restored.append(str(entry.get("rel") or filepath))
+            except OSError:
+                continue
+        if not restored:
+            return False, f"Checkpoint '{name}' restored 0 files"
+        return True, f"Restored checkpoint '{name}': {', '.join(restored)}"
 
     def revert_all(self) -> str:
         """Revert all files to their earliest snapshots."""
