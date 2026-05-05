@@ -1,0 +1,158 @@
+py : C:\Users\winst\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n
+2kfra8p0\LocalCache\local-packages\Python311\site-packages\requests\__init__.py:113: 
+RequestsDependencyWarning: urllib3 (2.3.0) or chardet 
+(7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!
+At line:6 char:1
++ py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\winst\...ported version!:Strin 
+   g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn(
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\winst\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe
+codspeed: 4.3.0 (disabled, mode: walltime, callgraph: not supported, timer_resolution: 100.0ns)
+cachedir: .pytest_cache
+benchmark: 5.2.3 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: D:\Github\sagemaker-coding-agent
+plugins: anyio-4.12.1, langsmith-0.6.8, asyncio-1.3.0, benchmark-5.2.3, codspeed-4.3.0, recording-0.13.4, socket-0.7.0, syrupy-5.1.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py::test_r19_u4_u5_subagent_recovery_bundle **Summary of Alpha's claim:**
+
+Alpha is **arguing FOR shipping** the Payment API. The reviewer's position is that the Payment API is in a healthy state and ready for production deployment.
+**Summary of Beta's Claim:**
+
+Beta is **arguing for a ROLLBACK**. The claim is that the Payment API error rate is too high, making the current deployment problematic and requiring a rollback to a previous stable version.
+[Stopped by user]
+
+[R19-U4_AUDIT_DIR] D:\Github\sagemaker-coding-agent\compact_v5\_status\r_tier_runtime\R19-U4-call1-audit
+[R19-U4_SIDE_METRICS] D:\Github\sagemaker-coding-agent\compact_v5\_status\r-tier-R19-U4-aws-call1-side-metrics.json
+[R19-U4_METRICS] {"api_calls": 8, "audit_dir": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R19-U4-call1-audit", "cache_hit_pct": 0.0, "call": 1, "changed_files_within_fixture": true, "completed": true, "cost_usd": 0.0529, "date": "2026-05-05T18:01:21Z", "failure_loop_event_count": 0, "guard_failure_class_counts": {}, "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0", "process_quality_ok": true, "reviewer_calls": 0, "reviewer_cost_usd": 0.0, "reviewer_tokens_in": 0, "reviewer_tokens_out": 0, "stop_reason": "user_stop", "subagent_calls": 2, "subagent_cost_usd": 0.0, "subagent_tokens_in": 0, "subagent_tokens_out": 0, "task_dispatches": 2, "test": "R19-U4", "tokens_in": 24, "tokens_out": 1255, "tool_calls": 7, "tool_order": ["read_file", "tool_search", "task", "task", "read_file", "write_file", "read_file"], "verdict": "GENUINE_PASS", "wallclock_s": 16.32}
+## Checkout Probe Summary
+
+**Status:** ? PASS
+
+**Key Finding:**
+- P95 latency: **180ms**
+
+**Notable Observations:**
+- The checkout probe completed successfully with acceptable performance metrics
+- The 180ms p95 latency indicates that 95% of checkout operations completed within this timeframe, suggesting stable performance under the tested conditions
+
+The evidence file is minimal but confirms the checkout functionality is working as expected with reasonable latency characteristics.
+## Summary of Inventory Probe
+
+**File:** `evidence/inventory.md`
+
+**Result:** ? **PASS**
+
+**Key Finding:** Stock sync is fresh.
+
+**Details:**
+The inventory probe completed successfully with a single-line report indicating that the stock synchronization is current and functioning properly. No issues or anomalies were detected.
+**Failure Report:**
+
+The file `evidence/missing_probe.md` **does not exist** at the expected path:
+```
+C:\Users\winst\AppData\Local\Temp\pytest-of-winst\pytest-436\test_r19_u4_u5_subagent_recove0\r19_u5\evidence\missing_probe.md
+```
+
+The read attempt returned a "File not found" error. No summary is available. The file either:
+- Has not been created yet
+- Exists at a different location
+- Was deleted
+
+No further retry attempts will be made per your instructions.
+Done. I have successfully completed the task:
+
+**Summary of Actions:**
+
+1. ? **Dispatched 3 explore subagents in parallel:**
+   - Subagent 1: Summarized `evidence/checkout.md` ? **PASS** (P95 latency: 180ms)
+   - Subagent 2: Summarized `evidence/inventory.md` ? **PASS** (Stock sync is fresh)
+   - Subagent 3: Attempted `evidence/missing_probe.md` ? **FILE NOT FOUND** (recorded failure, no retry)
+
+2. ? **Wrote recovery_summary.md** containing:
+   - Both successful probe findings
+   - Explicit record of the missing probe file failure
+   - Recovery decision: **CONTINUE_WITH_PARTIAL_EVIDENCE**
+
+The recovery summary is now ready and documents that despite the missing probe, sufficient evidence exists to proceed with recovery based on the two successful probes.
+
+[R19-U5_AUDIT_DIR] D:\Github\sagemaker-coding-agent\compact_v5\_status\r_tier_runtime\R19-U5-call1-audit
+[R19-U5_SIDE_METRICS] D:\Github\sagemaker-coding-agent\compact_v5\_status\r-tier-R19-U5-aws-call1-side-metrics.json
+[R19-U5_METRICS] {"api_calls": 10, "audit_dir": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R19-U5-call1-audit", "cache_hit_pct": 0.0, "call": 1, "changed_files_within_fixture": true, "completed": false, "cost_usd": 0.0366, "date": "2026-05-05T18:01:56Z", "failure_loop_event_count": 1, "guard_failure_class_counts": {}, "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0", "process_quality_ok": true, "reviewer_calls": 0, "reviewer_cost_usd": 0.0, "reviewer_tokens_in": 0, "reviewer_tokens_out": 0, "stop_reason": "end_turn", "subagent_calls": 3, "subagent_cost_usd": 0.0, "subagent_tokens_in": 0, "subagent_tokens_out": 0, "task_dispatches": 3, "test": "R19-U5", "tokens_in": 30, "tokens_out": 1822, "tool_calls": 8, "tool_order": ["read_file", "read_file", "read_file", "tool_search", "task", "task", "task", "write_file"], "verdict": "FAIL", "wallclock_s": 35.51}
+FAILED
+
+================================== FAILURES ===================================
+___________________ test_r19_u4_u5_subagent_recovery_bundle ___________________
+
+tmp_path = WindowsPath('C:/Users/winst/AppData/Local/Temp/pytest-of-winst/pytest-436/test_r19_u4_u5_subagent_recove0')
+
+    @pytest.mark.skipif(
+        not os.getenv("RUN_REAL_BEDROCK"),
+        reason="RUN_REAL_BEDROCK not set; Stage 6 R19-U4/U5 bundle is real-AWS gated.",
+    )
+    def test_r19_u4_u5_subagent_recovery_bundle(tmp_path):
+        """R19-U4/U5 pass when parent handles conflicting/failed subagent evidence."""
+        from runtime.bedrock_client import BedrockClient
+        from runtime.config import CONFIG
+        import security.manager as sec_mgr
+    
+        saved_ws = CONFIG.workspace
+        saved_sec = sec_mgr.SECURITY
+        saved_cost_limit = getattr(CONFIG, "session_cost_limit", None)
+        saved_model = getattr(CONFIG, "model_id", None)
+        saved_max_tokens = getattr(CONFIG, "max_tokens", None)
+        saved_require_approval = getattr(CONFIG, "require_tool_approval", None)
+        saved_audit_dir = getattr(CONFIG, "audit_dir", None)
+        saved_disable_traces = getattr(CONFIG, "disable_local_traces", None)
+        try:
+            CONFIG.session_cost_limit = sum(_hard_ceiling(test_id) for test_id in _PER_TEST_CAPS)
+            CONFIG.model_id = _HAIKU_45_AU
+            CONFIG.max_tokens = 2048
+            CONFIG.require_tool_approval = False
+            CONFIG.disable_local_traces = False
+            sec_mgr.rebuild_singleton_for_tests()
+    
+            call = int(os.getenv("R_TIER_CALL", "1"))
+            region = os.getenv("AWS_REGION", "ap-southeast-2")
+            client = BedrockClient(model_id=_HAIKU_45_AU, region=region, mock_mode=False)
+            members = [
+                ("R19-U4", _U4_PROMPT, _setup_u4, _u4_ready),
+                ("R19-U5", _U5_PROMPT, _setup_u5, _u5_ready),
+            ]
+            results = [
+                _run_member(
+                    test_id=test_id,
+                    workspace=tmp_path / test_id.lower().replace("-", "_"),
+                    prompt=prompt,
+                    setup=setup,
+                    ready=ready,
+                    client=client,
+                    call=call,
+                    cap=_hard_ceiling(test_id),
+                )
+                for test_id, prompt, setup, ready in members
+            ]
+            for metrics in results:
+>               assert metrics["completed"] is True, f"{metrics['test']} failed Stage 6 criteria: {metrics}"
+E               AssertionError: R19-U5 failed Stage 6 criteria: {'test': 'R19-U5', 'call': 1, 'date': '2026-05-05T18:01:56Z', 'model': 'au.anthropic.claude-haiku-4-5-20251001-v1:0', 'tokens_in': 30, 'tokens_out': 1822, 'cache_hit_pct': 0.0, 'wallclock_s': 35.51, 'tool_calls': 8, 'api_calls': 10, 'subagent_calls': 3, 'reviewer_calls': 0, 'subagent_tokens_in': 0, 'subagent_tokens_out': 0, 'subagent_cost_usd': 0.0, 'reviewer_tokens_in': 0, 'reviewer_tokens_out': 0, 'reviewer_cost_usd': 0.0, 'changed_files_within_fixture': True, 'task_dispatches': 3, 'failure_loop_event_count': 1, 'guard_failure_class_counts': {}, 'process_quality_ok': True, 'completed': False, 'cost_usd': 0.0366, 'verdict': 'FAIL', 'stop_reason': 'end_turn', 'audit_dir': 'D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R19-U5-call1-audit', 'tool_order': ['read_file', 'read_file', 'read_file', 'tool_search', 'task', 'task', 'task', 'write_file']}
+E               assert False is True
+
+compact_v5\MAIN\agent\tests\r_tier\test_r19_u4_u5_subagent_recovery_bundle.py:332: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  root:bedrock_client.py:465 [BEDROCK] throttle (recovery=backoff, attempt=1/5, sleep=0.9s): An error occurred (ThrottlingException) when calling the InvokeModel operation (reached max retries: 1): Too many requests, please wait before trying again.
+WARNING  root:bedrock_client.py:465 [BEDROCK] throttle (recovery=backoff, attempt=2/5, sleep=1.5s): An error occurred (ThrottlingException) when calling the InvokeModel operation (reached max retries: 1): Too many requests, please wait before trying again.
+WARNING  root:bedrock_client.py:465 [BEDROCK] throttle (recovery=backoff, attempt=1/5, sleep=1.3s): An error occurred (ThrottlingException) when calling the InvokeModel operation (reached max retries: 1): Too many requests, please wait before trying again.
+WARNING  root:bedrock_client.py:465 [BEDROCK] throttle (recovery=backoff, attempt=2/5, sleep=2.6s): An error occurred (ThrottlingException) when calling the InvokeModel operation (reached max retries: 1): Too many requests, please wait before trying again.
+WARNING  root:bedrock_client.py:465 [BEDROCK] throttle (recovery=backoff, attempt=1/5, sleep=0.8s): An error occurred (ThrottlingException) when calling the InvokeModel operation (reached max retries: 1): Too many requests, please wait before trying again.
+WARNING  root:bedrock_client.py:465 [BEDROCK] throttle (recovery=backoff, attempt=2/5, sleep=1.7s): An error occurred (ThrottlingException) when calling the InvokeModel operation (reached max retries: 1): Too many requests, please wait before trying again.
+=========================== short test summary info ===========================
+FAILED compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py::test_r19_u4_u5_subagent_recovery_bundle
+============================= 1 failed in 52.73s ==============================
+WARNING:root:session-final cost: $0.04 (cache 100% | saved ~$0.0579) (10 API calls, 
+in=30 out=1,822)

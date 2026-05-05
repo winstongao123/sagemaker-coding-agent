@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "test": "R19-U4",
+  "call": 1,
+  "audit_log_path": "compact_v5\\_status\\r_tier_runtime\\R19-U4-call1-audit\\2026-05-06_3c1c6af251f3.jsonl",
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R19-U4+U5-aws-call1.log",
+  "side_channel_path": "compact_v5\\_status\\r-tier-R19-U4-aws-call1-side-metrics.json",
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [
+        {
+          "name": "tool_search",
+          "args_summary": "{'query': 'select:task'}",
+          "args_hash": "0e9d5daf4b05",
+          "user_approved": true,
+          "result_summary": "<functions>\n{\"description\": \"Launch a sub-agent for a specific, scoped task.\\n\\nSub-agents run with a FRESH conversation but share the parent agent's iteration "
+        },
+        {
+          "name": "task",
+          "args_summary": "{'description': \"Summarize Alpha's claim from reviews/alpha.md\", 'prompt': \"Read the file reviews/alpha.md and provide a concise summary of Alpha's claim. What ",
+          "args_hash": "77a549129883",
+          "user_approved": true,
+          "result_summary": "**Summary of Alpha's claim:**\n\nAlpha is **arguing FOR shipping** the Payment API. The reviewer's position is that the Payment API is in a healthy state and read"
+        },
+        {
+          "name": "task",
+          "args_summary": "{'description': \"Summarize Beta's claim from reviews/beta.md\", 'prompt': \"Read the file reviews/beta.md and provide a concise summary of Beta's claim. What is B",
+          "args_hash": "ee986fcda22c",
+          "user_approved": true,
+          "result_summary": "**Summary of Beta's Claim:**\n\nBeta is **arguing for a ROLLBACK**. The claim is that the Payment API error rate is too high, making the current deployment proble"
+        },
+        {
+          "name": "read_file",
+          "args_summary": "{'file_path': 'C:\\\\Users\\\\winst\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-winst\\\\pytest-436\\\\test_r19_u4_u5_subagent_recove0\\\\r19_u4\\\\source_of_truth.json'}",
+          "args_hash": "7b32edb487bb",
+          "user_approved": true,
+          "result_summary": "[source_of_truth.json] Lines 1-6 of 6\n   1| {\n   2|   \"service\": \"payment-api\",\n   3|   \"error_rate_pct\": 12.0,\n   4|   \"healthy_threshold_pct\": 2.0,\n   5|   \"s"
+        },
+        {
+          "name": "write_file",
+          "args_summary": "{'file_path': 'C:\\\\Users\\\\winst\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-winst\\\\pytest-436\\\\test_r19_u4_u5_subagent_recove0\\\\r19_u4\\\\reconciliation.md', 'content': '[11",
+          "args_hash": "0b99e08cf42c",
+          "user_approved": true,
+          "result_summary": "Written 1,121 chars to C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-436\\test_r19_u4_u5_subagent_recove0\\r19_u4\\reconciliation.md"
+        }
+      ],
+      "wallclock_s": 14.404,
+      "tokens_in": 12,
+      "tokens_out": 910,
+      "cache_read_tokens": 18975,
+      "cache_write_tokens": 21959,
+      "cache_hit_pct": 0.4634,
+      "agent_text_chars": 421,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 5,
+    "REPEATED_calls": 0,
+    "per_tool": {
+      "tool_search": 1,
+      "task": 2,
+      "read_file": 1,
+      "write_file": 1
+    },
+    "unique_calls": 5
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [
+    {
+      "timestamp": "2026-05-06T04:01:11.581893",
+      "agent_type": "explore",
+      "task_summary": "Summarize Alpha's claim from reviews/alpha.md",
+      "result_summary": "**Summary of Alpha's claim:**\n\nAlpha is **arguing FOR shipping** the Payment API. The reviewer's position is that the Payment API is in a healthy state and ready for production deployment.\n\n[subagent_"
+    },
+    {
+      "timestamp": "2026-05-06T04:01:15.131140",
+      "agent_type": "explore",
+      "task_summary": "Summarize Beta's claim from reviews/beta.md",
+      "result_summary": "**Summary of Beta's Claim:**\n\nBeta is **arguing for a ROLLBACK**. The claim is that the Payment API error rate is too high, making the current deployment problematic and requiring a rollback to a prev"
+    }
+  ],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": 0.4634,
+    "last_5_turns_avg_hit_pct": 0.4634,
+    "session_avg_hit_pct": 0.4634
+  },
+  "agent_attribution": {
+    "parent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0
+    },
+    "subagents": {},
+    "reviewers": {}
+  },
+  "failure_loop_events": [],
+  "outcome": {
+    "completed": true,
+    "stop_reason": "user_stop",
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 24,
+    "tokens_out_total": 1255,
+    "cost_usd": 0.0529,
+    "wallclock_s_total": 16.32,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 11,
+  "turns_seen": 1
+}

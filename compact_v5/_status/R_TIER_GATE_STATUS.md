@@ -100,6 +100,17 @@ Completed and pushed:
   `r_tier_gate.py --test R18-E7` passed. Call1 diagnostic cap exceed remains
   preserved; call2 passed under the $0.10 planned cap.
 
+Blocked:
+
+- R19-U4/R19-U5 Stage 6 call1 ran after Phase A approval and healthy AWS
+  budget check. R19-U4 produced a functional/process pass, but the bundle is
+  blocked because R19-U5 exposed a narrow readiness predicate and Claude Phase B
+  review cannot currently run: both CLI attempts returned
+  `Credit balance is too low`.
+- Do not retry Stage 6 or advance to R16 until Claude Phase B returns
+  `APPROVE_RETRY` from
+  `compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseB-iter1-prompt.txt`.
+
 The local no-AWS gate still passes for suite materialization and cost guard:
 
 - executable R-tier coverage exists for all 42 required scenario markers
@@ -196,7 +207,7 @@ No additional AWS call should run unless:
 
 ## AWS Budget snapshot
 
-Latest checked during Stage 4 on 2026-05-05 with:
+Latest checked during Stage 6 on 2026-05-06 with:
 
 ```bash
 aws budgets describe-budget --account-id 903039434627 --budget-name Bedrock-Monthly-50
@@ -208,3 +219,7 @@ Result:
 - actual spend: `$0.00`
 - forecasted spend: `$0.047`
 - health status: `HEALTHY`
+- local R-tier ledger before Stage 6 call1: `$1.2912`
+- Stage 6 call1 diagnostic/non-ready spend added:
+  - R19-U4: `$0.0529`
+  - R19-U5: `$0.0366`

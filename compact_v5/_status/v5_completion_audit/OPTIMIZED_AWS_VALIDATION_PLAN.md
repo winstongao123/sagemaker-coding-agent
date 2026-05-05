@@ -215,6 +215,23 @@ Stop AWS execution and return to implementation/review if:
 - Next optimized stage is Stage 6: R3 + R19-U4 + R19-U5 subagent/reviewer
   bundle, subject to fresh Phase A approval and AWS Budget/headroom check.
 
+2026-05-06 Stage 6 call1 stop:
+
+- Claude Phase A approved R19-U4+R19-U5 on Haiku 4.5 AU with R3 evidence
+  reused and not rerun.
+- AWS budget was healthy before spend. Call1 used `$0.0529` for R19-U4 and
+  `$0.0366` for R19-U5, both under their buffered per-test ceilings.
+- R19-U4 produced a genuine functional/process pass, but remains
+  bundle-blocked pending clean Phase C/gate.
+- R19-U5 produced the intended recovery artifact and acceptable process
+  quality, but pytest failed because `_u5_ready` required the exact substring
+  `failure`; the artifact used "Failed Probes" and `FILE NOT FOUND`.
+- The runner predicate was fixed locally and zero-cost lock tests passed.
+- Claude Phase B could not run: both default and `--model haiku` CLI attempts
+  returned `Credit balance is too low`.
+- Stop here. Do not retry Stage 6 or advance to R16 until Claude Phase B review
+  access is restored and returns `APPROVE_RETRY`.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates
