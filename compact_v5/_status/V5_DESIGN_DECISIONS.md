@@ -1908,15 +1908,16 @@ the prompt-content locks are sufficient.
 - WIRED: `compact_v5/MAIN/agent/core/query_engine.py.run()`
   (coordinator block append at start of run)
 - NEW: `compact_v5/MAIN/agent/tests/integration/test_block_g3.py`
-  (11 tests + 1 T5 skip)
+  (16 test functions: 15 local pass + 1 T5 real-AWS skip)
 
 ### Linked port-log rows
 - #092 â€” Block G3-1 system prompt + engine wiring
 - #093 â€” Block G3-2 user context
 
 ### Validation
-- 675 pass + 7 skipped (was 664 + 6 at end of Block G; +11 pass + 1
-  skip net new). The +1 skip is the T5 real-AWS deferral.
+- Original Block G3 validation recorded 675 pass + 7 skipped. Completion-audit
+  rerun on 2026-05-05 records `test_block_g3.py`: 15 passed + 1 skipped. The
+  skip is the T5 real-AWS deferral.
 - verify_ship_zip.py: PASS (120 files / 334.7 KB / 36%).
 - Phase 11 widget surface preserved: no regressions in existing tests.
 
