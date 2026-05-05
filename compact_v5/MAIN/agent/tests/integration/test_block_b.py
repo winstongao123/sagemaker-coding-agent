@@ -347,6 +347,92 @@ def test_tool_result_dataclass_shape():
     assert r.error_message == ""
 
 
+def test_count_tokens_haiku_fallback_mock_and_none():
+    from core.compactor import count_tokens_via_haiku_fallback
+
+    class _MockClient:
+        mock_mode = True
+        region = "ap-southeast-2"
+
+    messages = [{"role": "user", "content": "count me"}]
+    assert count_tokens_via_haiku_fallback(messages, _MockClient()) > 0
+    assert count_tokens_via_haiku_fallback(messages, None) is None
+
+
+def test_token_count_with_estimation_prefers_last_usage_record():
+    from runtime.tokens import TOKENS
+
+    messages = [{"role": "user", "content": "short"}]
+    TOKENS.reset()
+    fallback = TOKENS.token_count_with_estimation(messages)
+    assert fallback > 0
+
+    TOKENS.add({"input_tokens": 321, "output_tokens": 0})
+    assert TOKENS.token_count_with_estimation(messages) == 321
+
+
+def test_model_pricing_formatting_contract():
+    from runtime.tokens import (
+        MODEL_COSTS,
+        format_model_pricing,
+        get_model_pricing_string,
+    )
+
+    haiku = MODEL_COSTS["anthropic.claude-haiku-4-5-20251001-v1:0"]
+    sonnet = MODEL_COSTS["anthropic.claude-sonnet-4-5-20250929-v1:0"]
+
+    assert format_model_pricing(haiku) == "$1/$5 per Mtok"
+    assert format_model_pricing(sonnet) == "$3/$15 per Mtok"
+    assert (
+        get_model_pricing_string("au.anthropic.claude-sonnet-4-5-20250929-v1:0")
+        == "$3/$15 per Mtok"
+    )
+    assert get_model_pricing_string("unknown-model") == "unknown"
+
+
+def test_truncation_class_shape_and_smart_truncate(monkeypatch):
+    from runtime.truncation import Truncation
+
+    monkeypatch.setattr(Truncation, "MAX_LINES", 20)
+    text = "\n".join(f"line {i}" for i in range(80))
+    truncated, was_truncated = Truncation.smart_truncate(text, head_lines=5, tail_lines=5)
+
+    assert was_truncated is True
+    assert "line 0" in truncated
+    assert "line 79" in truncated
+    assert "lines skipped" in truncated
+
+
+def test_context_manager_threshold_warnings():
+    from core.budget import CONTEXT, ContextManager
+
+    ctx = ContextManager(max_tokens=5_000)
+    warning = ctx.check_and_warn([{"role": "user", "content": "x" * 2_000}])
+    assert warning and "Context at 80%" in warning
+    assert ctx.check_and_warn([{"role": "user", "content": "x" * 2_000}]) is None
+    ctx.reset()
+    assert ctx.last_warning_level == 0
+    assert isinstance(CONTEXT, ContextManager)
+
+
+def test_lorem_ipsum_context_utility_contract():
+    from tests.utils.lorem import MAX_LOREM_TOKENS, ONE_TOKEN_WORDS, generate_lorem_ipsum
+
+    text = generate_lorem_ipsum(205)
+    words = text.split()
+
+    assert len(ONE_TOKEN_WORDS) >= 100
+    assert len(words) == 205
+    assert words[0] == ONE_TOKEN_WORDS[0]
+    assert words[len(ONE_TOKEN_WORDS)] == ONE_TOKEN_WORDS[0]
+    assert generate_lorem_ipsum(0) == ""
+    assert MAX_LOREM_TOKENS == 500_000
+    with pytest.raises(ValueError):
+        generate_lorem_ipsum(-1)
+    with pytest.raises(ValueError):
+        generate_lorem_ipsum(MAX_LOREM_TOKENS + 1)
+
+
 # ============================================================
 # Bonus — Runnable tokenEstimation helpers (B-3, B-4, B-6, B-7, B-9)
 # ============================================================
@@ -642,7 +728,6 @@ def test_count_tokens_includes_thinking_when_messages_have_thinking():
     thinking block. Per Runnable services/tokenEstimation.ts:437-495."""
     from runtime.bedrock_client import BedrockClient
 
-    client = BedrockClient(model_id="x", region="us-east-1", mock_mode=False)
     captured: Dict[str, Any] = {}
 
     class _FakeBedrock:
@@ -650,7 +735,12 @@ def test_count_tokens_includes_thinking_when_messages_have_thinking():
             captured.update(kwargs)
             return {"inputTokens": 42}
 
-    client.client = _FakeBedrock()
+    client = BedrockClient(
+        model_id="x",
+        region="us-east-1",
+        mock_mode=False,
+        client=_FakeBedrock(),
+    )
 
     msg_with_thinking = {
         "role": "assistant",
@@ -670,7 +760,6 @@ def test_count_tokens_omits_thinking_when_messages_plain():
     """Lock: plain messages don't trigger the thinking-config switch."""
     from runtime.bedrock_client import BedrockClient
 
-    client = BedrockClient(model_id="x", region="us-east-1", mock_mode=False)
     captured: Dict[str, Any] = {}
 
     class _FakeBedrock:
@@ -678,7 +767,12 @@ def test_count_tokens_omits_thinking_when_messages_plain():
             captured.update(kwargs)
             return {"inputTokens": 10}
 
-    client.client = _FakeBedrock()
+    client = BedrockClient(
+        model_id="x",
+        region="us-east-1",
+        mock_mode=False,
+        client=_FakeBedrock(),
+    )
     client.count_tokens(messages=[{"role": "user", "content": "hi"}])
 
     body = json.loads(captured["input"]["invokeModel"]["body"].decode("utf-8"))

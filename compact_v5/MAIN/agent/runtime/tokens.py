@@ -69,6 +69,29 @@ MODEL_COSTS: Dict[str, Dict[str, float]] = {
 _MODEL_PRICING = MODEL_COSTS
 
 
+def _format_mtok_price(price_per_1k_tokens: float) -> str:
+    price = price_per_1k_tokens * 1000
+    if float(price).is_integer():
+        return f"${int(price)}"
+    return f"${price:.2f}".rstrip("0").rstrip(".")
+
+
+def format_model_pricing(costs: Dict[str, float]) -> str:
+    """Return Runnable-style "$input/$output per Mtok" pricing text."""
+    return (
+        f"{_format_mtok_price(float(costs['input']))}/"
+        f"{_format_mtok_price(float(costs['output']))} per Mtok"
+    )
+
+
+def get_model_pricing_string(model_id: str) -> str:
+    """Return formatted pricing for a Bedrock model id, or "unknown"."""
+    pricing = MODEL_COSTS.get(canonicalize_model_id(model_id))
+    if not pricing:
+        return "unknown"
+    return format_model_pricing(pricing)
+
+
 # R-tier R1 PHASE A iter-3 fix: AWS Bedrock geo inference profiles
 # (au. / us. / eu. / apac.) carry a 10% premium over the global Anthropic
 # list price for Haiku 4.5 and Sonnet 4.5. The local cost tracker MUST
@@ -229,6 +252,13 @@ def estimate_message_tokens(text: str, padding_factor: float = 4.0 / 3.0) -> int
 # ============================================================
 # B-7 — hasThinkingBlocks (R4 #43)
 # ============================================================
+
+# Runnable tokenEstimation.ts uses these minimal values so CountTokens
+# requests with thinking blocks satisfy the API invariant:
+# max_tokens must be greater than thinking.budget_tokens.
+TOKEN_COUNT_THINKING_BUDGET = 1024
+TOKEN_COUNT_MAX_TOKENS = 2048
+
 
 def has_thinking_blocks(message: Dict[str, Any]) -> bool:
     """True if a message contains an Anthropic-format `thinking` block.
@@ -615,10 +645,14 @@ __all__ = [
     "MODEL_COSTS",
     "EXCLUDED_MODELS_FOR_CACHE_BREAK",
     "IMAGE_MAX_TOKEN_SIZE",
+    "TOKEN_COUNT_THINKING_BUDGET",
+    "TOKEN_COUNT_MAX_TOKENS",
     "TokenTracker",
     "TOKENS",
     "bytes_per_token_for_file_type",
     "estimate_message_tokens",
+    "format_model_pricing",
+    "get_model_pricing_string",
     "has_thinking_blocks",
     "rough_token_count_for_block",
     "rough_token_count_for_message",

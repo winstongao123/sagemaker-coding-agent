@@ -3143,6 +3143,87 @@ For A-21, compaction changes what the model can legitimately rely on. Clearing r
 
 No AWS/R-tier test was run.
 
+## ADR-050 - Block B token accounting completion-audit redo
+
+**Date**: 2026-05-04
+**Phase ID**: v5.0.1 Block B completion audit redo
+**Status**: ACCEPTED
+
+### Context
+
+`SYNTHESIS_MASTER.md:55-70` identifies 16 Block B rows covering Bedrock
+token counting, Haiku fallback counting, token-estimation helpers, model
+pricing, token accounting, BedrockClient/ToolResult/Truncation/ContextManager
+explicit evidence, and the lorem context-window test utility. Several surfaces
+already existed from the earlier Block B work, but the completion redo required
+row-specific evidence and local lock tests for every canonical row.
+
+### Decision
+
+Ship Block B as local token/context infrastructure:
+
+- Keep `BedrockClient.count_tokens()` as the Bedrock CountTokens path and use
+  injected fake clients in local tests so no boto3/AWS dependency is required.
+- Keep `count_tokens_via_haiku_fallback()` in `core/compactor.py` because its
+  real consumer is compaction; add direct Block B lock coverage for mock and
+  None-client behavior.
+- Keep token-estimation helpers in `runtime/tokens.py`: JSON byte/token ratios,
+  4/3 message padding, per-block rough estimation, image cap, thinking-block
+  detection, final-context fallback, and last-usage-record fallback.
+- Add the Runnable CountTokens thinking constants
+  `TOKEN_COUNT_THINKING_BUDGET=1024` and `TOKEN_COUNT_MAX_TOKENS=2048`, then
+  wire them into `BedrockClient.count_tokens()`.
+- Add `format_model_pricing()` and `get_model_pricing_string()` for
+  Runnable-style `$1/$5 per Mtok` pricing text.
+- Keep the current v5 configured Bedrock pricing rows for Haiku 4.5 and Sonnet
+  4.5, plus the existing 3.5 baseline compatibility row. The canonical row
+  names Sonnet 4.6, but current v5 runtime config and entrypoint expose Sonnet
+  4.5 and no Sonnet 4.6 model id; wiring an invented model id would be less
+  honest than documenting the runtime constraint.
+- Add `ContextManager` and `CONTEXT` to `core/budget.py` with v4-style
+  80/90/95 percent warnings and fixed-overhead fallback.
+- Add the deterministic lorem utility under `tests/utils/lorem.py`, scoped to
+  local context-window tests rather than production runtime.
+
+### Runnable-fidelity impact
+
+**FAITHFUL-WITH-JUSTIFIED-ADAPTATION**
+
+The implementation preserves the token/counting semantics that matter in the
+Bedrock-only Python runtime. Anthropic-direct/Runnable-specific model tiers,
+fast-mode pricing, tool-search stripping in token-count requests, and server
+tool web-search costs are not active v5.0.1 runtime surfaces. The Sonnet 4.6
+name in the source plan is treated as a model-catalog mismatch against the
+current v5 configured model id, not as permission to invent a Bedrock id.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/core/budget.py`
+- `compact_v5/MAIN/agent/core/__init__.py`
+- `compact_v5/MAIN/agent/core/compactor.py`
+- `compact_v5/MAIN/agent/runtime/bedrock_client.py`
+- `compact_v5/MAIN/agent/runtime/tokens.py`
+- `compact_v5/MAIN/agent/runtime/truncation.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_b.py`
+- `compact_v5/MAIN/agent/tests/utils/lorem.py`
+
+### Linked port-log rows
+
+- #154 through #169 - Block B completion-audit redo rows B-1 through B-16.
+
+### Validation
+
+- `python -m py_compile <Block B touched files>`
+- Result: PASS.
+- `python -m pytest compact_v5/MAIN/agent/tests/integration/test_block_b.py -q`
+- Result: 34 passed, 1 skipped.
+- `python -m pytest compact_v5/MAIN/agent/tests/unit/test_bedrock.py -q`
+- Result: 11 passed.
+- `python -m pytest compact_v5/MAIN/agent/tests/integration/test_geo_inference_premium.py -q`
+- Result: 5 passed.
+
+No AWS/R-tier test was run.
+
 ## ADR-049 - Block C runtime safety and JSON repair redo
 
 **Date**: 2026-05-04

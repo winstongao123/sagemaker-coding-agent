@@ -14,7 +14,7 @@ to wire deferred tools into the next turn's API call.
 from __future__ import annotations
 
 # Re-export the public surface
-from .budget import IterationBudget  # noqa: F401
+from .budget import CONTEXT, ContextManager, IterationBudget  # noqa: F401
 from .errors import (  # noqa: F401
     BedrockErrorCategory,
     ErrorClassifier,

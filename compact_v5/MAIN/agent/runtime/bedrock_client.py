@@ -594,17 +594,24 @@ class BedrockClient:
             # thinking config). Otherwise Bedrock either rejects or
             # undercounts the thinking budget. Per Runnable
             # services/tokenEstimation.ts:437-495 (R4 #43).
-            from runtime.tokens import has_thinking_blocks
+            from runtime.tokens import (
+                TOKEN_COUNT_MAX_TOKENS,
+                TOKEN_COUNT_THINKING_BUDGET,
+                has_thinking_blocks,
+            )
             uses_thinking = any(has_thinking_blocks(m) for m in messages)
             body: Dict[str, Any] = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "messages": messages,
                 **({"system": system} if system else {}),
                 **({"tools": tools} if tools else {}),
-                "max_tokens": 2048 if uses_thinking else 1,
+                "max_tokens": TOKEN_COUNT_MAX_TOKENS if uses_thinking else 1,
             }
             if uses_thinking:
-                body["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+                body["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": TOKEN_COUNT_THINKING_BUDGET,
+                }
             kwargs: Dict[str, Any] = {
                 "modelId": model_id or self.model_id,
                 "input": {

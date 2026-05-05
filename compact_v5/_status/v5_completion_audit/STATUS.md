@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
-Date: 2026-05-04
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, AND C CLOSED/PUSHED; NEXT BLOCK B; R-TIER TEST SPECS MATERIALIZED
+Date: 2026-05-05
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, AND C CLOSED/PUSHED; BLOCK B LOCAL IMPLEMENTATION SCOPE-AUDIT CLEAN AND CLAUDE ITER8 APPROVED FROM MONITOR-SESSION REVIEW, NOW IN CLOSE CHECKPOINT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -78,9 +78,33 @@ Block L, Block N, Block K, Block T, and Block C:
 - Block C close commit: `18fb3dc14e9e33f3d233f50c8bcde9d14f36558e`.
 - Block C evidence commit: `34374979e851b9ebf24e5a4f9bcd66f007a6cdcf`.
 
-The next worker action is to resume from files, read
-`BLOCK_ORDER_AND_COVERAGE.md`, and start Block B. Do not tag unless explicitly
-approved.
+Current Block B state:
+
+- Local implementation and audit artifacts are complete for 16/16 rows.
+- `scope_audit.py --block B` reports 16 shipped rows and 0 ship-blocking rows.
+- Local gates pass: Block B suite 34 passed/1 skipped, Bedrock unit suite
+  11 passed, geo-pricing suite 5 passed, py_compile PASS.
+- Claude iter1 returned `API Error: Unable to connect to API (ConnectionRefused)`.
+- Claude iter2 escalation was rejected by environment policy because sending
+  private workspace contents to external Claude is denied.
+- Claude iter3, after explicit user authorization, still returned
+  `API Error: Unable to connect to API (ConnectionRefused)`.
+- Claude iter4 retried the user-authorized subscription-auth/read-only path
+  with network escalation and was rejected by tenant policy before execution.
+- Claude iter5 retried the normal non-escalated subscription-auth/read-only
+  path and returned `API Error: Unable to connect to API (ConnectionRefused)`.
+- Claude iter6 retried the same normal non-escalated path and returned
+  `API Error: Unable to connect to API (ConnectionRefused)`.
+- Claude iter7 retried the same normal non-escalated path and returned
+  `API Error: Unable to connect to API (ConnectionRefused)`.
+- Claude iter8 was imported per user instruction from the full independent
+  monitor-session review at
+  `logs/block-b-monitor-claude-fullprompt-test.out.md`; official copy:
+  `reviews/block-b-claude-review-iter8.md`.
+- Iter8 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Block B is in close checkpoint: documentation consistency pass, strict
+  scope audit, specific-file commit, push, then continue to next block.
 
 Worker-led loop docs:
 
