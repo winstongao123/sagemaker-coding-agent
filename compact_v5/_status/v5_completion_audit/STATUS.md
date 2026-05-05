@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT CLOSED/PUSHED; SOFTWARE-GATE CLOSED/PUSHED; FINAL LOCAL READINESS GATES PASSED; FINAL CLAUDE READINESS REVIEW PENDING; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT CLOSED/PUSHED; SOFTWARE-GATE CLOSED/PUSHED; FINAL LOCAL READINESS GATES PASSED; FINAL CLAUDE READINESS REVIEW APPROVED; READY_FOR_AWS_TEST_PHASE; NOT_PRODUCTION_READY_UNTIL_AWS; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -526,3 +526,19 @@ Final local readiness gates:
 - Worker self-review: `compact_v5/_status/v5_completion_audit/FINAL_WORKER_SELF_REVIEW.md`
 - Final Claude architecture/readiness review: pending
 - AWS/R-tier spend: not run; requires explicit human approval after final local review.
+
+
+Final Claude readiness review:
+
+- Review: `compact_v5/_status/v5_completion_audit/reviews/final-claude-architecture-readiness-review.md`
+- Verdict: `APPROVE_WITH_FIXES`
+- Ship decision: `READY_FOR_AWS_TEST_PHASE`
+- Production readiness decision: `NOT_PRODUCTION_READY_UNTIL_AWS`
+- INFO cleanup applied locally: backfilled missing software-block `PROMPTS.md` files and regenerated final logs directly as UTF-8.
+- Cleanup re-review iter2: `APPROVE`, `READY_FOR_AWS_TEST_PHASE`, `NOT_PRODUCTION_READY_UNTIL_AWS`.
+
+
+Final readiness document:
+
+- `compact_v5/_status/v5_completion_audit/FINAL_READY_FOR_AWS_REVIEW.md`
+- Current decision: ready for AWS test phase, not production-ready until AWS Phase A/spend/Phase C loop and final post-AWS Claude review pass.
