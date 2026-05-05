@@ -1,0 +1,27 @@
+Claude Phase A confirmation for Stage 6 R19-U4/R19-U5.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Read these files from disk:
+
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseA-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseA-iter1.md
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py
+
+Iter1 returned `APPROVE_FOR_AWS_CALL` and said existing R3 READY evidence is
+sufficient; R3 should not be rerun. It had one actionable medium finding:
+the runner accepted `task_dispatches >= 2/3` while the Phase A prompt requires
+exactly two R19-U4 subagents and exactly three R19-U5 subagents.
+
+Change after iter1:
+
+- `test_r19_u4_u5_subagent_recovery_bundle.py` now requires
+  `task_dispatches == 2` for R19-U4 and `task_dispatches == 3` for R19-U5.
+
+Review task:
+
+Return `APPROVE_FOR_AWS_CALL` if this stricter runner remains approved for one
+Haiku 4.5 AU real-Bedrock invocation of R19-U4 + R19-U5 only, with R3 READY
+evidence reused. Return `REJECT_FOR_AWS_CALL` if the change creates a blocker.
+
+Do not run AWS.

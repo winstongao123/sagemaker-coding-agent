@@ -189,3 +189,32 @@ Blocking decision:
   `result_ref_seen=true`. Claude Phase C returned `GENUINE_PASS`, and
   `r_tier_gate.py --test R18-E7` passed. Call1 diagnostic spend remains in
   `r_tier_metrics.jsonl` and the review log.
+
+## R19-U4/R19-U5 Subagent Attribution Granularity
+
+Status: OPEN-LOW
+
+Classification: non-blocking Stage 6 process-quality follow-up.
+
+Evidence:
+
+- `compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseC-iter1.md`
+- `compact_v5/_status/r-tier-R19-U4-aws-call2-telemetry.json`
+- `compact_v5/_status/r-tier-R19-U5-aws-call2-telemetry.json`
+
+Observed behavior:
+
+- Stage 6 call2 had exact subagent dispatch counts and useful child work.
+- Canonical telemetry includes `subagent_dispatches`, but the Stage 6 runner's
+  side metrics record `subagent_tokens_in/out` and `subagent_cost_usd` as `0`.
+- Claude Phase C judged this non-blocking because R3's prior READY evidence
+  already provides the Stage 6 bundle's stronger parent/child attribution proof.
+
+Follow-up:
+
+- Before final production-readiness review, decide whether every later
+  subagent/reviewer AWS runner must populate child token/cost buckets directly
+  from the task result envelopes rather than relying on canonical dispatch
+  telemetry plus earlier R3 attribution evidence.
+- R16 and any later subagent/reviewer run should treat missing attribution as a
+  quality penalty and document whether it is acceptable for that scenario.

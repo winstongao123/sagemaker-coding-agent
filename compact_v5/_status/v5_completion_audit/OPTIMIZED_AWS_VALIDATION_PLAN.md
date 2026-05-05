@@ -229,8 +229,26 @@ Stop AWS execution and return to implementation/review if:
 - The runner predicate was fixed locally and zero-cost lock tests passed.
 - Claude Phase B could not run: both default and `--model haiku` CLI attempts
   returned `Credit balance is too low`.
-- Stop here. Do not retry Stage 6 or advance to R16 until Claude Phase B review
-  access is restored and returns `APPROVE_RETRY`.
+- The subscription-auth Claude reviewer command later returned
+  `APPROVE_RETRY` from
+  `r-tier-R19-U4+U5-phaseB-iter2-subscription.md`.
+
+2026-05-06 Stage 6 call2 resolution:
+
+- Stage 6 call2 retried only R19-U4+R19-U5 on Haiku 4.5 AU. R3 was not rerun.
+- R19-U4 passed at `$0.0537`, under the `$0.40` planned cap and `$0.48` hard
+  ceiling, with exactly two subagents, source-of-truth reconciliation, and no
+  failure-loop events.
+- R19-U5 passed at `$0.0309`, under the `$0.30` planned cap and `$0.36` hard
+  ceiling, with exactly three subagents, one expected missing-child
+  file-not-found event, and no repeated guard/exec loop.
+- Claude Phase C returned `GENUINE_PASS` for both members.
+- `r_tier_gate.py --test R19-U4` and `--test R19-U5` passed.
+- Call1 diagnostic/non-ready spend remains preserved in the metrics ledger and
+  evidence files.
+- Next optimized stage is Stage 7: R16 long app build, subject to fresh Phase A
+  approval, budget/headroom check, and recurrence watch for R14/R19-U3-style
+  tool loops.
 
 ## Expected Confidence
 

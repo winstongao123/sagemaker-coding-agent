@@ -14,7 +14,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 |---|---|---|---|---|
 | R1 | IN_PROGRESS | AWS call #1 found Unicode stdout crash; fix pushed, needs fixed-code review and rerun | Full composite tool/workflow proof | AWS pass + telemetry + quality + gate |
 | R2 | PENDING_EXECUTABLE | Test code missing | Long-context compaction/cache proof | Executable + Phase A + AWS pass |
-| R3 | PENDING_EXECUTABLE | Test code missing | Sub-agent orchestration proof | Subagent telemetry + parent synthesis |
+| R3 | READY | Existing AWS call2 evidence reused for Stage 6; not rerun per optimized plan and Claude Phase A/Phase C | Sub-agent orchestration proof | Subagent telemetry + parent synthesis |
 | R4 | EXECUTABLE_PENDING_REVIEW | Test exists; needs Phase A review before real idle/AWS run | PS#3 cold-cache idle recovery | Idle/resume compact evidence |
 | R5 | PENDING_EXECUTABLE | Test code missing | PS#7 exec-limit recovery | 201st exec blocked; other tools continue |
 | R6 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | `/dream` memory consolidation proof | Required facts preserved |
@@ -47,8 +47,8 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R19-U1 | READY_WITH_LOW_FOLLOWUP | Stage 4 bundle AWS pass, Phase C GENUINE_PASS, gate pass; low follow-up for direct chat clarification vs ask_user | Ambiguity handling | Clarifies instead of blind edit |
 | R19-U2 | READY | Stage 4 bundle AWS pass, Phase C GENUINE_PASS, gate pass | Contradictory requirement handling | Conflict flagged |
 | R19-U3 | READY | Stage 5 call2 passed on Haiku with search-before-edit, pytest pass, no repeated guard/exec loop, Phase C GENUINE_PASS, and gate pass | Hidden dependency refactor proof | Search before edit; tests pass |
-| R19-U4 | CALL1_FUNCTIONAL_PASS_BUNDLE_BLOCKED | Stage 6 call1 produced a clean R19-U4 artifact/process pass, but bundle is blocked because R19-U5 needed a predicate fix and Claude Phase B could not run (`Credit balance is too low`) | Conflicting sub-agent reconciliation | Evidence-based parent decision + Phase C + gate |
-| R19-U5 | BLOCKED_CLAUDE_PHASEB_HANDOFF | Stage 6 call1 artifact/process looked acceptable, but runner predicate was too narrow; local fix and zero-cost lock tests pass, pending Claude Phase B retry approval after CLI credit is restored | Sub-agent failure recovery | Parent completes after child failure + Phase C + gate |
+| R19-U4 | READY | Stage 6 call2 passed on Haiku after Claude Phase B retry approval; Phase C `GENUINE_PASS`; gate pass; call1 diagnostic spend preserved | Conflicting sub-agent reconciliation | Evidence-based parent decision + Phase C + gate |
+| R19-U5 | READY | Stage 6 call2 passed on Haiku after predicate fix and Claude Phase B retry approval; Phase C `GENUINE_PASS`; gate pass; call1 diagnostic spend preserved | Sub-agent failure recovery | Parent completes after child failure + Phase C + gate |
 | R19-U6 | READY | Stage 5 call2 passed with malformed-output recovery, Phase C GENUINE_PASS, and gate pass | Garbage tool output recovery | Retry/alternative path succeeds |
 | R19-U7 | READY | Stage 5 call2 passed with breaker_fired=true, exactly two actual bait calls, Phase C GENUINE_PASS, and gate pass | Repeated-call circuit breaker proof | Third repeat blocked, alternative used |
 | R19-U8 | EXECUTABLE_PENDING_REVIEW | Zero-cost UX spec exists; needs Phase A review/execution | Memory conflict latest-wins proof | Uses latest preference |

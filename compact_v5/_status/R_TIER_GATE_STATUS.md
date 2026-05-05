@@ -100,16 +100,12 @@ Completed and pushed:
   `r_tier_gate.py --test R18-E7` passed. Call1 diagnostic cap exceed remains
   preserved; call2 passed under the $0.10 planned cap.
 
-Blocked:
-
-- R19-U4/R19-U5 Stage 6 call1 ran after Phase A approval and healthy AWS
-  budget check. R19-U4 produced a functional/process pass, but the bundle is
-  blocked because R19-U5 exposed a narrow readiness predicate and Claude Phase B
-  review cannot currently run: both CLI attempts returned
-  `Credit balance is too low`.
-- Do not retry Stage 6 or advance to R16 until Claude Phase B returns
-  `APPROVE_RETRY` from
-  `compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseB-iter1-prompt.txt`.
+- R19-U4: Stage 6 bundle call2 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R19-U4` passed. Call1 diagnostic bundle-blocked spend
+  remains preserved.
+- R19-U5: Stage 6 bundle call2 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R19-U5` passed. Call1 diagnostic predicate-failure
+  spend remains preserved.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -223,3 +219,6 @@ Result:
 - Stage 6 call1 diagnostic/non-ready spend added:
   - R19-U4: `$0.0529`
   - R19-U5: `$0.0366`
+- Stage 6 call2 READY spend added:
+  - R19-U4: `$0.0537`
+  - R19-U5: `$0.0309`
