@@ -387,6 +387,11 @@ class QueryEngine:
         self._tool_denials_this_turn = 0
         self._partial_tool_names: Set[str] = set()
         self._tool_dispatch_checkpoints: List[Any] = []
+        # SOFTWARE-COMPACT-TELEMETRY: keep failure signatures across top-level
+        # run() calls for this engine so repeated tool failures leave durable
+        # audit evidence instead of being only an in-turn repetition guard.
+        self._tool_failure_counts: Dict[Tuple[str, str], int] = {}
+        self._consecutive_tool_failures = 0
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -695,6 +700,17 @@ class QueryEngine:
                     )
                     now = _time.time()
                     if now - self._last_api_call_time > threshold:
+                        gap_min = (now - self._last_api_call_time) / 60.0
+                        self._audit_engine_event(
+                            "compact_micro_start",
+                            parameters={
+                                "trigger": "cold_cache",
+                                "gap_seconds": round(now - self._last_api_call_time, 3),
+                                "threshold_seconds": threshold,
+                                "keep_n": Compactor.KEEP_LAST_N_COLD_CACHE,
+                            },
+                            result_summary="microcompact started",
+                        )
                         mc_messages, mc_saved = Compactor.microcompact(
                             self.messages,
                             keep_n_override=Compactor.KEEP_LAST_N_COLD_CACHE,
@@ -707,12 +723,34 @@ class QueryEngine:
                                     turn_messages,
                                     deferred_names,
                                 )
-                            gap_min = (now - self._last_api_call_time) / 60.0
+                            self._audit_engine_event(
+                                "compact_micro_end",
+                                parameters={
+                                    "trigger": "cold_cache",
+                                    "saved_count": mc_saved,
+                                    "applied": True,
+                                },
+                                result_summary=f"microcompact freed {mc_saved} tokens",
+                            )
                             output_fn(
                                 f"[i] Cold cache detected ({gap_min:.0f}min gap) - "
                                 f"proactive microcompact freed ~{mc_saved:,} tokens"
                             )
+                        else:
+                            self._audit_engine_event(
+                                "compact_micro_end",
+                                parameters={
+                                    "trigger": "cold_cache",
+                                    "saved_count": mc_saved,
+                                    "applied": False,
+                                },
+                                result_summary=f"microcompact skipped; saved {mc_saved} tokens below threshold",
+                            )
             except Exception:
+                self._audit_engine_event(
+                    "compact_micro_failed",
+                    result_summary="microcompact raised before API call",
+                )
                 pass
 
             try:
@@ -869,6 +907,15 @@ class QueryEngine:
                 ):
                     _ok, _why = AUTO_COMPACT.try_attempt()
                     if _ok:
+                        self._audit_engine_event(
+                            "compact_auto_start",
+                            parameters={
+                                "trigger": "context_threshold",
+                                "max_context_count": _max_ctx,
+                                "messages": len(self.messages),
+                            },
+                            result_summary="auto compact started",
+                        )
                         _result = Compactor.run(
                             self.client,
                             self.messages,
@@ -877,6 +924,19 @@ class QueryEngine:
                         )
                         if _result.success:
                             AUTO_COMPACT.record_success()
+                            self._audit_engine_event(
+                                "compact_auto_end",
+                                parameters={
+                                    "success": True,
+                                    "before_count": _result.tokens_before,
+                                    "after_count": _result.tokens_after,
+                                    "saved_count": _result.tokens_before - _result.tokens_after,
+                                },
+                                result_summary=(
+                                    f"auto compact saved "
+                                    f"{_result.tokens_before - _result.tokens_after} tokens"
+                                ),
+                            )
                             output_fn(
                                 f"[auto-compact] saved "
                                 f"{_result.tokens_before - _result.tokens_after:,} "
@@ -884,14 +944,29 @@ class QueryEngine:
                             )
                             self.messages = _result.messages_after
                         else:
+                            self._audit_engine_event(
+                                "compact_failed",
+                                parameters={
+                                    "trigger": "context_threshold",
+                                    "before_count": _result.tokens_before,
+                                    "after_count": _result.tokens_after,
+                                },
+                                result_summary=_result.error or "auto compact failed",
+                            )
                             _disabled, _reason = AUTO_COMPACT.record_failure()
                             if _disabled:
                                 output_fn(f"[{_reason}]")
                     else:
-                        # Cooldown / cap message â€” log once per turn, no
+                        self._audit_engine_event(
+                            "compact_auto_skipped",
+                            parameters={"trigger": "context_threshold", "reason": _why},
+                            result_summary=_why,
+                        )
+                        # Cooldown / cap message - log once per turn, no
                         # spam since try_attempt returns reason text.
                         output_fn(f"[auto-compact skipped: {_why}]")
             except Exception:
+                self._audit_engine_event("compact_failed", result_summary="auto compact raised")
                 pass
 
             # Stop conditions: end_turn / no tool_use blocks â†’ final answer.
@@ -1226,6 +1301,30 @@ class QueryEngine:
             except Exception:
                 _repaired_input = {}
 
+        _failure_key = self._tool_failure_key(call.name, _repaired_input)
+        _failure_count = self._tool_failure_counts.get(_failure_key, 0)
+        if _failure_count >= 2:
+            self._audit_engine_event(
+                "tool_failure_loop_blocked",
+                tool_name=call.name,
+                parameters={
+                    "tool_name": call.name,
+                    "args_hash": _failure_key[1],
+                    "previous_failures": _failure_count,
+                },
+                result_summary="blocked repeated failed tool call",
+            )
+            return {
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": (
+                    f"Blocked: previous identical call to '{call.name}' failed "
+                    f"{_failure_count} times. Change approach, change arguments, "
+                    "or ask the user before retrying."
+                ),
+                "is_error": True,
+            }
+
         from runtime.config import CONFIG as _CFG_AT
         _is_mock = bool(
             getattr(_CFG_AT, "mock_mode", False)
@@ -1339,6 +1438,10 @@ class QueryEngine:
                 )
             except Exception:
                 pass
+            if self._looks_like_tool_failure(text):
+                self._record_tool_failure(call.name, _failure_key, text)
+            else:
+                self._record_tool_success()
             if call.name == "tool_search":
                 discovered = tool_search_discovered_names(text)
                 if discovered:
@@ -1368,6 +1471,11 @@ class QueryEngine:
                 )
             except Exception:
                 pass
+            self._record_tool_failure(
+                call.name,
+                _failure_key,
+                f"{type(exc).__name__}: {exc}",
+            )
             return {
                 "type": "tool_result",
                 "tool_use_id": call.id,
@@ -1404,6 +1512,82 @@ class QueryEngine:
                 )
         if output_fn is not None and event_type == "warning":
             output_fn(f"[warning] {message}")
+
+    def _audit_engine_event(
+        self,
+        action: str,
+        *,
+        tool_name: str = "(engine)",
+        parameters: Optional[Dict[str, Any]] = None,
+        result_summary: str = "",
+        user_approved: bool = False,
+    ) -> None:
+        """Best-effort typed audit helper used by telemetry hardening."""
+        try:
+            from runtime.audit import AUDIT as _AUDIT
+            _AUDIT.log(
+                session_id=self.session_id,
+                action=action,
+                tool_name=tool_name,
+                parameters=parameters or {},
+                result_summary=result_summary,
+                user_approved=user_approved,
+            )
+        except Exception:
+            pass
+
+    @staticmethod
+    def _tool_failure_key(tool_name: str, args: Any) -> Tuple[str, str]:
+        try:
+            canonical = json.dumps(args or {}, sort_keys=True, default=str)
+        except Exception:
+            canonical = repr(args)
+        return (
+            str(tool_name or "unknown"),
+            hashlib.sha256(canonical.encode("utf-8", errors="replace")).hexdigest()[:12],
+        )
+
+    @staticmethod
+    def _looks_like_tool_failure(text: str) -> bool:
+        t = (text or "").strip().lower()
+        return t.startswith((
+            "error:",
+            "error_during_execution:",
+            "blocked:",
+            "approval gate error",
+            "user denied approval",
+        )) or " timed out after " in t
+
+    def _record_tool_success(self) -> None:
+        self._consecutive_tool_failures = 0
+
+    def _record_tool_failure(
+        self,
+        tool_name: str,
+        failure_key: Tuple[str, str],
+        result_summary: str,
+    ) -> None:
+        count = self._tool_failure_counts.get(failure_key, 0) + 1
+        self._tool_failure_counts[failure_key] = count
+        self._consecutive_tool_failures += 1
+        self._audit_engine_event(
+            "tool_failure_recorded",
+            tool_name=tool_name,
+            parameters={
+                "tool_name": tool_name,
+                "args_hash": failure_key[1],
+                "failure_count": count,
+                "consecutive_failures": self._consecutive_tool_failures,
+            },
+            result_summary=str(result_summary)[:500],
+        )
+        if self._consecutive_tool_failures >= 5:
+            self._audit_engine_event(
+                "tool_failure_loop_warning",
+                tool_name=tool_name,
+                parameters={"consecutive_failures": self._consecutive_tool_failures},
+                result_summary="five consecutive tool failures observed",
+            )
 
     def _emit_warning(
         self,

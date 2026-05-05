@@ -85,7 +85,8 @@ def test_build_telemetry_aggregates_tool_dispatch_events(tmp_path):
     # Required schema keys.
     for key in {"test", "call", "per_turn", "tool_call_summary",
                 "compaction_events", "subagent_dispatches",
-                "cache_efficiency_trend", "outcome"}:
+                "cache_efficiency_trend", "agent_attribution",
+                "failure_loop_events", "outcome"}:
         assert key in telemetry, f"telemetry missing required key {key}"
 
     # Two turns based on 30s window heuristic.
@@ -149,6 +150,7 @@ def test_build_telemetry_captures_thinking_when_audit_emits_chat_response(tmp_pa
     assert pt["cache_read_tokens"] == 500
     # cache_hit_pct = 500 / (500 + 0 + 1000) = 0.3333
     assert abs(pt["cache_hit_pct"] - 0.3333) < 0.001
+    assert telemetry["cache_efficiency_trend"]["session_avg_hit_pct"] == pytest.approx(0.3333, abs=0.001)
 
 
 def test_build_telemetry_reads_query_engine_nested_chat_response(tmp_path):
@@ -199,21 +201,29 @@ def test_build_telemetry_validation_rejects_malformed_output(tmp_path):
     assert any("missing required" in e for e in errors)
 
 
-def test_build_telemetry_handles_compaction_and_subagent_events(tmp_path):
-    """Aggregator filters compact + task (subagent dispatch) events
-    into their dedicated arrays."""
+def test_build_telemetry_handles_compaction_subagent_and_failure_events(tmp_path):
+    """Aggregator filters typed compaction, subagent dispatch, and failure-loop events."""
     bt = _load_build_telemetry()
     audit_path = tmp_path / "audit.jsonl"
     _write_audit_jsonl(audit_path, [
         {"timestamp": "2026-05-04T10:00:00.000",
+         "session_id": "s1", "action": "compact_auto_start",
+         "tool_name": "(engine)", "parameters": {"trigger": "context_threshold"},
+         "result_summary": "started", "hash": "h1"},
+        {"timestamp": "2026-05-04T10:00:01.000",
          "session_id": "s1", "action": "compact_invoked",
-         "tool_name": "(engine)", "parameters": {"trigger": "auto"},
-         "result_summary": "freed 5000 tokens", "hash": "h1"},
+         "tool_name": "(engine)", "parameters": {"trigger": "legacy"},
+         "result_summary": "legacy freed", "hash": "h1b"},
         {"timestamp": "2026-05-04T10:00:05.000",
          "session_id": "s1", "action": "tool_dispatch",
          "tool_name": "task",
          "parameters": {"subagent_type": "explore", "description": "find auth"},
          "result_summary": "ok", "user_approved": True, "hash": "h2"},
+        {"timestamp": "2026-05-04T10:00:07.000",
+         "session_id": "s1", "action": "tool_failure_loop_blocked",
+         "tool_name": "read_file",
+         "parameters": {"args_hash": "abc", "previous_failures": 2},
+         "result_summary": "blocked", "user_approved": False, "hash": "h3"},
     ])
     raw_log = tmp_path / "raw.log"
     raw_log.write_text("ok", encoding="utf-8")
@@ -222,10 +232,13 @@ def test_build_telemetry_handles_compaction_and_subagent_events(tmp_path):
         test="RX", call=1, audit_log_path=audit_path,
         raw_log_path=raw_log, side_channel_path=None,
     )
-    assert len(telemetry["compaction_events"]) == 1
-    assert "freed" in telemetry["compaction_events"][0]["result_summary"]
+    assert len(telemetry["compaction_events"]) == 2
+    assert telemetry["compaction_events"][0]["typed"] is True
+    assert telemetry["compaction_events"][1]["typed"] is False
     assert len(telemetry["subagent_dispatches"]) == 1
     assert telemetry["subagent_dispatches"][0]["agent_type"] == "explore"
+    assert len(telemetry["failure_loop_events"]) == 1
+    assert telemetry["failure_loop_events"][0]["action"] == "tool_failure_loop_blocked"
 
 
 def test_build_telemetry_uses_side_channel_for_outcome(tmp_path):
@@ -249,6 +262,16 @@ def test_build_telemetry_uses_side_channel_for_outcome(tmp_path):
         "tokens_in": 5000, "tokens_out": 2000, "cost_usd": 0.04,
         "wallclock_s": 12.3, "stop_reason": "end_turn",
         "chart_exists": True, "report_exists": True,
+        "parent_input_tokens": 4000,
+        "parent_output_tokens": 1000,
+        "parent_cache_read_tokens": 300,
+        "parent_cache_write_tokens": 80,
+        "parent_cost_usd": 0.02,
+        "subagent_input_tokens": {"review": 600, "verify": 700},
+        "subagent_output_tokens": {"review": 120, "verify": 150},
+        "subagent_cache_read_tokens": {"review": 60, "verify": 70},
+        "subagent_cache_write_tokens": {"review": 12, "verify": 15},
+        "subagent_cost_usd": {"review": 0.003, "verify": 0.004},
     }), encoding="utf-8")
 
     telemetry = bt.build_telemetry(
@@ -262,3 +285,18 @@ def test_build_telemetry_uses_side_channel_for_outcome(tmp_path):
     assert out["completed"] is True
     assert out["artifacts_valid"]["chart"] is True
     assert out["artifacts_valid"]["report"] is True
+    agent_attr = telemetry["agent_attribution"]
+    assert agent_attr["parent"]["input_tokens"] == 4000
+    assert agent_attr["parent"]["output_tokens"] == 1000
+    assert agent_attr["parent"]["cache_read_tokens"] == 300
+    assert agent_attr["parent"]["cache_write_tokens"] == 80
+    assert agent_attr["parent"]["cost_usd"] == 0.02
+    assert agent_attr["subagents"]["review"]["input_tokens"] == 600
+    assert agent_attr["subagents"]["review"]["output_tokens"] == 120
+    assert agent_attr["subagents"]["review"]["cache_read_tokens"] == 60
+    assert agent_attr["subagents"]["review"]["cache_write_tokens"] == 12
+    assert agent_attr["subagents"]["review"]["cost_usd"] == 0.003
+    assert agent_attr["subagents"]["verify"]["output_tokens"] == 150
+    assert agent_attr["subagents"]["verify"]["cache_read_tokens"] == 70
+    assert agent_attr["subagents"]["verify"]["cost_usd"] == 0.004
+    assert agent_attr["reviewers"]["review"]["cost_usd"] == 0.003

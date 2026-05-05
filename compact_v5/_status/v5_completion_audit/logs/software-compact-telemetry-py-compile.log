@@ -1,0 +1,2 @@
+﻿Command: py -3.11 -m py_compile compact_v5/MAIN/agent/core/query_engine.py compact_v5/_status/scripts/build_telemetry.py compact_v5/MAIN/agent/tests/integration/test_software_compact_telemetry.py compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py
+Result: PASS

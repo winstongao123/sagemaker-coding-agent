@@ -49,7 +49,8 @@ from typing import Any, Dict, List, Optional, Tuple
 REQUIRED_TOP_LEVEL_KEYS = {
     "test", "call", "per_turn", "tool_call_summary",
     "compaction_events", "subagent_dispatches",
-    "cache_efficiency_trend", "outcome",
+    "cache_efficiency_trend", "agent_attribution",
+    "failure_loop_events", "outcome",
 }
 
 
@@ -229,15 +230,34 @@ def _summarize_tool_calls(turns: List[List[Dict[str, Any]]]) -> Dict[str, Any]:
     }
 
 
+TYPED_COMPACTION_ACTIONS = {
+    "compact_auto_start",
+    "compact_auto_end",
+    "compact_auto_skipped",
+    "compact_micro_start",
+    "compact_micro_end",
+    "compact_micro_failed",
+    "compact_failed",
+}
+
+
 def _extract_compaction_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Filter audit_log for compact-related actions."""
+    """Filter audit_log for typed compact/recovery actions.
+
+    SOFTWARE-COMPACT-TELEMETRY requires typed actions so R-tier evidence does
+    not rely on substring guessing. Historical compact-like actions are still
+    included with typed=False for backwards-compatible old logs.
+    """
     out = []
     for e in events:
-        action = e.get("action", "")
-        if "compact" in action.lower():
+        action = str(e.get("action", ""))
+        typed = action in TYPED_COMPACTION_ACTIONS
+        if typed or "compact" in action.lower():
             out.append({
                 "timestamp": e.get("timestamp"),
                 "action": action,
+                "typed": typed,
+                "parameters": e.get("parameters") or {},
                 "result_summary": str(e.get("result_summary", ""))[:200],
             })
     return out
@@ -258,14 +278,102 @@ def _extract_subagent_dispatches(events: List[Dict[str, Any]]) -> List[Dict[str,
     return out
 
 
+FAILURE_LOOP_ACTIONS = {
+    "tool_failure_recorded",
+    "tool_failure_loop_warning",
+    "tool_failure_loop_blocked",
+}
+
+
+def _extract_failure_loop_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Extract repeated-failure loop telemetry from audit events."""
+    out = []
+    for e in events:
+        action = str(e.get("action", ""))
+        if action not in FAILURE_LOOP_ACTIONS:
+            continue
+        params = e.get("parameters") or {}
+        out.append({
+            "timestamp": e.get("timestamp"),
+            "action": action,
+            "tool_name": e.get("tool_name"),
+            "args_hash": params.get("args_hash"),
+            "failure_count": params.get("failure_count"),
+            "consecutive_failures": params.get("consecutive_failures"),
+            "result_summary": str(e.get("result_summary", ""))[:200],
+        })
+    return out
+
+
+def _avg(values: List[float]) -> Optional[float]:
+    vals = [float(v) for v in values if v is not None]
+    if not vals:
+        return None
+    return round(sum(vals) / len(vals), 4)
+
+
 def _cache_trend(per_turn: List[Dict[str, Any]]) -> Dict[str, Optional[float]]:
-    """Per-turn cache hit % isn't tracked in v5 audit_log today, so all
-    fields here are null — Block V scoring picks up token totals from
-    the side-channel metrics instead. Schema-required key set retained."""
+    """Return cache-hit trend from per-turn chat_response usage when present."""
+    hits = [pt.get("cache_hit_pct") for pt in per_turn if pt.get("cache_hit_pct") is not None]
     return {
-        "first_5_turns_avg_hit_pct": None,
-        "last_5_turns_avg_hit_pct": None,
-        "session_avg_hit_pct": None,
+        "first_5_turns_avg_hit_pct": _avg(hits[:5]),
+        "last_5_turns_avg_hit_pct": _avg(hits[-5:]),
+        "session_avg_hit_pct": _avg(hits),
+    }
+
+
+def _agent_attribution(side_channel: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return parent/subagent/reviewer token-cost attribution.
+
+    The side channel should use TokenTracker.get_stats() or
+    TokenTracker.get_otel_counters() output. Missing fields stay present with
+    empty/zero values so R-tier review can distinguish "not used" from
+    "telemetry missing".
+    """
+    if not side_channel:
+        return {
+            "parent": {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.0,
+            },
+            "subagents": {},
+            "reviewers": {},
+        }
+
+    parent = {
+        "input_tokens": int(side_channel.get("parent_input_tokens", 0) or 0),
+        "output_tokens": int(side_channel.get("parent_output_tokens", 0) or 0),
+        "cache_read_tokens": int(side_channel.get("parent_cache_read_tokens", 0) or 0),
+        "cache_write_tokens": int(side_channel.get("parent_cache_write_tokens", 0) or 0),
+        "cost_usd": float(side_channel.get("parent_cost_usd", 0.0) or 0.0),
+    }
+    sub_in = side_channel.get("subagent_input_tokens", {}) or {}
+    sub_out = side_channel.get("subagent_output_tokens", {}) or {}
+    sub_cache_read = side_channel.get("subagent_cache_read_tokens", {}) or {}
+    sub_cache_write = side_channel.get("subagent_cache_write_tokens", {}) or {}
+    sub_cost = side_channel.get("subagent_cost_usd", {}) or {}
+    subagents: Dict[str, Dict[str, Any]] = {}
+    reviewers: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(
+        set(sub_in) | set(sub_out) | set(sub_cache_read) | set(sub_cache_write) | set(sub_cost)
+    ):
+        row = {
+            "input_tokens": int(sub_in.get(name, 0) or 0),
+            "output_tokens": int(sub_out.get(name, 0) or 0),
+            "cache_read_tokens": int(sub_cache_read.get(name, 0) or 0),
+            "cache_write_tokens": int(sub_cache_write.get(name, 0) or 0),
+            "cost_usd": float(sub_cost.get(name, 0.0) or 0.0),
+        }
+        subagents[name] = row
+        if name == "review" or "review" in str(name).lower():
+            reviewers[name] = row
+    return {
+        "parent": parent,
+        "subagents": subagents,
+        "reviewers": reviewers,
     }
 
 
@@ -391,7 +499,9 @@ def build_telemetry(
     tool_summary = _summarize_tool_calls(turns)
     compaction = _extract_compaction_events(events)
     subagent = _extract_subagent_dispatches(events)
+    failure_loop = _extract_failure_loop_events(events)
     cache_trend = _cache_trend(per_turn)
+    agent_attr = _agent_attribution(side_channel)
     outcome = _parse_outcome_from_log(raw_log_path, side_channel)
 
     return {
@@ -406,6 +516,8 @@ def build_telemetry(
         "compaction_events": compaction,
         "subagent_dispatches": subagent,
         "cache_efficiency_trend": cache_trend,
+        "agent_attribution": agent_attr,
+        "failure_loop_events": failure_loop,
         "outcome": outcome,
         "events_seen": len(events),
         "turns_seen": len(turns),
@@ -454,7 +566,8 @@ def main() -> int:
           f"({len(telemetry['per_turn'])} turns, "
           f"{telemetry['tool_call_summary']['TOTAL_calls']} tool calls, "
           f"{len(telemetry['compaction_events'])} compaction events, "
-          f"{len(telemetry['subagent_dispatches'])} subagent dispatches)")
+          f"{len(telemetry['subagent_dispatches'])} subagent dispatches, "
+          f"{len(telemetry['failure_loop_events'])} failure-loop events)")
     return 0
 
 

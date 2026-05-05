@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT READY_FOR_CLOSE_COMMIT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL CLOSED/PUSHED; SOFTWARE-RESULTS CLOSED/PUSHED; SOFTWARE-SUBAGENT CLOSED/PUSHED; SOFTWARE-COMPACT-TELEMETRY READY_FOR_CLOSE_COMMIT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -492,3 +492,14 @@ rollback/traceability: after any block reaches clean close state, commit using
 only specific files and push branch `v5-build` to `sageagent`; do not tag unless
 explicitly approved. Long blocks may also use specific-file checkpoint commits
 after reviewer-approved implementation slices.
+Current SOFTWARE-COMPACT-TELEMETRY state:
+
+- Manual rows: 4. Shipped rows: 4. Blocking rows after Claude: 0.
+- Added typed compaction audit events for cold-cache microcompact and auto-compact paths.
+- `build_telemetry.py` now records typed-vs-legacy compaction events, cache-hit trends, parent/subagent/reviewer attribution, and failure-loop events.
+- `QueryEngine` records repeated failed tool signatures across top-level runs for one engine and blocks the third identical failed call with `tool_failure_loop_blocked` evidence.
+- Local tests passed: SOFTWARE-COMPACT-TELEMETRY focused suite `3 passed`; telemetry builder suite `8 passed`; targeted Block A/N regressions `4 passed`; py_compile PASS.
+- Original-block scope audits remain clean: summary and strict both report `TOTAL_SHIP_BLOCKING_ROWS: 0`.
+- Claude iter1 returned `APPROVE_WITH_FIXES` with 0 blockers and two LOW findings; worker fixed both.
+- Claude iter2 returned `VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Next action: specific-file close commit and push to `sageagent/v5-build`, then continue `SOFTWARE-GATE`.
