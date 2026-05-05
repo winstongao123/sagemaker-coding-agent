@@ -31,7 +31,7 @@ TOTAL_EXPECTED_ROWS: 233
 ```
 
 Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, H, H+, and M
-are closed/pushed. Block J is approved for checkpoint. After J and 0 close, the worker must
+are closed/pushed. Block 0 is next. After Block 0 closes, the worker must
 continue into the `SOFTWARE-*` hardening queue below before AWS/R-tier spend.
 The remaining audit rows are still ship-blocking until each block is ledgered,
 implemented or explicitly user-dispositioned, Claude-reviewed, and pushed.

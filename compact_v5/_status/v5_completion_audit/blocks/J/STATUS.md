@@ -1,6 +1,6 @@
 # Block J Status
 
-Status: CLOSED_READY_FOR_GIT_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Expected rows from `SYNTHESIS_MASTER`: 0
@@ -8,22 +8,19 @@ Ledger rows: 0 canonical rows
 Current blocking-row count: 0 (`scope_audit.py --block J --strict`
 `NO_SPEC_ROWS_FOUND`)
 
-Current phase: ZERO_ROW_CLOSURE_APPROVED
+Current phase: ZERO_ROW_CLOSURE_PUSHED
 
-Current task: Commit and push Block J zero-row closure artifacts, then continue
-to Block 0 from files.
+Current task: Continue to Block 0 from files.
 
-Last completed action: Claude review iter1 returned `VERDICT: APPROVE` and
-`SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW` with 0 remaining ship-blocking
-rows.
+Last completed action: Block J close commit
+`f199d052457c483dcf9ec7bfbbeb24a121187fce` was pushed to
+`sageagent/v5-build` and verified with `git ls-remote`.
 
 Next 3 todo items:
 
-1. Run final Block J documentation/scope consistency gates.
-2. Commit only the Block J closure artifacts, prompt/review/log evidence, and
-   status/matrix updates.
-3. Push to `sageagent/v5-build` and verify the remote SHA before starting
-   Block 0.
+1. Reconstruct Block 0 scope from `SYNTHESIS_MASTER.md`.
+2. Create or update Block 0 closure artifacts and ledger.
+3. Run Block 0 local gates and Claude review.
 
 Local validation:
 
