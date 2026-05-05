@@ -376,10 +376,11 @@ SCENARIO_SPECS = {
     "R19-U7": {
         "mode": "real_aws_gated",
         "cost_cap_usd": 0.20,
-        "fixture": "repeated-call circuit-breaker bait",
+        "fixture": "deterministic repeated-call circuit-breaker bait",
         "prompt": "Avoid repeated identical tool calls after block.",
         "acceptance": [
             "third repeated call is blocked or redirected",
+            "breaker_fired evidence is recorded unless explicitly escalated",
             "agent changes approach to an alternative path",
         ],
     },
@@ -406,9 +407,10 @@ SCENARIO_SPECS = {
     "R19-U10": {
         "mode": "real_aws_gated",
         "cost_cap_usd": 0.50,
-        "fixture": "150-turn session with model switches and compactions",
+        "fixture": "prebuilt transcript/churn fixture representing a 150-turn session with model switches and compactions",
         "prompt": "Finish final task after long-session context churn.",
         "acceptance": [
+            "Phase A confirms fixture-substitution under the approved cap",
             "final task succeeds",
             "compactions/switches are logged",
             "no coherence loss appears in quality review",

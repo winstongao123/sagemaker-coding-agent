@@ -34,8 +34,8 @@ These fields prevent software-builder tests from passing on prose alone:
 | R19-U2 | Evidence must include `conflict_detected=true`, `clarification_request_count>=1`, and no speculative edit. |
 | R19-U3 | Evidence must include search-before-edit ordering and fixture orthogonality from R14. |
 | R19-U6 | Evidence must name the fixture-controlled malformed-output injection and recovery path. |
-| R19-U7 | Evidence must include `breaker_fired=true` unless the run is explicitly escalated as "model recovered before breaker could be tested." |
-| R19-U10 | Evidence must include a deterministic final-task anchor that depends on information inserted before compaction/churn. |
+| R19-U7 | Evidence must include `breaker_fired=true` from a deterministic repeated-call bait fixture unless the run is explicitly escalated as "model recovered before breaker could be tested." |
+| R19-U10 | Evidence must include a deterministic final-task anchor that depends on information inserted before compaction/churn, and Phase A must confirm use of the prebuilt transcript/churn fixture unless the user approves a higher cap. |
 
 Required R16 `software_builder_subchecks` keys:
 
@@ -76,6 +76,9 @@ Cache evidence limitation row template:
 
 Do not leave cache fields silently blank. Use numeric evidence when available;
 otherwise write the explicit limitation row above.
+Before writing `MODEL_LIMITATION`, inspect the raw Bedrock/model response
+payload for the relevant cache field names and cite the missing-field evidence
+in the telemetry or quality review. A capture bug is not a model limitation.
 
 ## Required Metrics JSONL Keys
 
@@ -148,7 +151,8 @@ Bundled AWS runs are allowed only when the plan explicitly says the bundle is
 high-signal and non-overlapping.
 
 - R19-U1+R19-U2 may run as one Stage 4 ambiguity/contradiction bundle.
-- R19-U3+R19-U6+R19-U7 may run as one Stage 5 recovery bundle.
+- R19-U3+R19-U6+R19-U7+R18-E7 may run as one Stage 5 recovery/results bundle.
+- R3+R19-U4+R19-U5 may run as one Stage 6 subagent/reviewer bundle.
 - The cost cap for a bundled run is the sum of the member test caps.
 - The raw log may use a bundle name such as
   `_status/codex_reviews/r-tier-R19-U1+U2-aws-call1.log`.

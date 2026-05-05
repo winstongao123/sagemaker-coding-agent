@@ -51,8 +51,9 @@ real model behavior is the point being evaluated.
 | 3 | R14 multi-file refactor | changes a realistic cross-file project safely | grep/search evidence, pytest, stale-reference cleanup, repeated-call telemetry | covers project navigation and dependency discovery |
 | 4 | R19-U1 + R19-U2 ambiguity gate | asks clarification on ambiguity/contradiction | no speculative edit, conflict reporting, status note | cheap UX/safety gate before long app work |
 | 5 | R19-U3 + R19-U6 + R19-U7 + R18-E7 recovery/results gate | handles hidden deps, bad output, repeated-call traps, and large-output replay | alternative path, retry discipline, repeated-call counters, stable `sageagent-result://` refs, `result_replay`, checkpoint/verify | bundles recovery/result-inspection failures instead of one AWS call per trap |
-| 6 | R16 long app build | completes a small real app across a long session | app tests, `/status`, `/phase`, `/save`, `/resume`, `/checkpoint`, `/verify`, `/done`, `/cost`, `/context`, compaction/cache telemetry | broadest end-to-end software-builder proof |
-| 7 | R19-U10 long coherence | preserves final task intent after compactions | final-task coherence, memory/status integrity, compaction events, cache trend, quality review | isolates long-coherence risk after R16 proves app build |
+| 6 | R3 + R19-U4 + R19-U5 subagent/reviewer gate | coordinates child agents, reconciles conflicting findings, and recovers from a failed child | subagent dispatch telemetry, parent synthesis, conflict evidence, failed-child recovery, token/cost/cache attribution | covers pure orchestration risk not proven by app-build success alone |
+| 7 | R16 long app build | completes a small real app across a long session | app tests, `/status`, `/phase`, `/save`, `/resume`, `/checkpoint`, `/verify`, `/done`, `/cost`, `/context`, compaction/cache telemetry | broadest end-to-end software-builder proof |
+| 8 | R19-U10 long coherence | preserves final task intent after compactions | final-task coherence, memory/status integrity, compaction events, cache trend, quality review | isolates long-coherence risk after R16 proves app build |
 
 ## Precondition Gate For Long-Run Tests
 
@@ -84,9 +85,12 @@ token-budget model at Phase A:
 Bundle policy:
 
 - Stage 4 can bundle R19-U1+R19-U2. Cap is the sum: $0.40.
-- Stage 5 can bundle R19-U3+R19-U6+R19-U7. Cap is the sum: $0.90.
+- Stage 5 can bundle R19-U3+R19-U6+R19-U7+R18-E7. Cap is the sum: $1.00.
+- Stage 6 can bundle R3+R19-U4+R19-U5. Cap is the sum: $1.20.
 - Bundled runs may share one raw log, but must write per-test telemetry,
   metrics, quality rows, and review-log rows.
+- R1 is already `IN_PROGRESS` from a prior Unicode-stdout failure. It must be
+  rerun under the same Phase A -> AWS -> Phase C loop before any READY claim.
 
 Determinism policy:
 
@@ -131,6 +135,9 @@ rerunning the whole matrix:
 
 These sub-checks must be typed evidence in telemetry as
 `software_builder_subchecks`, not only prose in a quality review.
+The compaction sub-check may be satisfied by forced/local compaction when the
+Phase A budget model proves the fixture is too small to naturally trigger
+auto-compact under the approved cap. The evidence must say which path was used.
 
 For cache evidence, if Bedrock/model output does not expose cache-hit/read/write
 fields for a run, the evidence package must record an explicit model-side
