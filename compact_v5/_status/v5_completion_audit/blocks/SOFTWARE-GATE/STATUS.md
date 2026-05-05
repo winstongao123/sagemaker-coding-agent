@@ -1,9 +1,9 @@
 # SOFTWARE-GATE Status
 
-Status: READY_FOR_BLOCK_CLOSE_REVIEW
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
-Current phase: READY_FOR_BLOCK_CLOSE_REVIEW
+Current phase: CLOSED_PUSHED
 
 Expected manual rows: 4
 Ledger rows: 4
@@ -18,9 +18,9 @@ Last completed action:
 
 Next 3 todo items:
 
-1. Commit specific SOFTWARE-GATE files.
-2. Push to `sageagent/v5-build` and verify remote SHA.
-3. Update close commit evidence, then proceed to final all-block local/readiness gates.
+1. Run final all-block local/readiness gates.
+2. Run worker self-review over all code/docs/tests/logs.
+3. Run final Claude architecture/readiness review before any AWS/R-tier spend.
 
 Local validation:
 

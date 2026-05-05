@@ -25,7 +25,6 @@ Residual risks before AWS:
 
 ## Git evidence
 
-- Current state: implementation and review artifacts are uncommitted pending Claude cleanup re-review.
-- Close commit: pending specific-file commit after Claude cleanup review.
-- Remote push: pending `sageagent/v5-build` push after close commit.
+- Close commit: `f902f02a092231b532b32eec8600ce5b081c656b`.
+- Remote push: verified as `f902f02a092231b532b32eec8600ce5b081c656b on sageagent/v5-build`.
 - No tag, AWS/R-tier spend, force push, reset, checkout, Codex review, or nested Codex exec was used.
