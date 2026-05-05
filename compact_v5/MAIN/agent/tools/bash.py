@@ -17,8 +17,8 @@ PORT_LOG: row #010 (Runnable BashTool/prompt.ts → tools/bash.py).
 
 PS Issue mapping addressed:
 - Issue #6 (wiring-bug pattern): description does NOT promise features
-  the executor doesn't implement (no `run_in_background`, no `sandbox`,
-  no Runnable-only flags).
+  the executor doesn't implement (no `sandbox`, no Runnable-only flags).
+  SOFTWARE-SHELL adds v5-native managed background jobs.
 - Issue #7 (buried matrix): description ends with explicit WHEN/WHEN NOT
   triage section.
 """
@@ -52,6 +52,7 @@ Usage:
 - `python_exec` is the canonical Python execution tool — DO NOT use `python -c` via bash (the denylist blocks it explicitly).
 - Output is captured (stdout + stderr); large outputs are smart-truncated (head 100 + tail 50 lines).
 - Default timeout 120s, max 600s.
+- Managed background jobs are available with `background=true`; use `action=poll|wait|kill` and `job_id` to manage them. Logs are stored under `.sageagent_state/shell_jobs/`.
 - Approval is required before any command runs.
 
 WHEN to use:
@@ -81,8 +82,19 @@ _INPUT_SCHEMA: Dict[str, Any] = {
             "type": "integer",
             "description": "Timeout in seconds. Default 120, max 600.",
         },
+        "background": {
+            "type": "boolean",
+            "description": "Start command as a managed background job.",
+        },
+        "action": {
+            "type": "string",
+            "description": "Manage a background job: poll, wait, or kill.",
+        },
+        "job_id": {
+            "type": "string",
+            "description": "Background job id for action=poll|wait|kill.",
+        },
     },
-    "required": ["command"],
 }
 
 
@@ -105,6 +117,25 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
     from runtime.config import CONFIG
     from runtime.truncation import Truncation
 
+    action = str(args.get("action", "") or "").lower().strip()
+    if action:
+        from runtime.shell_jobs import SHELL_JOBS
+        job_id = str(args.get("job_id", "") or "").strip()
+        if not job_id:
+            return "Error: job_id is required for background job actions"
+        if action == "poll":
+            return _format_job_status(SHELL_JOBS.status(job_id))
+        if action == "wait":
+            raw_wait = args.get("timeout", 30)
+            try:
+                wait_timeout = float(raw_wait)
+            except (TypeError, ValueError):
+                wait_timeout = 30.0
+            return _format_job_status(SHELL_JOBS.wait(job_id, timeout=wait_timeout))
+        if action == "kill":
+            return _format_job_status(SHELL_JOBS.kill(job_id))
+        return "Error: action must be one of poll, wait, kill"
+
     command = args.get("command")
     if not isinstance(command, str) or not command:
         return "Error: command is required and must be a non-empty string"
@@ -125,6 +156,8 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         return f"Blocked: {msg}"
 
     try:
+        if args.get("background") and CONFIG.execution_mode == "docker":
+            return "Error: background bash jobs are supported only in local execution_mode"
         if CONFIG.execution_mode == "docker":
             from security.manager import ensure_docker_image_ready
             ensure_docker_image_ready()
@@ -149,6 +182,16 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
                 except ValueError:
                     cmd_arg = command.split()
                 use_shell = False
+            if args.get("background"):
+                from runtime.shell_jobs import SHELL_JOBS
+                status = SHELL_JOBS.start(
+                    cmd_arg,
+                    shell=use_shell,
+                    cwd=_current_workspace(),
+                    env=safe_exec_env(),
+                    command=command,
+                )
+                return _format_job_status(status)
             result = run_subprocess(
                 cmd_arg, timeout=timeout, shell=use_shell,
                 cwd=_current_workspace(), env=safe_exec_env(),
@@ -242,3 +285,8 @@ def _combined_abort_event(context: Optional[Dict[str, Any]]) -> Optional[Any]:
         return None
     from runtime.execution_context import combined_abort_signal
     return combined_abort_signal(*events)
+
+
+def _format_job_status(status: Dict[str, Any]) -> str:
+    import json
+    return "Background job status:\n" + json.dumps(status, indent=2, sort_keys=True)

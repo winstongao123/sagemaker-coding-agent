@@ -532,10 +532,33 @@ def kill_active_process() -> None:
     global _active_process
     with _active_process_lock:
         if _active_process and _active_process.poll() is None:
+            _kill_process_tree(_active_process)
+
+
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """Terminate a process and its children best-effort across platforms."""
+    if proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        else:
+            import signal
+            os.killpg(proc.pid, signal.SIGTERM)
             try:
-                _active_process.kill()
-            except OSError:
-                pass
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except OSError:
+            pass
 
 
 def safe_exec_env() -> Dict[str, str]:
@@ -566,14 +589,24 @@ def run_subprocess(cmd_arg, timeout: int, shell: bool, cwd: str,
         text=True,
         cwd=cwd,
         env=env,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+        start_new_session=(os.name != "nt"),
     )
     with _active_process_lock:
         _active_process = proc
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_process_tree(proc)
+        try:
+            proc.communicate(timeout=2)
+        except Exception:
+            pass
+        raise
     finally:
         with _active_process_lock:
-            _active_process = None
+            if _active_process is proc:
+                _active_process = None
     return subprocess.CompletedProcess(cmd_arg, proc.returncode, stdout, stderr)
 
 

@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL NEXT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; ALL ORIGINAL BLOCKS CLOSED/PUSHED; SOFTWARE-ASYNC-DECISION CLOSED/PUSHED; SOFTWARE-STATE CLOSED/PUSHED; SOFTWARE-CHECKPOINT CLOSED/PUSHED; SOFTWARE-SHELL APPROVED/PENDING PUSH; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -383,6 +383,21 @@ Current SOFTWARE-CHECKPOINT state:
   refs/heads/v5-build` returned
   `4e0f2c3cc78f5a3dfcff2d8f0ba761da255596f9`.
 - Next action: continue `SOFTWARE-SHELL` from files.
+
+Current SOFTWARE-SHELL state:
+
+- Manual rows: 3. Shipped rows: 3. Blocking rows before Claude: 0.
+- Foreground subprocess timeout/stop now kills process trees.
+- Added managed background shell job lifecycle with durable logs/index.
+- Local tests passed: SOFTWARE-SHELL focused suite `2 passed`; timeout
+  regressions `2 passed`; py_compile PASS.
+- Claude iter1 timed out with empty stdout/stderr.
+- Claude iter2 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- Worker applied Claude's two non-blocking LOW cleanup notes and reran focused
+  tests plus py_compile.
+- Next action: commit/push the specific SOFTWARE-SHELL files, verify remote
+  SHA, then continue `SOFTWARE-RESULTS`.
 
 Previous Block B state:
 
