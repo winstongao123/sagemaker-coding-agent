@@ -20,14 +20,14 @@ D-8, D-9, D-10, D-11, D-12, D-13.
 
 ## Git Evidence
 
-Pending D close commit. Ledger rows use `pending D close commit` until the
+Pending D close commit. Ledger rows use `b972492d198c7fa63865949f1d09eb425bc65f7d` until the
 specific-file checkpoint commit is created and pushed.
 
 ## Open Risk
 
-Claude iter1 approved D-1 through D-13 with 0 blockers. The only remaining
-close task is to replace pending git evidence with the specific close commit SHA
-after commit/push.
+Claude iter1 approved D-1 through D-13 with 0 blockers. Git evidence now points
+to close commit `b972492d198c7fa63865949f1d09eb425bc65f7d`, which was pushed to
+`sageagent/v5-build`.
 
 `PS_SOFTWARE_PROJECT_WORKFLOW.md` was reread before D close. The D
 implementation does not add `/project-*` commands; the long-running software
@@ -67,4 +67,3 @@ Coverage: 13 / 13 = 100%
 PORT_LOG rows for this Block: 13 (#181-#193)
 Reviewer verification: PASS (`reviews/block-d-claude-review-iter1.md`)
 Recommendation: READY_TO_CHECKPOINT
-

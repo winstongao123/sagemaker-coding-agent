@@ -125,7 +125,9 @@ Current Block D state:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
 - Worker fixed the non-blocking INFO test symmetry note by adding direct
   `/init-verifiers` dispatch coverage and rerunning local gates.
-- Next action: specific-file close commit and push D to `sageagent/v5-build`.
+- D specific-file close commit was created and pushed to `sageagent/v5-build`:
+  `b972492d198c7fa63865949f1d09eb425bc65f7d`.
+- Next action: push D checkpoint evidence update, then continue to Block F2.
   Do not run AWS/R-tier, tag, Codex review, nested `codex exec`, force push, or
   unrelated staging.
 

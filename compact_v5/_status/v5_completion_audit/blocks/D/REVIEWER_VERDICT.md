@@ -12,8 +12,8 @@ Remaining ship-blocking rows: 0
 
 Findings:
 
-- INFO: replace `pending D close commit` git evidence with the real close SHA
-  after the D checkpoint commit.
+- INFO: git evidence was updated to close commit
+  `b972492d198c7fa63865949f1d09eb425bc65f7d`.
 - INFO: historical review placeholders were replaced with the iter1 review
   path in `LEDGER.md`.
 - INFO: Claude noted direct `/init-verifiers` dispatch coverage was optional;
