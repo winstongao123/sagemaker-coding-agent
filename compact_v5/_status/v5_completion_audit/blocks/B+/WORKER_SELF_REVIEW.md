@@ -40,8 +40,9 @@ Rows:
 
 ## Git Evidence
 
-Git checkpoint is pending. `LEDGER.md` uses `pending Block B+ checkpoint` until
-specific-file commit and push complete.
+Git checkpoint is recorded. `LEDGER.md` uses close commit
+`d83249ec548e1bf33f05657aabcf959112243db3`, which was pushed to
+`sageagent/v5-build`.
 
 ## Open Risk
 

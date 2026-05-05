@@ -1,8 +1,11 @@
 # Block B+ Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_CHECKPOINT
+Status: CLOSED_PUSHED
 
-Specific-file commit is ready after final scope/doc consistency checks.
+Specific-file close commit was created and pushed to `sageagent/v5-build`:
+`d83249ec548e1bf33f05657aabcf959112243db3`.
+
+Checkpoint evidence fields now record that SHA.
 
 Before close commit:
 
@@ -13,5 +16,8 @@ Before close commit:
 5. Update `LEDGER.md`, `REVIEWER_VERDICT.md`, `STATUS.md`,
    `CLAUDE_REVIEW_MATRIX.md`, and this file with the actual review and
    checkpoint evidence.
-6. Stage only the B+ file list plus directly touched code/test/doc artifacts.
-7. Commit and push to `sageagent` branch `v5-build`; do not tag.
+6. Stage only the checkpoint-evidence files for the follow-up evidence commit.
+7. Commit and push the evidence update to `sageagent` branch `v5-build`; do
+   not tag.
+
+Evidence update status: included in the follow-up evidence commit.

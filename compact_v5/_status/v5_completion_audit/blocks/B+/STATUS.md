@@ -1,6 +1,6 @@
 # Block B+ Status
 
-Status: READY_FOR_BLOCK_CLOSE_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Expected rows from `SYNTHESIS_MASTER`: 8
@@ -9,12 +9,11 @@ Current blocking-row count: 0
 
 Current phase: FINAL_CLOSE_ARTIFACTS
 
-Current task: Final scope/doc consistency pass, then specific-file commit and
-push to `sageagent/v5-build`.
+Current task: Continue to next block in `BLOCK_ORDER_AND_COVERAGE.md`.
 
-Last completed action: Claude iter7 returned a usable row-by-row review:
-`APPROVE / SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`, with 0 remaining
-ship-blocking rows. INFO artifact cleanup items were addressed locally.
+Last completed action: Specific-file B+ close commit
+`d83249ec548e1bf33f05657aabcf959112243db3` was pushed to
+`sageagent/v5-build`, and checkpoint evidence fields were updated.
 
 Smoke artifacts:
 
@@ -27,10 +26,10 @@ Latest usable Claude verdict: `reviews/block-b-plus-claude-review-iter7.md`.
 
 Next 3 todo items:
 
-1. Run final `scope_audit.py --block B+` and documentation consistency checks.
-2. Commit only B+ close files plus directly touched code/test/doc artifacts.
-3. Push the checkpoint to `sageagent/v5-build`, then update git evidence if an
-   amend is needed.
+1. Verify remote branch tip after evidence update push.
+2. Start C+ from files.
+3. Do not run AWS/R-tier, tag, Codex review, nested `codex exec`, force push,
+   or unrelated staging.
 
 Next Claude review state: none required for B+ unless final artifact edits
 introduce a new substantive scope change.
