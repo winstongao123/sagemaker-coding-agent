@@ -106,6 +106,11 @@ Completed and pushed:
 - R19-U5: Stage 6 bundle call2 Phase C `GENUINE_PASS`,
   `r_tier_gate.py --test R19-U5` passed. Call1 diagnostic predicate-failure
   spend remains preserved.
+- R16: Stage 7 call1 Phase C `GENUINE_PASS`, `r_tier_gate.py --test R16`
+  passed. Haiku completed the bounded Flask CRUD app at `$0.0205`, with all
+  required `software_builder_subchecks`, numeric cache evidence, forced/local
+  compaction evidence, unchanged fixture tests, and no R14/R19-U3 guard-loop
+  recurrence.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -157,6 +162,10 @@ Local blocker fix summary:
   instead of relying only on tool-dispatch timing heuristics.
 - `build_telemetry.py` now reads both legacy top-level `response` payloads and
   the new `parameters.response` payload emitted by QueryEngine.
+- `build_telemetry.py` now reads all JSONL files in an audit directory. R16
+  surfaced that a forced/local compaction JSONL and a session JSONL can coexist
+  in the same audit directory; the telemetry builder must aggregate both rather
+  than picking only the newest file.
 - `r_tier_gate.py` was added as a local evidence/cost guard.
 
 ## Mock verification
@@ -222,3 +231,6 @@ Result:
 - Stage 6 call2 READY spend added:
   - R19-U4: `$0.0537`
   - R19-U5: `$0.0309`
+- Stage 7 R16 call1 READY spend added:
+  - R16: `$0.0205`
+- local R-tier ledger after R16: `$1.4858`

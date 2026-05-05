@@ -71,9 +71,15 @@ Local fix status:
   repeated failed exec recovery loop, and no `max_turns`. Claude Phase C
   returned `GENUINE_PASS` and said R14 does not need an immediate targeted
   rerun.
-- This follow-up is no longer blocking Stage 5. It remains on recurrence watch:
-  if R16, R19-U10, or any later software-builder run shows a non-intentional
-  repeated guard-class loop, stop the matrix and reopen this blocker.
+- 2026-05-06: R16 call1 passed on Haiku with `process_quality_ok=true`, two
+  tool calls (`read_file`, `write_file`), zero failure-loop events, empty guard
+  failure class counts, no repeated calls, and no `max_turns`. Claude Phase C
+  returned `GENUINE_PASS`, so the recurrence watch remains clean through the
+  long app build stage.
+- This follow-up is no longer blocking Stage 5 or R16. It remains on
+  recurrence watch: if R19-U10 or any later software-builder run shows a
+  non-intentional repeated guard-class loop, stop the matrix and reopen this
+  blocker.
 
 Execution decision:
 
@@ -111,6 +117,9 @@ Follow-up:
   chat-text clarification is acceptable for v5.0.1.
 - R16 quality review must check whether user-clarification moments use the
   intended channel when a task cannot safely continue.
+- 2026-05-06 R16 note: no clarification moment occurred in the bounded Flask
+  fixture, so R16 did not add evidence for or against the direct clarification
+  channel decision. This low follow-up remains open for final review.
 
 ## R19-U3 Stage 5 Call1 Tool-Failure Loop Recurrence
 

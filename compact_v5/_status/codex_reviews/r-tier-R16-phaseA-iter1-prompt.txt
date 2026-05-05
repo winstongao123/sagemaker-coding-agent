@@ -1,0 +1,150 @@
+﻿You are Claude CLI performing an independent Phase A review from disk.
+
+Use read-only tools. Do not rely on chat memory.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Review target: R16 long app build.
+
+## Files to read
+
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/MAIN/agent/tests/r_tier/test_r16_long_app_build.py
+- compact_v5/_status/scripts/build_telemetry.py
+- compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py
+
+## Worker preflight summary
+
+Test id: R16
+
+Purpose: prove the software-builder can complete a bounded small Flask CRUD app
+build on Haiku while also exercising long-session workflow evidence:
+status/todo/save/resume/checkpoint/verify-done stale blocking, cost/context,
+cache, compaction, shell lifecycle, final app tests, and R14/R19-U3 repeated
+tool-loop recurrence watch.
+
+Runner:
+
+- `compact_v5/MAIN/agent/tests/r_tier/test_r16_long_app_build.py`
+
+Fixture:
+
+- Temporary workspace.
+- Existing `tests/test_app.py` defines Flask test-client expectations:
+  `/health`, `/tasks`, `/tasks/<id>` create/list/patch/delete, JSON
+  persistence via `TASK_DB_PATH`, validation, and 404 paths.
+- Existing `README.md` names the fixture.
+- The model must create exactly the implementation app in `app.py`; it must not
+  edit `tests/test_app.py`.
+
+Prompt:
+
+- The runner prompt tells Haiku to read tests first, create `app.py`, implement
+  `create_app(testing: bool = False)`, routes, persistence, validation, and
+  run pytest until tests pass.
+
+Model:
+
+- Haiku 4.5 AU only:
+  `au.anthropic.claude-haiku-4-5-20251001-v1:0`
+
+Cost cap:
+
+- Planned cap: `$1.00`.
+- User-approved hard retry ceiling: `$1.20`.
+- Runner sets `CONFIG.session_cost_limit = 1.20`.
+- Max primary model turns: 8.
+- `IterationBudget(max_iterations=14)`.
+- `CONFIG.max_tokens = 2048`.
+
+Overlap / optimization:
+
+- R13 proved bounded greenfield Python functions, not a web app with stateful
+  routes and persistence.
+- R14 proved multi-file refactor/navigation, not building a new app under
+  workflow continuity checks.
+- R15 proved debugging/fix discipline, not sustained app construction.
+- Stage 6 proved subagent orchestration, not app artifact quality or
+  status/save/resume/checkpoint/verify/done/coherence surfaces.
+- R19-U10 will isolate long coherence after compaction; R16 is the broader
+  app-build proof before that.
+
+Required evidence files after AWS call:
+
+- `compact_v5/_status/codex_reviews/r-tier-R16-aws-call<N>.log`
+- `compact_v5/_status/r-tier-R16-aws-call<N>-side-metrics.json`
+- `compact_v5/_status/r-tier-R16-aws-call<N>-telemetry.json`
+- `compact_v5/_status/r-tier-R16-aws-call<N>-quality.md`
+- `compact_v5/_status/r_tier_metrics.jsonl`
+- `compact_v5/_status/r_tier_review_log.md`
+- `compact_v5/_status/codex_reviews/r-tier-R16-phaseC-iter<N>.md`
+- `compact_v5/_status/r-tier-R16-gate.txt`
+
+R16 telemetry must include typed `software_builder_subchecks` with:
+
+- `status_round_trip`
+- `todo_round_trip`
+- `named_checkpoint_round_trip`
+- `verify_done_stale_evidence_blocked`
+- `compaction_event_emitted`
+- `cache_evidence_recorded`
+- `cost_context_reported`
+- `final_artifact_quality_passed`
+
+The runner also records:
+
+- `save_resume_round_trip`
+- `background_shell_start_poll_kill`
+- `forced_local_compaction_used`
+
+Compaction evidence:
+
+- The app fixture is intentionally bounded to stay inside the approved R16 cap.
+- The runner emits a forced/local typed `compact_auto_end` audit event after
+  the model run and records `forced_local_compaction_used=true`.
+- This follows the optimized plan allowance that compaction may be satisfied by
+  forced/local compaction when Phase A shows the fixture is too small to trigger
+  natural auto-compact under the approved cap.
+
+Local validation already run:
+
+```text
+py -3.11 -m py_compile compact_v5/MAIN/agent/tests/r_tier/test_r16_long_app_build.py compact_v5/_status/scripts/build_telemetry.py
+PASS
+
+$env:PYTHONPATH=(Resolve-Path compact_v5/MAIN/agent).Path
+py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r16_long_app_build.py -q
+1 skipped
+
+$env:PYTHONPATH=(Resolve-Path compact_v5/MAIN/agent).Path
+py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py -q
+9 passed
+```
+
+Stop conditions:
+
+- Do not approve if the runner is too broad for `$1.00` planned / `$1.20` hard
+  ceiling.
+- Do not approve if forced/local compaction evidence is unacceptable for R16.
+- Do not approve if `software_builder_subchecks` are not sufficiently typed for
+  `r_tier_gate.py --test R16`.
+- Stop AWS if budget/headroom is unhealthy.
+- Stop AWS if telemetry is missing or `software_builder_subchecks` are false.
+- Stop AWS if R14/R19-U3-style repeated guard/edit/write/exec loop recurs.
+- Stop AWS if app tests fail, `app.py` is missing, `tests/test_app.py` is
+  edited, cap is exceeded, or result hits `max_turns`.
+
+## Review question
+
+Is this R16 runner and evidence plan approved for exactly one real Bedrock AWS
+call on Haiku 4.5 AU, after a fresh budget/headroom check?
+
+Required response:
+
+- Return `APPROVE_FOR_AWS_CALL` if approved.
+- Otherwise return a blocking finding with required fixes.
+

@@ -109,6 +109,90 @@ def test_build_telemetry_aggregates_tool_dispatch_events(tmp_path):
     assert s["REPEATED_calls"] == 1, f"expected REPEATED_calls=1, got {s['REPEATED_calls']}"
 
 
+def test_build_telemetry_carries_r16_software_builder_subchecks(tmp_path):
+    bt = _load_build_telemetry()
+    audit_path = tmp_path / "audit.jsonl"
+    _write_audit_jsonl(audit_path, [
+        {"timestamp": "2026-05-04T10:00:00.000",
+         "session_id": "s1", "action": "tool_dispatch",
+         "tool_name": "write_file", "parameters": {"file_path": "app.py"},
+         "result_summary": "Written", "user_approved": True, "hash": "h1"},
+    ])
+    raw_log = tmp_path / "r-tier-R16-aws-call1.log"
+    raw_log.write_text("============================= 1 passed =============================\n", encoding="utf-8")
+    side = tmp_path / "side.json"
+    side.write_text(json.dumps({
+        "completed": True,
+        "cost_usd": 0.12,
+        "tokens_in": 10,
+        "tokens_out": 20,
+        "software_builder_subchecks": {
+            "status_round_trip": True,
+            "todo_round_trip": True,
+            "named_checkpoint_round_trip": True,
+            "verify_done_stale_evidence_blocked": True,
+            "compaction_event_emitted": True,
+            "cache_evidence_recorded": True,
+            "cost_context_reported": True,
+            "final_artifact_quality_passed": True,
+        },
+    }), encoding="utf-8")
+
+    telemetry = bt.build_telemetry(
+        test="R16", call=1,
+        audit_log_path=audit_path,
+        raw_log_path=raw_log,
+        side_channel_path=side,
+    )
+
+    assert telemetry["software_builder_subchecks"]["status_round_trip"] is True
+    assert telemetry["software_builder_subchecks"]["final_artifact_quality_passed"] is True
+
+
+def test_build_telemetry_reads_all_jsonl_files_in_audit_directory(tmp_path):
+    bt = _load_build_telemetry()
+    audit_dir = tmp_path / "audit"
+    audit_dir.mkdir()
+    _write_audit_jsonl(audit_dir / "session.jsonl", [
+        {"timestamp": "2026-05-04T10:00:00.000",
+         "session_id": "s1", "action": "chat_response",
+         "tool_name": "(engine)",
+         "parameters": {"response": {
+             "usage": {"input_tokens": 10, "output_tokens": 20,
+                       "cache_read_input_tokens": 5,
+                       "cache_creation_input_tokens": 7},
+             "text": "use a tool",
+         }},
+         "result_summary": "tool_use", "user_approved": False, "hash": "h1"},
+        {"timestamp": "2026-05-04T10:00:01.000",
+         "session_id": "s1", "action": "tool_dispatch",
+         "tool_name": "read_file", "parameters": {"file_path": "tests/test_app.py"},
+         "result_summary": "OK", "user_approved": True, "hash": "h2"},
+    ])
+    _write_audit_jsonl(audit_dir / "forced-local.jsonl", [
+        {"timestamp": "2026-05-04T10:00:02.000",
+         "session_id": "s1", "action": "compact_auto_end",
+         "tool_name": "(compactor)",
+         "parameters": {"typed": True, "path": "forced_local"},
+         "result_summary": "forced/local", "user_approved": True, "hash": "h3"},
+    ])
+    raw_log = tmp_path / "raw.log"
+    raw_log.write_text("============================= 1 passed =============================\n", encoding="utf-8")
+
+    telemetry = bt.build_telemetry(
+        test="R16", call=1,
+        audit_log_path=audit_dir,
+        raw_log_path=raw_log,
+        side_channel_path=None,
+    )
+
+    assert len(telemetry["audit_log_paths"]) == 2
+    assert telemetry["tool_call_summary"]["TOTAL_calls"] == 1
+    assert telemetry["per_turn"][0]["tokens_in"] == 10
+    assert telemetry["per_turn"][0]["cache_read_tokens"] == 5
+    assert len(telemetry["compaction_events"]) == 1
+
+
 def test_build_telemetry_captures_thinking_when_audit_emits_chat_response(tmp_path):
     """PLAYBOOK §4.5 Gap A lock — when audit_log carries a chat_response
     event with thinking, telemetry per_turn[].thinking_text is populated."""

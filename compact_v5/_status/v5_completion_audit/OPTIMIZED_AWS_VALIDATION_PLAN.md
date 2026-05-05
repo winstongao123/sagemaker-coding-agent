@@ -250,6 +250,34 @@ Stop AWS execution and return to implementation/review if:
   approval, budget/headroom check, and recurrence watch for R14/R19-U3-style
   tool loops.
 
+2026-05-06 Stage 7 R16 resolution:
+
+- Claude Phase A iter2 approved R16 after the runner was tightened to hash
+  `tests/test_app.py` before and after the model run.
+- AWS budget was healthy before spend. Local R-tier ledger before R16 was
+  `$1.4653`; R16 had no prior spend.
+- R16 call1 ran on Haiku 4.5 AU and passed at `$0.0205`, under the `$1.00`
+  planned cap and `$1.20` hard retry ceiling.
+- The model read `tests/test_app.py` before writing `app.py`, completed the
+  Flask CRUD fixture, and pytest reported `3 passed`.
+- All required `software_builder_subchecks` were true. Cache evidence was
+  numeric (`cache_read_tokens=7597`, `cache_write_tokens=10154`,
+  `cache_hit_pct=0.4279`), so no `MODEL_LIMITATION` row was needed.
+- Compaction evidence was explicitly forced/local, not natural long-context
+  pressure, per the approved R16 bounded-fixture allowance.
+- The R14/R19-U3 repeated guard/edit/write/exec loop did not recur:
+  two tool calls, zero repeated calls, zero failure-loop events, and empty
+  guard failure class counts.
+- R16 surfaced a local telemetry aggregation bug: when an audit directory
+  contained both the session JSONL and forced/local compaction JSONL, the
+  builder read only one file. `build_telemetry.py` now reads all JSONL files in
+  an audit directory, a zero-cost lock test covers this, and R16 telemetry was
+  rebuilt from the preserved AWS evidence.
+- Claude Phase C returned `GENUINE_PASS`, and
+  `r_tier_gate.py --test R16` passed.
+- Next optimized stage is Stage 8: R19-U10 long coherence, subject to fresh
+  Phase A approval and AWS Budget/headroom check.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates

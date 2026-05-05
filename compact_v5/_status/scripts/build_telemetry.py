@@ -10,7 +10,7 @@ Inputs:
   --test    R-tier test name (e.g. R1, R12, V1)
   --call    AWS call number for this test (1, 2, or 3)
   --audit-log  path to MAIN/agent/audit_logs/<session_id>.jsonl
-                (or directory — script will pick the latest jsonl in it)
+                (or directory — script will read every jsonl in it)
   --raw-log    path to compact_v5/_status/codex_reviews/r-tier-<TEST>-aws-call<N>.log
   --output     path to write the telemetry.json
   [--metrics-side-channel]  optional path to a JSON written by the test
@@ -80,19 +80,13 @@ def _parse_jsonl(path: Path) -> List[Dict[str, Any]]:
     return events
 
 
-def _resolve_audit_log(audit_log_arg: Path) -> Optional[Path]:
-    """If audit_log_arg is a file, return it. If a dir, pick the
-    most recently modified .jsonl inside."""
+def _resolve_audit_logs(audit_log_arg: Path) -> List[Path]:
+    """If audit_log_arg is a file, return it. If a dir, return all jsonl files."""
     if audit_log_arg.is_file():
-        return audit_log_arg
+        return [audit_log_arg]
     if audit_log_arg.is_dir():
-        candidates = sorted(
-            audit_log_arg.glob("*.jsonl"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        return candidates[0] if candidates else None
-    return None
+        return sorted(audit_log_arg.glob("*.jsonl"), key=lambda p: p.name)
+    return []
 
 
 def _ts_to_seconds(ts_str: str) -> float:
@@ -492,8 +486,10 @@ def build_telemetry(
         except json.JSONDecodeError:
             side_channel = None
 
-    audit_jsonl = _resolve_audit_log(audit_log_path)
-    events = _parse_jsonl(audit_jsonl) if audit_jsonl else []
+    audit_jsonls = _resolve_audit_logs(audit_log_path)
+    events: List[Dict[str, Any]] = []
+    for audit_jsonl in audit_jsonls:
+        events.extend(_parse_jsonl(audit_jsonl))
     turns = _group_into_turns(events)
     per_turn = _aggregate_per_turn(turns)
     tool_summary = _summarize_tool_calls(turns)
@@ -508,7 +504,8 @@ def build_telemetry(
         "schema_version": 1,
         "test": test,
         "call": call,
-        "audit_log_path": str(audit_jsonl) if audit_jsonl else None,
+        "audit_log_path": str(audit_log_path) if audit_jsonls else None,
+        "audit_log_paths": [str(path) for path in audit_jsonls],
         "raw_log_path": str(raw_log_path) if raw_log_path else None,
         "side_channel_path": str(side_channel_path) if side_channel_path else None,
         "per_turn": per_turn,
@@ -524,6 +521,8 @@ def build_telemetry(
     }
     if side_channel and side_channel.get("breaker_fired") is not None:
         telemetry["breaker_fired"] = bool(side_channel.get("breaker_fired"))
+    if side_channel and isinstance(side_channel.get("software_builder_subchecks"), dict):
+        telemetry["software_builder_subchecks"] = dict(side_channel["software_builder_subchecks"])
     return telemetry
 
 
