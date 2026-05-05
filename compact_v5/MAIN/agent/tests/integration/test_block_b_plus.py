@@ -124,6 +124,186 @@ def test_session_save_load_preserves_cost(tmp_path):
     assert abs(TOKENS.session_cost - expected_cost) < 1e-6
 
 
+def test_save_resume_commands_restore_messages_and_cost(tmp_path, monkeypatch):
+    """B+1: production /save -> /resume command path rehydrates cost."""
+    from runtime.config import CONFIG
+    from runtime.tokens import TOKENS
+    from commands import dispatch_command
+    import runtime.session as session_mod
+
+    monkeypatch.setattr(CONFIG, "sessions_dir", str(tmp_path))
+    sm = session_mod.SessionManager(sessions_dir=str(tmp_path))
+    monkeypatch.setattr(session_mod, "SESSIONS", sm)
+
+    model = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    TOKENS.add({"input_tokens": 1000, "output_tokens": 200}, model_id=model)
+    expected_cost = TOKENS.session_cost
+    ctx = {"messages": [{"role": "user", "content": "persist me"}]}
+
+    saved = dispatch_command("/save cost-restore", ctx=ctx)
+    assert saved.side_effect.startswith("session_saved:")
+    session_id = saved.side_effect.split(":", 1)[1]
+
+    TOKENS.reset()
+    ctx["messages"] = []
+    resumed = dispatch_command(f"/resume {session_id}", ctx=ctx)
+
+    assert resumed.side_effect == f"session_resumed:{session_id}"
+    assert ctx["messages"] == [{"role": "user", "content": "persist me"}]
+    assert abs(TOKENS.session_cost - expected_cost) < 1e-9
+
+
+def test_resume_command_restores_agent_message_buffer(tmp_path, monkeypatch):
+    """B+1: Chat UI can pass an Agent and restore its engine messages."""
+    from runtime.config import CONFIG
+    from runtime.tokens import TOKENS
+    from commands import dispatch_command
+    import runtime.session as session_mod
+
+    class _Engine:
+        messages = []
+
+    class _Agent:
+        def __init__(self):
+            self._engine = _Engine()
+
+        @property
+        def messages(self):
+            return list(self._engine.messages)
+
+    monkeypatch.setattr(CONFIG, "sessions_dir", str(tmp_path))
+    sm = session_mod.SessionManager(sessions_dir=str(tmp_path))
+    monkeypatch.setattr(session_mod, "SESSIONS", sm)
+
+    agent = _Agent()
+    agent._engine.messages = [{"role": "assistant", "content": "saved"}]
+    TOKENS.add(
+        {"input_tokens": 1200, "output_tokens": 120},
+        model_id="anthropic.claude-haiku-4-5-20251001-v1:0",
+    )
+    expected_cost = TOKENS.session_cost
+
+    saved = dispatch_command("/save agent-session", ctx={"agent": agent})
+    session_id = saved.side_effect.split(":", 1)[1]
+
+    agent._engine.messages = []
+    TOKENS.reset()
+    resumed = dispatch_command(f"/resume {session_id}", ctx={"agent": agent})
+
+    assert resumed.side_effect == f"session_resumed:{session_id}"
+    assert agent._engine.messages == [{"role": "assistant", "content": "saved"}]
+    assert abs(TOKENS.session_cost - expected_cost) < 1e-9
+
+
+def test_per_model_usage_collapses_bedrock_geo_prefixes():
+    """B+2: per-model usage rows use canonical model ids."""
+    from runtime.tokens import TOKENS
+
+    base = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    TOKENS.add({"input_tokens": 1000, "output_tokens": 100}, model_id=base)
+    TOKENS.add({"input_tokens": 2000, "output_tokens": 200}, model_id="apac." + base)
+    TOKENS.add({"input_tokens": 3000, "output_tokens": 300}, model_id="us." + base)
+
+    usage = TOKENS.get_model_usage()
+    assert list(usage) == [base]
+    assert usage[base]["input_tokens"] == 6000
+    assert usage[base]["output_tokens"] == 600
+    assert usage[base]["api_calls"] == 3
+
+
+def test_cost_block_is_four_line_model_agent_cache_summary():
+    """B+3: /cost has a stable four-line total/model/agent/cache block."""
+    from commands import cmd_cost
+    from runtime.tokens import TOKENS
+
+    model = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    TOKENS.add(
+        {
+            "input_tokens": 1000,
+            "output_tokens": 200,
+            "cache_read_input_tokens": 100,
+            "cache_creation_input_tokens": 50,
+        },
+        model_id=model,
+        agent_kind="parent",
+    )
+    TOKENS.add(
+        {"input_tokens": 500, "output_tokens": 100},
+        model_id=model,
+        agent_kind="build",
+    )
+
+    lines = TOKENS.get_cost_block().splitlines()
+    assert len(lines) == 4
+    assert lines[0].startswith("Total: $")
+    assert lines[1].startswith("Per-model: ")
+    assert model in lines[1]
+    assert lines[2].startswith("Per-agent: ")
+    assert "parent=$" in lines[2]
+    assert "build=$" in lines[2]
+    assert lines[3] == "Cache: read=100 write=50 total=150"
+
+    command_lines = cmd_cost("").text.splitlines()
+    assert command_lines[:4] == lines
+    assert command_lines[4].startswith("Tokens: ")
+
+
+def test_otel_counters_emitted_locally_only():
+    """B+4: local OTel-style counters are inspectable without export."""
+    from runtime.tokens import TOKENS
+
+    model = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    TOKENS.add(
+        {
+            "input_tokens": 700,
+            "output_tokens": 70,
+            "cache_read_input_tokens": 20,
+            "cache_creation_input_tokens": 10,
+        },
+        model_id=model,
+        agent_kind="review",
+    )
+
+    counters = TOKENS.get_otel_counters()
+    assert counters["export"] == "local-only"
+    assert counters["tokens.input"] == 700
+    assert counters["tokens.output"] == 70
+    assert counters["tokens.cache_read"] == 20
+    assert counters["tokens.cache_write"] == 10
+    assert counters["api.calls"] == 1
+    assert counters["context_window.tokens"] == 730
+    assert counters["models"][model]["api_calls"] == 1
+    assert counters["agents.subagent.cost_usd"]["review"] > 0
+
+
+def test_context_window_refreshes_on_every_cost_update():
+    """B+6: latest response context-window estimate refreshes per add()."""
+    from runtime.tokens import TOKENS
+
+    model = "anthropic.claude-haiku-4-5-20251001-v1:0"
+    TOKENS.add(
+        {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "cache_read_input_tokens": 5,
+            "cache_creation_input_tokens": 7,
+        },
+        model_id=model,
+    )
+    assert TOKENS.context_window_tokens == 112
+
+    TOKENS.add(
+        {
+            "input_tokens": 300,
+            "output_tokens": 30,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 11,
+        },
+        model_id=model,
+    )
+    assert TOKENS.context_window_tokens == 311
+
+
 # ============================================================
 # T1 — session_cost_limit warn-and-continue (per user 2026-05-03)
 # ============================================================
@@ -392,6 +572,22 @@ def test_cleanup_registry_callback_error_does_not_skip_others(caplog):
     assert any("intentional" in r.getMessage() for r in caplog.records)
 
 
+def test_cost_flush_on_exit_logs_final_cost(caplog):
+    """B+7: exit-time cost flush logs nonzero session cost."""
+    import logging
+    from runtime.tokens import TOKENS, _flush_cost_on_exit
+
+    TOKENS.add(
+        {"input_tokens": 1000, "output_tokens": 100},
+        model_id="anthropic.claude-haiku-4-5-20251001-v1:0",
+    )
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        _flush_cost_on_exit()
+    assert any("session-final cost:" in r.getMessage() for r in caplog.records)
+
+
 # ============================================================
 # ADR-020 remap 0-9 — feature_flags fail-closed
 # ============================================================
@@ -630,3 +826,16 @@ def test_block_b_plus_remap_table_present_in_adr_022():
         # Each B+N row references its target Block (I or A).
         # Be tolerant of formatting; just look for the literal item id.
         assert item in text, f"ADR-022 missing landing-Block remap for {item}"
+
+
+def test_config_dataclass_explicit_b_plus_row_fields():
+    """B+8: Config row preserves cost/session/status/cache fields."""
+    from runtime.config import Config
+
+    cfg = Config()
+    assert cfg.session_cost_limit == 0.0
+    assert cfg.sessions_dir
+    assert cfg.enable_status_doc is True
+    assert cfg.status_doc == "AGENT_STATUS.md"
+    assert cfg.compaction_model == ""
+    assert cfg.cache_ttl == "5m"

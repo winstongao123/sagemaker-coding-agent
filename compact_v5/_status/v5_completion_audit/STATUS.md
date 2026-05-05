@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, AND B CLOSED/PUSHED; NEXT BLOCK B+; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, AND B CLOSED/PUSHED; BLOCK B+ APPROVED BY CLAUDE ITER7 AND READY FOR SPECIFIC-FILE CHECKPOINT; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -78,7 +78,28 @@ Block L, Block N, Block K, Block T, and Block C:
 - Block C close commit: `18fb3dc14e9e33f3d233f50c8bcde9d14f36558e`.
 - Block C evidence commit: `34374979e851b9ebf24e5a4f9bcd66f007a6cdcf`.
 
-Current Block B state:
+Current Block B+ state:
+
+- B+ local implementation/artifacts cover 8/8 rows.
+- `scope_audit.py --block B+` reports 8 shipped rows and 0 ship-blocking rows.
+- Local gates pass: Block B+ suite 29 passed, Block D command suite 22 passed,
+  targeted B+5 advisor tests 2 passed, py_compile PASS.
+- Claude review iter6 was the first usable B+ review and returned
+  `APPROVE_WITH_FIXES / SHIP DECISION: BLOCKED` because B+1 lacked a production
+  `/resume` call site.
+- Worker fixed B+1 with production `/save` and `/resume` commands, Chat UI
+  command context, and lock tests.
+- Claude review iter7 returned `VERDICT: APPROVE`, `SHIP DECISION:
+  READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
+- `blocks/B+/STATUS.md`, `REVIEWER_VERDICT.md`,
+  `ledger/CLAUDE_REVIEW_MATRIX.md`, and `REVIEW_LOOP_BLOCKED.md` record the
+  iter7 outcome.
+- Next B+ action: final scope/doc consistency, specific-file commit, push to
+  `sageagent/v5-build`, then replace pending checkpoint evidence with the
+  actual SHA if needed. Do not run AWS/R-tier, tag, Codex review, nested
+  `codex exec`, force push, or unrelated staging.
+
+Previous Block B state:
 
 - Local implementation and audit artifacts are complete for 16/16 rows.
 - `scope_audit.py --block B` reports 16 shipped rows and 0 ship-blocking rows.

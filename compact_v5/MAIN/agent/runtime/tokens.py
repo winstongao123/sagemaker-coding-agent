@@ -394,6 +394,11 @@ class TokenTracker:
         self.subagent_input_tokens: Dict[str, int] = {}
         self.subagent_output_tokens: Dict[str, int] = {}
         self.subagent_cost: Dict[str, float] = {}
+        # B+2: per-model usage is keyed by canonical model id so Bedrock
+        # inference-profile prefixes collapse into one reporting row.
+        self.model_usage: Dict[str, Dict[str, Any]] = {}
+        # B+6: refreshed on every usage/cost update from the latest response.
+        self.context_window_tokens = 0
         # Last-usage record for tokenCountWithEstimation walks (B-8).
         self._last_usage_record: Optional[Dict[str, int]] = None
 
@@ -480,6 +485,25 @@ class TokenTracker:
                     self.subagent_cost.get(agent_kind, 0.0) + cost
                 )
 
+            model_row = self.model_usage.setdefault(
+                mid,
+                {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cost_usd": 0.0,
+                    "api_calls": 0,
+                },
+            )
+            model_row["input_tokens"] += input_tokens
+            model_row["output_tokens"] += output_tokens
+            model_row["cache_read_input_tokens"] += cache_read
+            model_row["cache_creation_input_tokens"] += cache_write
+            model_row["cost_usd"] += cost
+            model_row["api_calls"] += 1
+            self.context_window_tokens = input_tokens + cache_read + cache_write
+
             # Budget gate (verbatim from v4).
             limit = self._config.session_cost_limit
             if limit > 0 and self.session_cost > 0:
@@ -532,6 +556,68 @@ class TokenTracker:
             cost_str += f" (cache {cache_pct:.0f}% | saved ~${savings:.4f})"
         return cost_str
 
+    def get_model_usage(self) -> Dict[str, Dict[str, Any]]:
+        """Return per-model usage collapsed by canonical model id."""
+        with self._lock:
+            return {
+                model_id: dict(stats)
+                for model_id, stats in self.model_usage.items()
+            }
+
+    def get_cost_block(self) -> str:
+        """Return Runnable-style four-line cost summary for `/cost`.
+
+        Lines are stable and intentionally compact:
+        total, per-model, per-agent, and cache.
+        """
+        with self._lock:
+            per_model = ", ".join(
+                f"{model}: ${stats['cost_usd']:.4f}"
+                for model, stats in sorted(self.model_usage.items())
+            ) or "none"
+            per_agent_parts = [f"parent=${self.parent_cost:.4f}"]
+            per_agent_parts.extend(
+                f"{kind}=${cost:.4f}"
+                for kind, cost in sorted(self.subagent_cost.items())
+            )
+            cache_total = self.session_cache_read + self.session_cache_write
+            return "\n".join([
+                f"Total: {self.get_cost()} ({self.api_calls} API calls)",
+                f"Per-model: {per_model}",
+                f"Per-agent: {', '.join(per_agent_parts)}",
+                (
+                    "Cache: "
+                    f"read={self.session_cache_read:,} "
+                    f"write={self.session_cache_write:,} "
+                    f"total={cache_total:,}"
+                ),
+            ])
+
+    def get_otel_counters(self) -> Dict[str, Any]:
+        """Return local-only OTel-style counters; never exports remotely."""
+        with self._lock:
+            return {
+                "export": "local-only",
+                "tokens.input": self.session_input,
+                "tokens.output": self.session_output,
+                "tokens.cache_read": self.session_cache_read,
+                "tokens.cache_write": self.session_cache_write,
+                "cost.usd": round(self.session_cost, 6),
+                "api.calls": self.api_calls,
+                "context_window.tokens": self.context_window_tokens,
+                "agents.parent.cost_usd": round(self.parent_cost, 6),
+                "agents.subagent.cost_usd": {
+                    k: round(v, 6) for k, v in self.subagent_cost.items()
+                },
+                "models": {
+                    model_id: {
+                        **stats,
+                        "cost_usd": round(float(stats["cost_usd"]), 6),
+                    }
+                    for model_id, stats in self.model_usage.items()
+                },
+            }
+
     def get_stats(self) -> Dict[str, Any]:
         return {
             "session_input": self.session_input,
@@ -550,6 +636,14 @@ class TokenTracker:
             "subagent_input_tokens": dict(self.subagent_input_tokens),
             "subagent_output_tokens": dict(self.subagent_output_tokens),
             "subagent_cost_usd": {k: round(v, 6) for k, v in self.subagent_cost.items()},
+            "model_usage": {
+                model_id: {
+                    **stats,
+                    "cost_usd": round(float(stats["cost_usd"]), 6),
+                }
+                for model_id, stats in self.model_usage.items()
+            },
+            "context_window_tokens": self.context_window_tokens,
         }
 
     def restore(self, stats: Dict[str, Any]):
@@ -577,6 +671,24 @@ class TokenTracker:
             self.subagent_cost = {
                 k: float(v) for k, v in stats.get("subagent_cost_usd", {}).items()
             }
+            self.model_usage = {
+                model_id: {
+                    "input_tokens": int(values.get("input_tokens", 0)),
+                    "output_tokens": int(values.get("output_tokens", 0)),
+                    "cache_read_input_tokens": int(
+                        values.get("cache_read_input_tokens", 0)
+                    ),
+                    "cache_creation_input_tokens": int(
+                        values.get("cache_creation_input_tokens", 0)
+                    ),
+                    "cost_usd": float(values.get("cost_usd", 0.0)),
+                    "api_calls": int(values.get("api_calls", 0)),
+                }
+                for model_id, values in stats.get("model_usage", {}).items()
+            }
+            self.context_window_tokens = int(
+                stats.get("context_window_tokens", 0)
+            )
 
     # --------------------------------------------------------
     # B-8 / B-9 — context-token math derived from last response

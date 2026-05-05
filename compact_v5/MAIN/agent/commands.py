@@ -1,4 +1,4 @@
-"""Block D — Slash-command dispatcher (20 v4 commands + /auth + 6 LF additions).
+"""Block D — Slash-command dispatcher (22 v4/B+ commands + /auth + 6 LF additions).
 
 v5 port of v4's slash-command surface (sagemaker_agent.py:8164 +
 :10789-:11341). The dispatch table here is the single source of truth
@@ -6,22 +6,22 @@ for what `/foo` lines do; the chat UI calls `dispatch_command(msg, ...)`
 when a user message starts with `/`.
 
 **Command count contract** (verified against `list_commands()`):
-  - 17 v4 advertised commands:
+  - 19 v4/B+ advertised commands:
     /skills, /skill use, /skill clear, /unskill, /skill suggestions,
-    /skill apply, /skill reject, /revert, /cost, /context, /status,
+    /skill apply, /skill reject, /save, /resume, /revert, /cost, /context, /status,
     /verify, /checkpoint, /phase, /diffs, /regression, /done
   - +6 LF additions:
     /simplify, /init, /init-verifiers, /skillify, /dream, /promote-to-skill
   - +1 /auth gate (separate path; runs BEFORE custom dispatch)
-  = **24 canonical commands**.
+  = **26 canonical commands**.
 
 The dispatch table contains one extra entry (`/skill suggestion` —
 singular alias of `/skill suggestions`) for v4 parity with sagemaker_agent.py:10874
-which accepts both spellings. The alias is NOT counted toward the 24.
+which accepts both spellings. The alias is NOT counted toward the 26.
 
 Therefore:
-  - `list_commands()` (default include_aliases=True) returns 25 strings.
-  - `list_commands(include_aliases=False)` returns 24 strings.
+  - `list_commands()` (default include_aliases=True) returns 27 strings.
+  - `list_commands(include_aliases=False)` returns 26 strings.
   - Tests assert exactly these numbers.
 
 Earlier docs in this module said "27 canonical commands" — that was an
@@ -29,7 +29,7 @@ incorrect headline count (20 + 6 + 1 wasn't reconciled against the
 dispatch table). Codex Block-D iter-2 finding #2 lock corrected the
 accounting against actual `list_commands()` output.
 
-20 v4-baseline commands (constraint #1: v4.10.10 baseline):
+22 v4/B+ baseline commands (constraint #1 plus B+ session persistence):
   /auth              — auth-token gate (separate from advertised list)
   /skills            — list available skills
   /skill use <name>  — activate a skill (sticky for session)
@@ -38,7 +38,9 @@ accounting against actual `list_commands()` output.
   /skill suggestions — list pending self-patch proposals (V4.9.5)
   /skill apply <name> [--yes|--edit] — preview + apply a proposal (V4.9.5)
   /skill reject <name> — discard pending proposals (V4.9.5)
-  /revert <file>     — revert a file via SnapshotManager
+    /save [title]      — persist current messages + cost snapshot
+    /resume <id>       — restore messages + cost snapshot from a session
+    /revert <file>     — revert a file via SnapshotManager
   /revert all --yes  — revert all snapshotted files
   /cost              — session cost summary
   /context           — context bloat diagnostic
@@ -279,27 +281,89 @@ def cmd_revert(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult
 
 
 # ============================================================
+# /save + /resume — SessionManager cost/history persistence
+# ============================================================
+
+def _messages_from_ctx(ctx: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not ctx:
+        return []
+    messages = ctx.get("messages")
+    if messages is None and ctx.get("agent") is not None:
+        messages = getattr(ctx["agent"], "messages", [])
+    return list(messages or [])
+
+
+def _restore_messages_to_ctx(
+    ctx: Optional[Dict[str, Any]],
+    messages: List[Dict[str, Any]],
+) -> None:
+    if not ctx:
+        return
+    if ctx.get("agent") is not None and hasattr(ctx["agent"], "_engine"):
+        ctx["agent"]._engine.messages = list(messages)
+    if "messages" in ctx:
+        ctx["messages"] = list(messages)
+
+
+def cmd_save(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
+    from runtime.session import SESSIONS
+    from runtime.tokens import TOKENS
+
+    title = args.strip() or "Saved Session"
+    session = SESSIONS.create(title=title)
+    session.messages = _messages_from_ctx(ctx)
+    session.metadata["tokens_stats"] = TOKENS.get_stats()
+    SESSIONS.save(session)
+    return CommandResult(
+        text=f"Saved session {session.id} ({len(session.messages)} messages).",
+        side_effect=f"session_saved:{session.id}",
+    )
+
+
+def cmd_resume(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
+    from runtime.session import SESSIONS
+    from runtime.tokens import TOKENS
+
+    session_id = args.strip()
+    if not session_id:
+        return CommandResult(text="Usage: /resume <session-id>")
+    session = SESSIONS.load(session_id)
+    if session is None:
+        return CommandResult(text=f"Session not found: {session_id}")
+    _restore_messages_to_ctx(ctx, session.messages)
+    token_stats = session.metadata.get("tokens_stats")
+    if isinstance(token_stats, dict):
+        TOKENS.restore(token_stats)
+    else:
+        return CommandResult(
+            text=(
+                f"Resumed session {session.id} ({len(session.messages)} messages); "
+                "no token stats found."
+            ),
+            side_effect=f"session_resumed:{session.id}:messages_only",
+        )
+    return CommandResult(
+        text=f"Resumed session {session.id} ({len(session.messages)} messages).",
+        side_effect=f"session_resumed:{session.id}",
+    )
+
+
+# ============================================================
 # /cost — session cost summary
 # ============================================================
 
 def cmd_cost(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
     from runtime.tokens import TOKENS
     from runtime.config import CONFIG
-    cost = TOKENS.get_cost()
     sess = TOKENS.get_session()
-    api_calls = TOKENS.api_calls
     limit = getattr(CONFIG, "session_cost_limit", 0.0)
-    parent_in = TOKENS.parent_input_tokens
-    parent_out = TOKENS.parent_output_tokens
-    sub_total = sum(TOKENS.subagent_input_tokens.values()) \
-              + sum(TOKENS.subagent_output_tokens.values())
-    lines = [
-        f"Session cost: {cost}",
-        f"Tokens: {sess}  | API calls: {api_calls}",
-        f"Parent: in={parent_in:,} out={parent_out:,}",
-        f"Sub-agents: {sub_total:,} tokens across "
-        f"{len(TOKENS.subagent_input_tokens)} agents",
-    ]
+    lines = TOKENS.get_cost_block().splitlines()
+    lines.append(f"Tokens: {sess}")
+    lines.append(f"Session cost: {TOKENS.get_cost()}")
+    lines.append(
+        f"Parent: in={TOKENS.parent_input_tokens:,} "
+        f"out={TOKENS.parent_output_tokens:,}"
+    )
     if limit > 0:
         lines.append(f"Limit: ${limit:.2f} (warn-and-continue)")
     return CommandResult(text="\n".join(lines))
@@ -596,6 +660,8 @@ _DISPATCH: List[tuple] = [
     ("/skill reject", cmd_skill_reject),
     ("/skills", cmd_skills),
     ("/unskill", cmd_unskill),
+    ("/resume", cmd_resume),
+    ("/save", cmd_save),
     ("/revert", cmd_revert),
     ("/cost", cmd_cost),
     ("/context", cmd_context),
@@ -652,9 +718,9 @@ def dispatch_command(message: str, ctx: Optional[Dict[str, Any]] = None) -> Comm
 def list_commands(include_aliases: bool = True) -> List[str]:
     """Return registered command prefixes (for /help-style listings).
 
-    By default returns ALL dispatch entries + /auth (25 strings; this
+    By default returns ALL dispatch entries + /auth (27 strings; this
     includes the `/skill suggestion` singular alias for v4 parity).
-    Pass `include_aliases=False` to get the 24 canonical prefixes
+    Pass `include_aliases=False` to get the 26 canonical prefixes
     (alias collapsed) — useful for headline command counts.
 
     Counts reconciled against actual dispatch table per

@@ -111,7 +111,7 @@ class ConsoleChatUI:
             try:
                 from commands import is_command, dispatch_command
                 if is_command(message):
-                    cr = dispatch_command(message)
+                    cr = dispatch_command(message, ctx={"agent": self.agent})
                     if cr.consumed:
                         # Block H+ — /dream side-effect: actually invoke
                         # the consolidation engine. Chat UI is the user-
@@ -229,7 +229,7 @@ class WidgetChatUI:
                     try:
                         from commands import is_command, dispatch_command
                         if is_command(msg):
-                            cr = dispatch_command(msg)
+                            cr = dispatch_command(msg, ctx={"agent": self.agent})
                             if cr.consumed:
                                 print(cr.text)
                                 # Block H+ — /dream side-effect actually

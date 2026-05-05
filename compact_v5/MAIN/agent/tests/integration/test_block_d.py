@@ -1,10 +1,10 @@
-"""Block D — Slash-command dispatcher (17 v4 advertised + /auth + 6 LF = 24 canonical).
+"""Block D — Slash-command dispatcher (19 v4/B+ advertised + /auth + 6 LF = 26 canonical).
 
 The dispatch table also carries one alias (`/skill suggestion` singular,
 v4-parity) for a full count of 25. Tests assert these exact numbers.
 
 Tests cover:
-  - Dispatch table has exactly 24 canonical + 1 alias = 25 entries.
+  - Dispatch table has exactly 26 canonical + 1 alias = 27 entries.
   - is_command() / dispatch_command() routing for each.
   - /auth gate behavior (env var match / mismatch).
   - Per-command handler returns CommandResult with consumed=True.
@@ -30,12 +30,12 @@ if _AGENT_ROOT not in sys.path:
 # T1 — Dispatch table coverage
 # ============================================================
 
-def test_dispatch_table_canonical_count_is_exact_24():
-    """17 v4 advertised + /auth + 6 LF = exactly 24 canonical commands.
+def test_dispatch_table_canonical_count_is_exact_26():
+    """19 v4/B+ advertised + /auth + 6 LF = exactly 26 canonical commands.
 
     Codex iter-2 finding #2 lock: assert EXACTLY this count (not a
     floor) so the documented headline matches `list_commands()`. The
-    `/skill suggestion` (singular) alias is the 25th entry in the
+    `/skill suggestion` (singular) alias is the 27th entry in the
     full listing — included for v4-parity per sagemaker_agent.py:10874.
     """
     from commands import list_commands
@@ -47,7 +47,7 @@ def test_dispatch_table_canonical_count_is_exact_24():
         # v4 advertised (17):
         "/skills", "/skill use", "/skill clear", "/unskill",
         "/skill suggestions", "/skill apply", "/skill reject",
-        "/revert", "/cost", "/context", "/status",
+            "/save", "/resume", "/revert", "/cost", "/context", "/status",
         "/verify", "/checkpoint", "/phase", "/diffs",
         "/regression", "/done",
         # /auth gate (1):
@@ -56,8 +56,8 @@ def test_dispatch_table_canonical_count_is_exact_24():
         "/simplify", "/init", "/init-verifiers",
         "/skillify", "/dream", "/promote-to-skill",
     }
-    assert len(expected_prefixes) == 24, (
-        f"expected_prefixes set should be exactly 24; got {len(expected_prefixes)}"
+    assert len(expected_prefixes) == 26, (
+        f"expected_prefixes set should be exactly 26; got {len(expected_prefixes)}"
     )
     assert set(canonical) == expected_prefixes, (
         f"canonical mismatch:\n"
@@ -66,9 +66,9 @@ def test_dispatch_table_canonical_count_is_exact_24():
     )
     # The alias IS present in the full listing.
     assert "/skill suggestion" in full
-    # Full listing is exactly 25 (canonical 24 + 1 alias).
-    assert len(full) == 25
-    assert len(canonical) == 24
+    # Full listing is exactly 27 (canonical 26 + 1 alias).
+    assert len(full) == 27
+    assert len(canonical) == 26
 
 
 def test_is_command_recognises_prefixes():

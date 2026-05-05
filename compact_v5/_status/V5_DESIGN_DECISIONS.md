@@ -3143,6 +3143,80 @@ For A-21, compaction changes what the model can legitimately rely on. Clearing r
 
 No AWS/R-tier test was run.
 
+## ADR-051 - Block B+ completion-audit cost/session redo
+
+**Date**: 2026-05-05
+**Phase ID**: v5.0.1 Block B+
+**Status**: ACCEPTED
+
+### Context
+
+The original Block B+ build shipped SessionManager, FileCache, cleanup
+registry, AGENT_STATUS loading, and cost-limit warning behavior, but the v5
+completion audit requires every `SYNTHESIS_MASTER.md` B+ row to have explicit
+row-level evidence before close. Rows B+3, B+4, and B+6 were previously
+documented as Block I remaps; the redo implements their small runtime surfaces
+directly in Block B+ to avoid a pre-review deferral.
+
+### Decision
+
+- Keep the existing `SessionManager` + `TokenTracker.restore` cost snapshot
+  contract for B+1 and wire it through concrete `/save` and `/resume`
+  commands. `/save` stores current messages plus `TOKENS.get_stats()` in
+  session metadata; `/resume <id>` restores messages and calls
+  `TOKENS.restore()` so the cost counters rehydrate through a production
+  command path.
+- Add canonical per-model usage rows to `TokenTracker`, keyed by
+  `canonicalize_model_id`, so Bedrock inference-profile prefixes collapse for
+  reporting while geo-premium cost calculation still uses the raw id.
+- Add `TokenTracker.get_cost_block()` and wire `/cost` to the four-line
+  total/per-model/per-agent/cache summary.
+- Add `TokenTracker.get_otel_counters()` as a local-only metrics view. It
+  returns dictionaries for tests and status reporting, never an external
+  endpoint/export path.
+- Refresh `TokenTracker.context_window_tokens` on every `add()` call from the
+  latest response usage.
+- Keep B+5 advisor sub-cost accounting in the compactor, where the auxiliary
+  model is actually invoked, and lock it with targeted Block A advisor tests.
+- Add explicit B+ Config field lock coverage for the cost/session/status/cache
+  fields used by this block.
+
+### Affected files
+
+- `compact_v5/MAIN/agent/runtime/tokens.py`
+- `compact_v5/MAIN/agent/commands.py`
+- `compact_v5/MAIN/agent/ui/chat_ui.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_b_plus.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_d.py`
+- `compact_v5/MAIN/agent/tests/integration/test_block_a.py` (existing targeted
+  B+5 advisor tests)
+- `compact_v5/MAIN/agent/runtime/config.py` (existing Config dataclass)
+- `compact_v5/MAIN/agent/runtime/session.py` (existing SessionManager)
+
+### Linked port-log rows
+
+- #170 - B+1 session cost restore
+- #171 - B+2 canonical per-model usage
+- #172 - B+3 four-line cost block
+- #173 - B+4 local OTel-style counters
+- #174 - B+5 advisor sub-cost accounting
+- #175 - B+6 context-window refresh
+- #176 - B+7 exit cost flush
+- #177 - B+8 Config explicit row
+
+### Validation
+
+- `py -3.11 -m pytest tests/integration/test_block_b_plus.py -q`:
+  29 passed.
+- `py -3.11 -m pytest tests/integration/test_block_d.py -q`:
+  22 passed.
+- `py -3.11 -m pytest tests/integration/test_block_a.py::test_advisor_cost_attributed_when_aux_model_set tests/integration/test_block_a.py::test_advisor_falls_back_to_parent_when_no_aux -q`:
+  2 passed.
+- `py -3.11 -m py_compile commands.py ui/chat_ui.py tests/integration/test_block_b_plus.py tests/integration/test_block_d.py`:
+  PASS.
+
+No AWS/R-tier test was run.
+
 ## ADR-050 - Block B token accounting completion-audit redo
 
 **Date**: 2026-05-04

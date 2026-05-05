@@ -22,6 +22,37 @@ What changed, including the primary code or process artifact.
 Which local test, scope audit, reviewer verdict, or explicit no-test
 justification proves the fix.
 
+## v5.0.1-block-b-plus completion-audit redo (2026-05-05)
+
+### Symptom
+
+Block B+ had no v5 completion-audit ledger, so `scope_audit.py --block B+`
+reported 8 expected rows, 0 ledger rows, and all B+ rows ship-blocking.
+
+### Root cause
+
+The earlier Block B+ build shipped several cost/session/runtime pieces, but
+B+3, B+4, and B+6 were documented as future Block I remaps rather than having
+current B+ row-level implementation and test evidence.
+
+### Fix
+
+Added explicit B+ row evidence for all 8 canonical rows. `TokenTracker` now
+exposes canonical per-model usage, a four-line cost block, local-only
+OTel-style counters, and context-window refresh state; `/cost` uses the
+four-line summary. After Claude iter6 found that B+1 had only manual
+save/restore plumbing, `/save` and `/resume` were wired through the production
+command path so session messages and `TOKENS.get_stats()` metadata persist and
+`TOKENS.restore()` rehydrates cost counters on resume. B+ lock tests cover the
+new surfaces plus exit flush and Config row evidence.
+
+### Verification
+
+- `py -3.11 -m pytest tests/integration/test_block_b_plus.py -q`: 29 passed.
+- `py -3.11 -m pytest tests/integration/test_block_d.py -q`: 22 passed.
+- `py -3.11 -m pytest tests/integration/test_block_a.py::test_advisor_cost_attributed_when_aux_model_set tests/integration/test_block_a.py::test_advisor_falls_back_to_parent_when_no_aux -q`: 2 passed.
+- `py -3.11 -m py_compile commands.py ui/chat_ui.py tests/integration/test_block_b_plus.py tests/integration/test_block_d.py`: PASS.
+
 ## v5.0.1-block-t completion-audit utility closure (2026-05-04)
 
 ### Symptom
