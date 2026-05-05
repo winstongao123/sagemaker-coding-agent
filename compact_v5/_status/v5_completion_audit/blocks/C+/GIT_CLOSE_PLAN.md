@@ -1,8 +1,11 @@
 # Block C+ Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_CHECKPOINT
+Status: CLOSED_PUSHED
 
-Specific-file commit is ready after final scope/doc consistency checks.
+Specific-file close commit was created and pushed to `sageagent/v5-build`:
+`90c359a76dbd59e34f95d34374ebe830e75a0b73`.
+
+Checkpoint evidence fields now record that SHA.
 
 Before close commit:
 

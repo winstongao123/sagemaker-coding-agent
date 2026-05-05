@@ -1,6 +1,6 @@
 # Block C+ Status
 
-Status: READY_FOR_BLOCK_CLOSE_CHECKPOINT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Expected rows from `SYNTHESIS_MASTER`: 3
@@ -9,20 +9,20 @@ Current blocking-row count: 0
 
 Current phase: FINAL_CLOSE_ARTIFACTS
 
-Current task: Final scope/doc consistency pass, then specific-file commit and
-push to `sageagent/v5-build`.
+Current task: Continue to next block in `BLOCK_ORDER_AND_COVERAGE.md`.
 
-Last completed action: Claude iter1 returned `APPROVE / SHIP DECISION:
-READY_FOR_BLOCK_CLOSE_REVIEW`, with 0 remaining ship-blocking rows.
+Last completed action: Specific-file C+ close commit
+`90c359a76dbd59e34f95d34374ebe830e75a0b73` was pushed to
+`sageagent/v5-build`, and checkpoint evidence fields were updated.
 
 Latest usable Claude verdict: `reviews/block-c-plus-claude-review-iter1.md`.
 
 Next 3 todo items:
 
-1. Run final `scope_audit.py --block C+` and documentation consistency checks.
-2. Commit only C+ close files plus directly touched docs/artifacts.
-3. Push the checkpoint to `sageagent/v5-build`, then update git evidence if
-   needed.
+1. Verify remote branch tip after evidence update push.
+2. Start Block D from files.
+3. Do not run AWS/R-tier, tag, Codex review, nested `codex exec`, force push,
+   or unrelated staging.
 
 Restrictions: do not run AWS/R-tier, tag, Codex review, nested `codex exec`,
 force push, or unrelated staging.

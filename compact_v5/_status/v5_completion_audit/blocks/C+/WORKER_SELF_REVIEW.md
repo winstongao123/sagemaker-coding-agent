@@ -23,7 +23,7 @@ Rows:
 - DEFERRED_USER_APPROVED: 0
 - DROPPED_USER_APPROVED: 1
 - N/A_CONSTRAINT: 0
-- Ship-blocking rows by local ledger: 0 pending Claude verification
+- Ship-blocking rows by local ledger: 0; verified by Claude iter1
 
 ## Tests Run
 
@@ -31,8 +31,14 @@ Rows:
 - `py -3.11 -m pytest tests/integration/test_block_b.py::test_snapshot_manager_creates_backup tests/integration/test_block_c.py::test_abort_context_reaches_query_engine_bash_and_python_exec -q`: 2 passed.
 - `py -3.11 -m py_compile ui/approval_dialog.py core/query_engine.py tools/write_file.py tools/edit_file.py runtime/snapshot.py runtime/execution_context.py tools/bash.py tools/python_exec.py tests/integration/test_block_c_plus.py tests/integration/test_block_b.py tests/integration/test_block_c.py`: PASS.
 
+## Git Evidence
+
+Git checkpoint is recorded. `LEDGER.md` uses close commit
+`90c359a76dbd59e34f95d34374ebe830e75a0b73`, which was pushed to
+`sageagent/v5-build`.
+
 ## Open Risk
 
-- No usable Claude reviewer verdict has been obtained for C+ yet.
-- `scope_audit.py --block C+` must be rerun after these artifact writes.
-- C+ must not close until Claude verifies C+1 through C+3 row-by-row.
+- Claude iter1 returned `APPROVE / SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`.
+- Documentation consistency pass must keep checkpoint evidence aligned with the
+  pushed commit SHA.

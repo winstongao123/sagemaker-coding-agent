@@ -1,7 +1,7 @@
 # v5 Completion Audit Status
 
 Date: 2026-05-05
-Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, AND B+ CLOSED/PUSHED; BLOCK C+ APPROVED BY CLAUDE ITER1 AND READY FOR SPECIFIC-FILE CHECKPOINT; R-TIER TEST SPECS MATERIALIZED
+Current state: WORKER-LED LOOP ACTIVE; BLOCK A, E+F, L, N, K, T, C, B, B+, AND C+ CLOSED/PUSHED; R-TIER TEST SPECS MATERIALIZED
 
 ## Baseline
 
@@ -109,10 +109,11 @@ Current Block C+ state:
   py_compile PASS.
 - Claude review iter1 returned `VERDICT: APPROVE`, `SHIP DECISION:
   READY_FOR_BLOCK_CLOSE_REVIEW`, and `REMAINING SHIP-BLOCKING ROWS: 0`.
-- Next C+ action: final scope/doc consistency, specific-file commit, push to
-  `sageagent/v5-build`, then replace pending checkpoint evidence with the
-  actual SHA if needed. Do not run AWS/R-tier, tag, Codex review, nested
-  `codex exec`, force push, or unrelated staging.
+- C+ specific-file close commit was created and pushed to `sageagent/v5-build`:
+  `90c359a76dbd59e34f95d34374ebe830e75a0b73`.
+- C+ checkpoint evidence fields record the close commit SHA.
+- Next action: continue to Block D from files. Do not run AWS/R-tier, tag,
+  Codex review, nested `codex exec`, force push, or unrelated staging.
 
 Previous Block B state:
 
