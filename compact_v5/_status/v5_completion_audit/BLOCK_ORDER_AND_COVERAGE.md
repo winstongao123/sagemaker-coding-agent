@@ -21,9 +21,8 @@ Current mechanical totals from the audit script:
 TOTAL_EXPECTED_ROWS: 233
 ```
 
-Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, and I are closed/pushed. Block G
-has complete local scope coverage and is waiting for Claude row-by-row closure
-review. The remaining audit rows are still ship-blocking until each block is
+Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, and G are closed/pushed. Block G2
+is next. The remaining audit rows are still ship-blocking until each block is
 ledgered, implemented or explicitly user-dispositioned, Claude-reviewed, and
 pushed.
 
@@ -80,7 +79,7 @@ Rows currently parsed from `SYNTHESIS_MASTER.md`:
 | D | 13 | Closed and pushed. |
 | E+F | 8 | Closed and pushed. |
 | F2 | 1 | Closed and pushed. |
-| G | 8 | Local scope clean; pending Claude closure review/push. |
+| G | 8 | Closed and pushed. |
 | G2 | 1 | Pending. |
 | G3 | 2 | Pending. |
 | H | 20 | Pending. |

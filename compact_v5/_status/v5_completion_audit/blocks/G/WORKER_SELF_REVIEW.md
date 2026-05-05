@@ -13,7 +13,7 @@ Checklist:
 - [x] Run fresh `scope_audit.py --block G`.
 - [x] Run Claude independent row-by-row review.
 - [x] Update artifacts with final verdict.
-- [ ] Update artifacts with git checkpoint.
+- [x] Update artifacts with git checkpoint.
 
 Self-review notes:
 
@@ -23,3 +23,4 @@ Self-review notes:
 - Local close gates pass: `49 passed, 1 skipped`, py_compile PASS, scope audit 0 blockers.
 - Claude iter1 approved all 8 rows with 0 blockers.
 - Claude LOW cleanup notes for G-8 and ADR-031 were applied.
+- Specific-file close commit `5aa618887521ea0669c1e34e3720f0102fc5a317` was pushed to `sageagent/v5-build`.

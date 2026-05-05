@@ -1,6 +1,6 @@
 # Block G Git Close Plan
 
-Status: READY_FOR_SPECIFIC_FILE_COMMIT
+Status: CLOSED_PUSHED
 Date: 2026-05-05
 
 Target remote/branch:
@@ -37,4 +37,12 @@ Current gate state:
 - Tests: PASS (`49 passed, 1 skipped`; py_compile PASS).
 - Scope audit: PASS (`READY_TO_REVIEW_CLOSE`, 8 shipped, 0 blockers).
 - Claude review: PASS (`VERDICT: APPROVE`, `SHIP DECISION: READY_FOR_BLOCK_CLOSE_REVIEW`).
-- Git evidence: pending close commit SHA.
+- Git evidence: close commit pushed and remote verified.
+
+Close commit:
+
+- Message: `Close block G subagent audit`
+- Commit SHA: `5aa618887521ea0669c1e34e3720f0102fc5a317`
+- Push: `sageagent/v5-build`
+- Remote verification: `git ls-remote sageagent refs/heads/v5-build` returned `5aa618887521ea0669c1e34e3720f0102fc5a317`
+- Tag: none created.
