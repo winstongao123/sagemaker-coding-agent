@@ -364,10 +364,10 @@ class BedrockClient:
             system_field = system
             use_cache = False
 
-        messages_field = messages
+        messages_field = self._strip_internal_message_fields(messages)
         if cache_active:
             messages_field = self._apply_cache_control_to_last_messages(
-                messages,
+                messages_field,
                 cache_control=cache_control,
             )
 
@@ -523,6 +523,21 @@ class BedrockClient:
                 break
         return out
 
+    @staticmethod
+    def _strip_internal_message_fields(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove v5 bookkeeping keys before serializing Bedrock messages."""
+        internal_keys = {
+            "is_meta",
+            "compact_metadata",
+            "compact_boundary",
+        }
+        out = json.loads(json.dumps(messages, ensure_ascii=False))
+        for msg in out:
+            if isinstance(msg, dict):
+                for key in internal_keys:
+                    msg.pop(key, None)
+        return out
+
     def _parse(self, result: dict) -> Response:
         """Parse Bedrock response into Response value type (v4 verbatim)."""
         text = ""
@@ -602,7 +617,7 @@ class BedrockClient:
             uses_thinking = any(has_thinking_blocks(m) for m in messages)
             body: Dict[str, Any] = {
                 "anthropic_version": "bedrock-2023-05-31",
-                "messages": messages,
+                "messages": self._strip_internal_message_fields(messages),
                 **({"system": system} if system else {}),
                 **({"tools": tools} if tools else {}),
                 "max_tokens": TOKEN_COUNT_MAX_TOKENS if uses_thinking else 1,

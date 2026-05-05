@@ -1,0 +1,62 @@
+{
+  "test": "R13",
+  "call": 1,
+  "date": "2026-05-05T14:22:23Z",
+  "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "tokens_in": 0,
+  "tokens_out": 0,
+  "cache_hit_pct": 0.0,
+  "wallclock_s": 1.2,
+  "tool_calls": 0,
+  "api_calls": 0,
+  "subagent_calls": 0,
+  "reviewer_calls": 0,
+  "subagent_tokens_in": 0,
+  "subagent_tokens_out": 0,
+  "subagent_cost_usd": 0.0,
+  "reviewer_tokens_in": 0,
+  "reviewer_tokens_out": 0,
+  "reviewer_cost_usd": 0.0,
+  "changed_files_within_fixture": true,
+  "score_passed": 0,
+  "score_total": 5,
+  "completed": false,
+  "cost_usd": 0.0,
+  "verdict": "FAIL",
+  "stop_reason": "fatal_error",
+  "solutions_exists": false,
+  "workspace_files": [
+    ".pytest_cache/.gitignore",
+    ".pytest_cache/CACHEDIR.TAG",
+    ".pytest_cache/README.md",
+    ".pytest_cache/v/cache/lastfailed",
+    ".pytest_cache/v/cache/nodeids",
+    ".sageagent_state/last_turn.json",
+    ".sageagent_state/turn_journal.jsonl",
+    "__pycache__/test_solutions.cpython-311-pytest-9.0.2.pyc",
+    "test_solutions.py"
+  ],
+  "per_case": {
+    "test_is_palindrome_normalizes_text": {
+      "passed": false,
+      "output_tail": "eback:\nC:\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\importlib\\__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_solutions.py:1: in <module>\n    from solutions import (\nE   ModuleNotFoundError: No module named 'solutions'\n=========================== short test summary info ===========================\nERROR test_solutions.py\n1 error in 0.24s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\nERROR: found no collectors for C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-404\\test_r13_coding_accuracy0\\test_solutions.py::test_is_palindrome_normalizes_text\n\n"
+    },
+    "test_merge_intervals_sorts_and_merges_touching_ranges": {
+      "passed": false,
+      "output_tail": "iles\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\importlib\\__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_solutions.py:1: in <module>\n    from solutions import (\nE   ModuleNotFoundError: No module named 'solutions'\n=========================== short test summary info ===========================\nERROR test_solutions.py\n1 error in 0.16s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\nERROR: found no collectors for C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-404\\test_r13_coding_accuracy0\\test_solutions.py::test_merge_intervals_sorts_and_merges_touching_ranges\n\n"
+    },
+    "test_top_k_frequent_uses_frequency_then_alpha_tiebreak": {
+      "passed": false,
+      "output_tail": "les\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\importlib\\__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_solutions.py:1: in <module>\n    from solutions import (\nE   ModuleNotFoundError: No module named 'solutions'\n=========================== short test summary info ===========================\nERROR test_solutions.py\n1 error in 0.13s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\nERROR: found no collectors for C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-404\\test_r13_coding_accuracy0\\test_solutions.py::test_top_k_frequent_uses_frequency_then_alpha_tiebreak\n\n"
+    },
+    "test_roman_to_int_handles_subtractive_pairs": {
+      "passed": false,
+      "output_tail": "\\Program Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\importlib\\__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_solutions.py:1: in <module>\n    from solutions import (\nE   ModuleNotFoundError: No module named 'solutions'\n=========================== short test summary info ===========================\nERROR test_solutions.py\n1 error in 0.13s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\nERROR: found no collectors for C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-404\\test_r13_coding_accuracy0\\test_solutions.py::test_roman_to_int_handles_subtractive_pairs\n\n"
+    },
+    "test_validate_brackets_detects_nesting_and_mismatches": {
+      "passed": false,
+      "output_tail": "iles\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\importlib\\__init__.py:126: in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntest_solutions.py:1: in <module>\n    from solutions import (\nE   ModuleNotFoundError: No module named 'solutions'\n=========================== short test summary info ===========================\nERROR test_solutions.py\n1 error in 0.13s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\nERROR: found no collectors for C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-404\\test_r13_coding_accuracy0\\test_solutions.py::test_validate_brackets_detects_nesting_and_mismatches\n\n"
+    }
+  },
+  "audit_dir": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R13-call1-audit"
+}

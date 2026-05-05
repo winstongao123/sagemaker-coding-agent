@@ -300,6 +300,49 @@ def test_cache_disabled_when_config_off(monkeypatch):
     assert captured[0]["system"] == "plain prompt"  # plain string, not list
 
 
+def test_internal_message_fields_not_sent_to_bedrock(monkeypatch):
+    """Internal compaction/message metadata must not reach Bedrock payloads."""
+    from runtime.config import CONFIG
+    from runtime.bedrock_client import BedrockClient
+
+    captured: list[Dict] = []
+
+    class _Fake:
+        def invoke_model(self, modelId, body, contentType=""):
+            captured.append(json.loads(body))
+            return {"body": _Body(json.dumps({"content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "usage": {}}).encode("utf-8"))}
+
+    class _Body:
+        def __init__(self, d):
+            self._d = d
+        def read(self):
+            return self._d
+
+    monkeypatch.setattr(CONFIG, "enable_prompt_cache", False)
+    c = BedrockClient(
+        model_id="test",
+        region="ap-southeast-2",
+        mock_mode=False,
+        client=_Fake(),
+    )
+
+    c.chat(
+        messages=[
+            {
+                "role": "user",
+                "content": "x",
+                "is_meta": False,
+                "compact_metadata": {"source": "test"},
+                "compact_boundary": True,
+            }
+        ],
+        system="plain prompt",
+    )
+
+    sent = captured[0]["messages"][0]
+    assert sent == {"role": "user", "content": "x"}
+
+
 # ============================================================
 # Cache-fallback retry path (Codex Phase-01 review finding 2)
 # ============================================================
