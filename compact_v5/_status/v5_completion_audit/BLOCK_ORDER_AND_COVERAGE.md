@@ -21,7 +21,7 @@ Current mechanical totals from the audit script:
 TOTAL_EXPECTED_ROWS: 233
 ```
 
-Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, and G3 are closed/pushed. Block H
+Blocks A, E+F, L, N, K, T, C, B, B+, C+, D, F2, I, G, G2, G3, and H are closed/pushed. Block H+
 is next. The remaining audit rows are still ship-blocking until each block is
 ledgered, implemented or explicitly user-dispositioned, Claude-reviewed, and
 pushed.
@@ -30,10 +30,10 @@ Latest current summary:
 
 ```text
 TOTAL_EXPECTED_ROWS: 233
-TOTAL_SHIP_BLOCKING_ROWS: 31
+TOTAL_SHIP_BLOCKING_ROWS: 11
 ```
 
-Evidence: fresh `scope_audit.py --all --summary` run on 2026-05-05 after Block G3 close.
+Evidence: fresh `scope_audit.py --all --summary` run on 2026-05-05 after Block H close.
 
 ## Redo Order
 
@@ -82,7 +82,7 @@ Rows currently parsed from `SYNTHESIS_MASTER.md`:
 | G | 8 | Closed and pushed. |
 | G2 | 1 | Closed and pushed. |
 | G3 | 2 | Closed and pushed. |
-| H | 20 | Pending. |
+| H | 20 | Closed and pushed. |
 | H+ | 1 | Pending. |
 | I | 13 | Closed and pushed. |
 | L | 28 | Closed and pushed. |
