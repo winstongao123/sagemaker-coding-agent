@@ -1,0 +1,27 @@
+﻿| Block | Expected | Ledger | Shipped | Partial | Missing | Blocking | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 0 | 10 | 0 | 0 | 0 | 0 | 10 | LEDGER_INCOMPLETE |
+| A | 43 | 43 | 43 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| B | 16 | 16 | 16 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| B+ | 8 | 8 | 8 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| C | 19 | 19 | 19 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| C+ | 3 | 3 | 2 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| D | 13 | 13 | 13 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| E+F | 8 | 8 | 6 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| F2 | 1 | 1 | 1 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| G | 8 | 8 | 8 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| G2 | 1 | 1 | 1 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| G3 | 2 | 2 | 2 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| H | 20 | 20 | 20 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| H+ | 1 | 1 | 1 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| I | 13 | 13 | 13 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| L | 28 | 28 | 28 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| M | 0 | 0 | 0 | 0 | 0 | 0 | NO_SPEC_ROWS_FOUND |
+| N | 19 | 19 | 14 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| T | 12 | 12 | 10 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+| J | 0 | 0 | 0 | 0 | 0 | 0 | NO_SPEC_ROWS_FOUND |
+| K | 8 | 8 | 8 | 0 | 0 | 0 | READY_TO_REVIEW_CLOSE |
+
+TOTAL_EXPECTED_ROWS: 233
+TOTAL_SHIP_BLOCKING_ROWS: 10
+

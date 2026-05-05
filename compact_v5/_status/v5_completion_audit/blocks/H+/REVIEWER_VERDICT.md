@@ -10,6 +10,7 @@ Latest usable Claude verdict:
 - Ship decision: `READY_FOR_BLOCK_CLOSE_REVIEW`
 - Remaining ship-blocking rows: 0
 - Reviewed row: H+1
+- Close commit: `f2e5a35fe9512a011f5c5eaf99ba5aad7b6045e8`
 
 Non-blocking cleanup notes from Claude:
 
