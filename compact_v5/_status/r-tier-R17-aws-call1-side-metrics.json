@@ -1,0 +1,57 @@
+{
+    "test":  "R17",
+    "call":  1,
+    "date":  "2026-05-06T02:03:19Z",
+    "model":  "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "tokens_in":  10,
+    "tokens_out":  1054,
+    "cache_hit_pct":  0.0,
+    "wallclock_s":  15.5,
+    "tool_calls":  0,
+    "api_calls":  1,
+    "subagent_calls":  0,
+    "reviewer_calls":  0,
+    "subagent_tokens_in":  0,
+    "subagent_tokens_out":  0,
+    "reviewer_tokens_in":  0,
+    "reviewer_tokens_out":  0,
+    "reviewer_cost_usd":  0.0,
+    "cost_usd":  0.0307,
+    "cost_cap_usd":  0.3,
+    "hard_ceiling_usd":  0.36,
+    "stop_reason":  "end_turn",
+    "thinking_seen":  true,
+    "thinking_chars":  1611,
+    "max_tokens":  8192,
+    "thinking_budget":  4096,
+    "audit_thinking_seen":  true,
+    "audit_thinking_chars":  1611,
+    "thinking_text_in_history":  true,
+    "thinking_text_in_telemetry_source":  true,
+    "process_quality_ok":  true,
+    "completed":  true,
+    "verdict":  "GENUINE_PASS",
+    "audit_dir":  "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R17-call1-audit",
+    "final_text":  "Looking at this two-train problem:\n\n**Step 1: Position when second train starts**\n- By 11:00, Train 1 has traveled for 2 hours: 80 Ã— 2 = 160 km from Sydney\n- Remaining distance between trains: 900 - 160 = 740 km\n\n**Step 2: When they meet**\n- Both trains now approach each other at combined speed: 80 + 100 = 180 km/h\n- Time to meet: 740 Ã· 180 = 37/9 hours â‰ˆ 4.11 hours = 4 hours 7 minutes\n- Meeting time: 11:00 + 4:07 = **15:07**\n\n**Distance from Sydney:**\n- Train 1\u0027s total distance: 160 + (80 Ã— 37/",
+    "parent_input_tokens":  10,
+    "parent_output_tokens":  1054,
+    "parent_cache_read_tokens":  0,
+    "parent_cache_write_tokens":  3228,
+    "parent_cost_usd":  0.030707,
+    "subagent_input_tokens":  {
+
+                              },
+    "subagent_output_tokens":  {
+
+                               },
+    "subagent_cache_read_tokens":  {
+
+                                   },
+    "subagent_cache_write_tokens":  {
+
+                                    },
+    "subagent_cost_usd":  0,
+    "subagent_cost_usd_by_type":  {
+
+                                  }
+}

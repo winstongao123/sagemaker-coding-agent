@@ -367,6 +367,23 @@ Stop AWS execution and return to implementation/review if:
   path validated on real Bedrock with supported injectable threshold," not as a
   literal 30-minute wall-clock production wait.
 
+2026-05-06 R17 cleanup resolution:
+
+- R17 call1 ran on Sonnet 4.5 AU after Phase A iter2 corrected the Bedrock
+  thinking invariant (`max_tokens=8192`, `thinking_budget=4096`).
+- AWS Budget was healthy before spend. Local R-tier ledger before R17 was
+  `$1.5222`; R17 had no prior spend.
+- R17 passed at `$0.0307`, under the `$0.30` planned cap and `$0.36` hard
+  retry ceiling.
+- Evidence includes non-empty thinking in assistant history
+  (`thinking_chars=1611`), non-empty `chat_response` audit thinking
+  (`audit_thinking_chars=1611`), and canonical telemetry
+  `per_turn[0].thinking_text`.
+- The run used no tools, subagents, compaction, or model switching, by design,
+  to isolate PS#4 thinking visibility.
+- Claude Phase C returned `GENUINE_PASS`, and
+  `r_tier_gate.py --test R17` passed.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates

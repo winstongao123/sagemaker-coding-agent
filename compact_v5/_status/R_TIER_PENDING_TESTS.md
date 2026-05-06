@@ -28,7 +28,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R14 | READY_WITH_RECURRENCE_WATCH | AWS artifact pass, Phase C GENUINE_PASS, gate pass, committed/pushed; R14/R19-U3 process blocker fixed locally, Claude-approved, and Stage 5 call2 showed no recurrence | Multi-file refactor proof | Pytest green + grep clean |
 | R15 | READY | AWS pass, Phase C GENUINE_PASS, gate pass, committed/pushed | Debugging proof | Both bugs fixed, no false positives |
 | R16 | READY | Stage 7 call1 passed on Haiku with Phase C `GENUINE_PASS`, `software_builder_subchecks`, numeric cache evidence, forced/local compaction evidence, no R14/R19-U3 loop recurrence, and gate pass | Long-session app-build proof | App/tests pass, compaction reviewed |
-| R17 | EXECUTABLE_PENDING_RUN | Test exists but no AWS evidence yet | PS#4 thinking visibility proof | Thinking blocks in history/telemetry |
+| R17 | READY | R17 call1 passed on Sonnet 4.5 AU with Phase A iter2 `APPROVE_FOR_AWS_CALL`, Phase C `GENUINE_PASS`, non-empty thinking in assistant history and telemetry, numeric cache evidence, and gate pass | PS#4 thinking visibility proof | Thinking blocks in history/telemetry |
 | R18-E1 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Throttle/retry behavior | 429 handled or escalated as infra |
 | R18-E2 | EXECUTABLE_PENDING_REVIEW | Zero-cost mock spec exists; needs local mock implementation/review | 5xx recovery without forced AWS fault | Mock 5xx ladder pass |
 | R18-E3 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Cost-cap timing proof | Cap halt/warning evidence |

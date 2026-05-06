@@ -262,4 +262,24 @@ Result:
   - R19-U10: `$0.0134`
 - R4 call1 READY spend added:
   - R4: `$0.0230`
-- local R-tier ledger after R4: `$1.5222`
+- R17 call1 READY spend added:
+  - R17: `$0.0307`
+- local R-tier ledger after R17: `$1.5529`
+
+## R17 Thinking Visibility Resolution
+
+R17 is READY as of 2026-05-06:
+
+- Phase A iter2 returned `APPROVE_FOR_AWS_CALL` after the runner was corrected
+  to satisfy the Bedrock invariant `max_tokens > thinking_budget`.
+- AWS Budget was healthy before spend.
+- R17 call1 ran only the approved Sonnet 4.5 AU thinking-visibility scenario.
+- Cost was `$0.0307`, under the `$0.30` planned cap and `$0.36` hard retry
+  ceiling.
+- Evidence captured non-empty thinking on both required surfaces:
+  assistant history `thinking_chars=1611` and audit/telemetry source
+  `audit_thinking_chars=1611`.
+- Canonical telemetry includes non-empty `per_turn[0].thinking_text` and
+  numeric cache fields (`cache_read_tokens=0`, `cache_write_tokens=3228`).
+- Claude Phase C returned `GENUINE_PASS`.
+- `r_tier_gate.py --repo-root . --test R17` passed.

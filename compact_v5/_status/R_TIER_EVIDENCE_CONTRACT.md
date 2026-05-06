@@ -31,6 +31,7 @@ These fields prevent software-builder tests from passing on prose alone:
 | R14 | Evidence must use Haiku 4.5 AU, include `changed_files_within_fixture=true`, stale-symbol grep output, a fixture note that visible call sites are present, visible read/search before edit, tool-count/failure-loop telemetry, and process-quality review of read-before-edit/write/exec guard failures. A correct artifact alone is not READY. |
 | R15 | Evidence must include pre-fix failing-test output, post-fix passing-test output, `false_positive_area_unchanged=true`, and diagnosis trace. |
 | R16 | Telemetry must include a typed `software_builder_subchecks` object with all required keys listed below. |
+| R17 | Evidence must use Sonnet 4.5 AU with extended thinking enabled, record `thinking_budget` and `max_tokens` satisfying the Bedrock thinking invariant, include non-empty thinking text in assistant history and `chat_response` audit evidence, and show non-empty telemetry `per_turn[].thinking_text`. Quality review must grade thinking usefulness, not only presence or character count. |
 | R19-U1 | Evidence must include `clarification_request_count>=1` and `changed_files_count=0`. |
 | R19-U2 | Evidence must include `conflict_detected=true`, `clarification_request_count>=1`, and no speculative edit. |
 | R19-U3 | Evidence must use Haiku 4.5 AU, include search-before-edit ordering, fixture orthogonality from R14, tool-count/failure-loop telemetry, and no non-intentional repeated read-before-edit/write or exec failure loop. A correct artifact alone is not READY. |
