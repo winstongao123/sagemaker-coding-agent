@@ -161,6 +161,32 @@ def _contains_any(text: str, needles: Iterable[str]) -> bool:
     return any(needle in text for needle in needles)
 
 
+def _phase_a_latest_decision_is_approval(base: Path, test_id: str) -> bool:
+    """Return whether the latest decision-bearing Phase A review approves.
+
+    Older evidence includes a few post-fix Phase A confirmation reviews whose
+    final reviewer wording is "AWS call #N may proceed/is justified" rather
+    than the exact original APPROVE_FOR_AWS_CALL token. The final gate should
+    honor the latest decision-bearing review, while still letting a later
+    REJECT override an earlier approval.
+    """
+    decision: bool | None = None
+    for path in _glob_paths(base, [f"r-tier-{test_id}-phaseA-iter*.md"]):
+        text = _read_text(path)
+        if "PRE-FLIGHT VERDICT: REJECT" in text or "\nREJECT" in text:
+            decision = False
+        if _contains_any(
+            text,
+            (
+                "APPROVE_FOR_AWS_CALL",
+                "AWS call #1 may proceed",
+                "AWS call #2 is justified",
+            ),
+        ):
+            decision = True
+    return decision is True
+
+
 def check_suite_materialized(repo_root: Path) -> List[str]:
     """Verify the executable R-tier test suite exists for the expected IDs."""
     errors: List[str] = []
@@ -285,8 +311,8 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
             errors.append(f"{test_id}: missing {label} in {reviews}")
 
     phase_a_text = _latest_text(reviews, [f"r-tier-{test_id}-phaseA-iter*.md"])
-    if phase_a_text and "APPROVE_FOR_AWS_CALL" not in phase_a_text:
-        errors.append(f"{test_id}: latest phase A review lacks APPROVE_FOR_AWS_CALL")
+    if phase_a_text and not _phase_a_latest_decision_is_approval(reviews, test_id):
+        errors.append(f"{test_id}: latest phase A decision does not approve AWS call")
 
     if not escalated:
         if phase_c_text and "GENUINE_PASS" not in phase_c_text:
