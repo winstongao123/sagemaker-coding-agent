@@ -26,6 +26,7 @@ These fields prevent software-builder tests from passing on prose alone:
 
 | Test | Additional required evidence |
 |---|---|
+| R4 | Evidence must include typed `compact_micro_start` and `compact_micro_end` events with `trigger=cold_cache`, `microcompact_applied=true`, `microcompact_saved_tokens>=5000`, cleared old tool-result markers, a real Haiku Bedrock call after the pre-call microcompact, and explicit quality wording that any injectable threshold validates the same A-16 code path without claiming a literal 30-minute wall-clock wait. |
 | R13 | Metrics or quality evidence must include `score_total=5`, `score_passed>=4`, and `changed_files_within_fixture=true`. A scored failure is allowed only as an escalated/fix-loop result, not as a READY pass. |
 | R14 | Evidence must use Haiku 4.5 AU, include `changed_files_within_fixture=true`, stale-symbol grep output, a fixture note that visible call sites are present, visible read/search before edit, tool-count/failure-loop telemetry, and process-quality review of read-before-edit/write/exec guard failures. A correct artifact alone is not READY. |
 | R15 | Evidence must include pre-fix failing-test output, post-fix passing-test output, `false_positive_area_unchanged=true`, and diagnosis trace. |

@@ -83,10 +83,14 @@ Completed and pushed:
   preserved.
 - R2: call1 Phase C `GENUINE_PASS`, `r_tier_gate.py --test R2` passed on
   refresh. This remains the real compaction/recall evidence row.
-- R4: deferred/escalated in `ESCALATION-R4.md`; v5.0.1 does not ship the A-16
-  time-based cold-cache microcompact that the original R4 test claims to
-  measure. No AWS spend was made for R4. This requires a user/product decision
-  before it can become READY: defer, implement A-16, or reshape the scenario.
+- R4: call1 Phase C `GENUINE_PASS`, `r_tier_gate.py --test R4` passed.
+  Haiku validated the A-16 time-based cold-cache microcompact code path at
+  `$0.0230` using the supported injectable threshold instead of a 30-minute
+  wall-clock wait. Evidence includes typed `compact_micro_start` /
+  `compact_micro_end`, `microcompact_saved_tokens=50360`, two cleared old
+  tool-result markers, numeric cache fields, and no repeated tool/failure loop.
+  The older `ESCALATION-R4.md` remains preserved as superseded historical
+  deferment evidence, not current disposition.
 - R13: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R13` passed.
 - R15: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R15` passed.
 - R14: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R14` passed. Artifact
@@ -185,6 +189,9 @@ Local blocker fix summary:
 - `build_telemetry.py` now extracts `model_switch_events` from audit logs so
   R19-U10 model-switch fixture evidence is visible in canonical telemetry.
 - `r_tier_gate.py` was added as a local evidence/cost guard.
+- `r_tier_gate.py --repo-root .` now checks per-test evidence for every matrix
+  row by default. Use `--skip-evidence` only for local suite/cost development
+  checks; the final gate must not use it.
 
 ## Mock verification
 
@@ -253,4 +260,6 @@ Result:
   - R16: `$0.0205`
 - Stage 8 R19-U10 call1 READY spend added:
   - R19-U10: `$0.0134`
-- local R-tier ledger after R19-U10: `$1.4992`
+- R4 call1 READY spend added:
+  - R4: `$0.0230`
+- local R-tier ledger after R4: `$1.5222`

@@ -320,11 +320,52 @@ Stop AWS execution and return to implementation/review if:
   Phase C `GENUINE_PASS`, `r_tier_gate.py --test R2` passed, and it remains
   the real compaction/recall proof.
 - R4 is a real stop/defer gate, not an AWS candidate to run blindly.
-  `ESCALATION-R4.md` documents that v5.0.1 does not ship the A-16 time-based
-  cold-cache microcompact path that original R4 claims to measure. Running R4
-  as written would spend money to confirm a known deferred feature. A user or
-  product decision is required before R4 can be READY: keep it deferred,
-  implement A-16, or reshape the scenario to a weaker idle-resume test.
+  `ESCALATION-R4.md` documents that v5.0.1 did not yet ship the A-16
+  time-based cold-cache microcompact path that original R4 claims to measure.
+  Running R4 as written before A-16 exists would spend money to confirm a known
+  missing feature.
+
+2026-05-06 user production-scope decision:
+
+- R4 deferment is not accepted for the final production-readiness package.
+- Implement A-16 time-based cold-cache microcompact before production.
+- Reshape R4 only as needed to test the same production code path without a
+  30-minute wallclock wait, for example by using an injectable clock or test
+  threshold. The test claim must remain cold-cache/time-based microcompact, not
+  a weaker idle-resume-only substitute.
+- After A-16, R4 must go through normal Phase A, AWS execution,
+  telemetry/quality/metrics, Phase C, and `r_tier_gate.py --test R4`.
+- The remaining matrix rows that failed per-test gates
+  (`R6`, `R7`, `R8`, `R9`, `R10`, `R11`, `R12`, `R17`,
+  `R18-E1`, `R18-E2`, `R18-E3`, `R18-E4`, `R18-E5`,
+  `R18-E6`, `R18-E8`, `R18-E9`, `R18-E10`, `R18-E11`,
+  `R18-E12`, `R18-E13`, `R18-E14`, `R18-E15`, `R19-U8`,
+  and `R19-U9`) must each receive concrete per-test evidence, an optimized
+  bundle mapping with artifacts strong enough to pass `r_tier_gate.py --test`,
+  or an explicit reviewed/user-approved disposition.
+
+2026-05-06 R4/A-16 resolution:
+
+- A-16 time-based cold-cache microcompact is present in `QueryEngine.run()` and
+  is now covered by local lock tests plus R4 real-AWS evidence.
+- R4 Phase A iter1 returned `APPROVE_FOR_AWS_CALL`.
+- AWS Budget was healthy before spend. Local R-tier ledger before R4 was
+  `$1.4992`; R4 prior spend was `$0.0000`.
+- R4 call1 ran on Haiku 4.5 AU and passed at `$0.0230`, under the `$0.20`
+  planned cap and `$0.24` hard retry ceiling.
+- The R4 runner used the supported injectable threshold
+  `CONFIG.cold_cache_threshold_seconds=1` and a seeded idle gap to exercise the
+  same production cold-cache branch without a 30-minute wall-clock wait.
+- Evidence includes typed `compact_micro_start` and `compact_micro_end` events
+  with `trigger=cold_cache`, `microcompact_applied=true`,
+  `microcompact_saved_tokens=50360`, two cleared old tool-result markers,
+  numeric cache fields, and no repeated tool/failure loop.
+- Claude Phase C returned `GENUINE_PASS`, and
+  `r_tier_gate.py --test R4` passed.
+- The older `ESCALATION-R4.md` remains preserved as superseded historical
+  deferment evidence. Final readiness must describe R4 as "A-16 cold-cache code
+  path validated on real Bedrock with supported injectable threshold," not as a
+  literal 30-minute wall-clock production wait.
 
 ## Expected Confidence
 

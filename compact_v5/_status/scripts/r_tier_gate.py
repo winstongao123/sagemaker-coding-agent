@@ -25,6 +25,7 @@ DIAGNOSTIC_NON_READY_VERDICTS = {
     "PROCESS_BLOCKER",
     "PROCESS_BLOCKER_LOCAL_FIX_PENDING_CLAUDE_REVIEW",
     "DIAGNOSTIC_NON_READY",
+    "DEFERRED-NOT-IMPLEMENTED",
     "CALL1_FUNCTIONAL_PASS_BUNDLE_BLOCKED",
     "TEST_DESIGN_FIX_REQUIRED_CLAUDE_REVIEW_BLOCKED",
 }
@@ -252,7 +253,25 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
     metrics = status / "r_tier_metrics.jsonl"
 
     escalation = reviews / f"ESCALATION-{test_id}.md"
-    escalated = escalation.is_file()
+    review_log_text = _read_text(review_log)
+    metric_rows = _load_metrics(metrics)
+    rows_for_test = [
+        r for r in metric_rows
+        if str(r.get("test")) == test_id and "_malformed" not in r
+    ]
+    pass_rows = [
+        row for row in rows_for_test
+        if row.get("completed") is True
+        and row.get("verdict") in {"GENUINE_PASS", "READY"}
+    ]
+    phase_c_text = _latest_text(reviews, [f"r-tier-{test_id}-phaseC-iter*.md"])
+    has_later_ready_evidence = (
+        bool(pass_rows)
+        and "GENUINE_PASS" in phase_c_text
+        and test_id in review_log_text
+        and "READY" in review_log_text
+    )
+    escalated = escalation.is_file() and not has_later_ready_evidence
 
     required_patterns = {
         "phase A prompt": [f"r-tier-{test_id}-phaseA-iter*-prompt.txt"],
@@ -270,7 +289,6 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
         errors.append(f"{test_id}: latest phase A review lacks APPROVE_FOR_AWS_CALL")
 
     if not escalated:
-        phase_c_text = _latest_text(reviews, [f"r-tier-{test_id}-phaseC-iter*.md"])
         if phase_c_text and "GENUINE_PASS" not in phase_c_text:
             errors.append(f"{test_id}: phase C review lacks GENUINE_PASS")
 
@@ -288,14 +306,11 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
         ):
             errors.append(f"{test_id}: quality review lacks an accepted composite verdict")
 
-    review_log_text = _read_text(review_log)
     if not review_log.is_file() or test_id not in review_log_text:
         errors.append(f"{test_id}: missing row in {review_log}")
     elif not escalated and "READY" not in review_log_text:
         errors.append(f"{test_id}: review log row lacks READY")
 
-    metric_rows = _load_metrics(metrics)
-    rows_for_test = [r for r in metric_rows if str(r.get("test")) == test_id and "_malformed" not in r]
     diagnostic_calls: set[int] = set()
     if not rows_for_test:
         errors.append(f"{test_id}: missing JSONL metrics row in {metrics}")
@@ -305,11 +320,6 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
             "cache_hit_pct", "wallclock_s", "tool_calls", "completed",
             "cost_usd", "verdict",
         }
-        pass_rows = [
-            row for row in rows_for_test
-            if row.get("completed") is True
-            and row.get("verdict") in {"GENUINE_PASS", "READY"}
-        ]
         if not escalated and not pass_rows:
             errors.append(f"{test_id}: missing completed pass/ready JSONL metrics row")
         for row in rows_for_test:
@@ -421,6 +431,8 @@ def main() -> int:
     parser.add_argument("--test", help="Specific test ID to verify, e.g. R1 or R19-U3")
     parser.add_argument("--skip-suite", action="store_true",
                         help="Skip executable-suite materialization check.")
+    parser.add_argument("--skip-evidence", action="store_true",
+                        help="Skip per-test evidence checks for local development only.")
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
@@ -431,6 +443,10 @@ def main() -> int:
     errors.extend(check_costs(repo_root))
     if args.test:
         errors.extend(check_test_evidence(repo_root, args.test))
+    elif not args.skip_evidence:
+        expected, _caps = _expected_from_matrix(repo_root)
+        for test_id in expected:
+            errors.extend(check_test_evidence(repo_root, test_id))
 
     if errors:
         print("R-tier gate FAILED:")
