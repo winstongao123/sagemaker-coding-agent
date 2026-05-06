@@ -111,6 +111,13 @@ Completed and pushed:
   required `software_builder_subchecks`, numeric cache evidence, forced/local
   compaction evidence, unchanged fixture tests, and no R14/R19-U3 guard-loop
   recurrence.
+- R19-U10: Stage 8 call1 Phase C `GENUINE_PASS`,
+  `r_tier_gate.py --test R19-U10` passed. Haiku completed the final coherence
+  report at `$0.0134` using the approved prebuilt 150-logical-turn transcript
+  substitution. Evidence includes three typed prebuilt compaction events, two
+  prebuilt model-switch events, final anchor preservation, and no repeated
+  guard-loop recurrence. This does not claim 150 live Bedrock calls, live model
+  switching, or natural compaction.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -166,6 +173,8 @@ Local blocker fix summary:
   surfaced that a forced/local compaction JSONL and a session JSONL can coexist
   in the same audit directory; the telemetry builder must aggregate both rather
   than picking only the newest file.
+- `build_telemetry.py` now extracts `model_switch_events` from audit logs so
+  R19-U10 model-switch fixture evidence is visible in canonical telemetry.
 - `r_tier_gate.py` was added as a local evidence/cost guard.
 
 ## Mock verification
@@ -233,4 +242,6 @@ Result:
   - R19-U5: `$0.0309`
 - Stage 7 R16 call1 READY spend added:
   - R16: `$0.0205`
-- local R-tier ledger after R16: `$1.4858`
+- Stage 8 R19-U10 call1 READY spend added:
+  - R19-U10: `$0.0134`
+- local R-tier ledger after R19-U10: `$1.4992`

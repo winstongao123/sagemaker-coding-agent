@@ -278,6 +278,38 @@ Stop AWS execution and return to implementation/review if:
 - Next optimized stage is Stage 8: R19-U10 long coherence, subject to fresh
   Phase A approval and AWS Budget/headroom check.
 
+2026-05-06 Stage 8 R19-U10 resolution:
+
+- Claude Phase A approved the optimized prebuilt transcript/churn substitution
+  for R19-U10. The design explicitly avoided 150 live Bedrock calls because
+  true 150-call execution is not valid under the `$0.50` cap without user
+  approval.
+- AWS budget was healthy before spend. Local R-tier ledger before R19-U10 was
+  `$1.4858`; R19-U10 had no prior spend.
+- R19-U10 call1 ran on Haiku 4.5 AU and passed at `$0.0134`, under the `$0.50`
+  planned cap and `$0.60` hard retry ceiling.
+- The model wrote `final_coherence_report.md` with the early codename
+  `HYDRA-LIME`, checksum `kiwi-1842`, latest runtime `Python 3.12`, latest
+  owner `Priya`, and final task marker `create_coherence_report`.
+- The stale `Python 3.10` preference did not win.
+- Evidence includes a 150-logical-turn prebuilt transcript fixture, three typed
+  prebuilt `compact_auto_end` events, two prebuilt `model_switch` events,
+  numeric cache fields, and one real `write_file` tool call.
+- This pass proves the approved optimized substitution only. It does not claim
+  150 live Bedrock calls, live model switching, or natural threshold-triggered
+  compaction.
+- The R14/R19-U3 repeated guard/edit/write/exec loop did not recur:
+  one tool call, zero repeated calls, zero failure-loop events, and empty guard
+  failure class counts. Claude Phase C noted the recurrence watch had limited
+  surface area because the run completed in one turn.
+- `build_telemetry.py` now extracts `model_switch_events` and a zero-cost lock
+  test covers that canonical telemetry field.
+- Claude Phase C returned `GENUINE_PASS`, and
+  `r_tier_gate.py --test R19-U10` passed.
+- Optimized stages 4 through 8 are now complete. Continue any remaining
+  required R-tier rows according to the final readiness docs before any final
+  production-readiness claim.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates

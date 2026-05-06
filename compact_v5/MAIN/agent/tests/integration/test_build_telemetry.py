@@ -193,6 +193,41 @@ def test_build_telemetry_reads_all_jsonl_files_in_audit_directory(tmp_path):
     assert len(telemetry["compaction_events"]) == 1
 
 
+def test_build_telemetry_extracts_model_switch_events(tmp_path):
+    bt = _load_build_telemetry()
+    audit_path = tmp_path / "audit.jsonl"
+    _write_audit_jsonl(audit_path, [
+        {"timestamp": "2026-05-04T10:00:00.000",
+         "session_id": "s1", "action": "model_switch",
+         "tool_name": "(engine)",
+         "parameters": {
+             "path": "prebuilt_transcript",
+             "logical_turn": 47,
+             "from": "Haiku 4.5 AU",
+             "to": "Sonnet 4.5 AU",
+         },
+         "result_summary": "prebuilt switch", "user_approved": True, "hash": "h1"},
+    ])
+    raw_log = tmp_path / "raw.log"
+    raw_log.write_text("============================= 1 passed =============================\n", encoding="utf-8")
+
+    telemetry = bt.build_telemetry(
+        test="R19-U10", call=1,
+        audit_log_path=audit_path,
+        raw_log_path=raw_log,
+        side_channel_path=None,
+    )
+
+    assert telemetry["model_switch_events"] == [{
+        "timestamp": "2026-05-04T10:00:00.000",
+        "from": "Haiku 4.5 AU",
+        "to": "Sonnet 4.5 AU",
+        "logical_turn": 47,
+        "path": "prebuilt_transcript",
+        "result_summary": "prebuilt switch",
+    }]
+
+
 def test_build_telemetry_captures_thinking_when_audit_emits_chat_response(tmp_path):
     """PLAYBOOK §4.5 Gap A lock — when audit_log carries a chat_response
     event with thinking, telemetry per_turn[].thinking_text is populated."""

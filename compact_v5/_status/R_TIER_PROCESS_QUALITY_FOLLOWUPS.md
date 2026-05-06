@@ -76,10 +76,14 @@ Local fix status:
   failure class counts, no repeated calls, and no `max_turns`. Claude Phase C
   returned `GENUINE_PASS`, so the recurrence watch remains clean through the
   long app build stage.
-- This follow-up is no longer blocking Stage 5 or R16. It remains on
-  recurrence watch: if R19-U10 or any later software-builder run shows a
-  non-intentional repeated guard-class loop, stop the matrix and reopen this
-  blocker.
+- 2026-05-06: R19-U10 call1 passed on Haiku with `process_quality_ok=true`, one
+  tool call (`write_file`), zero failure-loop events, empty guard failure class
+  counts, no repeated calls, and no `max_turns`. Claude Phase C returned
+  `GENUINE_PASS` but noted the recurrence watch had limited surface area
+  because the run completed in a single tool call.
+- This follow-up is no longer blocking Stage 5, R16, or R19-U10. It remains on
+  recurrence watch: if any later software-builder run shows a non-intentional
+  repeated guard-class loop, stop the matrix and reopen this blocker.
 
 Execution decision:
 

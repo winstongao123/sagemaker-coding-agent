@@ -272,6 +272,24 @@ def _extract_subagent_dispatches(events: List[Dict[str, Any]]) -> List[Dict[str,
     return out
 
 
+def _extract_model_switch_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Filter audit_log for model switch events used by long-coherence tests."""
+    out = []
+    for e in events:
+        if e.get("action") != "model_switch":
+            continue
+        params = e.get("parameters") or {}
+        out.append({
+            "timestamp": e.get("timestamp"),
+            "from": params.get("from"),
+            "to": params.get("to"),
+            "logical_turn": params.get("logical_turn"),
+            "path": params.get("path"),
+            "result_summary": str(e.get("result_summary", ""))[:200],
+        })
+    return out
+
+
 FAILURE_LOOP_ACTIONS = {
     "tool_failure_recorded",
     "tool_failure_loop_warning",
@@ -495,6 +513,7 @@ def build_telemetry(
     tool_summary = _summarize_tool_calls(turns)
     compaction = _extract_compaction_events(events)
     subagent = _extract_subagent_dispatches(events)
+    model_switch = _extract_model_switch_events(events)
     failure_loop = _extract_failure_loop_events(events)
     cache_trend = _cache_trend(per_turn)
     agent_attr = _agent_attribution(side_channel)
@@ -512,6 +531,7 @@ def build_telemetry(
         "tool_call_summary": tool_summary,
         "compaction_events": compaction,
         "subagent_dispatches": subagent,
+        "model_switch_events": model_switch,
         "cache_efficiency_trend": cache_trend,
         "agent_attribution": agent_attr,
         "failure_loop_events": failure_loop,

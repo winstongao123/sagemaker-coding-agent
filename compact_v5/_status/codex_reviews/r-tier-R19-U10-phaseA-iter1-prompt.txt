@@ -1,0 +1,133 @@
+﻿Claude Phase A review request: R19-U10 long coherence AWS call1
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Read from disk only. Use read-only tools. Do not rely on prior chat context.
+
+Required decision token:
+- Return APPROVE_FOR_AWS_CALL only if this R19-U10 design is safe to spend on AWS.
+- Otherwise return a blocking finding and explain what must change before AWS.
+
+Files to read:
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u10_long_coherence.py
+- compact_v5/_status/scripts/build_telemetry.py
+- compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py
+- compact_v5/_status/scripts/r_tier_gate.py
+
+Test id:
+- R19-U10
+
+Purpose:
+- Prove the real Bedrock-backed agent can preserve final-task coherence after a long-session churn fixture.
+- The final answer must depend on facts inserted before the prebuilt compaction/model-switch churn: early codename `HYDRA-LIME`, checksum `kiwi-1842`, latest runtime `Python 3.12`, owner `Priya`, and final task marker `create_coherence_report`.
+- The run must also continue the R14/R19-U3 recurrence watch: no repeated non-intentional guard/edit/write/exec failure loop.
+
+Fixture:
+- Runner path: `compact_v5/MAIN/agent/tests/r_tier/test_r19_u10_long_coherence.py`.
+- Temporary workspace fixture writes:
+  - `r19_u10_churn_fixture.json` with 150 logical turns represented, 2 model switches, 3 compactions, and anchors.
+  - `AGENT_STATUS.md` with preserved early anchor, latest runtime, latest owner, and final task marker.
+  - `memory.md` with stale Python 3.10 explicitly superseded by Python 3.12.
+- The agent message buffer is seeded with an 18-message compacted transcript representing the 150 logical turns instead of making 150 AWS calls.
+- The runner logs three typed `compact_auto_end` audit events with `path="prebuilt_transcript"`.
+- The runner logs two `model_switch` audit events representing the prebuilt switch history.
+
+Prompt:
+- The final prompt asks the model to create `final_coherence_report.md` with exactly:
+  - `CODENAME: <project codename from the early anchor>`
+  - `CHECKSUM: <checksum phrase from the early anchor>`
+  - `RUNTIME: <latest runtime preference>`
+  - `OWNER: <latest owner>`
+  - `FINAL_TASK: <final task marker>`
+- The model is told to use existing conversation context/status/memory, not ask for clarification, and stop after writing the report.
+
+Runner:
+- AWS command, only after this Phase A approval and budget/headroom:
+  $env:RUN_REAL_BEDROCK='1'
+  $env:R_TIER_CALL='1'
+  $env:AWS_REGION='ap-southeast-2'
+  $env:PYTHONPATH=(Resolve-Path compact_v5/MAIN/agent).Path
+  py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r19_u10_long_coherence.py -v -s *> compact_v5/_status/codex_reviews/r-tier-R19-U10-aws-call1.log
+
+Expected model:
+- `au.anthropic.claude-haiku-4-5-20251001-v1:0`
+- The prebuilt fixture represents prior model switches; the actual AWS call1 uses Haiku only to stay within the approved cap.
+
+Cost cap:
+- Planned cap: $0.50.
+- User-approved hard retry ceiling: $0.60.
+- Runner sets `CONFIG.session_cost_limit` to $0.60.
+- Max primary turns: 4.
+- IterationBudget max_iterations: 8.
+- CONFIG.max_tokens: 1024.
+- The design intentionally avoids 150 real Bedrock calls because OPTIMIZED_AWS_VALIDATION_PLAN.md says true 150 calls are not valid under this cap without user approval.
+
+Overlap / optimization analysis:
+- R16 proved a bounded app build and software-builder state subchecks.
+- R19-U10 isolates long-coherence risk after churn: final task intent and early anchors must survive compaction/model-switch summaries.
+- This is not redundant with R16 because R16 did not test a prebuilt 150-logical-turn history with stale-vs-latest preference resolution and final-task anchor recovery.
+- This is not redundant with R19-U8/R19-U9 because it combines early anchor, stale preference override, compaction summaries, model-switch history, and final artifact creation under one real model call.
+
+Acceptance criteria:
+- `final_coherence_report.md` exists in the temp fixture workspace.
+- It contains:
+  - `CODENAME: HYDRA-LIME`
+  - `CHECKSUM: kiwi-1842`
+  - `RUNTIME: Python 3.12`
+  - `OWNER: Priya`
+  - `FINAL_TASK: create_coherence_report`
+- Side metrics record:
+  - `logical_turns_represented=150`
+  - `prebuilt_transcript_used=true`
+  - `model_switch_events_logged=2`
+  - `compaction_events_logged>=3`
+  - `process_quality_ok=true`
+  - no failure-loop events
+  - no repeated guard-class loop
+- Canonical telemetry must include non-empty `per_turn`, model id, cost, tool summary, cache trend, outcome, and the typed compaction events.
+
+Required evidence files after AWS:
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-phaseA-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-phaseA-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-phaseA-iter1.err.log
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-aws-call1.log
+- compact_v5/_status/r-tier-R19-U10-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R19-U10-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R19-U10-aws-call1-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-phaseC-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-phaseC-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U10-phaseC-iter1.err.log
+- compact_v5/_status/r-tier-R19-U10-gate.txt
+
+Known limitations that must be represented honestly:
+- The 150-turn session is a prebuilt transcript/churn fixture, not 150 live Bedrock calls.
+- The model switches are logged fixture events, not actual model changes during call1.
+- The compactions are typed prebuilt/fixture compaction events, not natural threshold-triggered compactions during call1.
+- If these substitutions are not acceptable for R19-U10 under the plan, reject Phase A instead of approving spend.
+
+Stop conditions:
+- Claude Phase A does not return APPROVE_FOR_AWS_CALL.
+- AWS budget/headroom check fails.
+- Actual model is not Haiku 4.5 AU.
+- Cost exceeds the $0.50 planned cap without clear within-ceiling justification, or exceeds the $0.60 hard ceiling.
+- Raw log, side metrics, telemetry, quality review, metrics row, review-log row, or gate output is missing.
+- Final report is missing any required anchor.
+- The stale Python 3.10 preference wins over latest Python 3.12.
+- R14/R19-U3-style repeated guard/edit/write/exec failure loop recurs.
+- `max_turns` is hit.
+- Claude Phase C does not return GENUINE_PASS.
+- `r_tier_gate.py --repo-root . --test R19-U10` fails.
+
+Local zero-cost validation just run before this prompt:
+- `py -3.11 -m py_compile compact_v5/MAIN/agent/tests/r_tier/test_r19_u10_long_coherence.py compact_v5/_status/scripts/build_telemetry.py`: PASS
+- `PYTHONPATH=compact_v5/MAIN/agent py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r19_u10_long_coherence.py -q`: 1 skipped because RUN_REAL_BEDROCK is not set
+- `PYTHONPATH=compact_v5/MAIN/agent py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py -q`: 10 passed
+
+Please review the files from disk and decide whether R19-U10 is approved for a single AWS call1 under this design.
+

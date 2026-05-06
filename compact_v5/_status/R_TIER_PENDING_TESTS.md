@@ -53,7 +53,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R19-U7 | READY | Stage 5 call2 passed with breaker_fired=true, exactly two actual bait calls, Phase C GENUINE_PASS, and gate pass | Repeated-call circuit breaker proof | Third repeat blocked, alternative used |
 | R19-U8 | EXECUTABLE_PENDING_REVIEW | Zero-cost UX spec exists; needs Phase A review/execution | Memory conflict latest-wins proof | Uses latest preference |
 | R19-U9 | EXECUTABLE_PENDING_REVIEW | Zero-cost UX spec exists; needs Phase A review/execution | `/dream` semantic preservation | All required facts preserved |
-| R19-U10 | EXECUTABLE_PENDING_REVIEW | Zero-cost UX spec exists; needs Phase A review/execution | Long coherence with switches/compactions | Final task succeeds |
+| R19-U10 | READY | Stage 8 call1 passed on Haiku with Phase C `GENUINE_PASS`, gate pass, prebuilt 150-logical-turn transcript/churn fixture, typed compaction events, model-switch fixture events, and final-anchor coherence | Long coherence with switches/compactions | Final task succeeds |
 
 ## Cost summary
 
