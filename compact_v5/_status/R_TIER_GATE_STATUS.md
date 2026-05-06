@@ -136,6 +136,16 @@ Completed and pushed:
   Claude Phase C returned `GENUINE_PASS`, and per-test gates passed. These
   rows used `local-call` evidence and recorded `$0.0000` spend; no AWS call was
   authorized.
+- R6 and R19-U9: bundled `/dream` call1 Phase A returned
+  `APPROVE_FOR_AWS_CALL`, AWS Budget was healthy before spend, the real Haiku
+  `/dream` path completed at `$0.0059` total shared spend (`$0.0029` allocated
+  to each row), Claude Phase C returned `GENUINE_PASS`, and
+  `r_tier_gate.py --test R6` / `--test R19-U9` passed. Evidence preserved
+  HYDRA-LIME, ap-southeast-2, prod/db/password, Priya, INC-4242, and Python
+  3.12; duplicate/stale notes were reduced; DreamLock released; backup existed;
+  telemetry showed zero tool calls and zero failure-loop events. A low,
+  non-blocking `/dream` output-shape polish follow-up remains tracked in
+  `R_TIER_PROCESS_QUALITY_FOLLOWUPS.md`.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -333,4 +343,4 @@ R18-E13, R18-E14, R18-E15, and R19-U8 are `DISPOSITION_OK` as of 2026-05-06:
 - Claude Phase C iter2 returned `DISPOSITION_OK`.
 - Per-test gates passed for all 14 disposition rows.
 - The default final gate now fails only on the real-AWS rows still outstanding:
-  R6, R7, R11, and R19-U9.
+  R7 and R11.

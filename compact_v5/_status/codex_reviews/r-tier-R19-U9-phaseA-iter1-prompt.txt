@@ -1,0 +1,101 @@
+Repo root: D:\Github\sagemaker-coding-agent
+
+You are the independent Claude Phase A reviewer for the R-tier real AWS test
+bundle R6 + R19-U9. Read repo files from disk using read-only tools. Do not
+trust this prompt as evidence; use it only as navigation.
+
+Required context to read:
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/MAIN/agent/tests/r_tier/test_r6_to_r19_readiness_specs.py
+- compact_v5/MAIN/agent/tests/r_tier/test_r6_r19_u9_dream_bundle.py
+- compact_v5/MAIN/agent/runtime/dream.py
+- compact_v5/MAIN/agent/ui/chat_ui.py
+- compact_v5/_status/scripts/r_tier_gate.py
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+
+Worker Phase A preflight summary:
+
+Test ids:
+- R6: /dream consolidation 100 entries.
+- R19-U9: /dream preserves important facts.
+
+Purpose:
+- Validate the production `/dream` memory consolidation path with one real
+  Haiku 4.5 AU Bedrock call.
+- R6 focuses on 100-entry consolidation, duplicate/stale entry collapse,
+  DreamLock release, phases, backup behavior, and cost cap.
+- R19-U9 focuses on semantic preservation of required facts during the same
+  consolidation.
+
+Fixture:
+- compact_v5/MAIN/agent/tests/r_tier/test_r6_r19_u9_dream_bundle.py writes a
+  100-entry memory.md fixture containing required facts, duplicate region/owner
+  and codename notes, stale Python 3.10 notes, and disposable scratch notes.
+- Required facts: HYDRA-LIME, ap-southeast-2, prod/db/password, Priya,
+  INC-4242, Python 3.12.
+- The runner calls runtime.dream.run_dream with a Bedrock-backed consolidator
+  using runtime.dream.get_dream_prompt, matching the actual UI path in
+  ui/chat_ui.py.
+
+Prompt/model/runner:
+- Runner path: compact_v5/MAIN/agent/tests/r_tier/test_r6_r19_u9_dream_bundle.py
+- Command after approval:
+  RUN_REAL_BEDROCK=1 R_TIER_CALL=1 py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r6_r19_u9_dream_bundle.py -q
+- Expected model: au.anthropic.claude-haiku-4-5-20251001-v1:0
+
+Cost cap:
+- R6 planned cap: $0.30.
+- R19-U9 planned cap: $0.30.
+- Bundle planned cap: $0.60.
+- User-approved hard retry ceiling: $0.72 total bundle ceiling.
+- The runner records actual bundle total cost and allocates half to each
+  metrics row so cumulative metrics do not double-count the single model call.
+
+Overlap/optimization:
+- R6 and R19-U9 intentionally overlap in `/dream`; one Bedrock call proves both
+  the consolidation mechanics and semantic preservation.
+- No separate R19-U9 call is needed because it would retest the same memory
+  consolidation output with the same facts.
+- This does not overlap with R4/R19-U10: those test cold-cache/long-coherence
+  memory retention, not the actual `/dream` consolidator write path.
+
+Required evidence files after AWS if approved:
+- compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-aws-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R6-aws-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R19-U9-aws-call1.log
+- compact_v5/_status/r-tier-R6-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R19-U9-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R6-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R19-U9-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R6-aws-call1-quality.md
+- compact_v5/_status/r-tier-R19-U9-aws-call1-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl rows for R6 and R19-U9
+- compact_v5/_status/r_tier_review_log.md rows for R6 and R19-U9
+- compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-phaseC-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-phaseC-iter1.md
+- per-test Phase C aliases for R6 and R19-U9
+- compact_v5/_status/r-tier-R6-gate.txt
+- compact_v5/_status/r-tier-R19-U9-gate.txt
+
+Stop conditions:
+- Do not approve if the runner does not exercise the production run_dream path.
+- Do not approve if it can pass while required facts are missing.
+- Do not approve if cost accounting would hide or double-count the single call.
+- Do not approve if it skips DreamLock/backup/phase evidence.
+- Do not approve if R19-U9 should require a separate AWS call after this bundle.
+- Do not approve if local evidence generation is insufficient for r_tier_gate.py.
+
+Local pre-AWS checks already run:
+- py -3.11 -m py_compile compact_v5/MAIN/agent/tests/r_tier/test_r6_r19_u9_dream_bundle.py : PASS
+- PYTHONPATH with compact_v5/MAIN and compact_v5/MAIN/agent, pytest on the new
+  runner without RUN_REAL_BEDROCK: 1 skipped, no AWS spend.
+
+Return a concise review with:
+- PRE-FLIGHT VERDICT: APPROVE_FOR_AWS_CALL or REJECT
+- findings, if any
+- whether the R6/R19-U9 bundle design is non-redundant and sufficient
+- whether the cost accounting is acceptable

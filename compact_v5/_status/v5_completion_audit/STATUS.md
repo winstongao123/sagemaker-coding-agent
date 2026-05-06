@@ -542,3 +542,13 @@ Final readiness document:
 
 - `compact_v5/_status/v5_completion_audit/FINAL_READY_FOR_AWS_REVIEW.md`
 - Current decision: ready for AWS test phase, not production-ready until AWS Phase A/spend/Phase C loop and final post-AWS Claude review pass.
+
+R6/R19-U9 cleanup resolution:
+
+- R6+R19-U9 bundled `/dream` call1 passed on Haiku after Claude Phase A
+  `APPROVE_FOR_AWS_CALL` and healthy AWS Budget/headroom check.
+- Shared call cost was `$0.0059` total, allocated as `$0.0029` to R6 and
+  `$0.0029` to R19-U9 in the local ledger; no diagnostic spend was hidden.
+- Claude Phase C returned `GENUINE_PASS`; `r_tier_gate.py --test R6` and
+  `r_tier_gate.py --test R19-U9` passed.
+- Remaining real-AWS rows before final review are R7 and R11.

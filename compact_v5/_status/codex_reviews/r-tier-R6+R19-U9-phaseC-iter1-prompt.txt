@@ -1,0 +1,72 @@
+Repo root: D:\Github\sagemaker-coding-agent
+
+You are the independent Claude Phase C reviewer for the completed R-tier
+R6 + R19-U9 AWS bundle. Read repo files from disk using read-only tools. Do
+not trust this prompt as evidence; use it only as navigation.
+
+Required context and evidence to read:
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/MAIN/agent/tests/r_tier/test_r6_r19_u9_dream_bundle.py
+- compact_v5/MAIN/agent/runtime/dream.py
+- compact_v5/MAIN/agent/ui/chat_ui.py
+- compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-phaseA-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-phaseA-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-aws-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R6-aws-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R19-U9-aws-call1.log
+- compact_v5/_status/r-tier-R6-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R19-U9-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R6-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R19-U9-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R6-aws-call1-quality.md
+- compact_v5/_status/r-tier-R19-U9-aws-call1-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/v5_completion_audit/logs/r-tier-R6+R19-U9-budget-headroom-iter1.out.txt
+
+Worker post-run summary:
+- Phase A returned APPROVE_FOR_AWS_CALL.
+- AWS Budget/headroom check was healthy:
+  - local recorded R-tier spend before call: $1.5529
+  - bundle hard ceiling: $0.72
+  - local headroom after hard ceiling: $11.9771
+  - AWS Budgets health status: HEALTHY
+- One approved Haiku 4.5 AU Bedrock call ran via pytest.
+- Raw pytest log passed: 1 passed.
+- Bundle total cost: $0.0059.
+- Allocated cost per row: $0.0029 for R6 and $0.0029 for R19-U9 to avoid
+  double-counting the single shared model call in cumulative metrics.
+- Tokens: 2231 input, 619 output.
+- API calls: 1.
+- Tool calls: 0.
+- Failure-loop events: 0.
+- Required facts preserved: HYDRA-LIME, ap-southeast-2, prod/db/password,
+  Priya, INC-4242, Python 3.12.
+- Duplicate/stale reduction:
+  - region mentions 31 -> 4
+  - owner mentions 21 -> 4
+  - stale Python 3.10 mentions 15 -> 2
+- Dream phases were `Orient`, `Gather`, `Consolidate`, `Prune+Index`.
+- Dream lock was released and memory backup was written.
+
+Known residual risk to evaluate:
+- The model returned phase explanations as part of the memory body because the
+  production prompt asks for phase outputs. Worker marked this as non-blocking
+  polish risk because required facts and consolidation behavior passed. Decide
+  whether this blocks R6/R19-U9 readiness.
+
+Review questions:
+1. Does R6 have a genuine artifact and process pass?
+2. Does R19-U9 have a genuine artifact and process pass?
+3. Is the single-call bundled evidence sufficient for both rows?
+4. Is the allocated cost accounting acceptable and non-deceptive?
+5. Is any evidence missing before gates?
+6. Does the residual phase-explanation-in-memory issue block these rows, or is
+   it a non-blocking follow-up/polish risk?
+
+Return a concise review with:
+- POST-PASS VERDICT: GENUINE_PASS or REJECT
+- per-row verdicts for R6 and R19-U9
+- any required fixes before gate

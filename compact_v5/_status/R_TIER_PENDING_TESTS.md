@@ -17,7 +17,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R3 | READY | Existing AWS call2 evidence reused for Stage 6; not rerun per optimized plan and Claude Phase A/Phase C | Sub-agent orchestration proof | Subagent telemetry + parent synthesis |
 | R4 | READY | A-16 time-based cold-cache microcompact is now implemented and R4 call1 passed on Haiku with Phase C `GENUINE_PASS`; the old `ESCALATION-R4.md` remains preserved as superseded historical deferment evidence | PS#3 cold-cache idle recovery | Typed cold-cache microcompact events, telemetry, quality, and gate pass |
 | R5 | PENDING_EXECUTABLE | Test code missing | PS#7 exec-limit recovery | 201st exec blocked; other tools continue |
-| R6 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | `/dream` memory consolidation proof | Required facts preserved |
+| R6 | READY | R6+R19-U9 call1 ran through the production `/dream` path on Haiku with Claude Phase C `GENUINE_PASS`, semantic preservation, dedup/stale reduction, DreamLock release, backup evidence, and gate pass | `/dream` memory consolidation proof | Required facts preserved |
 | R7 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | Model-switch/cache invariant proof | Haiku->Sonnet behavior documented |
 | R8 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | Free malformed JSON repair proof | Mock repair ladder pass |
 | R9 | DISPOSITION_OK | Claude-approved reviewed disposition: approval gate is deterministic pre-Bedrock UI/dispatcher logic and no fake AWS evidence was created | Approval/diff/audit proof | Approve/deny/always asserted |
@@ -52,7 +52,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R19-U6 | READY | Stage 5 call2 passed with malformed-output recovery, Phase C GENUINE_PASS, and gate pass | Garbage tool output recovery | Retry/alternative path succeeds |
 | R19-U7 | READY | Stage 5 call2 passed with breaker_fired=true, exactly two actual bait calls, Phase C GENUINE_PASS, and gate pass | Repeated-call circuit breaker proof | Third repeat blocked, alternative used |
 | R19-U8 | DISPOSITION_OK | Claude-approved mapping to R19-U10 real Haiku evidence where Python 3.12 beat stale Python 3.10 | Memory conflict latest-wins proof | Uses latest preference |
-| R19-U9 | EXECUTABLE_PENDING_REVIEW | Zero-cost UX spec exists; needs Phase A review/execution | `/dream` semantic preservation | All required facts preserved |
+| R19-U9 | READY_WITH_LOW_FOLLOWUP | R6+R19-U9 call1 ran through the same production `/dream` output with Claude Phase C `GENUINE_PASS`, all required facts preserved, gate pass, and a non-blocking output-shape polish follow-up | `/dream` semantic preservation | All required facts preserved |
 | R19-U10 | READY | Stage 8 call1 passed on Haiku with Phase C `GENUINE_PASS`, gate pass, prebuilt 150-logical-turn transcript/churn fixture, typed compaction events, model-switch fixture events, and final-anchor coherence | Long coherence with switches/compactions | Final task succeeds |
 
 ## Cost summary

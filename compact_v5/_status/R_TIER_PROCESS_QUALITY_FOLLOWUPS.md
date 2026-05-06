@@ -231,3 +231,35 @@ Follow-up:
   telemetry plus earlier R3 attribution evidence.
 - R16 and any later subagent/reviewer run should treat missing attribution as a
   quality penalty and document whether it is acceptable for that scenario.
+
+## R6/R19-U9 Dream Output Shape Polish
+
+Status: OPEN-LOW
+
+Classification: genuine R6/R19-U9 artifact/process pass; non-blocking prompt
+polish follow-up.
+
+Evidence:
+
+- `compact_v5/_status/codex_reviews/r-tier-R6+R19-U9-phaseC-iter1.md`
+- `compact_v5/_status/r-tier-R6-aws-call1-quality.md`
+- `compact_v5/_status/r-tier-R19-U9-aws-call1-quality.md`
+- `compact_v5/_status/r-tier-R6-aws-call1-side-metrics.json`
+- `compact_v5/_status/r-tier-R19-U9-aws-call1-side-metrics.json`
+
+Observed behavior:
+
+- The real `/dream` run preserved all required facts, reduced duplicates/stale
+  facts, wrote a backup, released the lock, and passed with one Haiku call.
+- The consolidated `memory.md` body included phase explanations because the
+  current production `DREAM_PROMPT_TEMPLATE` explicitly asks the model to
+  output Phase 1, Phase 2, Phase 3, and Phase 4 content.
+
+Follow-up:
+
+- Before final production-readiness review, decide whether this output shape is
+  acceptable for v5.0.1 or whether `/dream` should be tightened to write only
+  the final Phase 4 memory body while still preserving orient/gather evidence in
+  logs or telemetry.
+- Claude Phase C judged this non-blocking for R6/R19-U9 because the acceptance
+  criteria and semantic checklist passed against the actual consolidated file.

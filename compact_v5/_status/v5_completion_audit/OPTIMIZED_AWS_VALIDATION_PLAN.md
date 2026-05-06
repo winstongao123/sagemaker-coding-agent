@@ -408,9 +408,11 @@ Stop AWS execution and return to implementation/review if:
   package as `DISPOSITION_OK`.
 - The final gate supports `DISPOSITION_OK` as a distinct evidence state so
   disposition rows do not use fake AWS/local raw logs and do not hide spend.
-- The only rows still requiring real AWS evidence are R6, R7, R11, and R19-U9;
-  R19-U9 should bundle with R6 because it exercises the same `/dream`
-  consolidation output with an additional semantic checklist.
+- R6 and R19-U9 were bundled as planned because both rows exercise the same
+  production `/dream` consolidation output. Phase A approved the bundle, AWS
+  Budget was healthy, call1 passed at `$0.0059` total shared spend, Claude
+  Phase C returned `GENUINE_PASS`, and both per-test gates passed. The only
+  rows still requiring real AWS evidence are R7 and R11.
 
 ## Expected Confidence
 
