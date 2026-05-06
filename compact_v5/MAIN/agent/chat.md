@@ -1,88 +1,172 @@
-# chat.ipynb companion (v5 Phase 11)
+# SageAgent v5 Notebook User Guide
 
-The notebook itself is the user-facing surface. This file documents cell
-purpose, expected output, and troubleshooting — read this when something
-in `chat.ipynb` doesn't behave as expected.
+This is the companion guide for `chat.ipynb`, the production SageMaker UI for SageAgent v5.
 
-## Cell-by-cell
+v5 keeps the v4-style notebook experience, but the engine underneath is the final v5 runtime: Bedrock Claude models, durable status and memory, subagents, checkpoints, compaction, result replay, telemetry, and review/verification gates for long-running software work.
 
-### Cell 0 — Markdown header
-Identifies the v5 build. No code.
+## What To Run
 
-### Cell 1 — Install dependencies
-```python
-!pip install -q boto3 ipywidgets Pillow
+Run the notebook cells in order:
+
+1. Install dependencies.
+2. Configure model, region, mock mode, thinking mode, and budgets.
+3. Launch the chat UI.
+4. Read the quick reference section when you need commands or skills.
+
+The usual production file to open is:
+
+```text
+chat.ipynb
 ```
-Runs once per kernel. Pillow is for `view_image`; ipywidgets is the chat UI.
-SageMaker base images already have boto3; the `-q` flag silences the warning
-when boto3 is up to date.
 
-### Cell 2 — Configure
-Sets:
-- `CONFIG.model_id`     — Bedrock inference profile id (default Haiku 4.5).
-- `CONFIG.region`       — AWS region.
-- `CONFIG.mock_mode`    — `True` for first-run smoke (no real Bedrock). Flip
-                          to `False` to invoke the real model.
-- `CONFIG.thinking_enabled` — PS Issue #4. Default OFF. UI exposes a toggle.
-- `CONFIG.thinking_budget`  — PS Issue #4. 4096 default; UI exposes a slider.
-- `CONFIG.enable_skill_auto_trigger` — v4.9.6 default-OFF. Skills only load
-                          via `/skill activate <name>`.
+The v4-compatible import path is still available:
 
-### Cell 3 — Launch
 ```python
-from entry import create_chat_ui
-from IPython.display import display
-ui = create_chat_ui()
-display(ui.render())
+from sagemaker_agent import CONFIG, BEDROCK_MODELS, create_chat_ui
 ```
-The factory:
-1. Reads CONFIG, builds a `BedrockClient`.
-2. Builds an `Agent` (Phase 11 wrapper around QueryEngine).
-3. Returns `WidgetChatUI` (when ipywidgets is available) or `ConsoleChatUI`.
 
-The widget panel contains:
-- IterationBudget progress bar (PS Issue #2 — visible budget).
-- Thinking-budget toggle + slider (PS Issue #4 — visible thinking).
-- Send / Stop / Clear buttons.
-- Output area for agent text.
+## Important Runtime Files
 
-### Cell 4 — Quick reference (markdown)
-Reminds the user about buttons, PS Issues, skills, console fallback.
+| File or folder | Why it matters |
+|---|---|
+| `chat.ipynb` | Main SageMaker UI. |
+| `entry.py` | Notebook import helper. |
+| `sagemaker_agent.py` | v4-compatible shim. |
+| `agent.py` | Public `Agent` wrapper. |
+| `commands.py` | Slash command dispatcher. |
+| `AGENT_STATUS.md` | Durable project/task status loaded into context. |
+| `memory.md` | Durable memory loaded into context and updated by memory flows. |
+| `core/` | Query engine, compaction, cache, budget, retry, formatting. |
+| `runtime/` | Bedrock client, config, session, tokens, telemetry, snapshots, gates. |
+| `tools/` | Read, write, edit, shell, notebook, task, result replay, skills. |
+| `skills/` | Production skill instructions. |
+| `subagent/` | Subagent spawning, handoff, envelopes, and context. |
+| `ui/` | Notebook widgets and display components. |
+| `security/` | Tool safety and prompt-injection protections. |
 
-## What the smoke test verifies
+## Commands
 
-`tests/integration/test_notebook_smoke.py` exercises:
-- `from entry import Agent, create_chat_ui, CONFIG, BEDROCK_MODELS`.
-- `Agent(client=mock).run("hello")` returns a `QueryResult` with text.
-- `ConsoleChatUI(agent).send("hello world")` returns a non-empty string and
-  consumes ≥ 1 iteration from the budget.
-- `IterationBudgetWidget.render_html()` reflects post-consume state.
-- `ThinkingBudgetWidget.render_html()` shows ON/OFF + budget.
-- `chat.ipynb` is valid JSON with required cells.
+Use slash commands in the chat box.
 
-This is the **Phase 11 acceptance gate** (V5_PLAN.md §Phase 11).
+| Command | What it does |
+|---|---|
+| `/status` | Show current `AGENT_STATUS.md`; `/status init` creates it. |
+| `/save [title]` | Save current session messages and cost snapshot. |
+| `/resume <id>` | Resume a saved session. |
+| `/checkpoint create <name>` | Create a file checkpoint. |
+| `/checkpoint list` | List checkpoints. |
+| `/checkpoint restore <name-or-file> [--yes]` | Preview or restore checkpoint content. |
+| `/cost` | Show token, cache, model, parent/subagent, and cost summary. |
+| `/context` | Show context-pressure diagnostics. |
+| `/verify [full|quick|pre-commit]` | Run verification gates. |
+| `/done [full|quick]` | Run the close gate before trusting completion. |
+| `/dream` | Consolidate `memory.md`. |
+| `/skills` | List available skills. |
+| `/skill use <name>` | Activate a skill. |
+| `/skill clear` | Clear active skills. |
+| `/skill suggestions` | Ask for possible skill matches. |
+| `/skill apply` | Apply a proposed skill patch when one exists. |
+| `/skill reject` | Reject a proposed skill patch. |
+| `/unskill` | Alias for clearing skills. |
+| `/skillify` | Convert repeated process knowledge into a skill candidate. |
+| `/promote-to-skill` | Promote useful knowledge into a skill flow. |
+| `/simplify` | Run simplification/review support. |
+| `/init` | Initialize workspace status/skill structure. |
+| `/init-verifiers` | Initialize verifier support. |
+| `/phase` | Phase/workflow helper. |
+| `/diffs` | Show changed-file context. |
+| `/regression` | Regression-test helper. |
+| `/revert` | Revert helper with safety checks. |
+| `/auth` | Authentication/status helper. |
+| `/quit` or `/q` | Quit/stop chat loop. |
+
+## Skills
+
+Production skills included in the company zip:
+
+| Skill | Use it for |
+|---|---|
+| `batch` | Batch-style work. |
+| `clara` | Structured codebase review methodology. |
+| `debug` | Debugging workflows. |
+| `design` | Design reasoning. |
+| `html` | HTML/design/architecture deliverables. |
+| `init` | Workspace initialization. |
+| `init-verifiers` | Verifier setup. |
+| `reflexion` | Self-review and reflection. |
+| `remember` | Durable memory behavior. |
+| `report` | Report writing. |
+| `review` | Code/design review. |
+| `security-review` | Security review. |
+| `simplify` | Simplification passes. |
+| `skillify` | Turning repeated workflows into skills. |
+| `verify` | Verification gates. |
+
+Use:
+
+```text
+/skills
+/skill use verify
+/skill clear
+```
+
+## Long-Running Software Work
+
+For serious software tasks, use this rhythm:
+
+1. State the goal clearly.
+2. Let v5 maintain `AGENT_STATUS.md`, todos, and `memory.md`.
+3. Use `/save` before long pauses.
+4. Use `/checkpoint create <name>` before risky edits.
+5. Use `/cost` and `/context` during long runs.
+6. Use `/verify` before claiming a task is done.
+7. Use `/done` before trusting final completion.
+8. Use `/resume <id>` after restart or interruption.
+
+This is the same anti-drift principle used to build v5 itself: long work must leave status, tests, logs, review evidence, and checkpoints.
+
+## Cost And Safety
+
+- Start with `CONFIG.mock_mode = True` for a no-AWS smoke test.
+- Set `CONFIG.mock_mode = False` only when Bedrock access and budget are ready.
+- `/cost` shows session usage.
+- `/context` shows context pressure.
+- v5 tracks token/cache/model usage and local cost. AWS Budget checks are still external account-level guardrails.
+- If a tool, model call, or verification gate fails, v5 should fix or stop instead of silently claiming success.
 
 ## Troubleshooting
 
-**"ipywidgets not installed"** — Run cell 1 then restart the kernel. The
-factory falls back to `ConsoleChatUI` if ipywidgets remains missing; you can
-still drive the agent via `ui.send("...")` from a code cell.
+| Problem | What to do |
+|---|---|
+| Widgets do not render | Run the install cell, restart the kernel, or use `ui.send("message")`. |
+| Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
+| Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
+| Context feels too large | Use `/context`; compaction and result replay should help. |
+| Long task got interrupted | Use `/resume <id>`, read `AGENT_STATUS.md`, and continue from saved status. |
+| Need rollback | Use `/checkpoint list` and `/checkpoint restore ...` with preview first. |
 
-**"Bedrock access denied"** — Set `CONFIG.mock_mode = True` in cell 2 to
-sanity-check the loop without hitting Bedrock. Then restore `mock_mode =
-False` and verify your IAM role has `bedrock-runtime:InvokeModel`.
+## Production Evidence
 
-**"Budget exhausted"** — `Agent.budget` shares the IterationBudget with
-sub-agents. Either bump `CONFIG.max_iteration_budget` (Phase 1 config) or
-press Clear (which optionally resets the budget if you pass
-`reset_budget=True`).
+The production zip intentionally excludes `_status`, tests, audit logs, and review artifacts. Those live in the repository, not the company runtime zip.
 
-## What's NOT in chat.ipynb (deferred)
+Final evidence summary:
 
-- Full v4 chat-display HTML rendering (Phase 13 polish).
-- Compact / clean buttons (microcompact wires later if at all).
-- Model-switcher mid-session (CONFIG.model_id is static; restart cell 2).
-- Session auto-restore (use `runtime.session.SessionManager` from a code
-  cell if needed).
-- `/skill apply` slash command (Phase 11 wires `skill_propose_patch`'s
-  apply path through an explicit user click; not yet shipped).
+- Final Claude production-readiness review: `APPROVE_PRODUCTION_READY`.
+- R-tier matrix: 42 rows, with 28 `READY` and 14 `DISPOSITION_OK`.
+- Final R-tier gate: passed.
+- Local recorded R-tier Bedrock spend: `$1.6757`.
+- Final test review: `compact_v5/_status/PS_TEST_REVIEW_FINAL.md`.
+
+## What Is Not In The Runtime Zip
+
+The company ship zip is intentionally small. It does not include:
+
+- tests;
+- `_status` audit evidence;
+- historical scan reports;
+- review logs;
+- local sessions;
+- audit logs;
+- bulky optional skill reference examples.
+
+Those files stay in the repository for traceability. The zip contains only the runtime package and the user-facing notebook guide.
