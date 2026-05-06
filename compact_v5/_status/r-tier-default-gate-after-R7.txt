@@ -1,0 +1,9 @@
+R-tier gate FAILED:
+  - R11: missing phase A prompt in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R11: missing phase A review in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R11: missing AWS/raw call log in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R11: missing phase C post-pass review in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R11: missing telemetry.json in D:\Github\sagemaker-coding-agent\compact_v5\_status
+  - R11: missing quality.md in D:\Github\sagemaker-coding-agent\compact_v5\_status
+  - R11: missing row in D:\Github\sagemaker-coding-agent\compact_v5\_status\r_tier_review_log.md
+  - R11: missing JSONL metrics row in D:\Github\sagemaker-coding-agent\compact_v5\_status\r_tier_metrics.jsonl

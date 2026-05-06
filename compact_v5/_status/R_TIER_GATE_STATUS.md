@@ -146,6 +146,11 @@ Completed and pushed:
   telemetry showed zero tool calls and zero failure-loop events. A low,
   non-blocking `/dream` output-shape polish follow-up remains tracked in
   `R_TIER_PROCESS_QUALITY_FOLLOWUPS.md`.
+- R7: call1 Phase A returned `APPROVE_FOR_AWS_CALL`, AWS Budget was healthy
+  before spend, the same Agent session made a live Haiku 4.5 AU -> Sonnet 4.5
+  AU Bedrock switch, Sonnet recalled `R7-CONTEXT-VIOLET-913`, numeric
+  cache/model usage evidence was recorded, cost was `$0.0175`, Claude Phase C
+  returned `GENUINE_PASS`, and `r_tier_gate.py --test R7` passed.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -342,5 +347,5 @@ R18-E13, R18-E14, R18-E15, and R19-U8 are `DISPOSITION_OK` as of 2026-05-06:
   require fake raw logs, telemetry, or quality files.
 - Claude Phase C iter2 returned `DISPOSITION_OK`.
 - Per-test gates passed for all 14 disposition rows.
-- The default final gate now fails only on the real-AWS rows still outstanding:
-  R7 and R11.
+- The default final gate now fails only on the real-AWS row still outstanding:
+  R11.

@@ -411,8 +411,11 @@ Stop AWS execution and return to implementation/review if:
 - R6 and R19-U9 were bundled as planned because both rows exercise the same
   production `/dream` consolidation output. Phase A approved the bundle, AWS
   Budget was healthy, call1 passed at `$0.0059` total shared spend, Claude
-  Phase C returned `GENUINE_PASS`, and both per-test gates passed. The only
-  rows still requiring real AWS evidence are R7 and R11.
+  Phase C returned `GENUINE_PASS`, and both per-test gates passed.
+- R7 call1 then proved a live same-session Haiku -> Sonnet model switch with
+  context preservation and numeric cache/model-switch evidence. Claude Phase C
+  returned `GENUINE_PASS`, and the per-test gate passed. The only row still
+  requiring real AWS evidence is R11.
 
 ## Expected Confidence
 

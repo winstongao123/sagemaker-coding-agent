@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "test": "R7",
+  "call": 1,
+  "audit_log_path": "compact_v5\\_status\\r_tier_runtime\\R7-call1-audit",
+  "audit_log_paths": [
+    "compact_v5\\_status\\r_tier_runtime\\R7-call1-audit\\2026-05-06_77b9f68b8bd6.jsonl"
+  ],
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R7-aws-call1.log",
+  "side_channel_path": "compact_v5\\_status\\r-tier-R7-aws-call1-side-metrics.json",
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [],
+      "wallclock_s": 1.672,
+      "tokens_in": 3160,
+      "tokens_out": 57,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 3212,
+      "cache_hit_pct": 0.0,
+      "agent_text_chars": 152,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 0,
+    "REPEATED_calls": 0,
+    "per_tool": {},
+    "unique_calls": 0
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "model_switch_events": [
+    {
+      "timestamp": "2026-05-06T13:49:39.272774",
+      "from": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "to": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "logical_turn": 2,
+      "path": "same_agent_session",
+      "result_summary": "R7 same-session model switch: au.anthropic.claude-haiku-4-5-20251001-v1:0 -> au.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    }
+  ],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": 0.0,
+    "last_5_turns_avg_hit_pct": 0.0,
+    "session_avg_hit_pct": 0.0
+  },
+  "agent_attribution": {
+    "parent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 3212,
+      "cost_usd": 0.0
+    },
+    "subagents": {},
+    "reviewers": {}
+  },
+  "failure_loop_events": [],
+  "outcome": {
+    "completed": true,
+    "stop_reason": null,
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 3160,
+    "tokens_out_total": 57,
+    "cost_usd": 0.0175,
+    "wallclock_s_total": 3.23,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 3,
+  "turns_seen": 1
+}

@@ -551,4 +551,8 @@ R6/R19-U9 cleanup resolution:
   `$0.0029` to R19-U9 in the local ledger; no diagnostic spend was hidden.
 - Claude Phase C returned `GENUINE_PASS`; `r_tier_gate.py --test R6` and
   `r_tier_gate.py --test R19-U9` passed.
-- Remaining real-AWS rows before final review are R7 and R11.
+- R7 call1 passed after Claude Phase A approval and healthy budget check. The
+  same Agent session made a live Haiku -> Sonnet Bedrock switch, preserved
+  `R7-CONTEXT-VIOLET-913`, recorded numeric cache/model-switch evidence, Claude
+  Phase C returned `GENUINE_PASS`, and `r_tier_gate.py --test R7` passed.
+- Remaining real-AWS row before final review is R11.
