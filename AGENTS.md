@@ -50,6 +50,12 @@ Do not rely on chat memory, terminal scrollback, or prior worker claims.
   and a concise evidence/navigation summary. Claude must locate and read the
   relevant repository files itself with read-only tools before issuing a
   verdict.
+- v4 is a reference baseline, not a ceiling. When comparing v5 against v4,
+  preserve v5 architecture and improvements unless there is concrete evidence
+  that a v4 behavior is still required. Any UI/parity change must be checked
+  against the v5 architecture, current production-readiness plan, tests, and
+  Claude review before editing production code. The goal is v5 > v4 overall,
+  including UI, not a blind rollback to v4 internals.
 
 ## Required v5 Entrypoints
 

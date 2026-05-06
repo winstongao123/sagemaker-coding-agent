@@ -377,6 +377,25 @@ work like this audit loop: durable status/todos/memory, subagent/reviewer
 coordination, saved review prompts/logs/verdicts, token/cost/cache telemetry,
 checkpoint/resume, and an enforced verify/done gate.
 
+## v4 Comparison Guardrail
+
+v4 is a reference baseline, not the target ceiling. Do not overwrite good v5
+architecture or v5 production-readiness improvements just to make code look
+more like v4. For every v4-vs-v5 parity issue, classify it first:
+
+- `V5_BETTER_KEEP`: v5 intentionally improves or replaces v4 behavior.
+- `V4_REQUIRED_PORT`: v4 behavior is still user-visible and should be restored
+  or adapted.
+- `DOC_STALE_ONLY`: docs are stale but runtime behavior is already correct.
+- `DESIGN_REVIEW_NEEDED`: changing code could conflict with v5 architecture,
+  so stop for Claude review before editing production files.
+
+Any UI/parity change must be checked against the current v5 architecture,
+software-builder plan, tests, and Claude review before production-code edits.
+The goal is v5 > v4 overall, including UI: keep v4's good user experience,
+while preserving v5's stronger long-running coding, review, memory, telemetry,
+subagent, and no-drift mechanisms.
+
 ## Block Order
 
 This is the active redo order. It is not the original build order from
