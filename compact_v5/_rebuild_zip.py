@@ -34,6 +34,8 @@ Dropped (dev-only artefacts):
 - __pycache__/, .pytest_cache/, .snapshots/, .ipynb_checkpoints/
 - _rebuild_zip.py + verify_ship_zip.py (meta tools — repo-only)
 - powerbi-dashboard variants (not in v5 base)
+- bulky optional skill reference/example assets under skills/html/references/
+- Clara long-form review prompt pack/reference notes; keep skills/clara/SKILL.md
 """
 
 from __future__ import annotations
@@ -64,6 +66,14 @@ EXCLUDE_DIR_PATTERNS = []
 EXCLUDE_REL_PATHS = {
     "MAIN/agent/tests",   # entire tests dir — dev only
     "tests",              # also catches it after the SRC_DIR strip
+    "MAIN/agent/skills/html/references",
+    "skills/html/references",
+    "MAIN/agent/skills/clara/prompts",
+    "skills/clara/prompts",
+    "MAIN/agent/skills/clara/FULL_REVIEW.md",
+    "skills/clara/FULL_REVIEW.md",
+    "MAIN/agent/skills/clara/V4_NOTES.md",
+    "skills/clara/V4_NOTES.md",
 }
 EXCLUDE_FILE_PATTERNS = [
     "*.pyc",
@@ -125,6 +135,8 @@ def main():
                     continue
                 abs_p = os.path.join(root, f)
                 rel_p = _archive_name(abs_p)
+                if rel_p in EXCLUDE_REL_PATHS:
+                    continue
                 z.write(abs_p, rel_p)
                 files_added += 1
                 total_raw += os.path.getsize(abs_p)
