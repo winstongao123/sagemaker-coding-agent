@@ -404,6 +404,7 @@ class QueryEngine:
         system_prompt: str,
         tools: List[Any],
         plan_mode: bool = False,
+        auto_compact_enabled: bool = True,
         output_fn: Callable[[str], None] = print,
         thinking_enabled: bool = False,
         thinking_budget: int = 4096,
@@ -688,6 +689,8 @@ class QueryEngine:
                 from core.compactor import Compactor
                 from runtime.config import CONFIG as _CFG_MC
                 if (
+                    auto_compact_enabled
+                    and
                     self.agent_kind == "parent"
                     and self._last_api_call_time > 0
                     and Compactor.should_auto_compact(query_source)
@@ -903,6 +906,8 @@ class QueryEngine:
                 from runtime.config import CONFIG as _CFG_AC
                 _max_ctx = getattr(_CFG_AC, "context_max_tokens", 200_000)
                 if (
+                    auto_compact_enabled
+                    and
                     Compactor.should_auto_compact(query_source)
                     and Compactor.should_compact(self.messages, _max_ctx)
                 ):

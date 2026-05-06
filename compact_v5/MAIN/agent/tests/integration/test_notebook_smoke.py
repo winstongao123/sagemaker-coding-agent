@@ -400,3 +400,260 @@ def test_chat_md_companion_exists():
     # Should reference the cell-0 import line + budget/thinking widgets
     low = text.lower()
     assert "chat.ipynb" in low or "notebook" in low
+
+
+def _v4_widget_ui_or_skip():
+    try:
+        import ipywidgets  # noqa: F401
+    except Exception:
+        pytest.skip("ipywidgets not available")
+    from agent import Agent
+    from runtime.bedrock_client import BedrockClient
+    from ui.chat_ui import V4WidgetChatUI
+
+    client = BedrockClient(model_id="x", region="us-east-1", mock_mode=True)
+    return V4WidgetChatUI(Agent(client=client))
+
+
+def test_v4_style_ui_plan_and_auto_compact_toggles_drive_agent_state():
+    ui = _v4_widget_ui_or_skip()
+
+    ui._plan_mode.value = True
+    assert ui.agent.plan_mode is True
+    assert "Plan: ON" in ui._mode_html.value
+
+    ui._auto_compact.value = False
+    assert ui.agent.auto_compact_enabled is False
+    assert "Auto-Compact: OFF" in ui._mode_html.value
+
+
+def test_v4_style_ui_subagent_preferences_reach_dynamic_prompt(monkeypatch):
+    ui = _v4_widget_ui_or_skip()
+    captured = {}
+
+    def fake_engine_run(**kwargs):
+        captured.update(kwargs)
+        from core.query_engine import QueryResult
+        return QueryResult(text="ok", messages=[], stop_reason="end_turn", turns_used=0)
+
+    ui.agent._engine.run = fake_engine_run
+    ui._subagent_toggle.value = True
+    ui._explorer_dropdown.value = "default"
+    ui.agent.run("use helpers", tools=[])
+
+    assert "Notebook UI Sub-Agent Preferences" in captured["system_prompt"]
+    assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
+    assert "- explorer: default" in captured["system_prompt"]
+    assert "- worker: worker" in captured["system_prompt"]
+    assert "- reviewer: reviewer" in captured["system_prompt"]
+
+
+def test_v4_style_ui_subagent_preferences_not_injected_when_disabled():
+    ui = _v4_widget_ui_or_skip()
+    captured = {}
+
+    def fake_engine_run(**kwargs):
+        captured.update(kwargs)
+        from core.query_engine import QueryResult
+        return QueryResult(text="ok", messages=[], stop_reason="end_turn", turns_used=0)
+
+    ui.agent._engine.run = fake_engine_run
+    ui._subagent_toggle.value = False
+    ui.agent.run("do normal work", tools=[])
+
+    assert "Notebook UI Sub-Agent Preferences" not in captured["system_prompt"]
+    assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
+
+
+def test_v4_style_ui_state_blocks_and_subagent_preferences_keep_one_boundary(monkeypatch):
+    import importlib
+    from agent import Agent
+    from runtime.bedrock_client import BedrockClient
+
+    captured = {}
+    agent_mod = importlib.import_module(Agent.__module__)
+    monkeypatch.setattr(
+        agent_mod,
+        "_load_agent_state_context_blocks",
+        lambda: ["## Handoff: AGENT_STATUS\n\nphase: ui test"],
+    )
+    agent = Agent(
+        client=BedrockClient(model_id="x", region="us-east-1", mock_mode=True),
+    )
+    agent.set_ui_subagent_preferences(
+        enabled=True,
+        explorer="explorer",
+        worker="worker",
+        reviewer="reviewer",
+    )
+
+    def fake_engine_run(**kwargs):
+        captured.update(kwargs)
+        from core.query_engine import QueryResult
+        return QueryResult(text="ok", messages=[], stop_reason="end_turn", turns_used=0)
+
+    agent._engine.run = fake_engine_run
+    agent.run("go", tools=[])
+
+    assert "Notebook UI Sub-Agent Preferences" in captured["system_prompt"]
+    assert "## Handoff: AGENT_STATUS" in captured["system_prompt"]
+    assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
+
+
+def test_v4_style_ui_custom_prompt_without_boundary_gets_one_boundary():
+    from agent import Agent
+    from runtime.bedrock_client import BedrockClient
+
+    captured = {}
+    agent = Agent(
+        client=BedrockClient(model_id="x", region="us-east-1", mock_mode=True),
+        system_prompt="custom system prompt without boundary",
+    )
+    agent.set_ui_subagent_preferences(
+        enabled=True,
+        explorer="explorer",
+        worker="worker",
+        reviewer="reviewer",
+    )
+
+    def fake_engine_run(**kwargs):
+        captured.update(kwargs)
+        from core.query_engine import QueryResult
+        return QueryResult(text="ok", messages=[], stop_reason="end_turn", turns_used=0)
+
+    agent._engine.run = fake_engine_run
+    agent.run("go", tools=[])
+
+    assert "Notebook UI Sub-Agent Preferences" in captured["system_prompt"]
+    assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
+
+
+def test_v4_style_ui_model_dropdown_updates_config_and_live_client(monkeypatch):
+    ui = _v4_widget_ui_or_skip()
+    from runtime.config import CONFIG
+
+    monkeypatch.setattr(CONFIG, "model_id", "before")
+    target = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+    ui._model_dropdown.value = target
+
+    assert CONFIG.model_id == target
+    assert ui.agent.client.model_id == target
+
+
+def test_v4_style_ui_removes_dead_approval_and_ask_user_placeholders(monkeypatch):
+    ui = _v4_widget_ui_or_skip()
+    from runtime.config import CONFIG
+    monkeypatch.setattr(CONFIG, "require_tool_approval", True)
+
+    assert not hasattr(ui, "_approval_box")
+    assert not hasattr(ui, "_ask_user_box")
+    # Real approval UI remains separate in ui.approval_dialog and the visible
+    # Require Approval checkbox still drives CONFIG.require_tool_approval.
+    ui._approval_toggle.value = False
+    assert CONFIG.require_tool_approval is False
+
+
+def test_v4_style_ui_clean_removes_traces_but_keeps_sessions(tmp_path, monkeypatch):
+    ui = _v4_widget_ui_or_skip()
+    from runtime.config import CONFIG
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "audit_dir", str(tmp_path / "audit_logs"))
+    for path in (
+        tmp_path / "audit_logs",
+        tmp_path / ".snapshots",
+        tmp_path / ".code_index",
+        tmp_path / "truncated_outputs",
+        tmp_path / ".sageagent_state",
+        tmp_path / ".sageagent_sessions",
+    ):
+        path.mkdir()
+    (tmp_path / ".exec_budget.json").write_text("{}", encoding="utf-8")
+
+    ui._on_clean(None)
+
+    assert not (tmp_path / "audit_logs").exists()
+    assert not (tmp_path / ".snapshots").exists()
+    assert not (tmp_path / ".exec_budget.json").exists()
+    assert (tmp_path / ".sageagent_sessions").exists()
+    assert any("sessions kept" in msg for _role, msg, _ts in ui._messages)
+
+
+def test_v4_style_ui_compact_button_uses_compactor_and_replaces_messages(monkeypatch):
+    ui = _v4_widget_ui_or_skip()
+    from core.compactor import Compactor
+
+    ui.agent.replace_messages([
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "second"},
+    ])
+    calls = {"compact": 0, "replace": 0}
+
+    monkeypatch.setattr(
+        Compactor,
+        "flush_memories_before_compact",
+        classmethod(lambda cls, messages, **_kwargs: None),
+    )
+    monkeypatch.setattr(
+        Compactor,
+        "prune_tool_outputs",
+        classmethod(lambda cls, messages, max_tokens: (list(messages), 0)),
+    )
+    monkeypatch.setattr(
+        Compactor,
+        "create_llm_summary",
+        classmethod(lambda cls, client, messages: "summary"),
+    )
+
+    def fake_compact(cls, messages, summary):
+        calls["compact"] += 1
+        return [{"role": "user", "content": f"compacted:{summary}"}]
+
+    monkeypatch.setattr(Compactor, "compact", classmethod(fake_compact))
+    monkeypatch.setattr(
+        Compactor,
+        "create_post_compact_file_attachments",
+        classmethod(lambda cls: []),
+    )
+    monkeypatch.setattr(
+        Compactor,
+        "create_skill_attachment_if_needed",
+        classmethod(lambda cls, skill_manager=None: None),
+    )
+    monkeypatch.setattr(
+        Compactor,
+        "run_post_compact_cleanup",
+        classmethod(lambda cls, skill_manager=None: {}),
+    )
+
+    original_replace = ui.agent.replace_messages
+
+    def tracked_replace(messages):
+        calls["replace"] += 1
+        original_replace(messages)
+
+    ui.agent.replace_messages = tracked_replace
+    ui._on_compact(None)
+
+    assert calls == {"compact": 1, "replace": 1}
+    assert ui.agent.messages == [{"role": "user", "content": "compacted:summary"}]
+    assert any("Compacted:" in msg for _role, msg, _ts in ui._messages)
+
+
+def test_v4_style_ui_session_buttons_dispatch_expected_commands(monkeypatch):
+    ui = _v4_widget_ui_or_skip()
+    commands = []
+
+    monkeypatch.setattr(
+        ui,
+        "_dispatch_ui_command",
+        lambda command: commands.append(command),
+    )
+
+    ui._session_name.value = "demo"
+    ui._save_btn.click()
+    ui._session_dropdown.options = [("demo", "session-1")]
+    ui._session_dropdown.value = "session-1"
+    ui._load_btn.click()
+
+    assert commands == ["/save demo", "/resume session-1"]

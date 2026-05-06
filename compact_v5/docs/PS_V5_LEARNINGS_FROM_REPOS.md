@@ -370,11 +370,11 @@
 
 ## Phase 11 — Notebook UX + entry + thinking/budget UI
 
-### From v4: chat.ipynb + create_chat_ui (minimal MVP port)
+### From v4: chat.ipynb + create_chat_ui (v4-style UI restored on v5 architecture)
 - **Source**: v4 `chat.ipynb` (5 cells) + `create_chat_ui` at sagemaker_agent.py:9735 (~2000 LOC).
-- **Adopted (ADAPT)**: `chat.ipynb` (4 cells, install/configure/launch/quick-ref) + `ui/chat_ui.py` (~150 LOC factory + WidgetChatUI + ConsoleChatUI) + `agent/__init__.py` (Agent wrapper class).
-- **Adaptation**: v4's massive HTML rendering / model-switcher / AWS-scope toggle / session-restore deferred. Phase 11 ships the MVP that the smoke gate validates.
-- **Better than v4**: testable in isolation; ConsoleChatUI fallback so headless environments still load the factory.
+- **Adopted (ADAPT)**: `chat.ipynb` + `ui/chat_ui.py` (`V4WidgetChatUI` plus `ConsoleChatUI`) + `agent.py` (Agent wrapper class).
+- **Adaptation**: final v5.0.1 keeps v4's dark notebook muscle-memory UI while preserving v5's modular runtime. The model selector, session controls, Plan Mode, approval toggle, thinking budget, temperature, cost budget, Auto-Compact, Compact, Clean, and sub-agent preference panel are wired to v5 runtime state or explicit v5-safe actions.
+- **Better than v4**: the UI is still testable in isolation; `ConsoleChatUI` keeps headless/CI environments working; v5's Plan Mode and Auto-Compact toggles drive the modular `Agent` / `QueryEngine` instead of hidden monolith globals; the UI deliberately avoids duplicate dead approval/ask-user boxes because v5 has real `PermissionDialog` and `ask_user` tool surfaces.
 
 ### PS Issues SHIPPED in Phase 11
 
@@ -448,6 +448,6 @@ This section consolidates every place v5 is better than the source repo, for qui
 | **10** | **Codex review (Phase 10)** | **runtime integration locked by test, not just by docs** | **Codex first pass caught that the Hermes filter was dead code (no runtime wiring). Post-fix: `test_query_engine_appends_relevant_skill_reminder_to_user_turn` is a BLOCKER lock — any future regression that decouples skill_manager from QueryEngine breaks CI.** |
 | **11** | **v4** | **PS Issue #2 visible IterationBudget RESOLVED** | **v4 only logs `[Budget exhausted...]` at the wall. v5 ships `IterationBudgetWidget` with color cue (info → warning at 70% → danger at 90%) — shared across parent + sub-agents.** |
 | **11** | **v4** | **PS Issue #4 visible thinking budget RESOLVED** | **v4 sends thinking config but never shows the operator the budget. v5 ships Checkbox + IntSlider with live observer routing back into agent state.** |
-| **11** | **v4** | **smaller, testable chat UI** | **~150 LOC vs v4's ~2000 LOC. Each piece (Agent, factory, widgets, notebook) testable in isolation; v4's UI is impossible to test without a real Jupyter.** |
+| **11** | **v4** | **v4-style UI on testable v5 architecture** | **Restores the v4 dark notebook surface while keeping modular Agent/QueryEngine/widgets and lock tests. v4's UI was one large monolith; v5 keeps the familiar controls but wires them to smaller, reviewable runtime surfaces.** |
 | **11** | **v4** | **ConsoleChatUI fallback for headless / CI environments** | **v4 requires Jupyter + ipywidgets to import. v5 falls back gracefully — `_IPYWIDGETS_OK` flag + ConsoleChatUI lets tests + SageMaker base images still exercise the factory.** |
 | **11** | **v4** | **lock test for CONFIG → runtime threading** | **Codex Phase-11 caught a regression where `CONFIG.max_turns` + `CONFIG.max_iteration_budget` weren't flowing from the notebook into Agent. `test_lazy_factory_threads_max_turns_and_budget` ensures any future regression breaks CI.** |

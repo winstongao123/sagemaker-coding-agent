@@ -435,8 +435,8 @@ The single highest-leverage token-saving Runnable adoption. v4 ships every tool'
 
 ### 11.1 Notebook UX is now its own package surface
 - **v4**: `create_chat_ui` is ~2000 LOC inline at sagemaker_agent.py:9735. Mixes session state, HTML rendering, model-switcher, mock-mode toggle, AWS-scope toggle, full chat-display rendering, todo list, status bar — all in one function.
-- **v5**: split into `agent/__init__.py` (Agent wrapper class) + `entry.py` (cell-0 imports) + `ui/chat_ui.py` (~150 LOC factory) + `ui/widgets.py` (PS Issue #2/#4 widgets) + `chat.ipynb` (4 cells) + `chat.md` (companion). Each piece independently testable.
-- **Behavior delta**: v5 Phase 11 ships an MVP; full v4 chat-display HTML rendering is deferred to Phase 13 polish. Send / Stop / Clear all work; budget bar + thinking widget all work; skill activation still works through the Phase 10 surface.
+- **v5**: split into `agent.py` (Agent wrapper class) + `entry.py` (cell-0 imports) + `ui/chat_ui.py` (v4-style notebook surface plus console fallback) + `ui/widgets.py` (PS Issue #2/#4 widgets) + `chat.ipynb` + `chat.md` (companion). Each piece is independently testable.
+- **Behavior delta**: final v5.0.1 restores the v4-style dark notebook surface while preserving v5 architecture. Send / Stop / Clear work; Save / Load / New session controls work; model, thinking, temperature, budget, approval, Plan Mode, Auto-Compact, Compact, Clean, and sub-agent preference controls are wired into v5 runtime surfaces or explicit v5-safe actions. Skill activation still works through the Phase 10 command/tool surface.
 
 ### 11.2 PS Issue #2 — IterationBudget is now visible (RESOLVED)
 - **v4**: silent until exhausted. The agent prints `[Budget exhausted: N/M iterations used]` once you hit the ceiling — no warning during the burn-down.
@@ -459,13 +459,13 @@ The single highest-leverage token-saving Runnable adoption. v4 ships every tool'
 ### 11.6 Acceptance: hello-world via mock Bedrock
 - **v5 Phase 11**: `tests/integration/test_notebook_smoke.py::test_hello_world_turn_via_console_ui` — the Phase 11 acceptance gate. Builds a mock-mode `BedrockClient`, wraps in `Agent`, drives `ConsoleChatUI.send("hello world")`, asserts non-empty text return + budget consumption ≥ 1.
 
-### 11.7 What's deliberately NOT in Phase 11
-- Full v4 chat-display HTML rendering (deferred to Phase 13 polish).
-- Compact / clean buttons.
-- Model-switcher widget (CONFIG.model_id is static; restart cell 2).
-- Session auto-restore on launch.
-- `/skill apply` slash command (Phase 10 deferred to here; deferred again — Phase 11 lands the skill manager + tools but not the explicit user-click apply UI).
-- Real SnapshotManager + AuditLogger singleton wiring (Phase 10 best-effort backup is sufficient for now).
+### 11.7 Final v5.0.1 UI parity note
+- Full v4-style chat-display HTML rendering is no longer deferred; `V4WidgetChatUI` is the default ipywidgets path when ipywidgets is available.
+- Compact / Clean buttons are present. Compact uses the v5 `Compactor` path; Clean removes local non-session traces and keeps sessions.
+- Model switching is present and updates both `CONFIG.model_id` and the live Bedrock client.
+- Session Save / Load / New controls are present and use the v5 slash-command/session surfaces.
+- Plan Mode and Auto-Compact controls are present and wired to the v5 `Agent` / `QueryEngine`.
+- The UI does not reimplement a second approval or ask-user modal because v5 already has real per-tool `PermissionDialog` approval and the `ask_user` tool surface. This avoids dead duplicate UI.
 
 ---
 

@@ -319,10 +319,13 @@ class V4WidgetChatUI(WidgetChatUI):
         self._subagent_toggle = widgets.ToggleButton(value=False, description="Sub-Agents", icon="cogs", layout=widgets.Layout(width="180px", height="28px"))
         self._plan_mode = widgets.Checkbox(value=False, description="Plan Mode", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
         self._approval_toggle = widgets.Checkbox(value=bool(getattr(CONFIG, "require_tool_approval", True)), description="Require Approval", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
+        self._explorer_dropdown = widgets.Dropdown(description="Explorer:", options=[("Default", "default"), ("Explorer", "explorer")], value="explorer", layout=widgets.Layout(width="320px"))
+        self._worker_dropdown = widgets.Dropdown(description="Worker:", options=[("Default", "default"), ("Worker", "worker")], value="worker", layout=widgets.Layout(width="320px"))
+        self._reviewer_dropdown = widgets.Dropdown(description="Reviewer:", options=[("Default", "default"), ("Reviewer", "reviewer")], value="reviewer", layout=widgets.Layout(width="320px"))
         self._subagent_panel = widgets.VBox([
-            widgets.Dropdown(description="Explorer:", options=[("Default", "default"), ("Explorer", "explorer")], value="explorer", layout=widgets.Layout(width="320px")),
-            widgets.Dropdown(description="Worker:", options=[("Default", "default"), ("Worker", "worker")], value="worker", layout=widgets.Layout(width="320px")),
-            widgets.Dropdown(description="Reviewer:", options=[("Default", "default"), ("Reviewer", "reviewer")], value="reviewer", layout=widgets.Layout(width="320px")),
+            self._explorer_dropdown,
+            self._worker_dropdown,
+            self._reviewer_dropdown,
         ])
         self._subagent_panel.layout.display = "none"
 
@@ -339,20 +342,12 @@ class V4WidgetChatUI(WidgetChatUI):
         self._stop_btn = widgets.Button(description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(display="none"))
         self._clear_btn = widgets.Button(description="Clear", button_style="warning", icon="trash")
         self._compact_btn = widgets.Button(description="Compact", button_style="", icon="compress")
-        self._clean_btn = widgets.Button(description="Clean", button_style="", icon="eraser")
-
-        self._approval_box = widgets.VBox([widgets.Output(), widgets.HBox([
-            widgets.Button(description="Approve", button_style="success", icon="check"),
-            widgets.Button(description="Always", button_style="info", icon="thumbs-up"),
-            widgets.Button(description="Deny", button_style="danger", icon="times"),
-        ])])
-        self._approval_box.layout.display = "none"
-        self._ask_user_box = widgets.VBox([widgets.Output(), widgets.HBox([
-            widgets.Text(placeholder="Type your answer...", layout=widgets.Layout(width="80%")),
-            widgets.Button(description="Submit", button_style="success", icon="check"),
-            widgets.Button(description="Skip", button_style="warning", icon="forward"),
-        ])])
-        self._ask_user_box.layout.display = "none"
+        self._clean_btn = widgets.Button(
+            description="Clean",
+            button_style="",
+            icon="eraser",
+            tooltip="Remove local traces; saved sessions are kept.",
+        )
 
         self._wire_events()
         self._build_layout(widgets)
@@ -362,8 +357,8 @@ class V4WidgetChatUI(WidgetChatUI):
         self._stop_btn.on_click(self._on_stop)
         self._clear_btn.on_click(self._on_clear)
         self._save_btn.on_click(lambda _b: self._dispatch_ui_command("/save " + self._session_name.value.strip() if self._session_name.value.strip() else "/save"))
-        self._compact_btn.on_click(lambda _b: self._dispatch_ui_command("/compact"))
-        self._clean_btn.on_click(lambda _b: self._dispatch_ui_command("/checkpoint list"))
+        self._compact_btn.on_click(self._on_compact)
+        self._clean_btn.on_click(self._on_clean)
         self._load_btn.on_click(lambda _b: self._dispatch_ui_command(f"/resume {self._session_dropdown.value}") if self._session_dropdown.value else None)
         self._new_btn.on_click(self._on_new)
         self._model_dropdown.observe(self._on_model_change, names="value")
@@ -373,8 +368,18 @@ class V4WidgetChatUI(WidgetChatUI):
         self._budget_input.observe(self._on_budget_change, names="value")
         self._chat_height_slider.observe(self._on_chat_height_change, names="value")
         self._dark_toggle.observe(self._on_dark_mode_change, names="value")
+        self._plan_mode.observe(self._on_plan_mode_change, names="value")
         self._approval_toggle.observe(self._on_approval_change, names="value")
-        self._subagent_toggle.observe(lambda ch: setattr(self._subagent_panel.layout, "display", "" if ch["new"] else "none"), names="value")
+        self._auto_compact.observe(self._on_auto_compact_change, names="value")
+        self._subagent_toggle.observe(self._on_subagent_preferences_change, names="value")
+        self._explorer_dropdown.observe(self._on_subagent_preferences_change, names="value")
+        self._worker_dropdown.observe(self._on_subagent_preferences_change, names="value")
+        self._reviewer_dropdown.observe(self._on_subagent_preferences_change, names="value")
+        self._on_plan_mode_change({"new": self._plan_mode.value})
+        self._on_auto_compact_change({"new": self._auto_compact.value})
+        # Seed the Agent with explicit disabled preferences so later toggles are
+        # a normal state update, not a special first-use path.
+        self._on_subagent_preferences_change({"new": self._subagent_toggle.value})
 
     def _build_layout(self, widgets: Any) -> None:
         style = widgets.HTML("""
@@ -434,7 +439,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._render_header()
         self._render_chat()
         self._render_status()
-        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._approval_box, self._ask_user_box, self._input, action_row, sep4, self._tokens_html, self._mode_html])
+        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._input, action_row, sep4, self._tokens_html, self._mode_html])
         self._panel.add_class("sageagent-v4-dark")
 
     def _refresh_sessions(self) -> None:
@@ -548,6 +553,8 @@ class V4WidgetChatUI(WidgetChatUI):
             f"| Thinking: {thinking_state} (budget {int(self._thinking_budget_slider.value)}) "
             f"| Auth: {'ON' if auth else 'OFF'} "
             f"| Approval: {'ON' if self._approval_toggle.value else 'OFF'} "
+            f"| Auto-Compact: {'ON' if self._auto_compact.value else 'OFF'} "
+            f"| Sub-Agents: {'ON' if self._subagent_toggle.value else 'OFF'} "
             f"| Skills: {skills_count} | Exec: {exec_mode} "
             f"| Iter: {iter_used}/{iter_total}"
             "</span>"
@@ -620,6 +627,84 @@ class V4WidgetChatUI(WidgetChatUI):
         self._render_chat()
         self._render_status()
 
+    def _on_compact(self, _btn) -> None:
+        messages = list(getattr(self.agent, "messages", []) or [])
+        if not messages:
+            self._append_message("system", "No conversation to compact.")
+            return
+        self._status_html.value = "<span style='color:#ff9800'><b>* Compacting</b></span>"
+        try:
+            from core.compactor import Compactor
+            from runtime.config import CONFIG
+
+            max_context = int(getattr(CONFIG, "context_max_tokens", 200_000) or 200_000)
+            before_count = len(messages)
+            before_tokens = Compactor.estimate_tokens(messages)
+            Compactor.flush_memories_before_compact(messages)
+            pruned, saved = Compactor.prune_tool_outputs(messages, max_context)
+            summary = Compactor.create_llm_summary(getattr(self.agent, "client", None), pruned)
+            if not summary:
+                summary = "Conversation compacted manually from the notebook UI. Continue from the preserved recent context."
+            compacted = Compactor.compact(pruned, summary)
+            post_blocks = []
+            post_blocks.extend(Compactor.create_post_compact_file_attachments())
+            skill_block = Compactor.create_skill_attachment_if_needed(getattr(self.agent, "skill_manager", None))
+            if skill_block is not None:
+                post_blocks.append(skill_block)
+            if post_blocks:
+                compacted.append({"role": "user", "content": post_blocks, "is_meta": True})
+            Compactor.reset_retry_counters()
+            Compactor.suppress_compact_warning_state()
+            Compactor.run_post_compact_cleanup(skill_manager=getattr(self.agent, "skill_manager", None))
+            self.agent.replace_messages(compacted)
+            after_tokens = Compactor.estimate_tokens(compacted)
+            parts = [f"Compacted: {before_count} -> {len(compacted)} messages."]
+            if saved:
+                parts.append(f"Pruned about {saved:,} tool-output tokens first.")
+            parts.append(f"Estimated context: {before_tokens:,} -> {after_tokens:,} tokens.")
+            self._append_message("system", " ".join(parts))
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("[chat-ui] manual compact failed")
+            self._append_message("system", f"Compact failed: {type(exc).__name__}: {exc}")
+        finally:
+            self._render_status()
+
+    def _on_clean(self, _btn) -> None:
+        try:
+            import os
+            import shutil
+            from runtime.config import CONFIG
+
+            workspace = getattr(CONFIG, "workspace", os.getcwd())
+            targets = [
+                ("audit_logs", getattr(CONFIG, "audit_dir", os.path.join(workspace, "audit_logs"))),
+                (".snapshots", os.path.join(workspace, ".snapshots")),
+                (".code_index", os.path.join(workspace, ".code_index")),
+                ("truncated_outputs", os.path.join(workspace, "truncated_outputs")),
+                (".sageagent_state", os.path.join(workspace, ".sageagent_state")),
+            ]
+            cleaned = []
+            for name, path in targets:
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                    cleaned.append(name)
+            for name, path in [
+                (".exec_budget.json", os.path.join(workspace, ".exec_budget.json")),
+            ]:
+                if os.path.isfile(path):
+                    os.unlink(path)
+                    cleaned.append(name)
+            if cleaned:
+                self._append_message("system", f"Cleaned: {', '.join(cleaned)} (sessions kept).")
+            else:
+                self._append_message("system", "Nothing to clean; sessions kept.")
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("[chat-ui] clean failed")
+            self._append_message("system", f"Clean failed: {type(exc).__name__}: {exc}")
+        finally:
+            self._refresh_sessions()
+            self._render_status()
+
     def _on_model_change(self, change) -> None:
         try:
             from runtime.config import CONFIG
@@ -682,6 +767,37 @@ class V4WidgetChatUI(WidgetChatUI):
         try:
             from runtime.config import CONFIG
             CONFIG.require_tool_approval = bool(change["new"])
+        except Exception:
+            pass
+        self._render_status()
+
+    def _on_plan_mode_change(self, change) -> None:
+        try:
+            self.agent.set_plan_mode(bool(change["new"]))
+        except Exception:
+            pass
+        self._render_status()
+
+    def _on_auto_compact_change(self, change) -> None:
+        try:
+            self.agent.set_auto_compact(bool(change["new"]))
+        except Exception:
+            pass
+        self._render_status()
+
+    def _on_subagent_preferences_change(self, change) -> None:
+        enabled = bool(self._subagent_toggle.value)
+        try:
+            self._subagent_panel.layout.display = "" if enabled else "none"
+        except Exception:
+            pass
+        try:
+            self.agent.set_ui_subagent_preferences(
+                enabled=enabled,
+                explorer=str(self._explorer_dropdown.value),
+                worker=str(self._worker_dropdown.value),
+                reviewer=str(self._reviewer_dropdown.value),
+            )
         except Exception:
             pass
         self._render_status()

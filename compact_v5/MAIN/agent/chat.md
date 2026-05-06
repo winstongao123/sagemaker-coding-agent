@@ -82,6 +82,20 @@ Use slash commands in the chat box.
 | `/auth` | Authentication/status helper. |
 | `/quit` or `/q` | Quit/stop chat loop. |
 
+## Notebook Controls
+
+| Control | What it does |
+|---|---|
+| Model dropdown | Changes `CONFIG.model_id` and the live Bedrock client model. |
+| Plan Mode | Turns on the read-only planning gate in the v5 query engine. |
+| Require Approval | Toggles approval prompts for mutating/high-risk tools. |
+| Extended Thinking / Think Budget | Changes the thinking config sent to Bedrock models that support it. |
+| Budget $ | Updates the local session cost limit shown in the UI. |
+| Auto-Compact | Enables or disables automatic compaction and cold-cache microcompact for future turns. |
+| Compact | Manually compacts current conversation context with the v5 compactor. |
+| Clean | Removes local non-session traces such as audit logs, snapshots, indexes, and temp output; saved sessions are kept. |
+| Sub-Agents | Sends explorer/worker/reviewer preferences into the dynamic prompt so v5 can coordinate helper agents when useful. |
+
 ## Skills
 
 Production skills included in the company zip:

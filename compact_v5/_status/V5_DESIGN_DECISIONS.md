@@ -1028,7 +1028,7 @@ After Phase 10 lands:
 ### Question 2 â€” Architectural justification
 v5 value-add over v4:
 - **agent.py is its own public surface** (~200 LOC) â€” wraps QueryEngine + SkillManager + Config + BedrockClient. v4's `Agent` is buried in the monolith and exposes everything.
-- **ChatUI is much smaller** (~150 LOC vs v4's ~2000 LOC). Most of v4's complexity is HTML rendering of message history; v5 delegates to ipywidgets and lets the browser handle layout. Phase 11 also intentionally drops v4's complex chat-display HTML rendering for the minimal MVP â€” operators get text output + widgets, not the v4 full-fidelity chat display.
+- **ChatUI keeps v4 muscle memory on v5 architecture**. Final v5.0.1 restores the v4-style dark chat display and controls, but keeps the behavior split across testable v5 modules (`Agent`, `QueryEngine`, `Compactor`, widgets, commands) rather than returning to the v4 monolith.
 - **PS Issue #2 visible IterationBudget**: Phase 8 shipped `IterationBudget` data model. Phase 11 wires `consume() / used() / total()` to an `ipywidgets.IntProgress` so the user sees the budget burning down as parent + sub-agents consume it.
 - **PS Issue #4 visible thinking budget**: Phase 1 already sends thinking config when enabled; Phase 11 surfaces a small label showing the current thinking-budget setting AND a checkbox to toggle it.
 
@@ -1051,7 +1051,7 @@ YES. The notebook is the user's ONLY surface for v5 â€” without `chat.ipynb
   - `chat.ipynb` â€” minimal 4 cells: install / config / launch / quick-reminder.
   - `chat.md` â€” companion markdown explaining the notebook.
   - `tests/integration/test_notebook_smoke.py` â€” hello-world turn vs mock Bedrock; UI factory smoke test (no ipywidgets render assertions, just construction).
-- Phase 11 does NOT ship: full v4 chat-display HTML rendering (defer to Phase 13 polish), v4's compact/clean buttons (microcompact lands as separate phase if at all), parallel sub-agent visualization, model-switcher widget (CONFIG.model_id static), session-history persistence (SessionManager from Phase 1 already exists; Phase 11 doesn't auto-restore).
+- Final v5.0.1 UI update ships v4-style chat-display HTML rendering, Compact/Clean buttons, model switcher, session controls, Plan Mode, Auto-Compact, approval toggle, and sub-agent preference controls. These controls are wired into v5 runtime surfaces or explicit v5-safe actions; hidden duplicate approval/ask-user placeholder boxes were not kept because v5 has real per-tool approval and `ask_user` tool paths.
 
 ### Budget reservation
 - Static prompt: +0 tokens.
@@ -1066,7 +1066,7 @@ After Phase 11 lands:
 - chat.ipynb cells 1-3 import cleanly, cell 3 returns a UI object.
 
 ### Linked port-log rows
-- #030 â€” v4 create_chat_ui â†’ ui/chat_ui.py (ADAPT â€” minimal Phase-11 scope)
+- #030 - v4 create_chat_ui -> ui/chat_ui.py (ADAPT - final v5.0.1 v4-style UI on v5 architecture)
 - #031 â€” v4 Agent class (extracted from monolith) â†’ agent.py (ADAPT â€” public-surface wrapper around Phase 8-10 modules)
 - #032 â€” v4 chat.ipynb â†’ compact_v5/MAIN/agent/chat.ipynb (ADAPT â€” minimal cells)
 - #033 â€” Phase-8 IterationBudget data model â†’ ui/widgets.py:IterationBudgetWidget (ADDITION â€” PS Issue #2 fix; ipywidgets progress bar)

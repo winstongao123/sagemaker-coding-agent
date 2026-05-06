@@ -153,7 +153,7 @@ footer {
     <table>
       <tr><th>Part</th><th>Kid Version</th><th>Real Version</th></tr>
       <tr><td>Brain</td><td>Decides the next step.</td><td>Bedrock Claude models through the query engine.</td></tr>
-      <tr><td>Notebook</td><td>Writes down what it is doing so it does not forget.</td><td>Status, todos, memory, sessions, checkpoints, and audit logs.</td></tr>
+      <tr><td>Notebook</td><td>The steering wheel and dashboard.</td><td>v4-style dark chat UI, model picker, session buttons, Plan Mode, Auto-Compact, Compact/Clean, thinking/budget controls, status, todos, memory, sessions, checkpoints, and audit logs.</td></tr>
       <tr><td>Toolbox</td><td>Reads files, edits files, and runs tests.</td><td>Read/edit/shell/notebook/task/result/memory tools.</td></tr>
       <tr><td>Helpers</td><td>Small robot helpers do side jobs.</td><td>Subagents with structured result envelopes.</td></tr>
       <tr><td>Money meter</td><td>Counts how much model work costs.</td><td>Token, cache, model, tool, subagent, and cost telemetry.</td></tr>
@@ -204,7 +204,7 @@ footer {
     <table>
       <tr><th>Reference</th><th>Lesson Used In v5</th><th>What We Did Not Copy</th></tr>
       <tr><td>Runnable Claude Code</td><td>Context compaction, cache thinking, skill discovery, model switch, tool-loop controls, subagent/reviewer discipline, and long-task status handling.</td><td>We did not copy the exact UI, streaming assumptions, or every Claude Code internal behavior because v5 runs in SageMaker/Bedrock.</td></tr>
-      <tr><td>v4</td><td>SageMaker notebook shape, practical local tools, Bedrock constraints, and earlier working UX were kept as anchors.</td><td>We did not keep v4's weaker long-run memory/status discipline. v5 adds stronger gates, telemetry, and subagent envelopes.</td></tr>
+      <tr><td>v4</td><td>SageMaker notebook shape, dark chat UI, model picker, session controls, Compact/Clean, practical local tools, Bedrock constraints, and earlier working UX were kept as anchors.</td><td>We did not keep v4's weaker long-run memory/status discipline or monolithic internals. v5 adds stronger gates, telemetry, modular code, and subagent envelopes.</td></tr>
       <tr><td>Hermes agent</td><td>Non-streaming concurrency ideas, robust tool orchestration, and production-agent failure handling informed the no-streaming adaptation.</td><td>We did not adopt incompatible streaming-first assumptions.</td></tr>
       <tr><td>Learning Factory</td><td>No-drift process: save prompts, reviews, ledgers, status, lessons, and proof before claiming done.</td><td>We did not make the human sit at every step. v5 uses persisted gates and checkpoint evidence so it can run longer safely.</td></tr>
     </table>
@@ -263,6 +263,7 @@ footer {
       <tr><td>Subagents and review-style helper work</td><td>Implemented with structured result envelopes and telemetry.</td></tr>
       <tr><td>Software-builder state/checkpoint/shell/results/gate features</td><td>Implemented in added software-builder blocks.</td></tr>
       <tr><td>Tool-loop quality controls</td><td>Improved after R14/R19-U3 exposed inefficient repeated-tool behavior.</td></tr>
+      <tr><td>v4-style notebook UI</td><td>Restored and wired to v5 runtime: Plan Mode, Auto-Compact, Compact, Clean, model/session controls, and sub-agent preferences.</td></tr>
       <tr><td>R-tier final gate</td><td>Strengthened so all matrix rows are checked by default.</td></tr>
       <tr><td>Final docs and evidence trail</td><td>Final review, metrics, status, test review, and HTML overview are preserved.</td></tr>
     </table>
@@ -272,7 +273,7 @@ footer {
     <h2>Not Implemented Or Accepted As Future Polish</h2>
     <table>
       <tr><th>Item</th><th>Reason</th></tr>
-      <tr><td>Exact Runnable/Claude Code UI</td><td>v5 is a SageMaker/Bedrock notebook agent, not a Claude Code clone.</td></tr>
+      <tr><td>Exact Runnable/Claude Code UI</td><td>v5 is a SageMaker/Bedrock notebook agent, not a Claude Code clone. It keeps the useful v4 notebook UI instead.</td></tr>
       <tr><td>Streaming-first behavior</td><td>Current environment and design are non-streaming where needed.</td></tr>
       <tr><td>Literal 30-minute R4 idle wait</td><td>R4 validated the same A-16 code path with an injectable threshold to avoid waste.</td></tr>
       <tr><td>150 live Bedrock calls for R19-U10</td><td>Approved prebuilt 150-logical-turn substitution gave the intended evidence without waste.</td></tr>

@@ -101,6 +101,7 @@ class Agent:
         on_stop_check: Optional[Callable[[], bool]] = None,
         system_prompt: Optional[str] = None,
         plan_mode: bool = False,
+        auto_compact_enabled: bool = True,
         thinking_enabled: bool = False,
         thinking_budget: int = 4096,
     ):
@@ -117,6 +118,9 @@ class Agent:
                 If None, the static v5 prompt is used.
             plan_mode: when True, the dispatch gate enforces the v4
                 PLAN_MODE_ALLOWED_TOOLS read-only allowlist.
+            auto_compact_enabled: when False, disables pre-call cold-cache
+                microcompact and post-turn auto-compact. Manual compaction
+                remains available from the notebook UI.
             thinking_enabled: send thinking config on every Bedrock call.
             thinking_budget: max tokens for thinking (PS Issue #4 surfaces this).
         """
@@ -141,8 +145,10 @@ class Agent:
         )
         self._system_prompt = system_prompt
         self._plan_mode = bool(plan_mode)
+        self._auto_compact_enabled = bool(auto_compact_enabled)
         self._thinking_enabled = bool(thinking_enabled)
         self._thinking_budget = int(thinking_budget)
+        self._ui_subagent_preferences: Dict[str, Any] = {}
         # Historical B+ state retained for compatibility with tests that
         # inspect the attribute; SOFTWARE-STATE refreshes context per run.
         self._agent_status_loaded = False
@@ -189,6 +195,22 @@ class Agent:
                 system_prompt = system_prompt + "\n\n" + state_text
             else:
                 system_prompt = system_prompt + CACHE_BOUNDARY + "\n\n" + state_text
+        if self._ui_subagent_preferences.get("enabled"):
+            prefs = self._ui_subagent_preferences
+            preference_block = (
+                "## Notebook UI Sub-Agent Preferences\n\n"
+                "The operator enabled the Sub-Agents panel in the notebook UI. "
+                "Use these as coordination preferences, not as permission to spawn "
+                "unnecessary workers. Only call the task tool when it materially "
+                "helps the current user request.\n\n"
+                f"- explorer: {prefs.get('explorer', 'explorer')}\n"
+                f"- worker: {prefs.get('worker', 'worker')}\n"
+                f"- reviewer: {prefs.get('reviewer', 'reviewer')}"
+            )
+            if CACHE_BOUNDARY in system_prompt:
+                system_prompt = system_prompt + "\n\n" + preference_block
+            else:
+                system_prompt = system_prompt + CACHE_BOUNDARY + "\n\n" + preference_block
         active_tools = list(tools) if tools is not None else all_registered()
 
         self._stop_requested = False  # reset between runs
@@ -222,6 +244,7 @@ class Agent:
             system_prompt=system_prompt,
             tools=active_tools,
             plan_mode=self._plan_mode,
+            auto_compact_enabled=self._auto_compact_enabled,
             output_fn=output_fn,
             thinking_enabled=self._thinking_enabled,
             thinking_budget=self._thinking_budget,
@@ -274,6 +297,15 @@ class Agent:
         if reset_budget:
             self.budget.reset()
 
+    def replace_messages(self, messages: Iterable[Dict[str, Any]]) -> None:
+        """Replace the conversation buffer after a trusted runtime transform.
+
+        The notebook Compact button uses this instead of reaching into
+        `Agent._engine.messages` directly. Keeping the mutation behind the
+        public wrapper protects the UI from future QueryEngine internals.
+        """
+        self._engine.messages = list(messages)
+
     # ------------------------------------------------------------
     # Read-only views (used by Phase 11 widgets)
     # ------------------------------------------------------------
@@ -288,8 +320,40 @@ class Agent:
         return self._thinking_enabled
 
     @property
+    def plan_mode(self) -> bool:
+        return self._plan_mode
+
+    @property
+    def auto_compact_enabled(self) -> bool:
+        return self._auto_compact_enabled
+
+    @property
     def thinking_budget(self) -> int:
         return self._thinking_budget
+
+    def set_plan_mode(self, enabled: bool) -> None:
+        """Update plan-mode dispatch filtering for subsequent runs."""
+        self._plan_mode = bool(enabled)
+
+    def set_auto_compact(self, enabled: bool) -> None:
+        """Enable/disable automatic compaction for subsequent runs."""
+        self._auto_compact_enabled = bool(enabled)
+
+    def set_ui_subagent_preferences(
+        self,
+        *,
+        enabled: bool,
+        explorer: str = "explorer",
+        worker: str = "worker",
+        reviewer: str = "reviewer",
+    ) -> None:
+        """Store notebook sub-agent preferences for the dynamic prompt tail."""
+        self._ui_subagent_preferences = {
+            "enabled": bool(enabled),
+            "explorer": explorer or "explorer",
+            "worker": worker or "worker",
+            "reviewer": reviewer or "reviewer",
+        }
 
     def set_thinking(self, enabled: bool, budget: Optional[int] = None) -> None:
         """Update thinking-mode settings (PS Issue #4 UI hook)."""

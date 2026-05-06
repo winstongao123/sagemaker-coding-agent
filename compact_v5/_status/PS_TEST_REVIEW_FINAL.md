@@ -258,3 +258,23 @@ v4 SageMaker UI and Bedrock fit, restores v4 model-selection ergonomics, and
 adds the software-builder features v4 did not prove: row-level review evidence,
 subagent envelopes, result replay, checkpoint/resume, tool-loop quality gates,
 and optimized real AWS coding tests.
+
+## UI Parity Final Pass
+
+Date: 2026-05-06
+
+The post-production v4 comparison found that the v5 engine was strong, but the
+notebook UI still had stale docs and a few controls that looked v4-like before
+they were fully wired. The UI final pass keeps the v4 user experience without
+rolling back v5 architecture.
+
+| UI item | What changed | Why it matters |
+|---|---|---|
+| Dark v4-style chat | `V4WidgetChatUI` is the default ipywidgets surface. | The user sees the familiar v4 notebook shape, not a stripped-down demo. |
+| Plan Mode | Checkbox now updates `Agent.plan_mode`, which reaches `QueryEngine.run(plan_mode=...)`. | Mutating tools are blocked when the operator is only planning. |
+| Auto-Compact | Checkbox now updates `Agent.auto_compact_enabled`, which gates cold-cache microcompact and auto-compact. | The visible checkbox actually controls the expensive automatic compaction path. |
+| Compact | Button now uses the v5 `Compactor` path directly instead of a nonexistent `/compact` command. | Manual compaction works from the notebook. |
+| Clean | Button removes local non-session traces and keeps sessions, matching the v4 safety intent. | Users can clean scratch/audit traces without losing conversation continuity. |
+| Sub-agent panel | Dropdowns now feed notebook sub-agent preferences into the dynamic prompt tail. | The model receives the operator's intended explorer/worker/reviewer preference without forcing unnecessary subagents. |
+| Approval and ask-user boxes | Hidden duplicate placeholders were removed. | v5 already has real `PermissionDialog` and `ask_user` tool surfaces; duplicate dead UI would be misleading. |
+| Docs | Stale "minimal MVP" UI claims were replaced with final v5.0.1 UI behavior. | Future workers will not accidentally downgrade v5 back to the old MVP description. |
