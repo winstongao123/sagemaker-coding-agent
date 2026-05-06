@@ -398,6 +398,20 @@ Stop AWS execution and return to implementation/review if:
 - Claude Phase C returned `GENUINE_PASS`, and per-test gates passed for all
   five rows.
 
+2026-05-06 reviewed-disposition cleanup resolution:
+
+- Claude reviewed the remaining non-optimized rows and approved explicit
+  no-new-AWS dispositions for R9, R10, R12, R18-E1, R18-E3, R18-E6, R18-E8,
+  R18-E10, R18-E14, plus mappings R18-E15 to R4 and R19-U8 to R19-U10.
+- Claude required local locks before disposition for R18-E4, R18-E11, and
+  R18-E13. Those locks now pass and Phase C iter2 accepted the disposition
+  package as `DISPOSITION_OK`.
+- The final gate supports `DISPOSITION_OK` as a distinct evidence state so
+  disposition rows do not use fake AWS/local raw logs and do not hide spend.
+- The only rows still requiring real AWS evidence are R6, R7, R11, and R19-U9;
+  R19-U9 should bundle with R6 because it exercises the same `/dream`
+  consolidation output with an additional semantic checklist.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates

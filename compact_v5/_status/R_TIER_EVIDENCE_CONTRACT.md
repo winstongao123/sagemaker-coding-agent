@@ -28,6 +28,17 @@ zero-cost. They require Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, raw
 `GENUINE_PASS`, and `r_tier_gate.py --test <TEST>` pass. The local/mock path
 does not authorize AWS and any nonzero cost row remains a gate failure.
 
+Reviewed-disposition rows are distinct from READY/AWS rows. A row with matrix
+`status: DISPOSITION_OK` keeps its original `kind`, model, and cap, but uses a
+Claude-approved no-new-AWS disposition instead of fake run evidence. It must
+have a Phase A review containing `APPROVE_DISPOSITION_PLAN` or
+`APPROVE_FOR_DISPOSITION`, a per-test
+`_status/codex_reviews/r-tier-<TEST>-disposition-iter<N>.md`, a Phase C
+`DISPOSITION_OK` review/alias, a zero-cost metrics row with
+`verdict=DISPOSITION_OK`, a review-log row, and
+`r_tier_gate.py --test <TEST>` pass. Disposition rows must not create fake
+`aws-call` or `local-call` logs, telemetry, or quality files.
+
 These fields prevent software-builder tests from passing on prose alone:
 
 | Test | Additional required evidence |

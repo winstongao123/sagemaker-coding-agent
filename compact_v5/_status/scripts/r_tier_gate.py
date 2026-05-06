@@ -180,6 +180,8 @@ def _phase_a_latest_decision_is_approval(base: Path, test_id: str) -> bool:
             (
                 "APPROVE_FOR_AWS_CALL",
                 "APPROVE_FOR_LOCAL_MOCK",
+                "APPROVE_FOR_DISPOSITION",
+                "APPROVE_DISPOSITION_PLAN",
                 "AWS call #1 may proceed",
                 "AWS call #2 is justified",
             ),
@@ -292,28 +294,32 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
         if isinstance(row, dict) and row.get("id")
     }
     is_mock = str(matrix_rows.get(test_id, {}).get("kind", "")).lower() == "mock"
+    is_disposition = str(matrix_rows.get(test_id, {}).get("status", "")).upper() == "DISPOSITION_OK"
     pass_rows = [
         row for row in rows_for_test
         if row.get("completed") is True
-        and row.get("verdict") in {"GENUINE_PASS", "READY"}
+        and row.get("verdict") in {"GENUINE_PASS", "READY", "DISPOSITION_OK"}
     ]
     phase_c_text = _latest_text(reviews, [f"r-tier-{test_id}-phaseC-iter*.md"])
     has_later_ready_evidence = (
         bool(pass_rows)
-        and "GENUINE_PASS" in phase_c_text
+        and ("GENUINE_PASS" in phase_c_text or (is_disposition and "DISPOSITION_OK" in phase_c_text))
         and test_id in review_log_text
-        and "READY" in review_log_text
+        and ("READY" in review_log_text or (is_disposition and "DISPOSITION_OK" in review_log_text))
     )
     escalated = escalation.is_file() and not has_later_ready_evidence
 
     required_patterns = {
         "phase A prompt": [f"r-tier-{test_id}-phaseA-iter*-prompt.txt"],
         "phase A review": [f"r-tier-{test_id}-phaseA-iter*.md"],
-        "AWS/raw call log": (
+    }
+    if is_disposition:
+        required_patterns["reviewed disposition"] = [f"r-tier-{test_id}-disposition-iter*.md"]
+    else:
+        required_patterns["AWS/raw call log"] = (
             [f"r-tier-{test_id}-local-call*.log"]
             if is_mock else [f"r-tier-{test_id}-aws-call*.log"]
-        ),
-    }
+        )
     if not escalated:
         required_patterns["phase C post-pass review"] = [f"r-tier-{test_id}-phaseC-iter*.md"]
     for label, patterns in required_patterns.items():
@@ -325,13 +331,15 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
         errors.append(f"{test_id}: latest phase A decision does not approve AWS call")
 
     if not escalated:
-        if phase_c_text and "GENUINE_PASS" not in phase_c_text:
+        if phase_c_text and "GENUINE_PASS" not in phase_c_text and not (
+            is_disposition and "DISPOSITION_OK" in phase_c_text
+        ):
             errors.append(f"{test_id}: phase C review lacks GENUINE_PASS")
 
     call_prefix = "local-call" if is_mock else "aws-call"
-    if not _glob_any(status, [f"r-tier-{test_id}-{call_prefix}*-telemetry.json"]):
+    if not is_disposition and not _glob_any(status, [f"r-tier-{test_id}-{call_prefix}*-telemetry.json"]):
         errors.append(f"{test_id}: missing telemetry.json in {status}")
-    if not _glob_any(status, [f"r-tier-{test_id}-{call_prefix}*-quality.md"]):
+    if not is_disposition and not _glob_any(status, [f"r-tier-{test_id}-{call_prefix}*-quality.md"]):
         errors.append(f"{test_id}: missing quality.md in {status}")
     quality_text = _latest_text(status, [f"r-tier-{test_id}-{call_prefix}*-quality.md"])
     if quality_text:
@@ -345,7 +353,9 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
 
     if not review_log.is_file() or test_id not in review_log_text:
         errors.append(f"{test_id}: missing row in {review_log}")
-    elif not escalated and "READY" not in review_log_text:
+    elif not escalated and "READY" not in review_log_text and not (
+        is_disposition and "DISPOSITION_OK" in review_log_text
+    ):
         errors.append(f"{test_id}: review log row lacks READY")
 
     diagnostic_calls: set[int] = set()
@@ -365,7 +375,7 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
                 errors.append(f"{test_id}: metrics row missing keys {sorted(missing)}")
             row_is_pass = (
                 row.get("completed") is True
-                and row.get("verdict") in {"GENUINE_PASS", "READY"}
+                and row.get("verdict") in {"GENUINE_PASS", "READY", "DISPOSITION_OK"}
             )
             row_is_diagnostic = row.get("verdict") in DIAGNOSTIC_NON_READY_VERDICTS
             if row_is_diagnostic:
@@ -402,6 +412,10 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
     if escalated:
         if test_id not in review_log_text or "ESCALATED" not in review_log_text:
             errors.append(f"{test_id}: escalation file exists but review log lacks ESCALATED row")
+
+    # Basic telemetry sanity for every telemetry file.
+    if is_disposition:
+        return errors
 
     # Basic telemetry sanity for every telemetry file.
     for fp in status.glob(f"r-tier-{test_id}-{call_prefix}*-telemetry.json"):

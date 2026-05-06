@@ -335,6 +335,60 @@ def test_r_tier_gate_accepts_mock_local_call_evidence(tmp_path):
     assert gate.check_test_evidence(tmp_path, "R8") == []
 
 
+def test_r_tier_gate_accepts_reviewed_disposition_without_fake_call(tmp_path):
+    gate = _load_gate()
+    status = tmp_path / "compact_v5" / "_status"
+    reviews = status / "codex_reviews"
+    reviews.mkdir(parents=True)
+    matrix = status / "r_tier_test_matrix.json"
+    matrix.write_text(
+        json.dumps([{
+            "id": "R9",
+            "title": "Approval flow end-to-end",
+            "kind": "real",
+            "model": "Haiku 4.5 AU",
+            "cost_cap_usd": 0.3,
+            "status": "DISPOSITION_OK",
+            "benefit": "approval",
+            "ready_criteria": "reviewed disposition",
+        }]),
+        encoding="utf-8",
+    )
+
+    (reviews / "r-tier-R9-phaseA-iter1-prompt.txt").write_text("prompt", encoding="utf-8")
+    (reviews / "r-tier-R9-phaseA-iter1.md").write_text(
+        "PRE-FLIGHT VERDICT: APPROVE_FOR_DISPOSITION", encoding="utf-8"
+    )
+    (reviews / "r-tier-R9-disposition-iter1.md").write_text(
+        "DISPOSITION_OK: local locks cover approval before Bedrock.", encoding="utf-8"
+    )
+    (reviews / "r-tier-R9-phaseC-iter1.md").write_text(
+        "POST-PASS VERDICT: DISPOSITION_OK", encoding="utf-8"
+    )
+    (status / "r_tier_review_log.md").write_text(
+        "| R9 | DISPOSITION_OK | $0.00 |\n", encoding="utf-8"
+    )
+    (status / "r_tier_metrics.jsonl").write_text(
+        json.dumps({
+            "test": "R9",
+            "call": 0,
+            "date": "2026-05-06T00:00:00Z",
+            "model": "n/a-disposition",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "cache_hit_pct": 0.0,
+            "wallclock_s": 0.0,
+            "tool_calls": 0,
+            "completed": True,
+            "cost_usd": 0.0,
+            "verdict": "DISPOSITION_OK",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    assert gate.check_test_evidence(tmp_path, "R9") == []
+
+
 def test_r_tier_gate_rejects_semantic_bug_quality(tmp_path):
     gate = _load_gate()
     status = tmp_path / "compact_v5" / "_status"

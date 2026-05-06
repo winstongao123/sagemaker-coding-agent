@@ -314,3 +314,23 @@ R8, R18-E2, R18-E5, R18-E9, and R18-E12 are READY as of 2026-05-06:
 - Claude Phase C returned `GENUINE_PASS`.
 - `r_tier_gate.py --repo-root . --test R8`, `R18-E2`, `R18-E5`, `R18-E9`, and
   `R18-E12` passed.
+
+## Reviewed Disposition Resolution
+
+R9, R10, R12, R18-E1, R18-E3, R18-E4, R18-E6, R18-E8, R18-E10, R18-E11,
+R18-E13, R18-E14, R18-E15, and R19-U8 are `DISPOSITION_OK` as of 2026-05-06:
+
+- Claude disposition iter1 returned `APPROVE_DISPOSITION_PLAN`, classifying
+  these rows as no-new-AWS dispositions or mappings to existing AWS evidence.
+- New local locks were added and passed for the only local gaps Claude found:
+  R18-E4 canonical skill activation/no alias surface, R18-E11 subagent timeout
+  with parent compaction/resume, and R18-E13 Unicode/RTL `/dream` memory
+  round-trip.
+- `r_tier_gate.py` now supports a third evidence state keyed by matrix
+  `status=DISPOSITION_OK`. These rows require per-test disposition files,
+  zero-cost metrics, Phase C `DISPOSITION_OK`, and review-log rows, but do not
+  require fake raw logs, telemetry, or quality files.
+- Claude Phase C iter2 returned `DISPOSITION_OK`.
+- Per-test gates passed for all 14 disposition rows.
+- The default final gate now fails only on the real-AWS rows still outstanding:
+  R6, R7, R11, and R19-U9.
