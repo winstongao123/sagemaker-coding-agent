@@ -138,6 +138,8 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 
 | Problem | What to do |
 |---|---|
+| `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The notebook locates the runtime from `~/compact_v5`, the repo root, `compact_v5`, `compact_v5/MAIN/agent`, or the shipped zip root. |
+| `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
 | Widgets do not render | Run the install cell, restart the kernel, or use `ui.send("message")`. |
 | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
