@@ -1,0 +1,76 @@
+You are the final independent Claude production-readiness reviewer for the
+v5.0.1 completion audit.
+
+Repository root:
+D:\Github\sagemaker-coding-agent
+
+You must read files from disk yourself using read-only tools. Do not rely on
+chat memory. Do not write files. Do not run git mutations. Do not run AWS.
+
+Review target:
+- Branch: v5-build
+- Worker-reviewed HEAD before this prompt:
+  aff20d0f515d5d02f52663cefb69273dd056ca5b
+- Remote sageagent/v5-build was verified at the same SHA before this prompt.
+
+Required files to read:
+- compact_v5/_status/v5_completion_audit/06_CODEX_WORKER_SELF_COORDINATED_PROMPT.md
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/R_TIER_GATE_STATUS.md
+- compact_v5/_status/R_TIER_PENDING_TESTS.md
+- compact_v5/_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/r-tier-default-gate-final.txt
+- compact_v5/_status/v5_completion_audit/STATUS.md
+- compact_v5/_status/v5_completion_audit/FINAL_READY_FOR_AWS_REVIEW.md
+- compact_v5/_status/v5_completion_audit/FINAL_POST_AWS_WORKER_SELF_REVIEW.md
+
+Also spot-check the evidence files referenced for the final rows completed
+after pre-AWS readiness:
+- R4 A-16 cold-cache microcompact evidence and Phase C review
+- R17 thinking visibility evidence and Phase C review
+- R8/R18-E2/R18-E5/R18-E9/R18-E12 mock cleanup evidence and Phase C review
+- reviewed disposition evidence and Phase C review for DISPOSITION_OK rows
+- R6/R19-U9 /dream evidence and Phase C review
+- R7 model-switch/cache evidence and Phase C review
+- R11 Sonnet end-to-end evidence and Phase C review
+
+You must specifically assess:
+1. Whether A-16 time-based cold-cache microcompact exists before production and
+   R4 is properly closed as READY / GENUINE_PASS.
+2. Whether every required R-tier row has either per-test READY evidence or an
+   explicit reviewed DISPOSITION_OK, without fake raw logs for disposition rows.
+3. Whether the final default r_tier_gate.py now checks all matrix rows and
+   passes without --skip-evidence.
+4. Whether diagnostic/non-ready spend is preserved and local ledger total
+   remains within the $14.25 matrix cap.
+5. Whether the R14/R19-U3 repeated failed tool-loop process blocker was fixed,
+   reviewed, and not bypassed by switching the tested scenario away from Haiku.
+6. Whether later R19-U7 and R16 evidence show the repeated guard/edit/write/exec
+   failure-loop pattern did not recur.
+7. Whether all open entries in R_TIER_PROCESS_QUALITY_FOLLOWUPS.md are either
+   acceptable non-blocking follow-ups for v5.0.1 or production blockers.
+8. Whether any evidence gap, stale status document, missing Phase C verdict,
+   cap issue, or unresolved blocker prevents production readiness.
+
+Required output format:
+
+PRODUCTION_READINESS_DECISION: APPROVE_PRODUCTION_READY or BLOCK_PRODUCTION_READY
+R_TIER_DECISION: COMPLETE or INCOMPLETE
+FOLLOWUP_DECISION: ACCEPT_NONBLOCKING or BLOCKING_FOLLOWUPS
+
+Then provide:
+- Findings, ordered by severity. If none block production, say "No blocking
+  findings."
+- Non-blocking follow-ups, if any.
+- Evidence reviewed, including exact file paths.
+- Any residual risk that should be carried into v5.0.1 release notes or
+  v5.0.2 planning.
+
+Approval criteria:
+- Only return APPROVE_PRODUCTION_READY if the evidence on disk supports it.
+- If you find a blocker, identify the exact file/path and the required fix.

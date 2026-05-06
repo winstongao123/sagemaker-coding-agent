@@ -91,6 +91,11 @@ Completed and pushed:
   tool-result markers, numeric cache fields, and no repeated tool/failure loop.
   The older `ESCALATION-R4.md` remains preserved as superseded historical
   deferment evidence, not current disposition.
+- R5: call1 Phase C `GENUINE_PASS`, `r_tier_gate.py --test R5` passed.
+  Haiku validated the exec-limit redirect path at `$0.0157` using the approved
+  lowered-cap same-code-path fixture. Evidence includes the blocked exec marker,
+  the "other tools still work" recovery instruction, non-exec recovery, and no
+  unrelated edits.
 - R13: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R13` passed.
 - R15: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R15` passed.
 - R14: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R14` passed. Artifact
@@ -155,6 +160,10 @@ Completed and pushed:
   before spend, Sonnet 4.5 AU completed the R1-style dashboard/report workflow
   at `$0.0995`, produced valid `chart.png` and `report.docx`, Claude Phase C
   returned `GENUINE_PASS`, and `r_tier_gate.py --test R11` passed.
+- Final post-AWS gate: `py -3.11 compact_v5/_status/scripts/r_tier_gate.py
+  --repo-root .` passed after R11. All 42 matrix rows now have accepted
+  evidence state (`READY` or `DISPOSITION_OK`), and production readiness is
+  pending final post-AWS Claude review.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -296,6 +305,14 @@ Result:
   - R18-E9: `$0.0000`
   - R18-E12: `$0.0000`
 - local R-tier ledger after mock cleanup remains `$1.5529`
+- R6/R19-U9 shared `/dream` call1 READY spend added:
+  - R6: `$0.0029`
+  - R19-U9: `$0.0029`
+- R7 call1 READY spend added:
+  - R7: `$0.0175`
+- R11 call1 READY spend added:
+  - R11: `$0.0995`
+- local R-tier ledger after R11: `$1.6757`
 
 ## R17 Thinking Visibility Resolution
 

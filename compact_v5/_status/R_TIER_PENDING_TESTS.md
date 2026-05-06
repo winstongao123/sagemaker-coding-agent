@@ -7,8 +7,9 @@ This table is maintained from the production-readiness contract in
 controlled by `v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md`, not by
 this file.
 
-Production-ready means every row is `READY`, total local spend is at or below
-`$14.25`, AWS Budget remains healthy, and final review + user F5 signoff pass.
+Production-ready means every row is `READY` or explicitly reviewed as
+`DISPOSITION_OK`, total local spend is at or below `$14.25`, AWS Budget remains
+healthy, and final review + user F5 signoff pass.
 
 | Test | Current status | Why pending | Benefit | Ready criterion |
 |---|---|---|---|---|
@@ -16,7 +17,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R2 | READY | Existing call1 evidence gates clean; real compaction/recall proof is already Phase C `GENUINE_PASS` | Long-context compaction/cache proof | Executable + Phase A + AWS pass |
 | R3 | READY | Existing AWS call2 evidence reused for Stage 6; not rerun per optimized plan and Claude Phase A/Phase C | Sub-agent orchestration proof | Subagent telemetry + parent synthesis |
 | R4 | READY | A-16 time-based cold-cache microcompact is now implemented and R4 call1 passed on Haiku with Phase C `GENUINE_PASS`; the old `ESCALATION-R4.md` remains preserved as superseded historical deferment evidence | PS#3 cold-cache idle recovery | Typed cold-cache microcompact events, telemetry, quality, and gate pass |
-| R5 | PENDING_EXECUTABLE | Test code missing | PS#7 exec-limit recovery | 201st exec blocked; other tools continue |
+| R5 | READY | AWS call1 passed with Phase C `GENUINE_PASS`, telemetry, quality, metrics, review-log row, and per-test gate; 201st-exec behavior validated through the approved lowered-cap same-code-path fixture | PS#7 exec-limit recovery | 201st exec blocked; other tools continue |
 | R6 | READY | R6+R19-U9 call1 ran through the production `/dream` path on Haiku with Claude Phase C `GENUINE_PASS`, semantic preservation, dedup/stale reduction, DreamLock release, backup evidence, and gate pass | `/dream` memory consolidation proof | Required facts preserved |
 | R7 | READY | R7 call1 passed after Claude Phase A approval and healthy budget check; same Agent session made a live Haiku -> Sonnet Bedrock switch, preserved `R7-CONTEXT-VIOLET-913`, recorded numeric cache/model-switch evidence, Claude Phase C returned `GENUINE_PASS`, and gate passed | Model-switch/cache invariant proof | Haiku->Sonnet behavior documented |
 | R8 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | Free malformed JSON repair proof | Mock repair ladder pass |

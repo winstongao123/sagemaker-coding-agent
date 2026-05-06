@@ -1,11 +1,20 @@
 # R-tier Process Quality Follow-ups
 
-Date: 2026-05-05
+Date: 2026-05-06
 
 This file tracks AWS/R-tier passes where artifact evidence is genuine but
 process quality exposed a production-readiness risk. These are not final-ready
 claims. They must be resolved, explicitly accepted, or promoted to blockers
 before any final production-readiness review.
+
+Final post-AWS review disposition:
+
+- Review:
+  `compact_v5/_status/v5_completion_audit/reviews/final-claude-post-aws-production-readiness-review.md`
+- `FOLLOWUP_DECISION: ACCEPT_NONBLOCKING`
+- Open low-severity entries remain tracked for release notes or v5.0.2
+  planning, but final Claude review did not classify them as production
+  blockers for v5.0.1.
 
 ## R14 Tool-Failure Loop
 
