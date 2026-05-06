@@ -52,6 +52,58 @@ control folder because it was too brittle for reliable progress.
     meaningful progress or new evidence. Stop only when the loop is stuck, such
     as repeated handoff failures, repeated same finding, or no meaningful change.
 
+## Current Production-Readiness Override
+
+This section supersedes older resume-point text below when preparing the final
+v5.0.1 production-readiness package.
+
+User decision as of 2026-05-06:
+
+- Do not accept the previous R4 deferment as final production scope.
+- Implement A-16 time-based cold-cache microcompact before production.
+- After A-16 is implemented and Claude-reviewed, make R4 a real READY /
+  `GENUINE_PASS` test instead of `ESCALATED_DEFERRED`.
+- Finish every remaining R-tier row with per-test evidence, not only the
+  optimized default gate. At minimum, run `r_tier_gate.py --test <ID>` for each
+  row and make it pass, or create an explicit Claude-reviewed/accepted
+  escalation for that row.
+- Strengthen the default `r_tier_gate.py --repo-root .` behavior so final
+  readiness cannot pass while individual matrix rows still fail their
+  per-test evidence checks.
+- Update and push all relevant final docs, status, data, metrics, review logs,
+  and HTML/design overview. Do not leave final-readiness evidence only local.
+
+Required remaining row set discovered by per-test gate checks:
+
+`R6, R7, R8, R9, R10, R11, R12, R17, R18-E1, R18-E2, R18-E3,
+R18-E4, R18-E5, R18-E6, R18-E8, R18-E9, R18-E10, R18-E11,
+R18-E12, R18-E13, R18-E14, R18-E15, R19-U8, R19-U9`
+
+For each row:
+
+1. Read the matrix row and executable test.
+2. Decide whether it needs real AWS, mock/local execution, or explicit mapping
+   to already-passed optimized bundle evidence.
+3. If mapped to a previous bundle, create concrete per-test artifacts and make
+   the per-test gate pass; do not rely on prose alone.
+4. If real AWS is needed, follow the full Phase A -> budget/headroom -> AWS ->
+   telemetry/quality/metrics -> Phase C -> per-test gate loop.
+5. Preserve all diagnostic/non-ready spend and failed evidence.
+
+Before any final production-ready claim:
+
+- A-16 must be implemented in runtime code, not only docs.
+- R4 must be READY / `GENUINE_PASS` or a fresh user-approved production-scope
+  decision must be recorded.
+- all matrix rows must pass their per-test gates or have explicit reviewed
+  dispositions;
+- `scope_audit.py --all --strict` must pass;
+- `r_tier_gate.py --repo-root .` must verify all required evidence and pass;
+- final worker self-review and final Claude production-readiness review must
+  approve;
+- final code/docs/evidence/HTML must be committed with a specific file list,
+  pushed to `sageagent/v5-build`, and remote SHA verified.
+
 ## Required Read Order
 
 Read these first:
@@ -177,7 +229,10 @@ Use read-only settings:
 - `--settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json`
 - allow read/grep/glob/bash only
 - deny writes, Codex, git commit/push/tag/reset/checkout
-- use `claude.cmd` or `claude -p`; pipe the saved prompt via stdin
+- use explicit `C:\Users\winst\AppData\Roaming\npm\claude.cmd` on
+  Windows/PowerShell; pipe the saved prompt via stdin
+- do not use `--add-dir`
+- do not use `--permission-mode bypassPermissions`
 
 Before each Claude review attempt, prove the Claude CLI reviewer path is live
 with a tiny non-escalated child-process smoke test from repo root:
@@ -185,7 +240,7 @@ with a tiny non-escalated child-process smoke test from repo root:
 ```powershell
 $old=$env:ANTHROPIC_API_KEY
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
-"Reply exactly: CLAUDE_REVIEWER_READY pre_review_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --tools "" --output-format text
+"Reply exactly: CLAUDE_REVIEWER_READY pre_review_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json --tools "" --output-format text
 if ($old) { $env:ANTHROPIC_API_KEY=$old }
 ```
 
@@ -233,9 +288,12 @@ Claude handoff retry policy:
 - `ConnectionRefused`, timeout, or transient network failure: retry up to 3
   times with the same intended prompt content, a new iteration number, and
   saved prompt/review/log artifacts for each attempt.
-- API credit, balance, or billing-route error: clear `ANTHROPIC_API_KEY` for
-  the Claude subprocess and retry through the Claude Code subscription-auth
-  path documented in `PS_CLI_WOKER_DESIGN/CLAUDE_REVIEWER_AUTH.md`.
+- API credit, balance, or billing-route error: treat as auth-route leakage.
+  Clear `ANTHROPIC_API_KEY` for the Claude subprocess and retry through the
+  explicit Claude Code subscription-auth path documented in
+  `PS_CLI_WOKER_DESIGN/CLAUDE_REVIEWER_AUTH.md`: `claude.cmd`,
+  `--setting-sources user`, `--permission-mode dontAsk`, no `--add-dir`, no
+  `bypassPermissions`, prompt via stdin from repo root.
 - malformed command, bad `--setting-sources`, or PowerShell argument issue:
   fix the command shape and retry with a new iteration number.
 - empty review, missing `VERDICT:`, missing `SHIP DECISION:`, or plan-mode

@@ -28,10 +28,28 @@ Do not rely on chat memory, terminal scrollback, or prior worker claims.
 - Keep progress visible in status files, not only terminal output.
 - After compaction or a new session, resume from files plus `scope_audit.py`,
   not memory.
+- Before the first Claude review after compaction/new session, run the tiny
+  non-escalated Claude Code smoke check documented in
+  `PS_COMPACTION_RESUME_CHECKLIST.md`.
+- Claude reviewer automation on Windows must use the subscription-auth command
+  shape from `PS_CLI_WOKER_DESIGN/CLAUDE_REVIEWER_AUTH.md`: clear
+  `ANTHROPIC_API_KEY` for the child process, call
+  `C:\Users\winst\AppData\Roaming\npm\claude.cmd`, use
+  `--setting-sources user` and `--permission-mode dontAsk`, and do not use
+  `--add-dir` or `--permission-mode bypassPermissions`.
 - There is no fixed hard limit on useful review iterations per block; stop only
   on documented stuck-loop conditions.
 - Save every worker/reviewer exchange: prompt, review/stdout, stderr/log,
   matrix row, block verdict, and block heartbeat.
+- Claude reviewer approvals must be row-by-row: every canonical row id for the
+  block must appear in the review output. Aggregate-only approvals are not
+  enough.
+- Claude is an independent local-repo reviewer. Codex must not paste or bundle
+  repository file contents into the Claude prompt as a substitute for review.
+  Codex may provide instructions, row ids, changed-file paths, artifact paths,
+  and a concise evidence/navigation summary. Claude must locate and read the
+  relevant repository files itself with read-only tools before issuing a
+  verdict.
 
 ## Required v5 Entrypoints
 

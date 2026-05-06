@@ -1,5 +1,10 @@
 # PS_V5_TEST_PLAYBOOK — Master Reference for R-tier + Block V Execution
 
+> **2026-05-04 OVERRIDE**: Codex is the worker for the v5 completion redo
+> using GPT-5.5. Claude Code is the independent reviewer using Opus high/xhigh
+> after CLI validation. Historical Codex-review references below are old
+> evidence/process text only.
+
 **Audience**: worker (autonomous Mode B execution) + future sessions
 
 **Purpose**: ONE place that has every spec needed to run R1-R16 + Block V correctly. Read at start of every R-tier or Block V session.

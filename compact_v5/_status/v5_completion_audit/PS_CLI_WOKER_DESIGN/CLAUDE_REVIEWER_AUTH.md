@@ -42,8 +42,16 @@ Before running Claude review from Codex/PowerShell:
    command fails due network/auth, record and retry per `FAILURE_MODES.md`.
    Escalation can be denied as private-repo egress before Claude executes, which
    produces no usable review.
-7. Use `claude.cmd` or `claude -p` with the saved prompt piped through stdin.
-   The command must remain read-only: allowed tools are `Read,Grep,Glob,Bash`;
+7. On Windows/PowerShell, use the explicit npm command shim
+   `C:\Users\winst\AppData\Roaming\npm\claude.cmd`, not bare `claude`, for
+   reviewer automation. The bare `claude` command may resolve to a PowerShell
+   shim or a different auth route in worker subprocesses.
+8. Do not use `--add-dir` or `--permission-mode bypassPermissions` for this
+   workflow. The repository path belongs in the prompt as `Repo root:
+   D:\Github\sagemaker-coding-agent`; Claude must locate/read files itself
+   from the working directory using read-only tools.
+9. Use the saved prompt piped through stdin. The command must remain read-only:
+   allowed tools are `Read,Grep,Glob,Bash`;
    disallowed tools include `Edit`, `Write`, `NotebookEdit`, git
    commit/push/tag/reset/checkout, `codex`, `aws`, and `sam`.
 
@@ -79,7 +87,7 @@ PowerShell pattern:
 $savedAnthropicApiKey = $env:ANTHROPIC_API_KEY
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 try {
-  Get-Content -Raw $promptPath | claude -p `
+  Get-Content -Raw $promptPath | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p `
     --model opus `
     --effort xhigh `
     --permission-mode dontAsk `
@@ -96,10 +104,23 @@ finally {
 }
 ```
 
-If Claude still returns `Credit balance is too low` after clearing
-`ANTHROPIC_API_KEY`, run the smoke command in `COMMANDS.md` or start an
-interactive `claude` session in the same terminal to verify the terminal can see
-the Claude Max login, then retry the saved prompt as a new iteration.
+If Claude returns `Credit balance is too low`, treat it as API-credit route
+leakage unless the subscription smoke also fails. Do not switch to API billing
+and do not stop immediately. First retry with all of these conditions:
+
+- `ANTHROPIC_API_KEY` removed only for the child process;
+- explicit `C:\Users\winst\AppData\Roaming\npm\claude.cmd`;
+- `--setting-sources user`;
+- `--permission-mode dontAsk`;
+- no `--add-dir`;
+- no `--permission-mode bypassPermissions`;
+- prompt piped via stdin from repo root.
+
+If the tiny subscription smoke succeeds but the full review still returns
+`Credit balance is too low`, record the failed attempt as command/auth routing
+and retry once with the same exact explicit `claude.cmd` shape. If both the
+smoke and full review fail on the explicit shape, stop with a reviewer handoff
+blocker.
 
 If Claude returns `Invalid setting source: user project local`, record that as a
 command-shape failure and retry with `--setting-sources user`.

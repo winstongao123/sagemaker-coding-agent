@@ -1,5 +1,9 @@
 # PS_V5_TEST_WORKER_FINAL — Single Source of Truth for v5.0.1 R-tier Worker
 
+> **2026-05-04 OVERRIDE**: Codex is the worker for the v5 completion redo
+> using GPT-5.5. Claude Code is the independent reviewer using Opus high/xhigh
+> after CLI validation. Do not use Codex CLI as reviewer.
+
 **This is THE persistent prompt for Claude Code worker executing v5.0.1 R-tier real-AWS testing.**
 **Supersedes all earlier handoff docs on conflict (CODEX_AFK_WORKER_PROMPT, CODEX_HANDOFF_PROMPT, CODEX_CONTEXT).**
 **Last updated**: 2026-05-04
@@ -11,10 +15,12 @@
 | Role | Tool |
 |---|---|
 | Worker (executor) | YOU — Claude Code |
-| Reviewer (independent verdicts) | Codex CLI invoked from your Bash tool |
+| Reviewer (independent verdicts) | Claude Code CLI reviewer, not Codex CLI |
 | User F5 sign-off | USER (you HALT and ask) |
 
-**NEVER use Codex CLI as a worker.** Codex-as-worker calling Codex-as-reviewer crashes (recursive). If Codex CLI itself crashes, write `ESCALATION-<TEST>.md` and ASK USER before switching reviewer (no silent downgrade to Claude Opus or anything else).
+**2026-05-04 override:** Codex CLI is now allowed as the worker, but must not
+invoke nested Codex review. Codex-as-worker calling Codex-as-reviewer crashes
+or derails the worker. Claude reviewer is now the explicit independent gate.
 
 ---
 

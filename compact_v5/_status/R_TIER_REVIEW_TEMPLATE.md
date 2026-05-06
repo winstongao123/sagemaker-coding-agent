@@ -1,4 +1,9 @@
-# R-tier Codex Review Template (real-AWS scenarios — v5-only; Block V DROPPED 2026-05-03)
+# R-tier Review Template (historical Codex version — superseded for v5 redo)
+
+> **2026-05-04 OVERRIDE**: do not use Codex CLI as reviewer for the v5
+> completion redo. Use Claude Code CLI reviewer prompts under
+> `_status/v5_completion_audit/`. This file is retained for historical R-tier
+> evidence and template content only.
 
 Used at every PHASE A (pre-flight) and PHASE C (diagnosis) per WORKER_HINT_2026-05-03.md §10. Fill `{{...}}` placeholders. Paste into `codex exec --full-auto -s read-only -m gpt-5.5 -c model_reasoning_effort="high" "<prompt>"`.
 

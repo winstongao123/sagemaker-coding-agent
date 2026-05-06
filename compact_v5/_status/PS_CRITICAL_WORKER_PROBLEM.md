@@ -1,13 +1,27 @@
 # PS_CRITICAL_WORKER_PROBLEM
 
-Date: 2026-05-04
-Status: SHIP-BLOCKING INCIDENT
+Date: 2026-05-06
+Status: RESOLVED_BY_COMPLETION_REDO_AND_FINAL_POST_AWS_REVIEW
 Author: Codex audit
 
 This file documents the critical worker/process problem discovered during
 v5.0.1 R-tier validation. It is intentionally direct: v5.0.1 has real built
 code and real passing AWS evidence, but the build/review process did not
 prove the full post-Wave-5-DEEP scope was implemented.
+
+Final resolution:
+
+- The completion redo built the row-level ledger and strict scope gates that
+  this incident required.
+- A-16 cold-cache microcompact was implemented before production and R4 was
+  closed as READY with Claude Phase C `GENUINE_PASS`.
+- The default R-tier gate now checks all matrix rows by default.
+- The final R-tier matrix has 28 `READY` rows and 14 `DISPOSITION_OK` rows.
+- Final Claude post-AWS review returned
+  `PRODUCTION_READINESS_DECISION: APPROVE_PRODUCTION_READY`.
+
+The historical findings below are preserved as root-cause evidence for why the
+redo was necessary. They are no longer the current ship decision.
 
 ## Executive Verdict
 
@@ -162,18 +176,22 @@ Current R-tier interpretation:
    - L large-scope guardrail gaps
    - N runtime parallel execution wiring if still in scope
    - K process/PORT_LOG closure
-5. Add a new Codex review requirement:
-   - Codex must receive the ledger.
-   - Codex must reject if any SYNTHESIS_MASTER row lacks disposition.
+5. Add a new independent Claude-review requirement:
+   - Claude reviewer must receive the ledger.
+   - Claude reviewer must independently regenerate the row list from
+     SYNTHESIS_MASTER, not trust the worker.
+   - Claude reviewer must reject if any SYNTHESIS_MASTER row lacks disposition.
    - A block cannot be marked DONE from tests alone.
 
 ## Current Ship Decision
 
-Do not F5-approve v5.0.1 yet.
+v5.0.1 production readiness is approved by final post-AWS Claude review.
 
-R1/R2/R3/R5 are useful evidence and should be kept. The AWS spend was not
-meaningless. But v5.0.1 cannot honestly be called complete against the
-post-Wave-5-DEEP plan until the row-level ledger is complete and the missing
-MUST/HIGH runtime blockers are either implemented or explicitly user-approved
-as drops.
+Canonical closeout files:
 
+- `compact_v5/_status/v5_completion_audit/FINAL_POST_AWS_PRODUCTION_READY.md`
+- `compact_v5/_status/v5_completion_audit/reviews/final-claude-post-aws-production-readiness-review.md`
+- `compact_v5/_status/R_TIER_GATE_STATUS.md`
+- `compact_v5/_status/r_tier_test_matrix.json`
+
+Historical diagnostic/non-ready spend and failed evidence remain preserved.

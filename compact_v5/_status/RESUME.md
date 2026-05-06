@@ -1,5 +1,11 @@
 # RESUME PROTOCOL — v5.0.1 build (post-Wave-6, Block-based)
 
+> **2026-05-04 OVERRIDE — v5 completion redo**: do NOT use Codex CLI as
+> reviewer. Codex may be used as a worker only. Independent review is Claude
+> Code CLI Opus/high-effort using
+> `_status/v5_completion_audit/02_CLAUDE_REVIEWER_START_PROMPT.md`.
+> Historical `_status/codex_reviews/` files remain evidence only.
+
 Use this checklist cold (zero prior context, after compaction, in a new session) to land ready to code.
 
 ---
@@ -23,7 +29,7 @@ Use this checklist cold (zero prior context, after compaction, in a new session)
 9. compact_v5/_phase_2/wave_6/TEST_DESIGN.md               # per-Block test catalogue
 10. compact_v5/_phase_2/synthesis/V5_PHASE_2_PLAN_v3.md    # Block-level scoping
 11. Last 3 commits: `git log -n 3 v5-build`
-12. Most recent Codex review: `_status/codex_reviews/block-<PREV>.md`
+12. Most recent historical Codex review: `_status/codex_reviews/block-<PREV>.md` (evidence only; not a live gate)
 ```
 
 `MEMORY.md` (`~/.claude/projects/d--Github/memory/MEMORY.md`) is auto-loaded by Claude Code at session start and is the cross-session memory anchor.
@@ -72,7 +78,10 @@ RUN_REAL_BEDROCK=1 AWS_REGION=ap-southeast-2 \
   pytest tests/integration/test_real_bedrock_smoke.py::test_<block>
 ```
 
-Then run Codex 3-axis review (template in `_status/CODEX_REVIEW_TEMPLATE.md`):
+Then run independent Claude reviewer using `_status/v5_completion_audit/02_CLAUDE_REVIEWER_START_PROMPT.md`.
+Do not run nested Codex review from a Codex worker.
+
+Historical command, disabled for redo:
 ```bash
 cd D:/Github/sagemaker-coding-agent
 codex exec --full-auto -s read-only -m gpt-5.5 --skip-git-repo-check \
@@ -80,7 +89,8 @@ codex exec --full-auto -s read-only -m gpt-5.5 --skip-git-repo-check \
   > _status/codex_reviews/block-<X>.md
 ```
 
-If Codex CHANGES_REQUESTED or REJECT → fix, recommit, re-Codex. Tag is FORBIDDEN if any open finding ≥ CHANGES_REQUESTED.
+If Claude reviewer returns REJECT or APPROVE_WITH_FIXES -> fix, recommit,
+re-review with Claude. Tag is FORBIDDEN if any open finding >= CHANGES_REQUESTED.
 
 ## Step 6 — User-approval gate (Step 11 of BUILDER_PROMPT)
 
@@ -119,7 +129,10 @@ NOW you can start the next Block (back to Step 1).
 
 After all 22 Blocks + R-tier (R1-R12 + R13-R16 enhanced) + Block V v4-vs-v5 head-to-head + final user acceptance: **v5.0.1 SHIPS**.
 
-Real-AWS test discipline (per WORKER_HINT §10): max 3 AWS calls per test, BOTH worker AND Codex must APPROVE before each call. Use R_TIER_REVIEW_TEMPLATE.md TEMPLATE A (pre-flight) / B (failed-test diagnosis) / C (post-pass sanity).
+Real-AWS test discipline for the redo: max 3 AWS calls per test, BOTH worker
+AND Claude reviewer must approve before each call. Historical
+R_TIER_REVIEW_TEMPLATE.md was Codex-oriented and is superseded by the
+v5_completion_audit Claude-review protocol unless the user explicitly restores it.
 
 ## Drift prevention checklist (every session)
 

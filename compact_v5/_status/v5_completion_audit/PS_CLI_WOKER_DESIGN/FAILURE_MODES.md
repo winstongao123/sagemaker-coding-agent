@@ -28,9 +28,15 @@ note, and block heartbeat for every attempt.
 - `ConnectionRefused`, timeout, or transient network failure: retry up to 3
   times with the same intended prompt content, a new iteration number, and
   saved artifacts for each attempt.
-- API credit, balance, or billing-route error: clear `ANTHROPIC_API_KEY` for
-  the Claude subprocess and retry through the Claude Code subscription-auth
-  path in `CLAUDE_REVIEWER_AUTH.md`.
+- API credit, balance, or billing-route error: treat as auth-route leakage,
+  not as AWS spend or a reason to switch billing. Retry through the exact
+  subscription-auth path in `CLAUDE_REVIEWER_AUTH.md`: temporarily clear
+  `ANTHROPIC_API_KEY`, use
+  `C:\Users\winst\AppData\Roaming\npm\claude.cmd`, `--setting-sources user`,
+  `--permission-mode dontAsk`, no `--add-dir`, no
+  `--permission-mode bypassPermissions`, saved prompt via stdin from repo root.
+  If the tiny subscription smoke succeeds, the worker should retry the full
+  review with that exact shape before stopping.
 - Malformed command, bad `--setting-sources`, or PowerShell argument issue:
   fix the command shape and retry with a new iteration number.
 - Empty output, missing `VERDICT:`, missing `SHIP DECISION:`, or plan-mode

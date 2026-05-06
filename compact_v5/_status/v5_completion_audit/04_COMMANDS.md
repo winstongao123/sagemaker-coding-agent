@@ -19,10 +19,11 @@ codex --version
 ```
 
 Claude reviewer smoke validation initially failed with `Credit balance is too
-low` because `ANTHROPIC_API_KEY` was set and `claude -p` took the API-credit
-path. Unset that variable for the command so Claude Code uses the subscription
-path. On Windows/PowerShell, use `--setting-sources user`; the comma-list form
-can be mangled by the wrapper.
+low` because the worker subprocess took the API-credit path instead of the
+Claude Code subscription path. For reviewer automation on Windows/PowerShell,
+use explicit `C:\Users\winst\AppData\Roaming\npm\claude.cmd`, temporarily clear
+`ANTHROPIC_API_KEY` for the child process, use `--setting-sources user`, and do
+not use `--add-dir` or `--permission-mode bypassPermissions`.
 
 ## Start Codex Worker
 
@@ -38,7 +39,7 @@ codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -m g
 Use this before the first review in a new terminal/session:
 
 ```powershell
-$old=$env:ANTHROPIC_API_KEY; Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue; claude -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "" --add-dir D:\Github\sagemaker-coding-agent --output-format text "Say CLAUDE_REVIEWER_READY and the model alias you are using. Do not run tools."; if ($old) { $env:ANTHROPIC_API_KEY=$old }
+$old=$env:ANTHROPIC_API_KEY; Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue; "Reply exactly: CLAUDE_REVIEWER_READY subscription_path_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "" --output-format text; if ($old) { $env:ANTHROPIC_API_KEY=$old }
 ```
 
 Expected output includes `CLAUDE_REVIEWER_READY` and the active Opus alias.
@@ -56,7 +57,7 @@ $prompt="compact_v5\_status\v5_completion_audit\prompts\<fresh-prompt>.md"
 $out="compact_v5\_status\v5_completion_audit\reviews\<review-output>.md"
 $log="compact_v5\_status\v5_completion_audit\logs\<review-log>.log"
 $old=$env:ANTHROPIC_API_KEY; Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
-Get-Content -Raw $prompt | claude -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "Read,Grep,Glob,Bash" --disallowedTools "Edit,Write,NotebookEdit,Bash(codex *),Bash(git commit *),Bash(git push *),Bash(git reset *),Bash(git checkout *)" --add-dir D:\Github\sagemaker-coding-agent --output-format text 2> $log | Tee-Object -FilePath $out
+Get-Content -Raw $prompt | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "Read,Grep,Glob,Bash" --disallowedTools "Edit,Write,NotebookEdit,Bash(codex *),Bash(git commit *),Bash(git push *),Bash(git reset *),Bash(git checkout *)" --output-format text 2> $log | Tee-Object -FilePath $out
 if ($old) { $env:ANTHROPIC_API_KEY=$old }
 ```
 

@@ -1,5 +1,12 @@
 # v5.0.1 BUILDER PROMPT — Comprehensive Worker Instructions
 
+> **2026-05-04 OVERRIDE — v5 completion redo**: do NOT use Codex CLI as
+> reviewer. Codex may be used as worker only. The independent reviewer is
+> Claude Code CLI Opus/high-effort using
+> `compact_v5/_status/v5_completion_audit/02_CLAUDE_REVIEWER_START_PROMPT.md`.
+> The historical Codex review sections below are evidence only unless the user
+> explicitly restores Codex-as-reviewer.
+
 **Purpose**: This is the canonical prompt for any worker (sub-agent, Codex session, fresh Claude session) implementing a single Block of v5.0.1. Use it verbatim. Fill in `<BLOCK_ID>` and `<BLOCK_NAME>` for the specific Block.
 
 ---
@@ -129,7 +136,15 @@ RUN_REAL_BEDROCK=1 AWS_REGION=ap-southeast-2 \
 
 If ANY test fails: STOP, fix, re-run. Never tag with red tests.
 
-### Step 8 — Codex AXIS A/B/C review
+### Step 8 — Independent Claude row-ledger review
+
+For the v5 completion redo, do not run Codex CLI as reviewer. Use the
+v5_completion_audit Claude reviewer protocol. The reviewer must independently
+rebuild the expected row list from SYNTHESIS_MASTER and reject missing rows.
+
+Historical Codex review instructions are retained below only for audit history.
+
+### Step 8 historical — Codex AXIS A/B/C review
 
 **MANDATORY pre-step (added 2026-05-03 after Block B review stalled)**:
 when citing v4 source for cross-check, **PRE-EXTRACT only the cited line

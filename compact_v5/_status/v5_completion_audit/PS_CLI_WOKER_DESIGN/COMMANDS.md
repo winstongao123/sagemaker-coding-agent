@@ -15,7 +15,7 @@ codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -m g
 ## Claude Smoke Test
 
 ```powershell
-$old=$env:ANTHROPIC_API_KEY; Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue; claude -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "" --add-dir D:\Github\sagemaker-coding-agent --output-format text "Say CLAUDE_REVIEWER_READY and the model alias you are using. Do not run tools."; if ($old) { $env:ANTHROPIC_API_KEY=$old }
+$old=$env:ANTHROPIC_API_KEY; Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue; "Reply exactly: CLAUDE_REVIEWER_READY subscription_path_smoke" | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5\_status\v5_completion_audit\claude-reviewer-settings.json --tools "" --output-format text; if ($old) { $env:ANTHROPIC_API_KEY=$old }
 ```
 
 ## Claude Review Invocation Shape
@@ -40,7 +40,7 @@ Then use this shape for block reviews.
 $savedAnthropicApiKey = $env:ANTHROPIC_API_KEY
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 try {
-  Get-Content -Raw $promptPath | claude -p `
+  Get-Content -Raw $promptPath | C:\Users\winst\AppData\Roaming\npm\claude.cmd -p `
     --model opus `
     --effort xhigh `
     --permission-mode dontAsk `
@@ -56,6 +56,12 @@ finally {
   }
 }
 ```
+
+Do not use `--add-dir` or `--permission-mode bypassPermissions`. Put the repo
+root in the prompt and run from `D:\Github\sagemaker-coding-agent`; Claude must
+read files itself with read-only tools. If `Credit balance is too low` appears
+while the subscription smoke succeeds, record the attempt as auth-route leakage
+and retry with this exact `claude.cmd` shape.
 
 ## Monitor Review Output
 

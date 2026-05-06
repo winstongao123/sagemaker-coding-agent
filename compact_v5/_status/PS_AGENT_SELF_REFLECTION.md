@@ -109,6 +109,8 @@ NOT acceptable claims:
 | Cannot claim DONE with MISSING items unless DEFERRED-USER-APPROVED row exists in PORT_LOG | Silent narrowing prevention |
 | Cannot bundle items in PORT_LOG without per-item justification | Removes "vague headline" cover |
 | Cannot send reviewer prompt without spec table inlined | Reviewer must see what's planned, not just what's submitted |
+| Cannot continue repeated no-progress review loops without stopping for user decision | Prevents unattended stuck loops without limiting useful reviews |
+| Cannot silently override reviewer findings | Disputed findings must go back to reviewer with evidence and remain blocking until resolved |
 | Output language is per-item, never aggregate | "9 of 43" not "20% complete" |
 | User sees the full Step 2 table at sign-off | Not "DONE" claim alone |
 
@@ -132,11 +134,25 @@ For these, output "Self-reflection checklist N/A: <reason>" instead of skipping 
 
 | Tool | Purpose | Status |
 |---|---|---|
-| `compact_v5/_status/scripts/scope_audit.py` | Auto-runs Step 2 grep evidence per Block | TO BE CREATED |
-| `~/.claude/hooks/verify-scope-completeness.sh` | Pre-commit hook blocks tag if Step 7 not green | TO BE CREATED |
-| Codex review template AXIS D | Reviewer scope-completeness check | TO BE UPDATED |
+| `compact_v5/_status/scripts/scope_audit.py` | Compares `SYNTHESIS_MASTER.md` expected rows to per-block ledgers, dispositions, and evidence | EXISTS |
+| `compact_v5/_status/scripts/verify_scope_completeness.ps1` | Repo-local strict gate wrapper; fails if blocking rows remain | EXISTS |
+| `compact_v5/_status/v5_completion_audit/CLAUDE_REVIEWER_BASE_PROMPT.md` | Forces Claude to independently reconstruct scope from `SYNTHESIS_MASTER.md` | EXISTS |
+| `compact_v5/_status/v5_completion_audit/06_CODEX_WORKER_SELF_COORDINATED_PROMPT.md` | Requires worker-led implementation plus Claude review loop | EXISTS |
 
 When these tools exist, the checklist becomes mechanically enforceable. Until then, agent runs it manually and outputs to user for verification.
+
+## Current reviewer policy for v5.0.1 redo
+
+Codex is worker-only for the current redo. Do not use Codex CLI as the
+independent reviewer and do not run nested `codex exec`.
+
+The independent reviewer is Claude Code Opus/high. Every Claude reviewer prompt
+must include `CLAUDE_REVIEWER_BASE_PROMPT.md`, which requires Claude to
+reconstruct row scope from `SYNTHESIS_MASTER.md` instead of trusting the
+worker's submitted list.
+
+Earlier reviewer-template wording is superseded for this redo by the Claude
+reviewer base prompt and the ledger-aware `scope_audit.py` gate.
 
 ## Honest commitment
 

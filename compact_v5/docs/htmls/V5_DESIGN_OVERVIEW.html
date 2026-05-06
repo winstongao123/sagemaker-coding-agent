@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SageAgent v5 Design Overview</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg: #f7f9fc;
+  --panel: #ffffff;
+  --ink: #172033;
+  --muted: #5f6f89;
+  --line: #d7e0ec;
+  --blue: #2f6fed;
+  --green: #11875d;
+  --amber: #b76b00;
+  --red: #b42318;
+  --purple: #6f42c1;
+  --cyan: #087990;
+  --shadow: 0 6px 18px rgba(17, 32, 51, 0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.55;
+}
+header {
+  background: #10213f;
+  color: white;
+  padding: 30px 28px;
+}
+header h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+header p {
+  max-width: 940px;
+  margin: 10px 0 0;
+  color: #d7e6ff;
+  font-size: 16px;
+}
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+}
+nav a {
+  color: var(--blue);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+nav a:hover { background: #eef4ff; }
+main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+  margin: 0 0 22px;
+}
+h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+h3 {
+  margin: 18px 0 8px;
+  font-size: 16px;
+}
+.lede {
+  font-size: 17px;
+  color: var(--muted);
+  margin: 0 0 18px;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 15px;
+  background: #fbfdff;
+}
+.card strong {
+  display: block;
+  margin-bottom: 5px;
+}
+.tag {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 9px;
+  margin: 3px 5px 3px 0;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.tag.blue { background: #eef4ff; color: var(--blue); border-color: #cfe0ff; }
+.tag.green { background: #eaf8f2; color: var(--green); border-color: #c8ecd9; }
+.tag.amber { background: #fff5e6; color: var(--amber); border-color: #f6d8a8; }
+.tag.red { background: #fff1f0; color: var(--red); border-color: #ffd0cc; }
+.tag.purple { background: #f5efff; color: var(--purple); border-color: #dfcff8; }
+.tag.cyan { background: #e9f8fb; color: var(--cyan); border-color: #c5edf4; }
+.flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+.mermaid-wrap {
+  background: #f8fbff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 14px 0;
+  overflow-x: auto;
+}
+.mermaid {
+  min-width: 620px;
+}
+.diagram-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+.step {
+  position: relative;
+  border: 2px solid #cfe0ff;
+  border-radius: 10px;
+  padding: 14px;
+  background: #f7fbff;
+  min-height: 118px;
+}
+.step b {
+  display: block;
+  color: var(--blue);
+  margin-bottom: 6px;
+}
+.step small {
+  color: var(--muted);
+}
+.simple {
+  background: #f8fbf7;
+  border: 1px solid #cfe8d5;
+  border-radius: 9px;
+  padding: 14px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 14px;
+}
+th, td {
+  border: 1px solid var(--line);
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: #f0f5fb;
+}
+code {
+  background: #f3f6fa;
+  border: 1px solid #dbe4ef;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.warning {
+  border-left: 5px solid var(--amber);
+  background: #fff9ee;
+}
+.danger {
+  border-left: 5px solid var(--red);
+  background: #fff6f5;
+}
+.ok {
+  border-left: 5px solid var(--green);
+  background: #f3fbf7;
+}
+.two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+footer {
+  color: var(--muted);
+  padding: 20px 24px 36px;
+  max-width: 1280px;
+  margin: 0 auto;
+  font-size: 13px;
+}
+@media (max-width: 700px) {
+  header h1 { font-size: 24px; }
+  main { padding: 14px; }
+  section { padding: 16px; }
+}
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.mermaid) {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      flowchart: { curve: "basis", htmlLabels: true },
+      themeVariables: {
+        primaryColor: "#eef4ff",
+        primaryTextColor: "#172033",
+        primaryBorderColor: "#2f6fed",
+        lineColor: "#5f6f89",
+        secondaryColor: "#f3fbf7",
+        tertiaryColor: "#fff9ee",
+        fontFamily: "Inter, Segoe UI, sans-serif"
+      }
+    });
+  }
+});
+</script>
+</head>
+<body>
+<header>
+  <h1>SageAgent v5 Design Overview</h1>
+  <p>A final current-snapshot map of the v5 coding agent: how it reads your task, uses tools, remembers work, asks helper agents, checks itself, tracks cost, and proved readiness with real AWS tests.</p>
+</header>
+
+<nav>
+  <a href="#kid">Simple Version</a>
+  <a href="#snapshot">Snapshot</a>
+  <a href="#diagrams">Flowcharts</a>
+  <a href="#loop">Main Loop</a>
+  <a href="#parts">Big Parts</a>
+  <a href="#software">Software Builder</a>
+  <a href="#review">Review Gates</a>
+  <a href="#tests">AWS Tests</a>
+  <a href="#status">Status</a>
+  <a href="#files">Where To Look</a>
+</nav>
+
+<main>
+  <section id="kid">
+    <h2>Simple Version</h2>
+    <p class="lede">Think of v5 like a careful robot programmer with a notebook, a toolbox, helper workers, and a safety inspector.</p>
+    <div class="cards">
+      <div class="card"><strong>Notebook</strong>It saves status, memory, todos, checkpoints, and logs so it can continue after a long task or compaction.</div>
+      <div class="card"><strong>Toolbox</strong>It can read files, edit files, run commands, inspect results, and test software.</div>
+      <div class="card"><strong>Helpers</strong>It can call subagents for smaller jobs, then collect their results in a structured envelope.</div>
+      <div class="card"><strong>Inspector</strong>It uses review gates, Claude review, local tests, and AWS tests before saying "ready."</div>
+      <div class="card"><strong>Money Meter</strong>It records tokens, cache use, tool calls, model calls, and cost so AWS spend does not become a surprise.</div>
+      <div class="card"><strong>Stop Sign</strong>If evidence is missing, tests fail, review fails, or cost is unsafe, it must stop or fix before moving on.</div>
+    </div>
+  </section>
+
+  <section id="snapshot">
+    <h2>Current Snapshot</h2>
+    <p class="lede">This page reflects the v5 build after the completion-audit redo, software-builder hardening blocks, AWS/R-tier evidence loop, and final post-AWS Claude production-readiness approval.</p>
+    <table>
+      <tr><th>Question</th><th>Plain Answer</th></tr>
+      <tr><td>Can v5 build software?</td><td>Yes for the validated personal SageMaker software-building scope. It has durable status, memory, checkpoints, subagents, result replay, telemetry, and evidence gates for long software work.</td></tr>
+      <tr><td>Is v5 production-ready today?</td><td>Yes. Final Claude post-AWS review returned <code>APPROVE_PRODUCTION_READY</code>, the R-tier matrix is complete, and the default R-tier gate passes.</td></tr>
+      <tr><td>Why did AWS R13 matter?</td><td>R13 was a real coding test that caught an API-boundary bug early: internal notes like <code>is_meta</code> leaked into a Bedrock payload. The bug was fixed, rerun, reviewed, gated, and preserved as part of the diagnostic evidence trail.</td></tr>
+      <tr><td>What remains?</td><td>Only non-blocking follow-ups accepted by final review: clarification UX polish, subagent attribution polish, dream output-shape polish, telemetry aggregation polish, and recurrence watch for repeated failed tool loops.</td></tr>
+    </table>
+  </section>
+
+  <section id="diagrams">
+    <h2>Flowcharts</h2>
+    <p class="lede">These are the big v5 paths, drawn like the v4 pages. The boxes show who does what and where the gates stop bad work.</p>
+
+    <h3>1. Whole v5 Coding Agent</h3>
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart TD
+  U["User asks for software work"] --> Load["Load prompt memory status skills and todos"]
+  Load --> Plan["Plan next step"]
+  Plan --> Model["Call Bedrock Claude"]
+  Model --> Decide{"Need tool or answer"}
+  Decide -->|"Tool"| Tools["Run tools for read edit shell tests and task"]
+  Tools --> Save["Save logs status results and telemetry"]
+  Save --> Compact{"Context too large"}
+  Compact -->|"Yes"| Compactor["Compact while preserving task todos memory and files"]
+  Compact -->|"No"| Continue["Continue loop"]
+  Compactor --> Continue
+  Continue --> Model
+  Decide -->|"Answer or close"| Verify["Verify and done evidence gates"]
+  Verify -->|"Missing evidence"| Plan
+  Verify -->|"Clean"| Done["Return result with traceable evidence"]
+      </div>
+    </div>
+    <p class="diagram-note">Simple version: v5 keeps looping until the work is done and the evidence is clean.</p>
+
+    <h3>2. Long Software Task Safety Loop</h3>
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart LR
+  Start["Start long task"] --> Todo["Write todos and status"]
+  Todo --> Work["Implement small slice"]
+  Work --> Test["Run local tests"]
+  Test --> Review["Self review and Claude review"]
+  Review --> Gate{"Gate clean"}
+  Gate -->|"No"| Fix["Fix or document blocker"]
+  Fix --> Work
+  Gate -->|"Yes"| Commit["Specific file commit and push"]
+  Commit --> Next["Next slice or next block"]
+  Next --> Todo
+      </div>
+    </div>
+    <p class="diagram-note">This is the anti-drift loop: no silent "done" without tests, review, logs, and git.</p>
+
+    <h3>3. Subagent And Reviewer Flow</h3>
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart TD
+  Parent["Parent agent owns task"] --> Split{"Need helper"}
+  Split -->|"No"| Direct["Parent does work directly"]
+  Split -->|"Yes"| Child["Spawn subagent with role context and budget"]
+  Child --> ChildWork["Subagent reads files and works"]
+  ChildWork --> Envelope["Return structured result envelope"]
+  Envelope --> ParentReview["Parent checks files cost status and result"]
+  Direct --> ParentReview
+  ParentReview --> Claude["Independent Claude reviewer reads files from disk"]
+  Claude --> Verdict{"Approve"}
+  Verdict -->|"No"| FixLoop["Fix and ask for re review"]
+  FixLoop --> Claude
+  Verdict -->|"Yes"| Close["Close with evidence"]
+      </div>
+    </div>
+    <p class="diagram-note">Claude should not just trust the worker. It reads the real files and checks the evidence.</p>
+
+    <h3>4. AWS Test Fix Review Loop</h3>
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart TD
+  PhaseA["Claude Phase A reviews test before spend"] --> Spend{"Approved and budget healthy"}
+  Spend -->|"No"| Stop["Stop and record blocker"]
+  Spend -->|"Yes"| AWS["Run real AWS Bedrock test"]
+  AWS --> Record["Save raw log side metrics and telemetry"]
+  Record --> Pass{"Genuine pass"}
+  Pass -->|"No"| Diagnose["Phase B diagnose failure"]
+  Diagnose --> Fix["Fix code or test"]
+  Fix --> Local["Run local lock tests"]
+  Local --> PhaseA
+  Pass -->|"Yes"| PhaseC["Claude Phase C reviews result"]
+  PhaseC --> Gate["R tier gate checks evidence and cost"]
+  Gate --> Commit["Commit and push evidence"]
+  Commit --> NextTest["Move to next R tier test"]
+      </div>
+    </div>
+    <p class="diagram-note">This loop is now complete for the required R-tier matrix. Failed or diagnostic calls stayed recorded; passing retries were reviewed, gated, committed, and pushed.</p>
+
+    <h3>5. Comprehensive Component Architecture Map</h3>
+    <div class="mermaid-wrap">
+      <div class="mermaid">
+flowchart TD
+  User["User or notebook UI"] --> Agent["Agent facade"]
+  Agent --> Prompt["Prompt builder and skills"]
+  Agent --> Engine["Query engine"]
+  Agent --> State["Session state and memory"]
+
+  Prompt --> Engine
+  State --> Engine
+
+  Engine --> Budget["Iteration budget and cost guard"]
+  Engine --> Context["Context analyzer and compactor"]
+  Engine --> Bedrock["Bedrock client"]
+  Engine --> Dispatcher["Tool dispatcher"]
+  Engine --> Audit["Audit logger and telemetry"]
+
+  Bedrock --> AWS["AWS Bedrock Claude models"]
+  AWS --> Bedrock
+  Bedrock --> Engine
+
+  Dispatcher --> ReadTools["Read search and inspect tools"]
+  Dispatcher --> WriteTools["Edit write notebook and shell tools"]
+  Dispatcher --> TaskTool["Task tool for subagents"]
+  Dispatcher --> TodoTool["Todo status and memory tools"]
+  Dispatcher --> Checkpoint["Checkpoint and result replay tools"]
+
+  TaskTool --> Subagent["Child query engine"]
+  Subagent --> ChildState["Child status memory budget and files"]
+  ChildState --> Envelope["Structured subagent result envelope"]
+  Envelope --> Engine
+
+  Context --> Summary["Summary and compacted history"]
+  Summary --> State
+
+  Audit --> Metrics["Tokens cost cache tools and errors"]
+  Metrics --> Gates["Verify done and R tier gates"]
+  Gates --> Review["Claude independent review"]
+  Review --> Close{"Close allowed"}
+  Close -->|"No"| Engine
+  Close -->|"Yes"| Git["Specific file commit and push"]
+      </div>
+    </div>
+    <p class="diagram-note">This is the full system map: user input enters the agent, the query engine coordinates model calls and tools, state survives long work, subagents return structured evidence, and gates/reviews decide whether work can close.</p>
+  </section>
+
+  <section id="loop">
+    <h2>Main Loop</h2>
+    <p class="lede">Every user message goes through the same control loop. The loop is designed to keep long software tasks from drifting.</p>
+    <div class="flow">
+      <div class="step"><b>1. Load Context</b><small>Read prompt rules, memory, status, todos, skills, and saved state.</small></div>
+      <div class="step"><b>2. Plan Work</b><small>Understand the task and choose tools or subagents.</small></div>
+      <div class="step"><b>3. Call Model</b><small>Ask Bedrock Claude for the next action, with context and tool schemas.</small></div>
+      <div class="step"><b>4. Run Tools</b><small>Read, edit, run tests, inspect files, or dispatch subagents.</small></div>
+      <div class="step"><b>5. Save Evidence</b><small>Write status, logs, tool results, telemetry, and checkpoints.</small></div>
+      <div class="step"><b>6. Verify</b><small>Run tests, review, cost gates, and close only when evidence is clean.</small></div>
+    </div>
+  </section>
+
+  <section id="parts">
+    <h2>Big Parts Of v5</h2>
+    <p class="lede">These are the main organs of the agent. If one is weak, long software work becomes risky.</p>
+    <table>
+      <tr><th>Part</th><th>What It Does</th><th>Why It Matters</th></tr>
+      <tr><td>Prompt and skills</td><td>Builds the model instructions and optional skills.</td><td>Keeps behavior consistent across coding tasks.</td></tr>
+      <tr><td>Query engine</td><td>Runs the main think/tool/think loop.</td><td>This is the agent's steering wheel.</td></tr>
+      <tr><td>Bedrock client</td><td>Talks to AWS Bedrock Claude models.</td><td>Must send only valid Bedrock API fields.</td></tr>
+      <tr><td>Tools</td><td>Read, write, edit, shell, notebook, image, todo, task, and more.</td><td>Turns model decisions into real workspace changes.</td></tr>
+      <tr><td>Compactor</td><td>Shrinks long context while preserving important facts.</td><td>Lets long tasks continue without losing the goal.</td></tr>
+      <tr><td>State and memory</td><td>Saves todos, status, memory, checkpoints, journals, and last-turn recovery.</td><td>Lets the agent resume after restart or compaction.</td></tr>
+      <tr><td>Subagents</td><td>Runs helper agents and returns structured results.</td><td>Lets one parent coordinate specialized work.</td></tr>
+      <tr><td>Telemetry and cost</td><td>Records tokens, cache, model calls, tools, subagents, and spend.</td><td>Makes production behavior measurable.</td></tr>
+      <tr><td>Review gates</td><td>Blocks "done" unless tests, status, review, telemetry, and evidence are fresh.</td><td>Prevents silent scope drift.</td></tr>
+      <tr><td>API boundary cleaning</td><td>Keeps private v5 bookkeeping out of Bedrock request payloads.</td><td>Prevents real AWS errors like the R13 <code>is_meta</code> failure that was found and fixed during validation.</td></tr>
+    </table>
+  </section>
+
+  <section id="software">
+    <h2>Software Builder Enhancements</h2>
+    <p class="lede">These were added so v5 can do long software engineering tasks like this v5 rebuild: plan, implement, test, review, checkpoint, and resume.</p>
+    <div class="cards">
+      <div class="card"><span class="tag blue">SOFTWARE-STATE</span><strong>Durable work state</strong>Todos, status, memory, turn journal, and last-turn recovery survive restart.</div>
+      <div class="card"><span class="tag green">SOFTWARE-CHECKPOINT</span><strong>Named checkpoints</strong>Create, list, and restore snapshots safely, with preview before mutation.</div>
+      <div class="card"><span class="tag cyan">SOFTWARE-SHELL</span><strong>Managed shell jobs</strong>Long commands can be tracked with logs and process cleanup.</div>
+      <div class="card"><span class="tag purple">SOFTWARE-RESULTS</span><strong>Large result storage</strong>Huge tool outputs are stored as replayable artifacts instead of flooding context.</div>
+      <div class="card"><span class="tag blue">SOFTWARE-SUBAGENT</span><strong>Structured helper results</strong>Subagent results include role, files changed, tokens, cost, timing, and recovery hints.</div>
+      <div class="card"><span class="tag green">SOFTWARE-GATE</span><strong>Real done gate</strong><code>/verify</code> and <code>/done</code> check evidence instead of just trusting a claim.</div>
+    </div>
+  </section>
+
+  <section id="review">
+    <h2>Review And No-Drift System</h2>
+    <div class="two">
+      <div class="simple ok">
+        <h3>What "Done" Means</h3>
+        <p>A block is not done just because the worker says it is. It needs row-by-row scope evidence, local tests, logs, review artifacts, a clean scope audit, and a pushed checkpoint.</p>
+      </div>
+      <div class="simple warning">
+        <h3>How Claude Review Works</h3>
+        <p>Codex gives Claude instructions and file locations. Claude should read the real files itself, reconstruct the scope, review each row, and write a verdict. Codex should not paste full repo files as the evidence source.</p>
+      </div>
+    </div>
+    <table>
+      <tr><th>Gate</th><th>Question It Answers</th></tr>
+      <tr><td>Scope audit</td><td>Did every planned row get shipped, deferred by user, dropped by user, or marked N/A with evidence?</td></tr>
+      <tr><td>Worker self-review</td><td>Did the worker check its own claim before asking for close?</td></tr>
+      <tr><td>Claude row review</td><td>Did an independent reviewer inspect the actual files and evidence?</td></tr>
+      <tr><td>Git checkpoint</td><td>Can we track, compare, and roll back every closed block?</td></tr>
+      <tr><td>Final readiness review</td><td>Are all local gates, AWS evidence, metrics, and follow-up dispositions clean enough to approve production readiness?</td></tr>
+    </table>
+  </section>
+
+  <section id="tests">
+    <h2>AWS Test Phase</h2>
+    <p class="lede">AWS tests were the real-world proving ground. They were intentionally optimized so each test revealed several things at once without wasting money repeating the same check.</p>
+    <div class="cards">
+      <div class="card"><span class="tag green">R1-R5</span><strong>Early real evidence</strong>Composite build, compaction, subagents, cold-cache microcompact, and exec recovery.</div>
+      <div class="card"><span class="tag green">R13-R17</span><strong>Software builder proof</strong>Coding accuracy, multi-file refactor, debugging, long app-building, and thinking visibility all reached reviewed pass evidence.</div>
+      <div class="card"><span class="tag green">R18</span><strong>Edge proof</strong>Mock and reviewed-disposition rows covered throttle, 5xx, corrupted state, disk-full, audit retention, Unicode memory, cache TTL, and large-output replay.</div>
+      <div class="card"><span class="tag green">R19</span><strong>UX and recovery proof</strong>Ambiguity, contradiction, hidden dependency, subagent conflicts, repeated-call circuit breaker, dream preservation, and long coherence reached accepted evidence.</div>
+    </div>
+    <div class="simple danger" style="margin-top:14px;">
+      <h3>Current Production Status</h3>
+      <p>v5 is production-ready for v5.0.1 after the AWS fix-test-review loop, final R-tier gate, and final post-AWS Claude review approved readiness.</p>
+    </div>
+    <h3>What Every AWS Test Must Leave Behind</h3>
+    <table>
+      <tr><th>Evidence</th><th>Simple Meaning</th></tr>
+      <tr><td>Phase A review</td><td>Inspector says the test is worth running before spending AWS money.</td></tr>
+      <tr><td>Raw AWS log</td><td>The exact test output is saved, even if it fails.</td></tr>
+      <tr><td>Telemetry</td><td>Turn-by-turn facts: tokens, tools, model calls, cache, timing, and errors.</td></tr>
+      <tr><td>Quality review</td><td>Human-readable judgment of whether the result was genuinely good.</td></tr>
+      <tr><td>Phase C review</td><td>Inspector checks the result after the run.</td></tr>
+      <tr><td>Metrics row</td><td>Machine-readable cost/result row for totals and gates.</td></tr>
+      <tr><td>Git commit and push</td><td>The fix or passing evidence is trackable and rollback-safe.</td></tr>
+    </table>
+  </section>
+
+  <section id="status">
+    <h2>Current High-Level Status</h2>
+    <table>
+      <tr><th>Area</th><th>Status</th></tr>
+      <tr><td>Original build blocks</td><td><span class="tag green">Closed and pushed</span> Row-by-row closure was completed before AWS phase.</td></tr>
+      <tr><td>Software-builder enhancement blocks</td><td><span class="tag green">Closed and pushed</span> State, checkpoint, shell, results, subagent envelopes, compaction telemetry, and gates were added.</td></tr>
+      <tr><td>Final local readiness</td><td><span class="tag green">Passed</span> Local/mock tests, compile, scope summary, and final Claude readiness review passed for AWS phase.</td></tr>
+      <tr><td>AWS/R-tier testing</td><td><span class="tag green">Complete</span> All 42 rows have accepted final evidence state: 28 <code>READY</code> rows and 14 <code>DISPOSITION_OK</code> rows.</td></tr>
+      <tr><td>Production readiness</td><td><span class="tag green">Approved</span> Final Claude review returned <code>APPROVE_PRODUCTION_READY</code>, <code>R_TIER_DECISION: COMPLETE</code>, and <code>FOLLOWUP_DECISION: ACCEPT_NONBLOCKING</code>.</td></tr>
+      <tr><td>Total R-tier Bedrock cost</td><td><span class="tag green">$1.6757</span> Local ledger total remains below the $14.25 matrix cap.</td></tr>
+      <tr><td>This HTML page</td><td><span class="tag green">Final snapshot</span> Explanatory page updated after production-readiness approval.</td></tr>
+    </table>
+  </section>
+
+  <section id="files">
+    <h2>Where To Look</h2>
+    <table>
+      <tr><th>Need</th><th>File Or Folder</th></tr>
+      <tr><td>Current audit status</td><td><code>compact_v5/_status/v5_completion_audit/STATUS.md</code></td></tr>
+      <tr><td>Software-builder requirements</td><td><code>compact_v5/_status/v5_completion_audit/PS_CODEX_3RD_SCAN_SOFTWARE_BUILDER_REQUIREMENTS.md</code></td></tr>
+      <tr><td>Third deep scan gaps</td><td><code>compact_v5/_status/v5_completion_audit/THIRD_DEEP_SCAN_SOFTWARE_BUILDER_GAPS.md</code></td></tr>
+      <tr><td>AWS test plan</td><td><code>compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md</code></td></tr>
+      <tr><td>R-tier review log</td><td><code>compact_v5/_status/r_tier_review_log.md</code></td></tr>
+      <tr><td>R-tier metrics</td><td><code>compact_v5/_status/r_tier_metrics.jsonl</code></td></tr>
+      <tr><td>Final post-AWS production-ready closeout</td><td><code>compact_v5/_status/v5_completion_audit/FINAL_POST_AWS_PRODUCTION_READY.md</code></td></tr>
+      <tr><td>Final Claude production-readiness review</td><td><code>compact_v5/_status/v5_completion_audit/reviews/final-claude-post-aws-production-readiness-review.md</code></td></tr>
+      <tr><td>Code entry point</td><td><code>compact_v5/MAIN/agent/agent.py</code> and <code>compact_v5/MAIN/agent/core/query_engine.py</code></td></tr>
+    </table>
+  </section>
+</main>
+
+<footer>
+  Generated for the v5 completion audit. This page is a user-facing explanation, not the source of truth. The source of truth remains the code, audit ledgers, review artifacts, metrics, and git commits.
+</footer>
+</body>
+</html>
