@@ -555,4 +555,11 @@ R6/R19-U9 cleanup resolution:
   same Agent session made a live Haiku -> Sonnet Bedrock switch, preserved
   `R7-CONTEXT-VIOLET-913`, recorded numeric cache/model-switch evidence, Claude
   Phase C returned `GENUINE_PASS`, and `r_tier_gate.py --test R7` passed.
-- Remaining real-AWS row before final review is R11.
+- R11 call1 passed after Claude Phase A approval and healthy budget check.
+  Sonnet 4.5 AU completed the R1-style dashboard/report workflow at `$0.0995`,
+  produced valid `chart.png` and `report.docx`, Claude Phase C returned
+  `GENUINE_PASS`, and `r_tier_gate.py --test R11` passed.
+- All 42 R-tier matrix rows now have per-test evidence, approved mock evidence,
+  or reviewed disposition. The final default gate passes, but production-ready
+  still requires final worker self-review and final Claude production-readiness
+  review.

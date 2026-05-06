@@ -263,3 +263,34 @@ Follow-up:
   logs or telemetry.
 - Claude Phase C judged this non-blocking for R6/R19-U9 because the acceptance
   criteria and semantic checklist passed against the actual consolidated file.
+
+## R11/R7 Telemetry Per-Turn Aggregation Polish
+
+Status: OPEN-LOW
+
+Classification: genuine R7/R11 artifact/process pass; non-blocking telemetry
+presentation follow-up.
+
+Evidence:
+
+- `compact_v5/_status/codex_reviews/r-tier-R7-phaseC-iter1.md`
+- `compact_v5/_status/codex_reviews/r-tier-R11-phaseC-iter1.md`
+- `compact_v5/_status/r-tier-R7-aws-call1-telemetry.json`
+- `compact_v5/_status/r-tier-R11-aws-call1-telemetry.json`
+
+Observed behavior:
+
+- R7 and R11 raw audit logs contain multiple distinct `chat_response` events.
+- Canonical telemetry aggregates those events into one `per_turn` row when
+  separate `Agent.run()` calls or repeated local turn numbers share `turn=1`.
+- Claude Phase C judged this non-blocking for both rows because raw audit,
+  side metrics, model-switch events, tool summaries, cost, and artifact evidence
+  preserve the load-bearing facts.
+
+Follow-up:
+
+- Before or during the final production-readiness review, decide whether
+  `build_telemetry.py` should preserve monotonic per-session chat-response
+  rows even when the engine-local `turn` value restarts or repeats.
+- This is not a blocker for R7/R11 readiness; it is an evidence presentation
+  improvement for future diagnostics.

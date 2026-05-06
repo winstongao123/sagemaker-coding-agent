@@ -414,8 +414,11 @@ Stop AWS execution and return to implementation/review if:
   Phase C returned `GENUINE_PASS`, and both per-test gates passed.
 - R7 call1 then proved a live same-session Haiku -> Sonnet model switch with
   context preservation and numeric cache/model-switch evidence. Claude Phase C
-  returned `GENUINE_PASS`, and the per-test gate passed. The only row still
-  requiring real AWS evidence is R11.
+  returned `GENUINE_PASS`, and the per-test gate passed.
+- R11 call1 proved the full R1-style dashboard/report workflow on Sonnet 4.5 AU
+  at `$0.0995`, under the `$1.50` planned cap. Claude Phase C returned
+  `GENUINE_PASS`, and the per-test gate passed. No R-tier matrix row remains
+  pending before final worker/Claude production-readiness review.
 
 ## Expected Confidence
 

@@ -1,0 +1,81 @@
+Repo root: D:\Github\sagemaker-coding-agent
+
+You are the independent Claude reviewer for R-tier Phase A. Read files from disk
+using read-only tools. Do not rely on this prompt as the source of truth.
+
+Review target:
+
+- Test id: R11
+- Purpose: prove production-model compatibility by running an R1-style
+  end-to-end dashboard/report workflow on Sonnet 4.5 AU.
+- Runner: compact_v5/MAIN/agent/tests/r_tier/test_r11_sonnet_e2e.py
+- R1 baseline runner: compact_v5/MAIN/agent/tests/r_tier/test_r1_dashboard.py
+- Matrix row: compact_v5/_status/r_tier_test_matrix.json
+- Evidence contract: compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- AWS loop contract:
+  compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+
+Planned execution:
+
+- Command will run only R11:
+  RUN_REAL_BEDROCK=1, R_TIER_CALL=1, AWS_REGION=ap-southeast-2,
+  pytest compact_v5/MAIN/agent/tests/r_tier/test_r11_sonnet_e2e.py -q
+- Expected model:
+  au.anthropic.claude-sonnet-4-5-20250929-v1:0
+- Planned cap: $1.50
+- Hard retry ceiling: $1.80 under the user-approved +20% retry buffer
+- The runner sets `CONFIG.max_tokens=2048`, `require_tool_approval=False`,
+  `enable_prompt_cache=True`, and a hard stop hook tied to token spend.
+
+What the runner is supposed to prove:
+
+1. Sonnet 4.5 AU completes an R1-style composite task on real Bedrock.
+2. The agent reads `sales.csv`, computes summary information, creates
+   `chart.png`, and creates `report.docx`.
+3. `chart.png` exists, has PNG signature, and is at least 1000 bytes.
+4. `report.docx` is a valid zip/docx with `word/document.xml`.
+5. The docx contains `Sales Report`, at least one CSV category, and either
+   total revenue `21400`/`21,400` or top-2 revenue `14000`/`14,000`.
+6. Side metrics and audit evidence record model id, cost/tokens/cache,
+   tool-dispatch names, artifact checks, and failure-loop count.
+7. Cost stays below the planned cap/hard ceiling.
+
+Overlap/optimization analysis:
+
+- R1 already proves the composite dashboard/report workflow on Haiku, not
+  Sonnet.
+- R7 proves live Haiku -> Sonnet model switching and cache evidence without
+  tools or artifact generation.
+- R17 proves Sonnet thinking visibility without tool/artifact workflow.
+- R11 is the only remaining row that exercises the full tool/artifact loop on
+  the production Sonnet model, so it is not redundant with cheaper completed
+  rows.
+
+Required evidence after AWS call if approved:
+
+- compact_v5/_status/codex_reviews/r-tier-R11-aws-call1.log
+- compact_v5/_status/r-tier-R11-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R11-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R11-aws-call1-quality.md
+- compact_v5/_status/r_tier_runtime/R11-call1-audit/*.jsonl
+- compact_v5/_status/r_tier_metrics.jsonl row for R11 call1
+- compact_v5/_status/r_tier_review_log.md row for R11
+- compact_v5/_status/codex_reviews/r-tier-R11-phaseC-iter1.md
+- compact_v5/_status/r-tier-R11-gate.txt
+
+Stop conditions:
+
+- Reject if the runner is not a genuine Sonnet workflow.
+- Reject if artifact checks are too loose or can pass on stubs.
+- Reject if the test is redundant with R1/R7/R17.
+- Reject if budget/cost controls are insufficient for the $1.50 planned cap
+  and $1.80 hard retry ceiling.
+- Reject if raw evidence, telemetry, side metrics, quality review, or gate
+  requirements are missing from the plan.
+- Reject if the runner might batch unrelated AWS tests.
+
+Expected reviewer output:
+
+- Return APPROVE_FOR_AWS_CALL if this R11 design is acceptable.
+- Otherwise return blocking findings with exact file references and required
+  changes before spend.

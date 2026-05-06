@@ -1,0 +1,61 @@
+{
+  "test": "R11",
+  "call": 1,
+  "date": "2026-05-06T04:02:21Z",
+  "model": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "tokens_in": 9,
+  "tokens_out": 774,
+  "cache_hit_pct": 0.3073,
+  "wallclock_s": 13.22,
+  "tool_calls": 4,
+  "api_calls": 3,
+  "subagent_calls": 0,
+  "reviewer_calls": 0,
+  "subagent_tokens_in": 0,
+  "subagent_tokens_out": 0,
+  "subagent_cost_usd": 0.0,
+  "reviewer_tokens_in": 0,
+  "reviewer_tokens_out": 0,
+  "reviewer_cost_usd": 0.0,
+  "cost_usd": 0.0995,
+  "cost_cap_usd": 1.5,
+  "hard_ceiling_usd": 1.7999999999999998,
+  "stop_reason": "end_turn",
+  "chart_exists": true,
+  "chart_png_valid": true,
+  "chart_size": 31714,
+  "report_exists": true,
+  "report_docx_valid": true,
+  "heading_ok": true,
+  "category_hits": [
+    "Electronics",
+    "Apparel"
+  ],
+  "revenue_or_top2_match": true,
+  "model_usage": {
+    "anthropic.claude-sonnet-4-5-20250929-v1:0": {
+      "input_tokens": 9,
+      "output_tokens": 774,
+      "cache_read_input_tokens": 9012,
+      "cache_creation_input_tokens": 20308,
+      "cost_usd": 0.099515,
+      "api_calls": 3
+    }
+  },
+  "session_cache_read": 9012,
+  "session_cache_write": 20308,
+  "parent_cache_read_tokens": 9012,
+  "parent_cache_write_tokens": 20308,
+  "tool_names": [
+    "tool_search",
+    "read_file",
+    "create_chart",
+    "create_word"
+  ],
+  "failure_loop_events": 0,
+  "process_quality_ok": true,
+  "completed": true,
+  "verdict": "GENUINE_PASS",
+  "audit_dir": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R11-call1-audit",
+  "final_text": "Task completed successfully!\n\n**Summary:**\n- **Total Revenue:** $21,400\n- **Top 2 Categories:** Electronics ($9,000) and Apparel ($5,000)\n\n**Files Created:**\n1. `chart.png` - Bar chart showing revenue by category\n2. `report.docx` - Word document with Sales Report heading, summary text, and embedded chart reference\n\nBoth files have been saved to the current directory."
+}

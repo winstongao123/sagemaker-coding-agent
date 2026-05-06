@@ -151,6 +151,10 @@ Completed and pushed:
   AU Bedrock switch, Sonnet recalled `R7-CONTEXT-VIOLET-913`, numeric
   cache/model usage evidence was recorded, cost was `$0.0175`, Claude Phase C
   returned `GENUINE_PASS`, and `r_tier_gate.py --test R7` passed.
+- R11: call1 Phase A returned `APPROVE_FOR_AWS_CALL`, AWS Budget was healthy
+  before spend, Sonnet 4.5 AU completed the R1-style dashboard/report workflow
+  at `$0.0995`, produced valid `chart.png` and `report.docx`, Claude Phase C
+  returned `GENUINE_PASS`, and `r_tier_gate.py --test R11` passed.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -347,5 +351,4 @@ R18-E13, R18-E14, R18-E15, and R19-U8 are `DISPOSITION_OK` as of 2026-05-06:
   require fake raw logs, telemetry, or quality files.
 - Claude Phase C iter2 returned `DISPOSITION_OK`.
 - Per-test gates passed for all 14 disposition rows.
-- The default final gate now fails only on the real-AWS row still outstanding:
-  R11.
+- The default final gate now passes all 42 matrix rows.
