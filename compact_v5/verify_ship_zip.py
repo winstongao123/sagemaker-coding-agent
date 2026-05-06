@@ -51,6 +51,13 @@ REQUIRED_SKILLS = {
     "report", "review", "security-review", "simplify", "verify",
 }
 
+REQUIRED_HTML_ASSETS = {
+    "skills/html/references/flowchart_page.html",
+    "skills/html/references/presentation_slides.html",
+    "skills/html/references/tabbed_design.html",
+    "docs/htmls/V5_DESIGN_OVERVIEW.html",
+}
+
 FORBIDDEN_PATTERNS = [
     re.compile(r"(^|/)tests(/|$)"),    # entire tests dir — dev only
     re.compile(r"(^|/)test_.*\.py$"),  # any individual test file
@@ -113,6 +120,11 @@ def main(zip_path: str = "../compact_v5.zip") -> int:
     for skill in sorted(REQUIRED_SKILLS):
         ok = any(n.startswith(f"skills/{skill}/SKILL.md") for n in names)
         if not _check(f"skills/{skill}/SKILL.md", ok):
+            failures += 1
+
+    print("\n== Required production HTML assets ==")
+    for asset in sorted(REQUIRED_HTML_ASSETS):
+        if not _check(asset, asset in names):
             failures += 1
 
     print("\n== Forbidden patterns (dev artefacts) ==")

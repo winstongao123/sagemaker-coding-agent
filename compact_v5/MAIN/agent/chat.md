@@ -40,6 +40,8 @@ from sagemaker_agent import CONFIG, BEDROCK_MODELS, create_chat_ui
 | `runtime/` | Bedrock client, config, session, tokens, telemetry, snapshots, gates. |
 | `tools/` | Read, write, edit, shell, notebook, task, result replay, skills. |
 | `skills/` | Production skill instructions. |
+| `skills/html/references/` | Production HTML templates used by the `html` skill. |
+| `docs/htmls/V5_DESIGN_OVERVIEW.html` | User-facing v5 architecture overview included in the company zip. |
 | `subagent/` | Subagent spawning, handoff, envelopes, and context. |
 | `ui/` | Notebook widgets and display components. |
 | `security/` | Tool safety and prompt-injection protections. |
@@ -152,7 +154,7 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 
 ## Production Evidence
 
-The production zip intentionally excludes `_status`, tests, audit logs, and review artifacts. Those live in the repository, not the company runtime zip.
+The production zip intentionally excludes `_status`, tests, audit logs, and review artifacts. Those live in the repository, not the company runtime zip. It does include the production `html` skill templates and `docs/htmls/V5_DESIGN_OVERVIEW.html`.
 
 Final evidence summary:
 

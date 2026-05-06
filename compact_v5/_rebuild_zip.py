@@ -10,6 +10,7 @@ PORT_LOG: #036.
 
 Kept (runtime essentials):
 - chat.ipynb (entry notebook, at zip root)
+- docs/htmls/V5_DESIGN_OVERVIEW.html (user-facing v5 architecture overview)
 - chat.md (companion — kept; v4 dropped it but v5 keeps it because it documents
             PS Issues #2 + #4 widget surface and the OUT-OF-SCOPE list)
 - memory.md, AGENT_STATUS.md (auto-loaded persistent files at zip root)
@@ -34,7 +35,7 @@ Dropped (dev-only artefacts):
 - __pycache__/, .pytest_cache/, .snapshots/, .ipynb_checkpoints/
 - _rebuild_zip.py + verify_ship_zip.py (meta tools — repo-only)
 - powerbi-dashboard variants (not in v5 base)
-- bulky optional skill reference/example assets under skills/html/references/
+- html skill reference/example assets under skills/html/references/
 - Clara long-form review prompt pack/reference notes; keep skills/clara/SKILL.md
 """
 
@@ -47,6 +48,10 @@ import zipfile
 SRC_DIR = os.path.join("MAIN", "agent")
 OUT_ZIP = os.path.join("..", "compact_v5.zip")
 ARCHIVE_PREFIX = SRC_DIR.replace(os.sep, "/") + "/"
+EXTRA_FILES = {
+    os.path.join("docs", "htmls", "V5_DESIGN_OVERVIEW.html"):
+        "docs/htmls/V5_DESIGN_OVERVIEW.html",
+}
 
 EXCLUDE_DIR_NAMES = {
     "__pycache__",
@@ -66,8 +71,6 @@ EXCLUDE_DIR_PATTERNS = []
 EXCLUDE_REL_PATHS = {
     "MAIN/agent/tests",   # entire tests dir — dev only
     "tests",              # also catches it after the SRC_DIR strip
-    "MAIN/agent/skills/html/references",
-    "skills/html/references",
     "MAIN/agent/skills/clara/prompts",
     "skills/clara/prompts",
     "MAIN/agent/skills/clara/FULL_REVIEW.md",
@@ -140,6 +143,13 @@ def main():
                 z.write(abs_p, rel_p)
                 files_added += 1
                 total_raw += os.path.getsize(abs_p)
+
+        for src, archive_name in EXTRA_FILES.items():
+            if not os.path.exists(src):
+                raise FileNotFoundError(f"Required ship extra missing: {src}")
+            z.write(src, archive_name)
+            files_added += 1
+            total_raw += os.path.getsize(src)
 
     zip_size = os.path.getsize(OUT_ZIP)
     print(

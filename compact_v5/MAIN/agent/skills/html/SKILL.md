@@ -28,7 +28,7 @@ Three templates ship with this skill at `skills/html/references/`. Each represen
 | `references/presentation_slides.html` | Slide-deck-style HTML, single-page, scroll-through | Hero section, stat row, numbered sections, comparison table, code block. Clean **generic template** with `[REPLACE]` placeholders — no business content. ~8 KB. |
 | `references/flowchart_page.html` | Flowchart-heavy pages (Mermaid as centrepiece) | Architecture flowchart with multiple Mermaid blocks + interactive panel sections + comparison tables. Source: this repo's `PS_ClaudeCode_Insights/PS_FLOWCHART_V4.html`, ~88 KB. |
 
-A 4th canonical reference lives at `compact_v4/MAIN/agent/v3_architecture.html` — the v4 architecture report itself. Use it as a 4th template for "architecture / comparison report" requests.
+A 4th production reference ships in v5 at `docs/htmls/V5_DESIGN_OVERVIEW.html` — the v5 architecture overview. Use it as the default architecture/report reference inside the company zip.
 
 ---
 
@@ -146,7 +146,7 @@ User says: *"explain the X flow with diagrams"*
 
 User says: *"build an architecture report comparing X and Y"*
 
-1. `read_file` `compact_v4/MAIN/agent/v3_architecture.html` — the v4's own architecture doc is the cleanest template here.
+1. `read_file` `docs/htmls/V5_DESIGN_OVERVIEW.html` — the v5 architecture overview ships with the company zip.
 2. Mimic: hero stats → numbered sections → comparison table → final assessment.
 3. Use the CSS palette above.
 
