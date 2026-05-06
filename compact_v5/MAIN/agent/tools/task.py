@@ -118,6 +118,14 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         )
     parent_engine = context["parent_engine"]
     parent_depth = int(context.get("parent_depth", 0))
+    try:
+        from runtime.config import CONFIG
+        subagent_model = str(
+            ((getattr(CONFIG, "agent_overrides", {}) or {}).get(subagent_type, {}) or {}).get("model", "")
+            or ""
+        )
+    except Exception:
+        subagent_model = ""
 
     # Lazy-import to avoid circular import: subagent.spawn imports
     # core.query_engine which (via tools/__init__.py:bootstrap_built_ins)
@@ -129,6 +137,7 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         prompt=prompt,
         agent_type=subagent_type,
         parent_depth=parent_depth,
+        model_id=subagent_model or None,
         plan_mode=bool(context.get("plan_mode", False)),
     )
 
@@ -142,6 +151,11 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
             tool_name="task",
             parameters={
                 "subagent_type": subagent_type,
+                "model_id": subagent_model or getattr(
+                    getattr(parent_engine, "client", None),
+                    "model_id",
+                    "",
+                ),
                 "description": description,
                 "child_session_id": result.child_session_id,
             },

@@ -195,22 +195,6 @@ class Agent:
                 system_prompt = system_prompt + "\n\n" + state_text
             else:
                 system_prompt = system_prompt + CACHE_BOUNDARY + "\n\n" + state_text
-        if self._ui_subagent_preferences.get("enabled"):
-            prefs = self._ui_subagent_preferences
-            preference_block = (
-                "## Notebook UI Sub-Agent Preferences\n\n"
-                "The operator enabled the Sub-Agents panel in the notebook UI. "
-                "Use these as coordination preferences, not as permission to spawn "
-                "unnecessary workers. Only call the task tool when it materially "
-                "helps the current user request.\n\n"
-                f"- explorer: {prefs.get('explorer', 'explorer')}\n"
-                f"- worker: {prefs.get('worker', 'worker')}\n"
-                f"- reviewer: {prefs.get('reviewer', 'reviewer')}"
-            )
-            if CACHE_BOUNDARY in system_prompt:
-                system_prompt = system_prompt + "\n\n" + preference_block
-            else:
-                system_prompt = system_prompt + CACHE_BOUNDARY + "\n\n" + preference_block
         active_tools = list(tools) if tools is not None else all_registered()
 
         self._stop_requested = False  # reset between runs
@@ -343,17 +327,22 @@ class Agent:
         self,
         *,
         enabled: bool,
-        explorer: str = "explorer",
-        worker: str = "worker",
-        reviewer: str = "reviewer",
+        explorer: str = "",
+        worker: str = "",
+        reviewer: str = "",
+        explorer_model: str = "",
+        worker_model: str = "",
+        reviewer_model: str = "",
     ) -> None:
-        """Store notebook sub-agent preferences for the dynamic prompt tail."""
-        self._ui_subagent_preferences = {
-            "enabled": bool(enabled),
-            "explorer": explorer or "explorer",
-            "worker": worker or "worker",
-            "reviewer": reviewer or "reviewer",
-        }
+        """Backward-compatible no-op for old notebook UI tests.
+
+        v5.0.1 follows v4 here: the notebook sub-agent panel writes model
+        overrides into `CONFIG.agent_overrides`, and `spawn_subagent()` reads
+        those overrides at dispatch time. The model does not need a dynamic
+        prompt block to learn UI preferences, which keeps the cache boundary
+        stable and avoids steering the model toward unnecessary sub-agent use.
+        """
+        self._ui_subagent_preferences = {"enabled": bool(enabled)}
 
     def set_thinking(self, enabled: bool, budget: Optional[int] = None) -> None:
         """Update thinking-mode settings (PS Issue #4 UI hook)."""

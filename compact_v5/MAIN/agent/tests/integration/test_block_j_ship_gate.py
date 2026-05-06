@@ -96,6 +96,10 @@ def test_zip_extract_in_tmpdir():
     # Now extract in a fresh tmpdir and confirm core files land.
     with tempfile.TemporaryDirectory() as tmp:
         with zipfile.ZipFile(str(_SHIP_ZIP)) as zf:
+            names = zf.namelist()
+            assert not any(n.startswith(".sageagent_state/") for n in names), (
+                "ship zip must not include local runtime state under .sageagent_state/"
+            )
             zf.extractall(tmp)
         for required in ("entry.py", "chat.ipynb", "__init__.py"):
             assert (Path(tmp) / required).exists(), (

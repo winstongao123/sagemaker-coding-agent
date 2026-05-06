@@ -21,6 +21,7 @@ PORT_LOG: #030.
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from typing import Any, Optional
 
@@ -277,6 +278,8 @@ class V4WidgetChatUI(WidgetChatUI):
         self._messages = []
         self._dark_mode = True
         self._chat_height = 500
+        self._run_thread = None
+        self._run_lock = threading.Lock()
         self._build()
 
     @staticmethod
@@ -316,17 +319,28 @@ class V4WidgetChatUI(WidgetChatUI):
         self._new_btn = widgets.Button(description="New", button_style="success", icon="plus")
 
         self._model_dropdown = widgets.Dropdown(description="", options=BEDROCK_MODELS, value=default_model, layout=widgets.Layout(width="260px"))
-        self._subagent_toggle = widgets.ToggleButton(value=False, description="Sub-Agents", icon="cogs", layout=widgets.Layout(width="180px", height="28px"))
+        self._subagent_toggle = widgets.ToggleButton(value=False, description="Sub-Agent Models ▶", icon="cogs", layout=widgets.Layout(width="210px", height="28px"))
         self._plan_mode = widgets.Checkbox(value=False, description="Plan Mode", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
         self._approval_toggle = widgets.Checkbox(value=bool(getattr(CONFIG, "require_tool_approval", True)), description="Require Approval", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
-        self._explorer_dropdown = widgets.Dropdown(description="Explorer:", options=[("Default", "default"), ("Explorer", "explorer")], value="explorer", layout=widgets.Layout(width="320px"))
-        self._worker_dropdown = widgets.Dropdown(description="Worker:", options=[("Default", "default"), ("Worker", "worker")], value="worker", layout=widgets.Layout(width="320px"))
-        self._reviewer_dropdown = widgets.Dropdown(description="Reviewer:", options=[("Default", "default"), ("Reviewer", "reviewer")], value="reviewer", layout=widgets.Layout(width="320px"))
-        self._subagent_panel = widgets.VBox([
-            self._explorer_dropdown,
-            self._worker_dropdown,
-            self._reviewer_dropdown,
-        ])
+        self._subagent_types = ["explore", "review", "general", "build", "plan"]
+        self._subagent_model_dropdowns = {}
+        model_options = [("Same as main", "")] + list(BEDROCK_MODELS)
+        model_values = [m[1] for m in BEDROCK_MODELS]
+        overrides = getattr(CONFIG, "agent_overrides", {}) or {}
+        for agent_type in self._subagent_types:
+            current = ""
+            try:
+                current = str((overrides.get(agent_type, {}) or {}).get("model", "") or "")
+            except Exception:
+                current = ""
+            self._subagent_model_dropdowns[agent_type] = widgets.Dropdown(
+                description=f"{agent_type}:",
+                options=model_options,
+                value=current if current in model_values else "",
+                layout=widgets.Layout(width="320px"),
+                style={"description_width": "70px"},
+            )
+        self._subagent_panel = widgets.VBox([self._subagent_model_dropdowns[t] for t in self._subagent_types])
         self._subagent_panel.layout.display = "none"
 
         self._thinking_checkbox = widgets.Checkbox(value=bool(getattr(self.agent, "thinking_enabled", False)), description="Extended Thinking", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
@@ -372,14 +386,10 @@ class V4WidgetChatUI(WidgetChatUI):
         self._approval_toggle.observe(self._on_approval_change, names="value")
         self._auto_compact.observe(self._on_auto_compact_change, names="value")
         self._subagent_toggle.observe(self._on_subagent_preferences_change, names="value")
-        self._explorer_dropdown.observe(self._on_subagent_preferences_change, names="value")
-        self._worker_dropdown.observe(self._on_subagent_preferences_change, names="value")
-        self._reviewer_dropdown.observe(self._on_subagent_preferences_change, names="value")
+        for agent_type, dropdown in self._subagent_model_dropdowns.items():
+            dropdown.observe(self._on_subagent_model_change(agent_type), names="value")
         self._on_plan_mode_change({"new": self._plan_mode.value})
         self._on_auto_compact_change({"new": self._auto_compact.value})
-        # Seed the Agent with explicit disabled preferences so later toggles are
-        # a normal state update, not a special first-use path.
-        self._on_subagent_preferences_change({"new": self._subagent_toggle.value})
 
     def _build_layout(self, widgets: Any) -> None:
         style = widgets.HTML("""
@@ -579,10 +589,23 @@ class V4WidgetChatUI(WidgetChatUI):
         msg = (self._input.value or "").strip()
         if not msg:
             return
+        if self._run_thread is not None and self._run_thread.is_alive():
+            self._append_message("system", "Agent is already running. Click Stop before sending another request.")
+            return
         self._input.value = ""
         self._append_message("user", msg)
         self._stop_btn.layout.display = ""
+        self._send_btn.disabled = True
         self._status_html.value = "<span style='color:#ff9800'><b>* Running</b></span>"
+
+        def _run() -> None:
+            with self._run_lock:
+                self._run_message(msg)
+
+        self._run_thread = threading.Thread(target=_run, name="sageagent-ui-run", daemon=True)
+        self._run_thread.start()
+
+    def _run_message(self, msg: str) -> None:
         try:
             if msg.startswith("/"):
                 try:
@@ -605,6 +628,7 @@ class V4WidgetChatUI(WidgetChatUI):
             self._append_message("system", f"[chat-ui] error: {type(exc).__name__}: {exc}")
         finally:
             self._stop_btn.layout.display = "none"
+            self._send_btn.disabled = False
             self.budget_widget.update()
             self.thinking_widget.refresh()
             self._render_status()
@@ -789,18 +813,45 @@ class V4WidgetChatUI(WidgetChatUI):
         enabled = bool(self._subagent_toggle.value)
         try:
             self._subagent_panel.layout.display = "" if enabled else "none"
-        except Exception:
-            pass
-        try:
-            self.agent.set_ui_subagent_preferences(
-                enabled=enabled,
-                explorer=str(self._explorer_dropdown.value),
-                worker=str(self._worker_dropdown.value),
-                reviewer=str(self._reviewer_dropdown.value),
-            )
+            self._subagent_toggle.description = "Sub-Agent Models ▼" if enabled else "Sub-Agent Models ▶"
         except Exception:
             pass
         self._render_status()
+
+    def _on_subagent_model_change(self, agent_type: str):
+        def handler(change) -> None:
+            try:
+                from runtime.config import CONFIG
+                if not isinstance(getattr(CONFIG, "agent_overrides", None), dict):
+                    CONFIG.agent_overrides = {}
+                CONFIG.agent_overrides.setdefault(agent_type, {})
+                new_model = str(change["new"] or "")
+                if new_model:
+                    CONFIG.agent_overrides[agent_type]["model"] = new_model
+                    label = next(
+                        (
+                            name
+                            for name, value in self._subagent_model_dropdowns[agent_type].options
+                            if value == new_model
+                        ),
+                        new_model,
+                    )
+                    self._append_message("system", f"Sub-agent `{agent_type}` model -> {label}")
+                else:
+                    CONFIG.agent_overrides[agent_type].pop("model", None)
+                    if not CONFIG.agent_overrides[agent_type]:
+                        CONFIG.agent_overrides.pop(agent_type, None)
+                    self._append_message("system", f"Sub-agent `{agent_type}` model -> same as main")
+            except Exception as exc:  # noqa: BLE001
+                logging.warning("[chat-ui] subagent model override update failed: %s", exc)
+            self._render_status()
+        return handler
+
+    def send(self, message: str) -> Any:
+        """Programmatic fallback matching ConsoleChatUI.send()."""
+        self._input.value = message
+        self._on_send(None)
+        return self._run_thread
 
     def render(self) -> Any:
         return self._panel

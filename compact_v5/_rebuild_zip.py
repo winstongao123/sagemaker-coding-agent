@@ -58,6 +58,7 @@ EXCLUDE_DIR_NAMES = {
     ".git",
     ".pytest_cache",
     ".snapshots",
+    ".sageagent_state",
     ".ipynb_checkpoints",
     "audit_logs",
     "sessions",

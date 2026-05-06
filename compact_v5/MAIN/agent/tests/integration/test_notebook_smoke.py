@@ -427,45 +427,51 @@ def test_v4_style_ui_plan_and_auto_compact_toggles_drive_agent_state():
     assert "Auto-Compact: OFF" in ui._mode_html.value
 
 
-def test_v4_style_ui_subagent_preferences_reach_dynamic_prompt(monkeypatch):
+def test_v4_style_ui_subagent_model_overrides_match_v4_contract(monkeypatch):
     ui = _v4_widget_ui_or_skip()
-    captured = {}
+    from entry import BEDROCK_MODELS
+    from runtime.config import CONFIG
 
-    def fake_engine_run(**kwargs):
-        captured.update(kwargs)
-        from core.query_engine import QueryResult
-        return QueryResult(text="ok", messages=[], stop_reason="end_turn", turns_used=0)
-
-    ui.agent._engine.run = fake_engine_run
+    monkeypatch.setattr(CONFIG, "agent_overrides", {})
     ui._subagent_toggle.value = True
-    ui._explorer_dropdown.value = "default"
-    ui.agent.run("use helpers", tools=[])
+    assert ui._subagent_panel.layout.display != "none"
+    assert list(ui._subagent_model_dropdowns) == ["explore", "review", "general", "build", "plan"]
+    for dropdown in ui._subagent_model_dropdowns.values():
+        assert dropdown.options[0] == ("Same as main", "")
+        assert list(dropdown.options[1:]) == list(BEDROCK_MODELS)
 
-    assert "Notebook UI Sub-Agent Preferences" in captured["system_prompt"]
-    assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
-    assert "- explorer: default" in captured["system_prompt"]
-    assert "- worker: worker" in captured["system_prompt"]
-    assert "- reviewer: reviewer" in captured["system_prompt"]
+    target = BEDROCK_MODELS[-1][1]
+    ui._subagent_model_dropdowns["review"].value = target
+    assert CONFIG.agent_overrides["review"]["model"] == target
+
+    ui._subagent_model_dropdowns["review"].value = ""
+    assert "review" not in CONFIG.agent_overrides
 
 
-def test_v4_style_ui_subagent_preferences_not_injected_when_disabled():
-    ui = _v4_widget_ui_or_skip()
+def test_v4_style_ui_subagent_model_overrides_do_not_pollute_dynamic_prompt(monkeypatch):
+    from agent import Agent
+    from runtime.bedrock_client import BedrockClient
+    from runtime.config import CONFIG
+
     captured = {}
+    monkeypatch.setattr(CONFIG, "agent_overrides", {"review": {"model": "child-model"}})
+    agent = Agent(
+        client=BedrockClient(model_id="parent-model", region="us-east-1", mock_mode=True),
+    )
 
     def fake_engine_run(**kwargs):
         captured.update(kwargs)
         from core.query_engine import QueryResult
         return QueryResult(text="ok", messages=[], stop_reason="end_turn", turns_used=0)
 
-    ui.agent._engine.run = fake_engine_run
-    ui._subagent_toggle.value = False
-    ui.agent.run("do normal work", tools=[])
+    agent._engine.run = fake_engine_run
+    agent.run("do normal work", tools=[])
 
     assert "Notebook UI Sub-Agent Preferences" not in captured["system_prompt"]
     assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
 
 
-def test_v4_style_ui_state_blocks_and_subagent_preferences_keep_one_boundary(monkeypatch):
+def test_v4_style_ui_state_blocks_keep_one_boundary(monkeypatch):
     import importlib
     from agent import Agent
     from runtime.bedrock_client import BedrockClient
@@ -480,12 +486,6 @@ def test_v4_style_ui_state_blocks_and_subagent_preferences_keep_one_boundary(mon
     agent = Agent(
         client=BedrockClient(model_id="x", region="us-east-1", mock_mode=True),
     )
-    agent.set_ui_subagent_preferences(
-        enabled=True,
-        explorer="explorer",
-        worker="worker",
-        reviewer="reviewer",
-    )
 
     def fake_engine_run(**kwargs):
         captured.update(kwargs)
@@ -495,7 +495,6 @@ def test_v4_style_ui_state_blocks_and_subagent_preferences_keep_one_boundary(mon
     agent._engine.run = fake_engine_run
     agent.run("go", tools=[])
 
-    assert "Notebook UI Sub-Agent Preferences" in captured["system_prompt"]
     assert "## Handoff: AGENT_STATUS" in captured["system_prompt"]
     assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
 
@@ -509,12 +508,6 @@ def test_v4_style_ui_custom_prompt_without_boundary_gets_one_boundary():
         client=BedrockClient(model_id="x", region="us-east-1", mock_mode=True),
         system_prompt="custom system prompt without boundary",
     )
-    agent.set_ui_subagent_preferences(
-        enabled=True,
-        explorer="explorer",
-        worker="worker",
-        reviewer="reviewer",
-    )
 
     def fake_engine_run(**kwargs):
         captured.update(kwargs)
@@ -524,8 +517,7 @@ def test_v4_style_ui_custom_prompt_without_boundary_gets_one_boundary():
     agent._engine.run = fake_engine_run
     agent.run("go", tools=[])
 
-    assert "Notebook UI Sub-Agent Preferences" in captured["system_prompt"]
-    assert captured["system_prompt"].count("# === DYNAMIC ===") == 1
+    assert captured["system_prompt"].count("# === DYNAMIC ===") == 0
 
 
 def test_v4_style_ui_model_dropdown_updates_config_and_live_client(monkeypatch):

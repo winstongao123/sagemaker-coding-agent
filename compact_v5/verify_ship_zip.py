@@ -27,13 +27,18 @@ REQUIRED_AT_ROOT = {
     "chat.ipynb",
     "chat.md",
     "entry.py",
+    "agent.py",
+    "commands.py",
+    "sagemaker_agent.py",
+    "memory.md",
+    "AGENT_STATUS.md",
     "__init__.py",
 }
 
 # Required package directories (each must contain a __init__.py at minimum).
 REQUIRED_PACKAGES = {
     "core", "tools", "skills", "runtime", "prompt", "ui", "subagent",
-    "security",
+    "security", "coordinator", "memory",
 }
 
 # Required runtime tools (subset — full list in tools/__init__.py).
@@ -45,10 +50,11 @@ REQUIRED_TOOLS = {
     "tool_search.py", "task.py", "skill.py", "skill_propose_patch.py",
 }
 
-# Required skill directories (10 v4 production skills, ported byte-for-byte).
+# Required skill directories.
 REQUIRED_SKILLS = {
-    "batch", "clara", "design", "html", "reflexion",
-    "report", "review", "security-review", "simplify", "verify",
+    "batch", "clara", "debug", "design", "html", "init",
+    "init-verifiers", "reflexion", "remember", "report", "review",
+    "security-review", "simplify", "skillify", "verify",
 }
 
 REQUIRED_HTML_ASSETS = {
@@ -64,6 +70,7 @@ FORBIDDEN_PATTERNS = [
     re.compile(r"(^|/)__pycache__"),
     re.compile(r"(^|/)\.pytest_cache"),
     re.compile(r"(^|/)\.snapshots"),
+    re.compile(r"(^|/)\.sageagent_state(/|$)"),
     re.compile(r"(^|/)\.ipynb_checkpoints"),
     re.compile(r"(^|/)audit_logs"),
     re.compile(r"(^|/)sessions(/|$)"),
@@ -76,6 +83,14 @@ FORBIDDEN_PATTERNS = [
     re.compile(r"\.swp$"),
     re.compile(r"\.DS_Store$"),
 ]
+
+FORBIDDEN_TEXT_MARKERS = {
+    "README.md": [
+        "SHIP BLOCKED",
+        "not shippable",
+        "v5.0.0 build candidate",
+    ],
+}
 
 
 def _check(name: str, condition: bool, detail: str = "") -> bool:
@@ -136,6 +151,25 @@ def main(zip_path: str = "../compact_v5.zip") -> int:
             print(f"  [FAIL] pattern {pat.pattern!r} matches {len(offenders)} entries; sample: {sample}")
         else:
             print(f"  [PASS] pattern {pat.pattern!r} clean")
+
+    print("\n== Release-facing stale text markers ==")
+    for path, markers in sorted(FORBIDDEN_TEXT_MARKERS.items()):
+        if path not in names:
+            continue
+        text = ""
+        try:
+            with zipfile.ZipFile(zip_path) as z:
+                text = z.read(path).decode("utf-8", errors="replace")
+        except Exception as exc:
+            failures += 1
+            print(f"  [FAIL] {path} readable -- {exc}")
+            continue
+        found = [m for m in markers if m in text]
+        if found:
+            failures += 1
+            print(f"  [FAIL] {path} stale markers: {found}")
+        else:
+            print(f"  [PASS] {path} stale markers clean")
 
     print("\n== Result ==")
     if failures:

@@ -73,12 +73,14 @@ class SubagentResult:
     files_changed: List[str] = field(default_factory=list)
     token_delta: Dict[str, Any] = field(default_factory=dict)
     recovery_hint: str = ""
+    model_id: str = ""
 
     def to_envelope(self) -> Dict[str, Any]:
         return {
             "schema": "sageagent.subagent_result.v1",
             "agent_type": self.agent_type,
             "role": self.agent_type,
+            "model_id": self.model_id,
             "depth": self.depth,
             "child_session_id": self.child_session_id,
             "stop_reason": self.stop_reason,
@@ -162,7 +164,44 @@ def _recovery_hint(stop_reason: str, error: Optional[str]) -> str:
     return "parent_should_review_subagent_envelope"
 
 
-def _new_child_engine(parent_engine: Any, max_turns: int, agent_type: str = "general") -> Any:
+def _resolve_child_model(agent_type: str, requested_model_id: Optional[str] = None) -> str:
+    """Return the v4-style sub-agent model override, if configured."""
+    if requested_model_id:
+        return str(requested_model_id)
+    try:
+        from runtime.config import CONFIG
+        override = (getattr(CONFIG, "agent_overrides", {}) or {}).get(agent_type, {}) or {}
+        return str(override.get("model") or override.get("model_id") or "")
+    except Exception:
+        return ""
+
+
+def _child_client(parent_engine: Any, agent_type: str, model_id: str = "") -> Any:
+    """Create a child client for a model override without mutating parent."""
+    parent_client = parent_engine.client
+    selected = _resolve_child_model(agent_type, model_id).strip()
+    parent_model = str(getattr(parent_client, "model_id", "") or "")
+    if not selected or selected == parent_model:
+        return parent_client
+    try:
+        from runtime.bedrock_client import BedrockClient
+        from runtime.config import CONFIG
+        return BedrockClient(
+            model_id=selected,
+            region=getattr(parent_client, "region", getattr(CONFIG, "region", "")),
+            mock_mode=bool(getattr(parent_client, "mock_mode", getattr(CONFIG, "mock_mode", False))),
+        )
+    except Exception as exc:
+        logging.warning(
+            "[subagent] model override %r for %s failed: %s; using parent model",
+            selected,
+            agent_type,
+            exc,
+        )
+        return parent_client
+
+
+def _new_child_engine(parent_engine: Any, max_turns: int, agent_type: str = "general", model_id: str = "") -> Any:
     """Construct a fresh QueryEngine that shares the parent's IterationBudget.
 
     Lazy-imports to avoid a circular load at module-import time
@@ -175,8 +214,9 @@ def _new_child_engine(parent_engine: Any, max_turns: int, agent_type: str = "gen
     can be filtered to a single sub-agent run.
     """
     from core.query_engine import QueryEngine
+    client = _child_client(parent_engine, agent_type, model_id)
     return QueryEngine(
-        client=parent_engine.client,
+        client=client,
         max_turns=max_turns,
         budget=parent_engine.budget,            # SHARED — the Phase-9 contract
         on_stop_check=parent_engine.on_stop_check,
@@ -211,6 +251,7 @@ def spawn_subagent(
     status_path: Optional[str] = None,
     todos_text: Optional[str] = None,
     recent_files: Optional[List[str]] = None,
+    model_id: Optional[str] = None,
     plan_mode: bool = False,
     output_fn: Callable[[str], None] = print,
 ) -> SubagentResult:
@@ -231,6 +272,7 @@ def spawn_subagent(
         result, no Bedrock call made.
     """
     child_depth = parent_depth + 1
+    selected_model_id = _resolve_child_model(agent_type, model_id)
 
     # Depth-limit gate (v4 sagemaker_agent.py:8354 parity).
     if child_depth > max_depth:
@@ -324,7 +366,12 @@ def spawn_subagent(
 
     # Construct child engine. The shared-budget invariant is enforced by
     # _new_child_engine — verified by test_subagent_shares_iteration_budget.
-    child = _new_child_engine(parent_engine, max_turns=max_turns, agent_type=agent_type)
+    child = _new_child_engine(
+        parent_engine,
+        max_turns=max_turns,
+        agent_type=agent_type,
+        model_id=selected_model_id,
+    )
 
     # Codex Phase-09 finding (BLOCKER): thread the child's depth so that
     # IF the child itself dispatches `task`, the QueryEngine's tool-dispatch
@@ -539,6 +586,7 @@ def spawn_subagent(
             files_changed=_extract_files_changed(result.messages),
             token_delta={},
             recovery_hint="parent_state_was_preserved_by_recovery_guard",
+            model_id=getattr(getattr(child, "client", None), "model_id", selected_model_id),
         )
 
     try:
@@ -564,4 +612,5 @@ def spawn_subagent(
         files_changed=_extract_files_changed(result.messages),
         token_delta=_token_delta(_tokens_before, _tokens_after, agent_type),
         recovery_hint=_recovery_hint(result.stop_reason, result.error),
+        model_id=getattr(getattr(child, "client", None), "model_id", selected_model_id),
     )

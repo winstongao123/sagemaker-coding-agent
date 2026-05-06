@@ -83,6 +83,41 @@ def test_subagent_shares_iteration_budget():
 # Test 2 — parent context unchanged (Phase 9 ACCEPTANCE)
 # ============================================================
 
+def test_subagent_model_override_uses_config_without_mutating_parent(monkeypatch):
+    """V4 parity: CONFIG.agent_overrides can select a child model."""
+    from core import QueryEngine, IterationBudget
+    from subagent.spawn import spawn_subagent
+    from runtime.bedrock_client import Response
+    from runtime.config import CONFIG
+    import runtime.bedrock_client as bedrock_mod
+
+    class FakeBedrockClient:
+        def __init__(self, model_id, region, mock_mode=False):
+            self.model_id = model_id
+            self.region = region
+            self.mock_mode = mock_mode
+
+        def chat(self, messages, system, tools, max_tokens, temperature,
+                 thinking_enabled, thinking_budget):
+            return Response(text=f"child model {self.model_id}", tool_calls=[], stop_reason="end_turn")
+
+    monkeypatch.setattr(bedrock_mod, "BedrockClient", FakeBedrockClient)
+    monkeypatch.setattr(CONFIG, "agent_overrides", {"review": {"model": "child-model"}})
+    parent_client = FakeBedrockClient("parent-model", "us-east-1", True)
+    parent = QueryEngine(
+        client=parent_client,
+        max_turns=5,
+        budget=IterationBudget(max_iterations=20),
+    )
+
+    result = spawn_subagent(parent, "review x", agent_type="review")
+
+    assert result.model_id == "child-model"
+    assert result.to_envelope()["model_id"] == "child-model"
+    assert parent.client.model_id == "parent-model"
+    assert result.text == "child model child-model"
+
+
 def test_subagent_parent_context_unchanged():
     """Phase 9 acceptance criterion: parent's `messages` buffer length is
     identical before and after spawn. The child has its own buffer."""
@@ -414,8 +449,8 @@ def test_real_spawn_child_budget_is_parent_budget():
     captured = {}
     real_factory = spawn_mod._new_child_engine
 
-    def capturing_factory(p, max_turns, agent_type="general"):
-        c = real_factory(p, max_turns, agent_type=agent_type)
+    def capturing_factory(p, max_turns, agent_type="general", model_id=""):
+        c = real_factory(p, max_turns, agent_type=agent_type, model_id=model_id)
         captured["child"] = c
         return c
 
@@ -462,7 +497,7 @@ def test_parent_immutability_check_catches_in_place_mutation(monkeypatch):
             return QueryResult(text="", stop_reason="end_turn", turns_used=0,
                                budget_used=0, messages=[])
 
-    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns, agent_type="general": _MutatorChild(p))
+    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns, agent_type="general", model_id="": _MutatorChild(p))
     result = spawn_mod.spawn_subagent(
         parent_engine=parent, prompt="x", agent_type="general"
     )
@@ -525,7 +560,7 @@ def test_subagent_returns_error_if_parent_context_mutated(monkeypatch):
             return QueryResult(text="", stop_reason="end_turn", turns_used=0,
                                budget_used=0, messages=[])
 
-    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns, agent_type="general": _BadChild(p))
+    monkeypatch.setattr(spawn_mod, "_new_child_engine", lambda p, max_turns, agent_type="general", model_id="": _BadChild(p))
     result = spawn_mod.spawn_subagent(
         parent_engine=parent, prompt="x", agent_type="general"
     )

@@ -94,7 +94,7 @@ Use slash commands in the chat box.
 | Auto-Compact | Enables or disables automatic compaction and cold-cache microcompact for future turns. |
 | Compact | Manually compacts current conversation context with the v5 compactor. |
 | Clean | Removes local non-session traces such as audit logs, snapshots, indexes, and temp output; saved sessions are kept. |
-| Sub-Agents | Sends explorer/worker/reviewer preferences into the dynamic prompt so v5 can coordinate helper agents when useful. |
+| Sub-Agent Models | Opens five v4-style child model dropdowns: `explore`, `review`, `general`, `build`, and `plan`. Each can use `Same as main` or any `BEDROCK_MODELS` entry. The choice writes to `CONFIG.agent_overrides`; it does not push prompt text into the model. |
 
 ## Skills
 
@@ -143,8 +143,8 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 
 ## Cost And Safety
 
-- Start with `CONFIG.mock_mode = True` for a no-AWS smoke test.
-- Set `CONFIG.mock_mode = False` only when Bedrock access and budget are ready.
+- The notebook default is real Bedrock mode (`CONFIG.mock_mode = False`), matching v4 production use.
+- Tick Mock Mode only for a no-AWS smoke test.
 - The notebook default region is `ap-southeast-2` (Sydney), matching v4.
 - The notebook default model is the first `BEDROCK_MODELS` entry: `Claude 4.5 Sonnet (AU) - default`.
 - The model dropdown includes the v4-style choices: Sonnet 4.5 AU, Haiku 4.5 AU, Sonnet 4.6 AU, Opus 4.6 AU, Opus 4.5 Global, and Claude 3 fallback models.
