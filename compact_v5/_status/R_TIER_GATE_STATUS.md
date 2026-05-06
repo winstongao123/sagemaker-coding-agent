@@ -78,6 +78,15 @@ queue order from `R_TIER_PENDING_TESTS.md`.
 
 Completed and pushed:
 
+- R1: call2 Phase C `GENUINE_PASS`, `r_tier_gate.py --test R1` passed on
+  refresh after the Unicode stdout fix. Call1 diagnostic crash spend remains
+  preserved.
+- R2: call1 Phase C `GENUINE_PASS`, `r_tier_gate.py --test R2` passed on
+  refresh. This remains the real compaction/recall evidence row.
+- R4: deferred/escalated in `ESCALATION-R4.md`; v5.0.1 does not ship the A-16
+  time-based cold-cache microcompact that the original R4 test claims to
+  measure. No AWS spend was made for R4. This requires a user/product decision
+  before it can become READY: defer, implement A-16, or reshape the scenario.
 - R13: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R13` passed.
 - R15: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R15` passed.
 - R14: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R14` passed. Artifact

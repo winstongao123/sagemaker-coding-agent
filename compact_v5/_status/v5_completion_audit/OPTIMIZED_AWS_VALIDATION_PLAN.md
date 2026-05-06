@@ -310,6 +310,22 @@ Stop AWS execution and return to implementation/review if:
   required R-tier rows according to the final readiness docs before any final
   production-readiness claim.
 
+2026-05-06 remaining cleanup verification:
+
+- R1 was refreshed from disk after the optimized sequence. Existing call2
+  evidence remains valid: Phase C `GENUINE_PASS`, `r_tier_gate.py --test R1`
+  passed, and call1 Unicode-crash spend remains preserved as diagnostic.
+  No redundant AWS rerun was performed.
+- R2 was refreshed from disk. Existing call1 evidence remains valid:
+  Phase C `GENUINE_PASS`, `r_tier_gate.py --test R2` passed, and it remains
+  the real compaction/recall proof.
+- R4 is a real stop/defer gate, not an AWS candidate to run blindly.
+  `ESCALATION-R4.md` documents that v5.0.1 does not ship the A-16 time-based
+  cold-cache microcompact path that original R4 claims to measure. Running R4
+  as written would spend money to confirm a known deferred feature. A user or
+  product decision is required before R4 can be READY: keep it deferred,
+  implement A-16, or reshape the scenario to a weaker idle-resume test.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates

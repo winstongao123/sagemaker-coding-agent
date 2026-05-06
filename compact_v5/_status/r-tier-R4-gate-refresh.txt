@@ -1,0 +1,9 @@
+﻿R-tier gate FAILED:
+  - R4: missing phase A prompt in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R4: missing phase A review in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R4: missing AWS/raw call log in D:\Github\sagemaker-coding-agent\compact_v5\_status\codex_reviews
+  - R4: missing telemetry.json in D:\Github\sagemaker-coding-agent\compact_v5\_status
+  - R4: missing quality.md in D:\Github\sagemaker-coding-agent\compact_v5\_status
+  - R4: escalation file exists but review log lacks ESCALATED row
+
+

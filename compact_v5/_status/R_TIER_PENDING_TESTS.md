@@ -12,10 +12,10 @@ Production-ready means every row is `READY`, total local spend is at or below
 
 | Test | Current status | Why pending | Benefit | Ready criterion |
 |---|---|---|---|---|
-| R1 | IN_PROGRESS | AWS call #1 found Unicode stdout crash; fix pushed, needs fixed-code review and rerun | Full composite tool/workflow proof | AWS pass + telemetry + quality + gate |
-| R2 | PENDING_EXECUTABLE | Test code missing | Long-context compaction/cache proof | Executable + Phase A + AWS pass |
+| R1 | READY | Existing call2 evidence gates clean; call1 Unicode stdout crash remains diagnostic spend and call2 is Phase C `GENUINE_PASS` | Full composite tool/workflow proof | AWS pass + telemetry + quality + gate |
+| R2 | READY | Existing call1 evidence gates clean; real compaction/recall proof is already Phase C `GENUINE_PASS` | Long-context compaction/cache proof | Executable + Phase A + AWS pass |
 | R3 | READY | Existing AWS call2 evidence reused for Stage 6; not rerun per optimized plan and Claude Phase A/Phase C | Sub-agent orchestration proof | Subagent telemetry + parent synthesis |
-| R4 | EXECUTABLE_PENDING_REVIEW | Test exists; needs Phase A review before real idle/AWS run | PS#3 cold-cache idle recovery | Idle/resume compact evidence |
+| R4 | DEFERRED_ESCALATED | `ESCALATION-R4.md` says v5.0.1 does not ship A-16 time-based cold-cache microcompact; running the original AWS test would burn spend to confirm a known deferred feature | PS#3 cold-cache idle recovery | Idle/resume compact evidence |
 | R5 | PENDING_EXECUTABLE | Test code missing | PS#7 exec-limit recovery | 201st exec blocked; other tools continue |
 | R6 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | `/dream` memory consolidation proof | Required facts preserved |
 | R7 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | Model-switch/cache invariant proof | Haiku->Sonnet behavior documented |
