@@ -51,6 +51,8 @@ Canonical final evidence:
 - `compact_v5/_status/R_TIER_GATE_STATUS.md`
 - `compact_v5/_status/r_tier_test_matrix.json`
 - `compact_v5/_status/r_tier_metrics.jsonl`
+- `compact_v5/_status/PS_PS_FINAL_TEST.md` - final human acceptance test for a
+  long-running supervisor/worker/reviewer software engineering task.
 
 ## v5 vs Runnable vs v4 vs Other Repos
 
