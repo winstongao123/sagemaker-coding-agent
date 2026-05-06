@@ -9,7 +9,7 @@ v5 keeps the v4-style notebook experience, but the engine underneath is the fina
 Run the notebook cells in order:
 
 1. Install dependencies.
-2. Configure model, region, mock mode, thinking mode, and budgets.
+2. Configure model from the dropdown, Sydney region, mock mode, thinking mode, and budgets.
 3. Launch the chat UI.
 4. Read the quick reference section when you need commands or skills.
 
@@ -129,6 +129,9 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 
 - Start with `CONFIG.mock_mode = True` for a no-AWS smoke test.
 - Set `CONFIG.mock_mode = False` only when Bedrock access and budget are ready.
+- The notebook default region is `ap-southeast-2` (Sydney), matching v4.
+- The notebook default model is the first `BEDROCK_MODELS` entry: `Claude 4.5 Sonnet (AU) - default`.
+- The model dropdown includes the v4-style choices: Sonnet 4.5 AU, Haiku 4.5 AU, Sonnet 4.6 AU, Opus 4.6 AU, Opus 4.5 Global, and Claude 3 fallback models.
 - `/cost` shows session usage.
 - `/context` shows context pressure.
 - v5 tracks token/cache/model usage and local cost. AWS Budget checks are still external account-level guardrails.

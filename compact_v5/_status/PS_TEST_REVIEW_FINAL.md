@@ -216,3 +216,45 @@ These are not production blockers for v5.0.1, but should stay visible for v5.0.2
 If we explain it simply: v5 took the big test, fell down in some places, learned why, fixed those places, passed the gates, and got an independent final review.
 
 That is the right kind of production evidence for this v5.0.1 personal SageMaker software-builder scope. It is not a promise that no future bug exists, but it is strong evidence that v5 is ready to use and that future problems will be traceable instead of mysterious.
+
+## v4 Actual-Use Problem Scan Cross-Check
+
+Date: 2026-05-06
+
+This section records the extra v4 scan requested after production readiness:
+two passes over v4 problem docs/source evidence, then v5 source/test evidence.
+
+### Round 1: v4 Known Problems
+
+Source checked: `compact_v4/docs/PS_actual_use_problems.md` and
+`compact_v4/CHANGELOG.md`.
+
+| v4 problem | v4 lesson | v5 evidence | Result |
+|---|---|---|---|
+| Startup warning noise | Advisory skill checks should not flood normal startup. | Block 0/skill smoke tests and final package smoke pass; normal UI import is quiet under mock mode. | Solved for v5 runtime. |
+| Iteration budget too small | Long coding needs much more than 90 shared LLM turns. | `core/budget.py` default is 600; notebook Cell 2 exposes `iteration_budget_slider` 90-2000; `test_notebook_smoke.py` locks config threading. | Solved and UI-exposed. |
+| Cold-cache behavior confusing but useful | Idle sessions need time-based microcompact, not surprise cost. | A-16 implemented; R4 real Bedrock gate validates cold-cache microcompact via injectable threshold. | Solved for v5.0.1 scope. |
+| Thinking visible only sometimes | Thinking is model-controlled, but UI/config should be explicit. | Notebook Cell 2 exposes thinking checkbox and budget dropdown; R17 validates thinking visibility path. | Solved enough for production; behavior still model-dependent. |
+| Session cost not persisted | Cost must live in token/cost tracker and survive save/resume. | `/save`, `/resume`, `/cost`, `runtime/tokens.py`, `runtime/session.py`, and `test_software_state.py` cover durable cost/status/memory paths. | Solved. |
+| Exec limit made agent say "I cannot work" | Failure messages must tell the model what still works. | v5 keeps 200 exec-call default, `/context`/`/cost`, result replay, loop breakers, and R14/R19-U3 recurrence tests. | Solved and strengthened. |
+| Tool matrix buried under prompt load | Capability guidance and no-drift gates must be explicit. | v5 adds command docs, software workflow contracts, `/verify`, `/done`, scope/audit gates, and final Claude review. | Solved through runtime + process gates. |
+
+### Round 2: Source/Test Evidence
+
+Source checked: `compact_v5/MAIN/agent`, notebook cells, package verifier,
+R-tier matrix, and final production review.
+
+| Evidence item | Command or file | Result |
+|---|---|---|
+| Notebook has v4-style model dropdown | `tests/integration/test_notebook_smoke.py` | `22 passed`; includes lock for `model_dropdown`, Sydney region, and Sonnet 4.5 default. |
+| Default model and region match v4 intent | `entry.py`, `runtime/config.py`, `chat.ipynb` | First `BEDROCK_MODELS` entry is `Claude 4.5 Sonnet (AU) - default`; region is `ap-southeast-2`. |
+| Minimum company zip excludes docs/tests/audit evidence | `verify_ship_zip.py` | Ship verifier passes; zip has no `docs/`, `_status/`, `tests/`, or design HTML. |
+| R-tier matrix complete | `r_tier_test_matrix.json` | 42 rows total: 28 `READY`, 14 `DISPOSITION_OK`. |
+| Final R-tier gate | `r_tier_gate.py --repo-root .` | Passed. |
+| Final independent review | `final-claude-post-aws-production-readiness-review.md` | `APPROVE_PRODUCTION_READY`; nonblocking follow-ups accepted. |
+
+Conclusion: v5 is better than v4 for the target use case because it keeps the
+v4 SageMaker UI and Bedrock fit, restores v4 model-selection ergonomics, and
+adds the software-builder features v4 did not prove: row-level review evidence,
+subagent envelopes, result replay, checkpoint/resume, tool-loop quality gates,
+and optimized real AWS coding tests.

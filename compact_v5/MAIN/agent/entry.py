@@ -66,12 +66,24 @@ from runtime.config import CONFIG  # noqa: F401
 # Optional Bedrock model list — kept as a module-level constant so the
 # config widget in chat.ipynb cell 2 can populate a dropdown.
 BEDROCK_MODELS = [
-    ("Claude Sonnet 4.5 (anthropic.claude-sonnet-4-5-20250929-v1:0)",
-     "anthropic.claude-sonnet-4-5-20250929-v1:0"),
-    ("Claude Haiku 4.5 (au.anthropic.claude-haiku-4-5-20251001-v1:0)",
+    ("Claude 4.5 Sonnet (AU) - default",
+     "au.anthropic.claude-sonnet-4-5-20250929-v1:0"),
+    ("Claude 4.5 Haiku (AU)",
      "au.anthropic.claude-haiku-4-5-20251001-v1:0"),
-    ("Claude Sonnet 3.5 (anthropic.claude-3-5-sonnet-20241022-v2:0)",
+    ("Claude 4.6 Sonnet (AU)",
+     "au.anthropic.claude-sonnet-4-6"),
+    ("Claude 4.6 Opus (AU)",
+     "au.anthropic.claude-opus-4-6-v1"),
+    ("Claude 4.5 Opus (Global)",
+     "global.anthropic.claude-opus-4-5-20251101-v1:0"),
+    ("Claude 3.5 Sonnet v2",
      "anthropic.claude-3-5-sonnet-20241022-v2:0"),
+    ("Claude 3.5 Sonnet",
+     "anthropic.claude-3-5-sonnet-20240620-v1:0"),
+    ("Claude 3 Haiku",
+     "anthropic.claude-3-haiku-20240307-v1:0"),
+    ("Claude 3 Sonnet",
+     "anthropic.claude-3-sonnet-20240229-v1:0"),
 ]
 
 # Chat UI factory (Phase 11)

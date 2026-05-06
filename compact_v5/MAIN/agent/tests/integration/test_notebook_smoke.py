@@ -59,6 +59,21 @@ def test_bedrock_models_list_is_well_formed():
         assert isinstance(mid, str) and mid
 
 
+def test_bedrock_models_keep_v4_default_and_dropdown_options():
+    from entry import BEDROCK_MODELS
+
+    labels = [label for label, _mid in BEDROCK_MODELS]
+    model_ids = [mid for _label, mid in BEDROCK_MODELS]
+
+    assert BEDROCK_MODELS[0] == (
+        "Claude 4.5 Sonnet (AU) - default",
+        "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    )
+    assert "au.anthropic.claude-haiku-4-5-20251001-v1:0" in model_ids
+    assert "au.anthropic.claude-sonnet-4-6" in model_ids
+    assert "Claude 4.6 Opus (AU)" in labels
+
+
 # ============================================================
 # Test 2 — Agent class basic behavior
 # ============================================================
@@ -359,6 +374,20 @@ def test_chat_ipynb_kernelspec_and_entry_wiring():
     assert has_create_chat_ui_import, (
         "chat.ipynb launch cell must import `create_chat_ui` from `entry`"
     )
+
+
+def test_chat_ipynb_has_v4_style_model_dropdown_and_sydney_default():
+    import json
+    nb_path = os.path.join(_AGENT_ROOT, "chat.ipynb")
+    with open(nb_path, "r", encoding="utf-8") as f:
+        nb = json.load(f)
+    sources_concat = "\n".join("".join(c.get("source", [])) for c in nb["cells"])
+
+    assert "model_dropdown = widgets.Dropdown" in sources_concat
+    assert "options=list(AVAILABLE_MODELS.keys())" in sources_concat
+    assert 'REGION = "ap-southeast-2"' in sources_concat
+    assert "default_model_name" in sources_concat
+    assert "CONFIG.model_id = AVAILABLE_MODELS[_value(model_dropdown)]" in sources_concat
 
 
 def test_chat_md_companion_exists():
