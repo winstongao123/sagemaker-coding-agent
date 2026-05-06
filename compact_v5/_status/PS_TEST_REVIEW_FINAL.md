@@ -52,6 +52,61 @@ Canonical final evidence:
 - `compact_v5/_status/r_tier_test_matrix.json`
 - `compact_v5/_status/r_tier_metrics.jsonl`
 
+## v5 vs Runnable vs v4 vs Other Repos
+
+Kid version: v5 is not just a copy of one older robot. It is v4's SageMaker
+notebook body, Runnable's stronger coding-agent brain patterns, Hermes's budget
+and failure discipline, and Learning Factory's "write down proof before saying
+done" habit.
+
+| Area | Runnable Claude Code | v4 SageMaker Agent | Hermes Agent | Learning Factory | What v5 Covers | Explain Like You Are 9 |
+|---|---|---|---|---|---|---|
+| Notebook UI | CLI/app-style coding agent, not SageMaker notebook first. | Strong SageMaker notebook shape. | Not the main pattern. | Not the main pattern. | Keeps v4-style `chat.ipynb`, `sagemaker_agent.py`, and notebook widgets. | v5 keeps the old steering wheel so you can still drive it in SageMaker. |
+| Bedrock/SageMaker fit | Not Bedrock-native. | Already works in SageMaker/Bedrock. | Has cost-conscious agent ideas. | Process repo, not Bedrock runtime. | Uses Bedrock-native request handling, model IDs, cost tracking, and API-boundary cleaning. | v5 speaks the language your AWS car understands. |
+| Long context and compaction | Strong compaction/cache patterns. | Had compaction, but less complete for long coding work. | Helps with budgets and failure limits. | Saves state/process docs. | Adds auto-compact, cold-cache microcompact A-16, post-compact cleanup, resume/status/memory checks. | When the backpack gets too full, v5 repacks it without losing the homework. |
+| Tool use | Rich tool contracts and tool-search/deferred schemas. | Practical file/shell tools. | Guardrails and graceful failure ideas. | Process gates. | Keeps practical tools, adds tool-search, result replay, tool-loop guards, read tracking, and evidence gates. | v5 has tools, but also learns not to bang the same hammer forever. |
+| Subagents | Strong helper-agent architecture. | Basic or weaker helper story. | Some orchestration lessons. | Worker/reviewer process discipline. | Adds task/subagent dispatch, structured result envelopes, handoff context, telemetry, and reviewer-style checks. | v5 can ask helper robots, then make them bring back a receipt. |
+| Skills | Rich skill discovery and activation. | Had simpler skill behavior. | Skill filtering ideas. | Procedural learning discipline. | Adds skill discovery, activation/reset behavior, filtering, and skill docs. | v5 can open the right instruction card for the job. |
+| Memory/status | Runnable has memory patterns. | Had memory/status but not enough no-drift proof. | Not the core contribution. | Strong status/lesson/process style. | Adds durable `memory.md`, `AGENT_STATUS.md`, todos, checkpoints, resume and `/dream`. | v5 writes notes so tomorrow-v5 remembers what today-v5 promised. |
+| Review/no drift | Not your exact worker-reviewer audit loop. | v4 did not enforce row-by-row proof strongly enough. | Failure discipline helps. | Main lesson: document, review, and gate work. | Adds row-level ledgers, scope audit, Claude review, final gates, and pushed evidence. | v5 cannot just say "I finished"; it must show its homework. |
+| Cost/token/cache telemetry | Strong patterns in Runnable; v4 was thinner. | Some cost support, less complete. | Budget discipline. | Not runtime telemetry. | Tracks tokens, cache, model calls, subagent/tool behavior, local R-tier spend, and AWS budget checks. | v5 has a piggy-bank counter so it does not spend secretly. |
+| Software-building proof | Reference implementation is strong. | v4 was useful but less proven on long software tasks. | Helpful constraints, not full SageMaker coding proof. | Process proof. | R13-R17 and R19 tests proved coding, debugging, refactor, long app build, recovery, and coherence. | v5 did real obstacle courses, not just a spelling test. |
+
+## Why v5 Is The Best We Can Build For This Scope
+
+| Reason | What It Means | Explain Like You Are 9 |
+|---|---|---|
+| It keeps v4's working SageMaker UI. | We did not throw away the part that already fits your company notebook workflow. | We kept the good bicycle frame. |
+| It imports the best Runnable ideas that fit Bedrock. | Compaction, cache thinking, tool search, subagents, skills, and tool-loop controls were adapted instead of blindly copied. | We borrowed the best Lego pieces, but made them fit our house. |
+| It adds Hermes-style budget/failure discipline. | Iteration limits, cost caps, failure recovery, and graceful stops are built into the process. | It knows when to stop before making a bigger mess. |
+| It adds Learning Factory no-drift habits. | Prompts, reviews, ledgers, logs, status, and lessons are saved before closure. | It writes the answer sheet and the work steps. |
+| It passed optimized real tests. | AWS tests were bundled to prove multiple abilities at once: coding quality, tool use, memory, compaction, subagents, recovery, cost, and telemetry. | One obstacle course tested running, jumping, balance, and listening together. |
+| It failed usefully before passing. | R13, R14, R18-E7, R19-U3, R19-U5, and R17 found real bugs or process gaps that were fixed and retested. | The practice race found loose shoelaces before the real race. |
+
+## What We Skipped Or Did Not Copy, Based On The Three Scans
+
+Kid version: skipping does not mean "forgot." It means "we checked it, and it
+did not fit this SageMaker/Bedrock job, or it would waste money, or it belongs
+in future polish."
+
+| Skipped Or Not Copied | Source Repo | Why We Skipped It | Explain Like You Are 9 |
+|---|---|---|---|
+| Exact Claude Code/Runnable UI | Runnable | v5 must run as a SageMaker notebook, not a CLI clone. | We kept your classroom desk instead of copying someone else's cockpit. |
+| Streaming-first behavior | Runnable / Hermes patterns | v5 is built around notebook/Bedrock constraints where non-streaming paths are safer and simpler. | We used a quiet walkie-talkie instead of a live TV broadcast. |
+| Anthropic-direct API features that Bedrock does not support | Runnable | Bedrock has different request rules; R13 proved internal fields must be cleaned. | We cannot put square blocks into round AWS holes. |
+| Literal 30-minute cold-cache wait in R4 | Runnable-style behavior | The same A-16 code path was validated with an injectable threshold to avoid wasting time and money. | We tested the alarm clock by setting it to ring soon, not by waiting all night. |
+| 150 live Bedrock calls for R19-U10 | Long coherence test design | Approved prebuilt 150-logical-turn substitution proved the memory/coherence goal without waste. | We tested the long story with a saved long book, not by paying to rewrite the whole book live. |
+| Full Runnable internal feature flags/GrowthBook/Kairos branches | Runnable | Those are Anthropic-internal product switches, not useful in this personal SageMaker agent. | We did not install switches for rooms this house does not have. |
+| Full MCP/config multi-source permission stack | Runnable | v5 has a simpler notebook approval model and Bedrock/SageMaker runtime. | One door lock is enough for this room; we did not copy a whole hotel key system. |
+| Exact async streaming subagent architecture | Runnable | v5 adapted subagents to sync notebook-compatible execution with structured envelopes. | Helpers still help, but they pass notes instead of shouting across a stadium. |
+| Hermes insurance/domain-specific logic | Hermes | Hermes taught budget/failure patterns, but its business domain is not your coding-agent domain. | We borrowed the seatbelt, not the delivery truck route. |
+| Learning Factory repo-specific automation | Learning Factory | We adopted the no-drift process, but not every repo-specific script/hook. | We copied the study habit, not the exact school timetable. |
+| Full optional skill reference packs in company zip | v4/v5 docs assets | They are useful examples for development, but not needed for the main production runtime. | We packed the toolbox, not the big instruction-library shelf. |
+| Perfect clarification UX | Final review follow-up | Current behavior is safe enough; direct `ask_user` polish is tracked for v5.0.2. | It asks okay now; later we can make it ask more neatly. |
+| Richer subagent side-metric display | Final review follow-up | Core cost/token/cache telemetry exists; prettier per-helper display is nonblocking polish. | It counts the helpers' snacks; later the receipt can be prettier. |
+| Perfect `/dream` output shape | Final review follow-up | `/dream` passed memory-preservation tests; output formatting polish is future work. | The notebook remembers the facts; later we can make the handwriting nicer. |
+| Mermaid-based final HTML diagrams | Docs packaging | Mermaid caused syntax/display problems, so the final HTML uses plain HTML flow boxes. | We used simple boxes instead of a fancy drawing tool that sometimes breaks. |
+
 ## What Failed, Why, And How It Was Fixed
 
 | Test or Area | What Went Wrong | Fix Applied | Final Evidence |
