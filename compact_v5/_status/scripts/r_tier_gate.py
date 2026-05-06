@@ -179,6 +179,7 @@ def _phase_a_latest_decision_is_approval(base: Path, test_id: str) -> bool:
             text,
             (
                 "APPROVE_FOR_AWS_CALL",
+                "APPROVE_FOR_LOCAL_MOCK",
                 "AWS call #1 may proceed",
                 "AWS call #2 is justified",
             ),
@@ -285,6 +286,12 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
         r for r in metric_rows
         if str(r.get("test")) == test_id and "_malformed" not in r
     ]
+    matrix_rows = {
+        str(row.get("id")): row
+        for row in _load_matrix(repo_root)
+        if isinstance(row, dict) and row.get("id")
+    }
+    is_mock = str(matrix_rows.get(test_id, {}).get("kind", "")).lower() == "mock"
     pass_rows = [
         row for row in rows_for_test
         if row.get("completed") is True
@@ -302,7 +309,10 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
     required_patterns = {
         "phase A prompt": [f"r-tier-{test_id}-phaseA-iter*-prompt.txt"],
         "phase A review": [f"r-tier-{test_id}-phaseA-iter*.md"],
-        "AWS/raw call log": [f"r-tier-{test_id}-aws-call*.log"],
+        "AWS/raw call log": (
+            [f"r-tier-{test_id}-local-call*.log"]
+            if is_mock else [f"r-tier-{test_id}-aws-call*.log"]
+        ),
     }
     if not escalated:
         required_patterns["phase C post-pass review"] = [f"r-tier-{test_id}-phaseC-iter*.md"]
@@ -318,11 +328,12 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
         if phase_c_text and "GENUINE_PASS" not in phase_c_text:
             errors.append(f"{test_id}: phase C review lacks GENUINE_PASS")
 
-    if not _glob_any(status, [f"r-tier-{test_id}-aws-call*-telemetry.json"]):
+    call_prefix = "local-call" if is_mock else "aws-call"
+    if not _glob_any(status, [f"r-tier-{test_id}-{call_prefix}*-telemetry.json"]):
         errors.append(f"{test_id}: missing telemetry.json in {status}")
-    if not _glob_any(status, [f"r-tier-{test_id}-aws-call*-quality.md"]):
+    if not _glob_any(status, [f"r-tier-{test_id}-{call_prefix}*-quality.md"]):
         errors.append(f"{test_id}: missing quality.md in {status}")
-    quality_text = _latest_text(status, [f"r-tier-{test_id}-aws-call*-quality.md"])
+    quality_text = _latest_text(status, [f"r-tier-{test_id}-{call_prefix}*-quality.md"])
     if quality_text:
         if "SEMANTIC_BUG_DETECTED" in quality_text:
             errors.append(f"{test_id}: quality review contains SEMANTIC_BUG_DETECTED")
@@ -393,7 +404,7 @@ def check_test_evidence(repo_root: Path, test_id: str) -> List[str]:
             errors.append(f"{test_id}: escalation file exists but review log lacks ESCALATED row")
 
     # Basic telemetry sanity for every telemetry file.
-    for fp in status.glob(f"r-tier-{test_id}-aws-call*-telemetry.json"):
+    for fp in status.glob(f"r-tier-{test_id}-{call_prefix}*-telemetry.json"):
         try:
             data = json.loads(_read_text(fp))
         except json.JSONDecodeError as exc:

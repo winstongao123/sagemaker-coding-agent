@@ -131,6 +131,11 @@ Completed and pushed:
   prebuilt model-switch events, final anchor preservation, and no repeated
   guard-loop recurrence. This does not claim 150 live Bedrock calls, live model
   switching, or natural compaction.
+- R8, R18-E2, R18-E5, R18-E9, and R18-E12: zero-cost mock cleanup bundle
+  Phase A returned `APPROVE_FOR_LOCAL_MOCK`, local pytest reported `5 passed`,
+  Claude Phase C returned `GENUINE_PASS`, and per-test gates passed. These
+  rows used `local-call` evidence and recorded `$0.0000` spend; no AWS call was
+  authorized.
 
 The local no-AWS gate still passes for suite materialization and cost guard:
 
@@ -265,6 +270,13 @@ Result:
 - R17 call1 READY spend added:
   - R17: `$0.0307`
 - local R-tier ledger after R17: `$1.5529`
+- zero-cost mock cleanup rows added after R17:
+  - R8: `$0.0000`
+  - R18-E2: `$0.0000`
+  - R18-E5: `$0.0000`
+  - R18-E9: `$0.0000`
+  - R18-E12: `$0.0000`
+- local R-tier ledger after mock cleanup remains `$1.5529`
 
 ## R17 Thinking Visibility Resolution
 
@@ -283,3 +295,22 @@ R17 is READY as of 2026-05-06:
   numeric cache fields (`cache_read_tokens=0`, `cache_write_tokens=3228`).
 - Claude Phase C returned `GENUINE_PASS`.
 - `r_tier_gate.py --repo-root . --test R17` passed.
+
+## Zero-Cost Mock Cleanup Resolution
+
+R8, R18-E2, R18-E5, R18-E9, and R18-E12 are READY as of 2026-05-06:
+
+- The matrix declares all five rows as `kind=mock`, `model=Mock`, and
+  `cost_cap_usd=0.0`.
+- Claude Phase A returned `APPROVE_FOR_LOCAL_MOCK`; no AWS spend was
+  authorized.
+- `test_r_tier_mock_cleanup.py` passed locally with five deterministic locks:
+  malformed JSON-string tool args, Bedrock HTML 5xx classification and
+  humanization, corrupt session JSON skip, snapshot disk-full safety, and
+  audit-log retention.
+- The final gate now supports `local-call` raw logs, telemetry, and quality
+  files only for matrix rows whose `kind` is `mock`. Cost checks are unchanged,
+  so any nonzero mock-row spend still fails the gate.
+- Claude Phase C returned `GENUINE_PASS`.
+- `r_tier_gate.py --repo-root . --test R8`, `R18-E2`, `R18-E5`, `R18-E9`, and
+  `R18-E12` passed.

@@ -384,6 +384,20 @@ Stop AWS execution and return to implementation/review if:
 - Claude Phase C returned `GENUINE_PASS`, and
   `r_tier_gate.py --test R17` passed.
 
+2026-05-06 zero-cost mock cleanup resolution:
+
+- R8, R18-E2, R18-E5, R18-E9, and R18-E12 were handled as mock-only rows per
+  `r_tier_test_matrix.json`; no AWS call was authorized or made.
+- Claude Phase A returned `APPROVE_FOR_LOCAL_MOCK`.
+- Local lock tests passed for malformed JSON-string tool args, HTML 5xx
+  classification/humanization, corrupt session JSON skip, snapshot disk-full
+  safety, and audit-log retention.
+- The gate was narrowed to allow `local-call` evidence only for matrix rows
+  whose `kind` is `mock`; cost checks remain unchanged and preserve all prior
+  diagnostic spend.
+- Claude Phase C returned `GENUINE_PASS`, and per-test gates passed for all
+  five rows.
+
 ## Expected Confidence
 
 Passing local gates alone is not enough for 98% confidence. Passing all gates

@@ -268,6 +268,73 @@ def test_r_tier_gate_uses_latest_phase_a_decision_not_exact_latest_token(tmp_pat
     assert gate.check_test_evidence(tmp_path, "R1") == []
 
 
+def test_r_tier_gate_accepts_mock_local_call_evidence(tmp_path):
+    gate = _load_gate()
+    status = tmp_path / "compact_v5" / "_status"
+    reviews = status / "codex_reviews"
+    reviews.mkdir(parents=True)
+    matrix = status / "r_tier_test_matrix.json"
+    matrix.write_text(
+        json.dumps([{
+            "id": "R8",
+            "title": "Malformed JSON repair",
+            "kind": "mock",
+            "model": "Mock",
+            "cost_cap_usd": 0.0,
+            "status": "EXECUTABLE_PENDING_REVIEW",
+            "benefit": "mock",
+            "ready_criteria": "mock",
+        }]),
+        encoding="utf-8",
+    )
+
+    (reviews / "r-tier-R8-phaseA-iter1-prompt.txt").write_text("prompt", encoding="utf-8")
+    (reviews / "r-tier-R8-phaseA-iter1.md").write_text(
+        "PRE-FLIGHT VERDICT: APPROVE_FOR_LOCAL_MOCK", encoding="utf-8"
+    )
+    (reviews / "r-tier-R8-local-call1.log").write_text("local mock passed", encoding="utf-8")
+    (reviews / "r-tier-R8-phaseC-iter1.md").write_text(
+        "POST-PASS VERDICT: GENUINE_PASS", encoding="utf-8"
+    )
+    (status / "r-tier-R8-local-call1-telemetry.json").write_text(
+        json.dumps({
+            "test": "R8", "call": 1,
+            "per_turn": [{"turn": 1}],
+            "tool_call_summary": {"TOTAL_calls": 0, "REPEATED_calls": 0},
+            "compaction_events": [],
+            "subagent_dispatches": [],
+            "cache_efficiency_trend": {},
+            "outcome": {"completed": True},
+        }),
+        encoding="utf-8",
+    )
+    (status / "r-tier-R8-local-call1-quality.md").write_text(
+        "Codex conclusion: NEAR_IDEAL", encoding="utf-8"
+    )
+    (status / "r_tier_review_log.md").write_text(
+        "| R8 | READY | $0.00 |\n", encoding="utf-8"
+    )
+    (status / "r_tier_metrics.jsonl").write_text(
+        json.dumps({
+            "test": "R8",
+            "call": 1,
+            "date": "2026-05-03T00:00:00Z",
+            "model": "Mock",
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "cache_hit_pct": 0.0,
+            "wallclock_s": 0.1,
+            "tool_calls": 0,
+            "completed": True,
+            "cost_usd": 0.0,
+            "verdict": "READY",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    assert gate.check_test_evidence(tmp_path, "R8") == []
+
+
 def test_r_tier_gate_rejects_semantic_bug_quality(tmp_path):
     gate = _load_gate()
     status = tmp_path / "compact_v5" / "_status"

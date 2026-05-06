@@ -1,0 +1,30 @@
+{
+  "test": "R18-E9",
+  "call": 1,
+  "date": "2026-05-06T02:20:00Z",
+  "mode": "local_mock",
+  "model": "Mock",
+  "per_turn": [
+    {
+      "turn": 1,
+      "event": "mock_snapshot_disk_full",
+      "snapshot_result": null,
+      "source_unchanged": true,
+      "failed_snapshot_not_indexed": true,
+      "completed": true
+    }
+  ],
+  "tool_call_summary": {
+    "total": 0,
+    "failed": 0
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "cache_efficiency_trend": [],
+  "outcome": {
+    "completed": true,
+    "cost_cap_hit": false,
+    "verdict": "GENUINE_PASS",
+    "cost_usd": 0.0
+  }
+}

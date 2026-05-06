@@ -19,7 +19,7 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R5 | PENDING_EXECUTABLE | Test code missing | PS#7 exec-limit recovery | 201st exec blocked; other tools continue |
 | R6 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | `/dream` memory consolidation proof | Required facts preserved |
 | R7 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | Model-switch/cache invariant proof | Haiku->Sonnet behavior documented |
-| R8 | EXECUTABLE_PENDING_REVIEW | Zero-cost mock spec exists; needs local mock implementation/review | Free malformed JSON repair proof | Mock repair ladder pass |
+| R8 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | Free malformed JSON repair proof | Mock repair ladder pass |
 | R9 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | Approval/diff/audit proof | Approve/deny/always asserted |
 | R10 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | Save/load cost persistence proof | Cost/history restored |
 | R11 | EXECUTABLE_PENDING_REVIEW | Zero-cost spec exists; needs Phase A review/execution | Production Sonnet compatibility | Sonnet workflow pass under cap |
@@ -30,17 +30,17 @@ Production-ready means every row is `READY`, total local spend is at or below
 | R16 | READY | Stage 7 call1 passed on Haiku with Phase C `GENUINE_PASS`, `software_builder_subchecks`, numeric cache evidence, forced/local compaction evidence, no R14/R19-U3 loop recurrence, and gate pass | Long-session app-build proof | App/tests pass, compaction reviewed |
 | R17 | READY | R17 call1 passed on Sonnet 4.5 AU with Phase A iter2 `APPROVE_FOR_AWS_CALL`, Phase C `GENUINE_PASS`, non-empty thinking in assistant history and telemetry, numeric cache evidence, and gate pass | PS#4 thinking visibility proof | Thinking blocks in history/telemetry |
 | R18-E1 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Throttle/retry behavior | 429 handled or escalated as infra |
-| R18-E2 | EXECUTABLE_PENDING_REVIEW | Zero-cost mock spec exists; needs local mock implementation/review | 5xx recovery without forced AWS fault | Mock 5xx ladder pass |
+| R18-E2 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | 5xx recovery without forced AWS fault | Mock 5xx ladder pass |
 | R18-E3 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Cost-cap timing proof | Cap halt/warning evidence |
 | R18-E4 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Skill alias activation proof | Alias activates expected skill |
-| R18-E5 | EXECUTABLE_PENDING_REVIEW | Zero-cost mock spec exists; needs local mock implementation/review | Corrupt session recovery | Clean error/recovery |
+| R18-E5 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | Corrupt session recovery | Clean error/recovery |
 | R18-E6 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Missing/empty file recovery | Agent recovers from tool error |
 | R18-E7 | READY | Stage 5 call2 passed under $0.10 planned cap after deterministic replay redesign; call1 diagnostic cap exceed remains recorded | Long output truncation proof | Truncation visible, agent continues |
 | R18-E8 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Concurrent sub-agent race proof | No shared-state corruption |
-| R18-E9 | EXECUTABLE_PENDING_REVIEW | Zero-cost mock spec exists; needs local mock implementation/review | Disk-full snapshot safety | Mock write failure safe |
+| R18-E9 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | Disk-full snapshot safety | Mock write failure safe |
 | R18-E10 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Plan-mode allowlist proof | Mutating tool blocked/audited |
 | R18-E11 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Timeout/compaction coordination | Parent recovers |
-| R18-E12 | EXECUTABLE_PENDING_REVIEW | Zero-cost mock spec exists; needs local mock implementation/review | Audit rotation proof | Rotation behavior tested |
+| R18-E12 | READY | Zero-cost mock cleanup bundle passed local lock tests, Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, Claude Phase C `GENUINE_PASS`, and gate pass | Audit rotation proof | Rotation behavior tested |
 | R18-E13 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Unicode/RTL memory proof | Unicode/RTL preserved |
 | R18-E14 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | `/dream` atomicity proof | No partial corrupt memory |
 | R18-E15 | EXECUTABLE_PENDING_REVIEW | Zero-cost edge spec exists; needs Phase A review/execution | Cache TTL behavior proof | TTL handling documented |

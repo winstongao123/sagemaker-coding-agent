@@ -1,0 +1,30 @@
+{
+  "test": "R18-E12",
+  "call": 1,
+  "date": "2026-05-06T02:20:00Z",
+  "mode": "local_mock",
+  "model": "Mock",
+  "per_turn": [
+    {
+      "turn": 1,
+      "event": "mock_audit_log_retention",
+      "old_log_pruned": true,
+      "fresh_log_preserved": true,
+      "new_audit_row_written": true,
+      "completed": true
+    }
+  ],
+  "tool_call_summary": {
+    "total": 0,
+    "failed": 0
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "cache_efficiency_trend": [],
+  "outcome": {
+    "completed": true,
+    "cost_cap_hit": false,
+    "verdict": "GENUINE_PASS",
+    "cost_usd": 0.0
+  }
+}

@@ -10,17 +10,23 @@ be called READY.
 | Evidence | Required file | Must contain |
 |---|---|---|
 | Pre-flight prompt | `_status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>-prompt.txt` | Filled TEMPLATE A with all placeholders replaced |
-| Pre-flight review | `_status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>.md` | `APPROVE_FOR_AWS_CALL` before spend |
-| Raw run log | `_status/codex_reviews/r-tier-<TEST>-aws-call<N>.log` | Full stdout/stderr from pytest run via tee |
+| Pre-flight review | `_status/codex_reviews/r-tier-<TEST>-phaseA-iter<N>.md` | `APPROVE_FOR_AWS_CALL` before spend; mock-only rows may use `APPROVE_FOR_LOCAL_MOCK` with no AWS authorization |
+| Raw run log | `_status/codex_reviews/r-tier-<TEST>-aws-call<N>.log` or `_status/codex_reviews/r-tier-<TEST>-local-call<N>.log` for mock rows | Full stdout/stderr from pytest run via tee |
 | Failure diagnosis | `_status/codex_reviews/r-tier-<TEST>-phaseB-iter<N>.md` | Required only on failure; must approve retry fix |
 | Post-pass review | `_status/codex_reviews/r-tier-<TEST>-phaseC-iter<N>.md` | `GENUINE_PASS` |
-| Telemetry | `_status/r-tier-<TEST>-aws-call<N>-telemetry.json` | Required schema, non-empty `per_turn`, completed outcome |
-| Quality review | `_status/r-tier-<TEST>-aws-call<N>-quality.md` | Functional result and process result graded separately; no `SEMANTIC_BUG_DETECTED`; no unresolved critical process-quality blocker |
-| Metrics ledger | `_status/r_tier_metrics.jsonl` | One row per AWS call with cost/tokens/cache/tool counts, including reviewer/subagent attribution when used |
+| Telemetry | `_status/r-tier-<TEST>-aws-call<N>-telemetry.json` or `_status/r-tier-<TEST>-local-call<N>-telemetry.json` for mock rows | Required schema, non-empty `per_turn`, completed outcome |
+| Quality review | `_status/r-tier-<TEST>-aws-call<N>-quality.md` or `_status/r-tier-<TEST>-local-call<N>-quality.md` for mock rows | Functional result and process result graded separately; no `SEMANTIC_BUG_DETECTED`; no unresolved critical process-quality blocker |
+| Metrics ledger | `_status/r_tier_metrics.jsonl` | One row per AWS or approved local/mock call with cost/tokens/cache/tool counts, including reviewer/subagent attribution when used |
 | Review ledger | `_status/r_tier_review_log.md` | One READY or ESCALATED row per test |
 | Escalation | `_status/codex_reviews/ESCALATION-<TEST>.md` | Required if any stop trigger fires |
 
 ## Selected-Test Evidence Additions
+
+Mock-only rows (`R8`, `R18-E2`, `R18-E5`, `R18-E9`, `R18-E12`) must remain
+zero-cost. They require Claude Phase A `APPROVE_FOR_LOCAL_MOCK`, raw
+`local-call` logs, telemetry, quality, metrics, review-log rows, Claude Phase C
+`GENUINE_PASS`, and `r_tier_gate.py --test <TEST>` pass. The local/mock path
+does not authorize AWS and any nonzero cost row remains a gate failure.
 
 These fields prevent software-builder tests from passing on prose alone:
 
