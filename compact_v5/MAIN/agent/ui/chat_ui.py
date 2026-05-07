@@ -974,6 +974,17 @@ class V4WidgetChatUI(WidgetChatUI):
         self._render_generation += 1
         return self._panel
 
+    def render_parts(self) -> list:
+        """Return fresh top-level child widgets for SageMaker-safe display.
+
+        Some SageMaker/JupyterLab builds can render individual child widgets
+        but fail when displaying a large nested VBox root with "model not
+        found". Cell 3 uses this child-by-child path so the notebook UI still
+        displays as one continuous surface while avoiding that frontend bug.
+        """
+        panel = self.render()
+        return list(getattr(panel, "children", ()) or [panel])
+
 
 # ============================================================
 # create_chat_ui — public factory

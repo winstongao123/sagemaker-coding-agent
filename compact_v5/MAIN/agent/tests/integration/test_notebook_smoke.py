@@ -649,6 +649,18 @@ def test_v4_style_ui_render_rebuilds_fresh_widget_models_after_first_display():
     assert "Reasoning: Thinking" in ui._tokens_html.value
 
 
+def test_v4_style_ui_render_parts_supports_sagemaker_child_display_path():
+    ui = _v4_widget_ui_or_skip()
+
+    parts = ui.render_parts()
+
+    assert parts
+    assert parts == list(ui._panel.children)
+    assert any(type(p).__name__ == "HBox" for p in parts)
+    assert any(type(p).__name__ == "Textarea" for p in parts)
+    assert "Cache R/W" in ui._tokens_html.value
+
+
 def test_v4_style_ui_removes_dead_approval_and_ask_user_placeholders(monkeypatch):
     ui = _v4_widget_ui_or_skip()
     from runtime.config import CONFIG

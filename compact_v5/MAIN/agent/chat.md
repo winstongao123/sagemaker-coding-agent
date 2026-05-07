@@ -166,7 +166,7 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 | `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The notebook locates the runtime from `~/compact_v5`, the repo root, `compact_v5`, `compact_v5/MAIN/agent`, or the shipped zip root. |
 | `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
 | Widgets do not render | Run the install cell, restart the kernel, or use `ui.send("message")`. |
-| `Error displaying widget: model not found` | Restart the kernel, clear notebook outputs, and rerun Cells 1-3 from the latest zip. v5 rebuilds a fresh widget model tree on `ui.render()` so stale widget IDs from an old extraction are not reused. |
+| `Error displaying widget: model not found` | Restart the kernel, clear notebook outputs, and rerun Cells 1-3 from the latest zip. Cell 3 uses SageMaker-safe child-by-child display via `ui.render_parts()` because some JupyterLab builds can render child widgets but fail on one large root `VBox`. |
 | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
 | Context feels too large | Use `/context`; compaction and result replay should help. |
