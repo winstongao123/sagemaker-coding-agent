@@ -45,6 +45,7 @@ import os
 import re
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -415,6 +416,10 @@ class QueryEngine:
         # hard max_turns cap, otherwise the last state file can stay stale.
         self._turn_budget_warning_sent = False
         self._final_claim_guard_sent = False
+        # Preserve the original user request outside `self.messages` so exact
+        # deliverables survive compaction/truncation and remain available to
+        # max-turn/final-claim guards.
+        self._run_requested_text = ""
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -469,6 +474,7 @@ class QueryEngine:
         # Block F2 â€” fresh BudgetTracker per run() so continuation state
         # never leaks across user messages.
         self._budget_tracker = None
+        self._run_requested_text = str(user_message or "")
         # Block M-1 (PORT_LOG #085) â€” Runnable QueryEngine.ts:238 verbatim:
         # discoveredSkillNames.clear() at run() entry. Prevents
         # path/trigger-activated skills from contaminating the next user
@@ -2016,7 +2022,7 @@ class QueryEngine:
             return messages
         if self.agent_kind != "parent":
             return messages
-        warning_window = max(1, min(5, self.max_turns // 10))
+        warning_window = max(1, min(15, max(5, self.max_turns // 6)))
         turns_remaining = self.max_turns - turn_index
         if turns_remaining > warning_window:
             return messages
@@ -2041,6 +2047,18 @@ class QueryEngine:
             body += (
                 "\nExact required paths still missing from the current workspace: "
                 f"{shown}. Create or explicitly escalate these before any final claim."
+            )
+        zip_problems = self._requested_zip_artifact_problems(
+            self._requested_user_text(),
+            self._current_workspace(),
+        )
+        if zip_problems:
+            body += (
+                "\nExact ZIP artifact is not ready: "
+                + "; ".join(zip_problems[:3])
+                + ". Stop optional work and create/recreate it now with Python "
+                "`zipfile`; then validate it with "
+                "`ZipFile(...).testzip()` and save the validation log."
             )
         try:
             output_fn(f"[Turn budget warning: {turns_remaining} turns remaining]")
@@ -2197,6 +2215,8 @@ class QueryEngine:
                 shown = match
             if not exists:
                 problems.append(f"required zip missing: {shown}")
+        for zip_problem in self._requested_zip_artifact_problems(requested, workspace):
+            problems.append(zip_problem)
 
         pytest_problem = self._final_claim_pytest_problem(lower, workspace)
         if pytest_problem:
@@ -2228,11 +2248,19 @@ class QueryEngine:
                 continue
             content = msg.get("content", "")
             if isinstance(content, str):
+                if XML_SYSTEM_REMINDER_TAG in content:
+                    continue
                 user_text_parts.append(content)
             elif isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "text":
-                        user_text_parts.append(str(block.get("text", "")))
+                        text = str(block.get("text", ""))
+                        if XML_SYSTEM_REMINDER_TAG in text:
+                            continue
+                        user_text_parts.append(text)
+        original = getattr(self, "_run_requested_text", "")
+        if original:
+            user_text_parts.insert(0, original)
         return "\n".join(user_text_parts)
 
     @staticmethod
@@ -2254,6 +2282,12 @@ class QueryEngine:
             lowered = item.lower()
             if lowered.startswith(("http://", "https://")):
                 continue
+            if not (
+                "/" in item
+                or "\\" in item
+                or lowered.endswith((".zip", "readme.md", "agent_status.md", "pyproject.toml"))
+            ):
+                continue
             candidates.add(item)
 
         missing: List[str] = []
@@ -2267,6 +2301,28 @@ class QueryEngine:
             if not exists:
                 missing.append(item)
         return missing
+
+    @staticmethod
+    def _requested_zip_artifact_problems(requested: str, workspace: str) -> List[str]:
+        problems: List[str] = []
+        if not requested:
+            return problems
+        for match in sorted(set(re.findall(r"([A-Za-z0-9_.\\/\-+]+\.zip)\b", requested))):
+            candidate = match.replace("\\", os.sep).replace("/", os.sep)
+            path = candidate if os.path.isabs(candidate) else os.path.join(workspace, candidate)
+            if not os.path.isfile(path):
+                problems.append(f"required zip missing: {match}")
+                continue
+            try:
+                with zipfile.ZipFile(path, "r") as archive:
+                    bad = archive.testzip()
+                if bad is not None:
+                    problems.append(f"required zip invalid: {match} has bad member {bad}")
+            except Exception as exc:
+                problems.append(
+                    f"required zip invalid: {match} ({type(exc).__name__}: {exc})"
+                )
+        return problems
 
     @staticmethod
     def _final_claim_pytest_problem(final_text_lower: str, workspace: str) -> str:

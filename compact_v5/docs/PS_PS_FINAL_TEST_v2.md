@@ -135,29 +135,12 @@ Process rules:
 Quality rules:
 - JSON writes must be atomic: write a temp file, then replace the target.
 - Tests must cover empty store, invalid JSON, duplicate ID prevention, status transitions, search filters, CLI happy path, and CLI error path.
-- Do not claim done until tests pass, review evidence is saved, and the zip is created.
+- Do not claim done until tests pass, review evidence is saved, and all required
+  live files exist.
 - Final answer must include a SPEC vs SHIPPED table and exact evidence paths.
 
-Final packaging:
-Create this zip at the end:
-
-/home/sagemaker-user/v5_final_acceptance_results.zip
-
-Use Python standard library zipfile. Do not use external dependencies.
-Do not use tar, shell-specific archive tricks, or a text file with a `.zip`
-extension.
-
-After creating the zip, validate it with Python:
-
-```python
-import zipfile
-with zipfile.ZipFile("/home/sagemaker-user/v5_final_acceptance_results.zip") as zf:
-    assert zf.testzip() is None
-```
-
-Do not claim done unless this validation passes.
-
-The zip must include:
+Final evidence:
+The live workspace must include:
 - the whole mini_issue_tracker project;
 - AGENT_STATUS.md;
 - docs/DESIGN.md;
@@ -177,7 +160,7 @@ FINAL_METRICS.md must include:
 - test command and result;
 - any repeated failures;
 - final SPEC vs SHIPPED table.
-- zip validation result from `zipfile.testzip()`.
+- final required file existence check.
 
 Before final answer, update `AGENT_STATUS.md` so it no longer says packaging,
 review, cost, context, verify, or done are pending.

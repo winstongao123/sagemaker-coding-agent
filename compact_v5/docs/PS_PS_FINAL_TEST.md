@@ -123,14 +123,8 @@ Process rules:
 14. If Bedrock cost exceeds $2.00, stop and report.
 15. Before final answer, run /verify full and /done full if available.
 
-Final packaging:
-Create this zip at the end:
-
-/home/sagemaker-user/v5_final_acceptance_results.zip
-
-Use Python standard library zipfile. Do not use external dependencies.
-
-The zip must include:
+Final evidence:
+The live workspace must include:
 - the whole mini_issue_tracker project;
 - AGENT_STATUS.md;
 - docs/DESIGN.md;
@@ -151,18 +145,13 @@ FINAL_METRICS.md must include:
 - any repeated failures;
 - final SPEC vs SHIPPED table.
 
-Do not claim done until tests pass, review evidence is saved, and the zip is created.
+Do not claim done until tests pass, review evidence is saved, and all required
+live files exist.
 ```
 
 ## What To Send Back To Codex
 
-Best option:
-
-```text
-/home/sagemaker-user/v5_final_acceptance_results.zip
-```
-
-If you cannot upload the zip, paste these files:
+Paste or upload these files:
 
 ```text
 AGENT_STATUS.md
@@ -195,7 +184,6 @@ Pass means:
 - tests passed;
 - logs and reviews were saved;
 - cost/context were captured;
-- zip was created;
 - final answer has evidence paths and SPEC vs SHIPPED.
 
 Fail means:

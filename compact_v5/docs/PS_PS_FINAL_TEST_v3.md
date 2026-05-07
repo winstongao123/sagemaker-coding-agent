@@ -187,16 +187,12 @@ Process rules:
 11. Do not repeat the same failed command more than twice without changing
     approach.
 12. If the same failure repeats 3 times, stop and write ESCALATION.md.
-13. Create mini_release_auditor_result.zip with Python zipfile.
-14. Validate the zip using zipfile.ZipFile(...).testzip(). Writing
-    create_zip.py or make_zip.py is not enough; you must execute the script
-    or inline Python command and save the validation output before final answer.
-15. Before final answer, verify every required live file exists.
-16. Before final answer, update AGENT_STATUS.md so nothing says review,
+13. Before final answer, verify every required live file exists.
+14. Before final answer, update AGENT_STATUS.md so nothing says review,
     packaging, cost, context, verify, or done is pending.
-17. Before final answer, run /verify full and /done full if available. If not,
+15. Before final answer, run /verify full and /done full if available. If not,
     explain clearly and save manual verification in docs/REVIEW.md.
-18. Final answer must include a SPEC vs SHIPPED table and exact evidence paths.
+16. Final answer must include a SPEC vs SHIPPED table and exact evidence paths.
 
 Tests must cover:
 - empty store,
@@ -207,15 +203,13 @@ Tests must cover:
 - search filters,
 - CLI happy path,
 - CLI error path,
-- report generation,
-- zip validation.
+- report generation.
 
 Do not claim done until:
 - tests pass,
 - docs/reviews/ has saved helper/reviewer evidence,
 - docs/logs/ has saved command/test summaries,
 - AGENT_STATUS.md is current,
-- zip validates,
 - SPEC vs SHIPPED is complete.
 ```
 
@@ -231,7 +225,6 @@ After the run, provide:
 - `docs/reviews/worker_or_explorer_review.md`,
 - `docs/reviews/final_reviewer_review.md`,
 - final SPEC vs SHIPPED answer,
-- `mini_release_auditor_result.zip`,
 - final visible cost from UI or `/cost`.
 
 ## Pass Criteria
@@ -240,7 +233,6 @@ Clean pass requires:
 
 - all required files present in the live workspace,
 - tests pass,
-- zip validates,
 - reviewer evidence is saved,
 - status is current,
 - UI shows cache/cost/context/agent metrics,

@@ -36,8 +36,14 @@ max-turn guards:
   if any are missing.
 - Injects still-missing exact requested paths into the near-`max_turns` warning so
   the model spends its final turns on required deliverables before optional polish.
+- Gives an extra concrete warning when the missing deliverable is an exact `.zip`
+  artifact, because the latest run substituted `.tar.gz` under turn pressure.
+- Validates requested `.zip` artifacts with Python `zipfile`, so a gzip/tar file
+  renamed to `.zip` is still rejected.
 - Writes still-missing exact requested paths into the max-turn resume section of
   `AGENT_STATUS.md` so a resumed run can pick up cleanly.
+- Preserves the original user request outside the compacted message list so exact
+  deliverable paths survive auto-compact.
 - Runs a bounded local `python -m pytest tests -q` probe when a Python project
   claims `all tests pass`, `project complete`, or `production-ready`.
 - Saves that probe to `.sageagent_state/final_claim_pytest.log` if it runs.
@@ -69,6 +75,11 @@ fresh v5 runs:
 - Missing `docs/DESIGN.md` would now be caught as a required path mismatch.
 - Missing `docs/TEST_REPORT.md` is now shown in the near-`max_turns` warning and
   saved into `AGENT_STATUS.md` if the run still exhausts turns.
+- Missing `mini_research_worklog_result.zip` now gets an explicit zipfile/testzip
+  instruction before final turns run out.
+- The exact requested zip path now survives auto-compact, instead of depending on
+  whatever compact summary text happened to retain.
+- Invalid `.zip` content is now blocked even if the filename exists.
 - Unchecked `AGENT_STATUS.md` plan rows would now be caught.
 - External pytest failures would now be caught before accepting a strong final
   completion claim.

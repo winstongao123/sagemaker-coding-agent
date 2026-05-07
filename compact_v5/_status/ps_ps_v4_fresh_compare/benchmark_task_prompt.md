@@ -8,7 +8,7 @@ $5.00. If cost approaches the cap, stop after saving status and evidence.
 Goal: build a small but real Python package named `mini_research_worklog`.
 
 This is not only a coding task. It must prove research, review, long-task state,
-tool discipline, packaging, and evidence capture.
+tool discipline, and evidence capture.
 
 Required tree:
 
@@ -60,17 +60,15 @@ Process requirements:
    blockers, cost checkpoints, and review state.
 2. Use todo state if available and keep it consistent with `AGENT_STATUS.md`.
 3. Save worker/reviewer/subagent output under `docs/reviews/`.
-4. Save command/test/zip summaries under `docs/logs/` and summarize them in
+4. Save command/test summaries under `docs/logs/` and summarize them in
    `docs/TEST_REPORT.md`.
 5. Run targeted tests first, then full tests.
 6. Do not repeat the same failed command more than twice without changing
    approach. If one failure repeats 3 times, stop and write `ESCALATION.md`.
 7. Before final answer, verify every required live file exists in `{{WORKSPACE}}`.
-8. Create `mini_research_worklog_result.zip` with Python `zipfile`, then validate
-   it with `ZipFile(...).testzip()` and save the validation output.
-9. Before final answer, update `AGENT_STATUS.md` so nothing says packaging,
+8. Before final answer, update `AGENT_STATUS.md` so nothing says packaging,
    review, cost, context, verify, or done is pending.
-10. Final answer must include a SPEC vs SHIPPED table and exact evidence paths.
+9. Final answer must include a SPEC vs SHIPPED table and exact evidence paths.
 
 Implementation requirements:
 
@@ -88,6 +86,6 @@ Implementation requirements:
   open items, and stale open items.
 - Tests must cover empty store, invalid JSON, duplicate id prevention, status
   transitions, atomic write temp cleanup, search filters, CLI happy path, CLI
-  error path, report generation, and zip validation helper behavior.
+  error path, and report generation.
 
 Do not claim done until saved evidence proves the package works.

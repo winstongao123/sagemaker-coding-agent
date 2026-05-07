@@ -278,16 +278,97 @@ def test_engine_warns_and_records_status_on_max_turns(tmp_path, monkeypatch):
     )
 
     assert result.stop_reason == "max_turns"
-    last_messages = client.calls[-1]["messages"]
-    final_warning = str(last_messages[-1]["content"])
+    final_warning = "\n".join(str(call["messages"]) for call in client.calls)
     assert "Turn budget warning" in final_warning
     assert "docs/TEST_REPORT.md" in final_warning
+    assert "Exact ZIP artifact is still missing" not in final_warning
     status_text = (tmp_path / "AGENT_STATUS.md").read_text(encoding="utf-8")
     assert "SAGEAGENT_MAX_TURNS_RESUME_STATE" in status_text
     assert "Stop reason: max_turns" in status_text
     assert "Completion claim: NOT_DONE" in status_text
     assert "docs/TEST_REPORT.md" in status_text
     assert any("AGENT_STATUS.md updated for max_turns resume" in line for line in out)
+
+
+def test_turn_budget_warning_prioritizes_missing_exact_zip(tmp_path, monkeypatch):
+    """Near max_turns, exact requested zip artifacts get a concrete nudge."""
+    from core import QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+    monkeypatch.setattr(CONFIG, "enable_status_doc", True)
+    (tmp_path / "AGENT_STATUS.md").write_text("Current phase: packaging\n", encoding="utf-8")
+    client = _ScriptedClient([
+        ("tool", f"call_{i}", "read_file", {"file_path": f"x{i}.txt"})
+        for i in range(5)
+    ])
+    engine = QueryEngine(client=client, max_turns=3)
+    result = engine.run(
+        user_message="Required final artifact: mini_research_worklog_result.zip",
+        system_prompt="sys",
+        tools=all_registered(),
+    )
+
+    assert result.stop_reason == "max_turns"
+    final_warning = "\n".join(str(call["messages"]) for call in client.calls)
+    assert "mini_research_worklog_result.zip" in final_warning
+    assert "Exact ZIP artifact is not ready" in final_warning
+    status_text = (tmp_path / "AGENT_STATUS.md").read_text(encoding="utf-8")
+    assert "mini_research_worklog_result.zip" in status_text
+
+
+def test_original_request_paths_survive_compacted_message_state():
+    """Exact deliverables must survive even if compaction rewrites messages."""
+    from core import QueryEngine
+
+    engine = QueryEngine(client=_ScriptedClient([]), max_turns=3)
+    engine._run_requested_text = "Required artifact: mini_research_worklog_result.zip"
+    engine.messages = [
+        {
+            "role": "user",
+            "content": (
+                "<system-reminder>Final-claim guard: required path missing: "
+                "mini_research_worklog_result.zip</system-reminder>"
+            ),
+        },
+        {
+            "role": "user",
+            "content": "compacted summary without the exact artifact name",
+        },
+    ]
+
+    requested = engine._requested_user_text()
+    assert "mini_research_worklog_result.zip" in requested
+    assert "Final-claim guard" not in requested
+
+
+def test_final_claim_guard_rejects_invalid_zip_file(tmp_path, monkeypatch):
+    """A gzip/tar payload renamed to .zip must not satisfy an exact zip request."""
+    from core import QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+    monkeypatch.setattr(CONFIG, "enable_status_doc", True)
+    (tmp_path / "AGENT_STATUS.md").write_text("Status: COMPLETE\n", encoding="utf-8")
+    (tmp_path / "mini_research_worklog_result.zip").write_bytes(b"\x1f\x8bnot-a-real-zip")
+    client = _ScriptedClient([
+        ("text", "Project complete. All tests pass."),
+        ("text", "NOT_DONE: zip is invalid."),
+    ])
+    engine = QueryEngine(client=client, max_turns=3)
+    result = engine.run(
+        user_message="Required final artifact: mini_research_worklog_result.zip",
+        system_prompt="sys",
+        tools=all_registered(),
+    )
+
+    assert result.text.startswith("NOT_DONE")
+    injected = str(client.calls[1]["messages"][-1]["content"])
+    assert "required zip invalid: mini_research_worklog_result.zip" in injected
 
 
 # ============================================================
