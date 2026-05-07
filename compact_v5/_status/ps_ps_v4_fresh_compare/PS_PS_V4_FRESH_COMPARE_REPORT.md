@@ -31,18 +31,18 @@ Model/region/cap:
 
 ## Results
 
-| Area | v4 fresh run | v5 fresh run after first fixes |
+| Area | v4 fresh run | latest v5 fresh run after guard fixes |
 |---|---:|---:|
-| Target workspace respected | FAIL: 0/19 required paths in target workspace | PASS: 19/19 required paths present |
+| Target workspace respected | FAIL: 0/19 required paths in target workspace | PARTIAL: 18/19 exact required paths present |
 | Software package built | FAIL | PASS |
-| Tests | FAIL: no tests dir in target workspace | PARTIAL: latest rerun had 123/127 passing |
+| Tests | FAIL: no tests dir in target workspace | PASS: `96 passed in 0.90s` |
 | Exact `.zip` artifact | FAIL: none | PASS in latest rerun |
 | Subagent evidence | FAIL: none | PASS: `docs/reviews/20260507T152935Z-plan-429d3b6faf16.md` |
 | Logs | FAIL: none | PASS: `docs/logs/subagent_artifacts.log` |
-| Status file | FAIL in target workspace | PARTIAL: present, but still claimed complete with failing tests and one missing required doc |
-| Stop reason | Incomplete/wrong workspace | PASS: `end_turn` |
+| Status file | FAIL in target workspace | PARTIAL: present, but final required `docs/TEST_REPORT.md` was missing |
+| Stop reason | Incomplete/wrong workspace | PARTIAL: `max_turns` |
 | API calls | 93 | 104 |
-| Cost | `$0.7796` | `$1.5409` |
+| Cost | `$0.7796` | `$1.1935` |
 | Cache telemetry | limited v4 session stats | PASS: cache read/write and subagent cost recorded |
 | Acceptance verdict | FAIL | FAIL, but much closer and with evidence |
 
@@ -54,16 +54,18 @@ v5 is clearly stronger than v4 on the same task:
 - v5 built the requested software package in the correct workspace.
 - v5 used a subagent and saved the subagent artifact.
 - v5 recorded cache, cost, parent/subagent metrics.
-- v5 reached a clean `end_turn` after the max-turn/status guard and prompt-rule fixes.
+- v5 produced a valid zip and a fully passing local test suite, but exhausted its
+  turn budget before creating one exact required report file.
 
 ## What Still Failed
 
 The latest v5 run is not a clean acceptance pass:
 
-1. It reported completion with four failing tests.
-2. It produced the exact requested `.zip`, but missed `docs/DESIGN.md`.
-3. `AGENT_STATUS.md` still used a completion tone despite failing tests and
-   unchecked original plan rows.
+1. It passed its generated tests: `96 passed`.
+2. It produced the exact requested `.zip`.
+3. It missed one exact required file: `docs/TEST_REPORT.md`.
+4. It stopped by `max_turns`, so it was correctly recorded as not a clean
+   acceptance pass.
 
 These are important because the user's goal is not just "can write code"; the goal
 is a long-running software engineering agent that does not drift from evidence.
@@ -80,6 +82,9 @@ Runtime:
   claim completion while local evidence still shows failing/partial tests,
   pending status, or a requested `.zip` artifact is missing, the engine feeds
   that contradiction back as a correction turn instead of ending.
+- `core/query_engine.py` now includes missing exact requested paths in the
+  near-`max_turns` warning and in the max-turn resume section of
+  `AGENT_STATUS.md`.
 
 Prompt rules:
 
@@ -102,9 +107,10 @@ Lock test:
 v5 is materially better than v4 for the user's target workflow, but the fresh
 comparison found one remaining production-quality issue:
 
-> v5 could still claim done when the external harness saw a failing test or exact
-> artifact mismatch. A deterministic final-claim guard has now been added and
-> lock-tested to prevent that class of false finish.
+> v5 could still run out of turns with one exact required artifact missing. The
+> turn-budget warning and resume guard now list exact missing paths so the next
+> run has mechanical pressure to finish or escalate those paths instead of
+> drifting into optional work.
 
 After the Runnable source scan, the final-claim guard was strengthened again:
 
@@ -118,7 +124,7 @@ Detailed source-level comparison:
 - `Critical_RUNNABLE_LESSONS_FOR_FINAL_GUARD.md`
 
 Before calling v5 "98% ready" for autonomous long-running coding, run one more
-fresh acceptance pass after this strengthened final-claim guard. The next acceptance run should
+fresh acceptance pass after this strengthened max-turn/final-claim guard. The next acceptance run should
 require:
 
 - exact required paths all present

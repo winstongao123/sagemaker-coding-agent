@@ -2022,6 +2022,10 @@ class QueryEngine:
             return messages
 
         self._turn_budget_warning_sent = True
+        missing_paths = self._missing_requested_paths(
+            self._requested_user_text(),
+            self._current_workspace(),
+        )
         body = (
             f"Turn budget warning: {turns_remaining} of {self.max_turns} turns remain. "
             "Prioritize closure over optional work. If deliverables are complete, "
@@ -2030,6 +2034,14 @@ class QueryEngine:
             "complete, update AGENT_STATUS.md with exact remaining work and say "
             "NOT_DONE instead of continuing broad implementation."
         )
+        if missing_paths:
+            shown = ", ".join(missing_paths[:12])
+            if len(missing_paths) > 12:
+                shown += f", ... ({len(missing_paths)} total)"
+            body += (
+                "\nExact required paths still missing from the current workspace: "
+                f"{shown}. Create or explicitly escalate these before any final claim."
+            )
         try:
             output_fn(f"[Turn budget warning: {turns_remaining} turns remaining]")
         except Exception:
@@ -2069,12 +2081,13 @@ class QueryEngine:
         """Best-effort AGENT_STATUS.md append when max_turns interrupts a run."""
         try:
             from runtime.config import CONFIG
+            enable_status = getattr(CONFIG, "enable_status_doc", True)
+            status_name = getattr(CONFIG, "status_doc", "AGENT_STATUS.md") or "AGENT_STATUS.md"
         except Exception:
             return
-        if not getattr(CONFIG, "enable_status_doc", True):
+        if not enable_status:
             return
-        workspace = getattr(CONFIG, "workspace", "") or os.getcwd()
-        status_name = getattr(CONFIG, "status_doc", "AGENT_STATUS.md") or "AGENT_STATUS.md"
+        workspace = self._current_workspace()
         status_path = os.path.join(workspace, status_name)
         try:
             os.makedirs(os.path.dirname(status_path) or ".", exist_ok=True)
@@ -2085,6 +2098,16 @@ class QueryEngine:
             marker = "<!-- SAGEAGENT_MAX_TURNS_RESUME_STATE -->"
             prior = existing.split(marker, 1)[0].rstrip()
             stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            missing_paths = self._missing_requested_paths(
+                self._requested_user_text(),
+                workspace,
+            )
+            missing_line = ""
+            if missing_paths:
+                shown = ", ".join(missing_paths[:20])
+                if len(missing_paths) > 20:
+                    shown += f", ... ({len(missing_paths)} total)"
+                missing_line = f"- Missing exact required paths at interruption: {shown}\n"
             section = (
                 f"\n\n{marker}\n"
                 "## SageAgent Resume State\n\n"
@@ -2092,6 +2115,7 @@ class QueryEngine:
                 "- Stop reason: max_turns\n"
                 f"- Turns used in interrupted run: {turns_used} / {self.max_turns}\n"
                 "- Completion claim: NOT_DONE until the next run verifies deliverables.\n"
+                f"{missing_line}"
                 "- Next action: read this file, inspect recent artifacts/logs, run the "
                 "smallest relevant verification, then either finish or update this "
                 "section with remaining work.\n"
@@ -2123,11 +2147,10 @@ class QueryEngine:
         problems: List[str] = []
         try:
             from runtime.config import CONFIG
-            workspace = getattr(CONFIG, "workspace", "") or os.getcwd()
             status_name = getattr(CONFIG, "status_doc", "AGENT_STATUS.md") or "AGENT_STATUS.md"
         except Exception:
-            workspace = os.getcwd()
             status_name = "AGENT_STATUS.md"
+        workspace = self._current_workspace()
 
         def _read_rel(rel: str) -> str:
             try:
@@ -2161,18 +2184,7 @@ class QueryEngine:
             ):
                 problems.append(f"{rel} reports failing or partial tests")
 
-        user_text_parts: List[str] = []
-        for msg in self.messages:
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                user_text_parts.append(content)
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        user_text_parts.append(str(block.get("text", "")))
-        requested = "\n".join(user_text_parts)
+        requested = self._requested_user_text()
         for missing in self._missing_requested_paths(requested, workspace):
             problems.append(f"required path missing: {missing}")
         for match in sorted(set(re.findall(r"([A-Za-z0-9_.\\/\-+]+\.zip)\b", requested))):
@@ -2201,6 +2213,27 @@ class QueryEngine:
             "summary. If you cannot fix it, answer NOT_DONE with exact blockers."
         )
         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
+    def _current_workspace(self) -> str:
+        try:
+            from runtime.config import CONFIG
+            return getattr(CONFIG, "workspace", "") or os.getcwd()
+        except Exception:
+            return os.getcwd()
+
+    def _requested_user_text(self) -> str:
+        user_text_parts: List[str] = []
+        for msg in self.messages:
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                user_text_parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        user_text_parts.append(str(block.get("text", "")))
+        return "\n".join(user_text_parts)
 
     @staticmethod
     def _missing_requested_paths(requested: str, workspace: str) -> List[str]:

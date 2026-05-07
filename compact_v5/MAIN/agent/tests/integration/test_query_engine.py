@@ -271,7 +271,7 @@ def test_engine_warns_and_records_status_on_max_turns(tmp_path, monkeypatch):
     out = []
     engine = QueryEngine(client=client, max_turns=3)
     result = engine.run(
-        user_message="loop",
+        user_message="Required final deliverable: docs/TEST_REPORT.md\nloop",
         system_prompt="sys",
         tools=all_registered(),
         output_fn=out.append,
@@ -279,11 +279,14 @@ def test_engine_warns_and_records_status_on_max_turns(tmp_path, monkeypatch):
 
     assert result.stop_reason == "max_turns"
     last_messages = client.calls[-1]["messages"]
-    assert "Turn budget warning" in str(last_messages[-1]["content"])
+    final_warning = str(last_messages[-1]["content"])
+    assert "Turn budget warning" in final_warning
+    assert "docs/TEST_REPORT.md" in final_warning
     status_text = (tmp_path / "AGENT_STATUS.md").read_text(encoding="utf-8")
     assert "SAGEAGENT_MAX_TURNS_RESUME_STATE" in status_text
     assert "Stop reason: max_turns" in status_text
     assert "Completion claim: NOT_DONE" in status_text
+    assert "docs/TEST_REPORT.md" in status_text
     assert any("AGENT_STATUS.md updated for max_turns resume" in line for line in out)
 
 
