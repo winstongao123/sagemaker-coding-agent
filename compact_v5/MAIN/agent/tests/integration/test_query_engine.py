@@ -126,6 +126,55 @@ def test_engine_dispatches_tool_then_finalizes():
     assert tr_block["tool_use_id"] == "call_1"
 
 
+def test_engine_repairs_invalid_tool_result_pairs_before_api_call():
+    """Long compaction/recovery must not send invalid tool_result blocks."""
+    from core import QueryEngine
+    from tools import all_registered
+
+    client = _ScriptedClient([("text", "recovered")])
+    engine = QueryEngine(client=client, max_turns=2)
+    engine.messages = [
+        {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": "dup",
+                "name": "read_file",
+                "input": {},
+            }],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "dup", "content": "first"},
+                {"type": "tool_result", "tool_use_id": "dup", "content": "duplicate"},
+                {"type": "tool_result", "tool_use_id": "lost", "content": "orphan"},
+            ],
+        },
+    ]
+
+    result = engine.run(
+        user_message="continue",
+        system_prompt="sys",
+        tools=all_registered(),
+    )
+
+    assert result.stop_reason == "end_turn"
+    sent_user = client.calls[0]["messages"][1]
+    typed_results = [
+        block for block in sent_user["content"]
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+    text_blocks = [
+        block for block in sent_user["content"]
+        if isinstance(block, dict) and block.get("type") == "text"
+    ]
+    assert [block["tool_use_id"] for block in typed_results] == ["dup"]
+    joined_text = "\n".join(block["text"] for block in text_blocks)
+    assert "duplicate" in joined_text
+    assert "orphan" in joined_text
+
+
 # ============================================================
 # Test 3 — Phase 7 wiring contract: tools= payload excludes deferred tools by default
 # ============================================================
@@ -150,7 +199,7 @@ def test_engine_excludes_deferred_tools_from_first_turn_payload():
     assert "list_dir" not in sent_names
     assert "notebook_edit" not in sent_names
     # Phase 9 added `task` tool with should_defer=True — must also be excluded.
-    assert "task" not in sent_names
+    assert "task" in sent_names
     # Phase 10 added `skill` and `skill_propose_patch` with should_defer=True.
     assert "skill" not in sent_names
     assert "skill_propose_patch" not in sent_names

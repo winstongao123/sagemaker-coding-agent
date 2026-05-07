@@ -223,19 +223,20 @@ def test_subagent_consumes_shared_budget():
 # Test 6 — task tool registered + deferred
 # ============================================================
 
-def test_task_tool_registered_and_deferred():
+def test_task_tool_registered_and_visible():
     from tools import find_tool_by_name, all_registered, apply_tool_search_deferral
 
     tool = find_tool_by_name(all_registered(), "task")
     assert tool is not None
-    assert tool.should_defer is True
-    assert tool.always_load is False
+    assert tool.should_defer is False
+    assert tool.always_load is True
 
-    # Confirm it appears in the deferred-names list when deferral is enabled.
+    # PS_PS v3 lock: task must be visible on the first turn so a small model
+    # cannot satisfy a long software prompt while skipping required reviewers.
     visible, deferred_names = apply_tool_search_deferral(all_registered(), enabled=True)
     visible_names = {t.name for t in visible}
-    assert "task" not in visible_names
-    assert "task" in deferred_names
+    assert "task" in visible_names
+    assert "task" not in deferred_names
 
 
 # ============================================================

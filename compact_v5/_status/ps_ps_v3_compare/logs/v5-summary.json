@@ -1,4 +1,5 @@
 {
+  "acceptance_pass": true,
   "agent": "v5",
   "cap_usd": 5.0,
   "error": false,
@@ -6,7 +7,7 @@
   "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
   "pytest": {
     "returncode": 0,
-    "summary": "============================= 62 passed in 0.58s =============================="
+    "summary": "76 passed in 0.60s"
   },
   "region": "ap-southeast-2",
   "required_present": {
@@ -16,7 +17,7 @@
     "docs/REVIEW.md": true,
     "docs/TEST_REPORT.md": true,
     "docs/logs": true,
-    "docs/reviews": false,
+    "docs/reviews": true,
     "mini_release_auditor/__init__.py": true,
     "mini_release_auditor/cli.py": true,
     "mini_release_auditor/models.py": true,
@@ -29,105 +30,109 @@
     "tests/test_search.py": true,
     "tests/test_store.py": true
   },
-  "required_present_count": 17,
+  "required_present_count": 18,
   "required_total": 18,
   "run": {
     "agent": "v5",
-    "elapsed_seconds": 478.3018841743469,
+    "elapsed_seconds": 334.7485785484314,
     "stats": {
-      "api_calls": 85,
-      "context_window_tokens": 68188,
-      "last_cost_usd": 0.021462,
+      "api_calls": 55,
+      "context_window_tokens": 67399,
+      "last_cost_usd": 0.017656,
       "last_input": 3,
-      "last_output": 1876,
+      "last_output": 1181,
       "model_usage": {
         "anthropic.claude-haiku-4-5-20251001-v1:0": {
-          "api_calls": 85,
-          "cache_creation_input_tokens": 273670,
-          "cache_read_input_tokens": 2850417,
-          "cost_usd": 0.937815,
-          "input_tokens": 253,
-          "output_tokens": 45086
+          "api_calls": 55,
+          "cache_creation_input_tokens": 159492,
+          "cache_read_input_tokens": 1967864,
+          "cost_usd": 0.714589,
+          "input_tokens": 162,
+          "output_tokens": 50695
         }
       },
-      "parent_cache_read_tokens": 2599108,
-      "parent_cache_write_tokens": 171794,
-      "parent_cost_usd": 0.756952,
-      "parent_input_tokens": 193,
-      "parent_output_tokens": 42697,
-      "session_cache_read": 2850417,
-      "session_cache_write": 273670,
-      "session_cost_usd": 0.937815,
-      "session_input": 253,
-      "session_output": 45086,
-      "session_total": 45339,
+      "parent_cache_read_tokens": 1948582,
+      "parent_cache_write_tokens": 143197,
+      "parent_cost_usd": 0.664614,
+      "parent_input_tokens": 147,
+      "parent_output_tokens": 46068,
+      "session_cache_read": 1967864,
+      "session_cache_write": 159492,
+      "session_cost_usd": 0.714589,
+      "session_input": 162,
+      "session_output": 50695,
+      "session_total": 50857,
       "subagent_cache_read_tokens": {
-        "verify": 251309
+        "plan": 19282
       },
       "subagent_cache_write_tokens": {
-        "verify": 101876
+        "plan": 16295
       },
       "subagent_cost_usd": {
-        "verify": 0.180863
+        "plan": 0.049975
       },
       "subagent_input_tokens": {
-        "verify": 60
+        "plan": 15
       },
       "subagent_output_tokens": {
-        "verify": 2389
+        "plan": 4627
       }
     },
     "stop_reason": "end_turn",
-    "turns_used": 65
+    "turns_used": 50
   },
   "stats": {
-    "api_calls": 85,
-    "context_window_tokens": 68188,
-    "last_cost_usd": 0.021462,
+    "api_calls": 55,
+    "context_window_tokens": 67399,
+    "last_cost_usd": 0.017656,
     "last_input": 3,
-    "last_output": 1876,
+    "last_output": 1181,
     "model_usage": {
       "anthropic.claude-haiku-4-5-20251001-v1:0": {
-        "api_calls": 85,
-        "cache_creation_input_tokens": 273670,
-        "cache_read_input_tokens": 2850417,
-        "cost_usd": 0.937815,
-        "input_tokens": 253,
-        "output_tokens": 45086
+        "api_calls": 55,
+        "cache_creation_input_tokens": 159492,
+        "cache_read_input_tokens": 1967864,
+        "cost_usd": 0.714589,
+        "input_tokens": 162,
+        "output_tokens": 50695
       }
     },
-    "parent_cache_read_tokens": 2599108,
-    "parent_cache_write_tokens": 171794,
-    "parent_cost_usd": 0.756952,
-    "parent_input_tokens": 193,
-    "parent_output_tokens": 42697,
-    "session_cache_read": 2850417,
-    "session_cache_write": 273670,
-    "session_cost_usd": 0.937815,
-    "session_input": 253,
-    "session_output": 45086,
-    "session_total": 45339,
+    "parent_cache_read_tokens": 1948582,
+    "parent_cache_write_tokens": 143197,
+    "parent_cost_usd": 0.664614,
+    "parent_input_tokens": 147,
+    "parent_output_tokens": 46068,
+    "session_cache_read": 1967864,
+    "session_cache_write": 159492,
+    "session_cost_usd": 0.714589,
+    "session_input": 162,
+    "session_output": 50695,
+    "session_total": 50857,
     "subagent_cache_read_tokens": {
-      "verify": 251309
+      "plan": 19282
     },
     "subagent_cache_write_tokens": {
-      "verify": 101876
+      "plan": 16295
     },
     "subagent_cost_usd": {
-      "verify": 0.180863
+      "plan": 0.049975
     },
     "subagent_input_tokens": {
-      "verify": 60
+      "plan": 15
     },
     "subagent_output_tokens": {
-      "verify": 2389
+      "plan": 4627
     }
   },
+  "subagent_cost_usd": {
+    "plan": 0.049975
+  },
+  "subagent_used": true,
   "workspace": "D:\\Github\\sageagent_psps_v3_compare_workspaces\\v5",
   "zip": {
     "error": "",
-    "members": 27,
-    "size_bytes": 45501,
+    "members": 58,
+    "size_bytes": 124043,
     "valid": true,
     "zip": "D:\\Github\\sageagent_psps_v3_compare_workspaces\\v5\\mini_release_auditor_result.zip"
   }

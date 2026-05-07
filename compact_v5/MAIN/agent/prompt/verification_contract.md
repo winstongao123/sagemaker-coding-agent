@@ -6,6 +6,10 @@ When that bar is hit, adversarial verification SHOULD precede reporting completi
 
 - Default (`enforce_verify_contract=False`): SUGGEST `/verify` — don't auto-spawn. "Edited N files. Want /verify before declaring done?"
 - Strict (`=True`): auto-spawn `verify` sub-agent.
+- User-required supervisor/reviewer mode: if the user asks for subagent,
+  worker/reviewer, reviewer evidence, or saved review artifacts, treat the
+  verify/review subagent as mandatory even when `enforce_verify_contract=False`.
+  Do not replace it with a self-written review file.
 
 Verify agent runs builds, tests, linters, adversarial probes.
 

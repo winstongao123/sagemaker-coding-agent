@@ -662,6 +662,131 @@ def test_compactor_create_llm_summary_calls_chat(monkeypatch):
     assert "summarizing" in captured["call"]["system"].lower()
 
 
+def test_compactor_summary_input_repairs_dangling_tool_use(monkeypatch):
+    """Summary calls must repair orphan tool_use blocks before Bedrock."""
+    from core.compactor import Compactor
+    from runtime.bedrock_client import BedrockClient, Response
+
+    client = BedrockClient(model_id="x", region="us-east-1", mock_mode=True)
+    captured: dict = {}
+
+    def fake_chat(*args, **kwargs):
+        captured["messages"] = kwargs["messages"]
+        return Response(text="summary after dangling tool_use", usage={})
+
+    monkeypatch.setattr(client, "chat", fake_chat)
+
+    msgs = [
+        {"role": "user", "content": "start"},
+        {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": "dangling-1",
+                "name": "read_file",
+                "input": {"file_path": "app.py"},
+            }],
+        },
+    ]
+
+    summary = Compactor.create_llm_summary(client, msgs)
+
+    assert summary == "summary after dangling tool_use"
+    sent = captured["messages"]
+    assistant_idx = next(
+        idx for idx, msg in enumerate(sent)
+        if msg.get("role") == "assistant"
+        and isinstance(msg.get("content"), list)
+        and msg["content"][0].get("type") == "tool_use"
+    )
+    next_msg = sent[assistant_idx + 1]
+    assert next_msg["role"] == "user"
+    assert isinstance(next_msg["content"], list)
+    assert next_msg["content"][0]["type"] == "tool_result"
+    assert next_msg["content"][0]["tool_use_id"] == "dangling-1"
+    assert "pre-summary orphaned tool_use repaired" in next_msg["content"][0]["content"]
+
+
+def test_compactor_compact_converts_orphan_tool_result_from_recent_window(monkeypatch):
+    """Compaction must not keep a tool_result after dropping its tool_use."""
+    from core.compactor import Compactor
+
+    monkeypatch.setattr(Compactor, "KEEP_LAST_MESSAGES", 1)
+    messages = [
+        {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": "lost-tool",
+                "name": "read_file",
+                "input": {"file_path": "large.py"},
+            }],
+        },
+        {
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": "lost-tool",
+                "content": "important output from the dropped tool call",
+            }],
+        },
+    ]
+
+    compacted = Compactor.compact(messages, "summary")
+
+    recent = next(
+        msg for msg in compacted
+        if msg.get("role") == "user"
+        and isinstance(msg.get("content"), list)
+    )
+    assert recent["role"] == "user"
+    assert recent["content"][0]["type"] == "text"
+    assert "orphaned tool_result converted to text" in recent["content"][0]["text"]
+    assert "important output from the dropped tool call" in recent["content"][0]["text"]
+
+
+def test_compactor_repair_converts_duplicate_tool_result_to_text():
+    """Bedrock accepts exactly one typed result per tool_use id."""
+    from core.compactor import Compactor
+
+    messages = [
+        {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": "dup-tool",
+                "name": "read_file",
+                "input": {},
+            }],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "dup-tool",
+                    "content": "first result",
+                },
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "dup-tool",
+                    "content": "duplicate result",
+                },
+            ],
+        },
+    ]
+
+    repaired, inserted, converted = Compactor.repair_tool_result_pairs_for_bedrock(messages)
+
+    assert inserted == 0
+    assert converted == 1
+    content = repaired[1]["content"]
+    assert content[0]["type"] == "tool_result"
+    assert content[0]["tool_use_id"] == "dup-tool"
+    assert content[1]["type"] == "text"
+    assert "duplicate result" in content[1]["text"]
+
+
 def test_compactor_run_end_to_end(monkeypatch):
     """Compactor.run: prune → summarize → compact, all in one."""
     from core.compactor import Compactor

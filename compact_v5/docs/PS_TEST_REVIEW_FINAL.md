@@ -368,31 +368,40 @@ Evidence:
 - `compact_v5/_status/ps_ps_v3_compare/logs/v4-summary.json`
 - `compact_v5/_status/ps_ps_v3_compare/logs/v4-agent-output.log`
 
-Same benchmark, same Haiku model, same `$5.00` cap.
+Same benchmark, same Haiku model, same `$5.00` cap. The table below records the
+final rerun after fixing subagent evidence persistence and Bedrock tool-result
+pairing.
 
 | Check | v5 | v4 |
 |---|---|---|
-| Intended workspace files | `17/18` present | `0/18` present |
-| Tests | `62 passed` | no tests dir in intended workspace |
-| Zip | valid, 27 members | no zip in intended workspace |
-| Cost | `$0.9378 / $5.00` | `$0.3934 / $5.00` |
-| Subagent telemetry | verify subagent cost/cache recorded | no comparable saved evidence |
+| Intended workspace files | `18/18` present | `0/18` present |
+| Tests | `76 passed` | no tests dir in intended workspace |
+| Zip | valid, 58 members | no zip in intended workspace |
+| Cost | `$0.7146 / $5.00` | `$0.3934 / $5.00` |
+| Final stop reason | `end_turn` | incomplete/wrong workspace |
+| Subagent telemetry | plan subagent cost/cache recorded and artifact saved under `docs/reviews/` | no comparable saved evidence |
 | Workspace safety | wrote to intended external workspace | wrote into repo root and modified `README.md` |
 
 What v3 caught:
 
 - v5 can complete a non-trivial Haiku software build with tests, package, cache
-  metrics, and subagent cost attribution under the cap.
+  metrics, saved subagent evidence, and subagent cost attribution under the cap.
 - v4 reproduced a major PS problem: it drifted out of the requested workspace.
-- v5 still missed one process artifact: `docs/reviews/` was absent despite using
-  a verify subagent. `PS_PS_FINAL_TEST_v3.md` now makes saved helper/reviewer
-  evidence an explicit hard pass criterion.
+- v5 originally missed one process artifact: `docs/reviews/` was absent despite
+  using a subagent. That is now fixed in `tools/task.py`, and the final rerun
+  saved `docs/reviews/20260507T131946Z-plan-028289457dcf.md`.
+- v5 also exposed long-session Bedrock pairing bugs around dangling, orphaned,
+  and duplicate tool results after compaction/recovery. Those are now repaired
+  before summary calls and before every Bedrock chat call.
 
 Explain it like you are 9:
 
-v5 did almost all the homework on the right desk and passed the tests. It forgot
-to put the helper's note into the review folder, so v3 now says that folder is
-mandatory.
+v5 did the homework on the right desk, passed the tests, put the helper's note
+in the review folder, and packed a real zip.
 
 v4 got confused and put homework on the wrong desk. That is why v5 is better for
-long software work, but v3 still checks that v5 saves every helper note.
+long software work.
+
+One more thing we learned: during long work, the conversation backpack must keep
+tool requests and tool receipts matched. v5 now checks and repairs that before
+calling Bedrock, so compaction is safer for long software tasks.

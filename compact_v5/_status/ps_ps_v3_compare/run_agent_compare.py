@@ -219,6 +219,10 @@ def main() -> int:
     pytest_result = _run_pytest(workspace, logs / f"{args.agent}-pytest.log")
     zip_result = _validate_zip(workspace)
     presence = _required_presence(workspace)
+    stats = run.get("stats", {})
+    if not isinstance(stats, dict):
+        stats = {}
+    subagent_costs = stats.get("subagent_cost_usd", {}) or {}
     summary = {
         "agent": args.agent,
         "model": MODEL_ID,
@@ -231,7 +235,9 @@ def main() -> int:
             for k, v in run.items()
             if k not in {"outputs", "result_text"}
         },
-        "stats": run.get("stats", {}),
+        "stats": stats,
+        "subagent_used": bool(subagent_costs),
+        "subagent_cost_usd": subagent_costs,
         "pytest": pytest_result,
         "zip": zip_result,
         "required_present": presence,
@@ -239,6 +245,13 @@ def main() -> int:
         "required_total": len(presence),
         "workspace": str(workspace),
     }
+    summary["acceptance_pass"] = (
+        summary["required_present_count"] == summary["required_total"]
+        and bool(zip_result.get("valid"))
+        and summary["subagent_used"]
+        and summary["run"].get("stop_reason") == "end_turn"
+        and pytest_result.get("returncode") == 0
+    )
     _write(logs / f"{args.agent}-summary.json", json.dumps(summary, indent=2, sort_keys=True))
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if not error else 1

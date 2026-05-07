@@ -121,6 +121,19 @@ def _build_tools_api_payload(tools: List[Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def _repair_messages_for_bedrock(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Best-effort final validation repair before any Bedrock call."""
+    try:
+        from core.compactor import Compactor
+        repaired, _, _ = Compactor.repair_tool_result_pairs_for_bedrock(
+            messages,
+            reason="pre-api tool pair repair",
+        )
+        return repaired
+    except Exception:
+        return messages
+
+
 def _coerce_tool_result_to_text(value: Any) -> str:
     """Map any tool-execute return value into a Bedrock tool_result text string.
 
@@ -1804,6 +1817,9 @@ class QueryEngine:
         )
 
     def _chat_with_fallback(self, **kwargs: Any) -> Any:
+        if isinstance(kwargs.get("messages"), list):
+            kwargs = dict(kwargs)
+            kwargs["messages"] = _repair_messages_for_bedrock(kwargs["messages"])
         try:
             return self.client.chat(**kwargs)
         except FallbackTriggeredError as exc:
@@ -1815,6 +1831,9 @@ class QueryEngine:
             retry_kwargs = dict(kwargs)
             retry_kwargs["messages"] = strip_signature_blocks(
                 retry_kwargs.get("messages", [])
+            )
+            retry_kwargs["messages"] = _repair_messages_for_bedrock(
+                retry_kwargs["messages"]
             )
             return self.client.chat(**retry_kwargs)
 
@@ -1980,7 +1999,7 @@ def run_one_turn(
 
     visible_tools, _deferred = apply_tool_search_deferral(tools, enabled=True)
     return client.chat(
-        messages=messages,
+        messages=_repair_messages_for_bedrock(messages),
         system=system_prompt,
         tools=_build_tools_api_payload(visible_tools),
         max_tokens=max_tokens,

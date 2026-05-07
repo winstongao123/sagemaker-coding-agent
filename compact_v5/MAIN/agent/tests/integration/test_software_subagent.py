@@ -61,6 +61,8 @@ def _extract_envelope(text: str) -> Dict[str, Any]:
     marker = "[subagent_result_envelope]"
     assert marker in text
     payload = text.split(marker, 1)[1].strip()
+    if "[subagent_artifacts]" in payload:
+        payload = payload.split("[subagent_artifacts]", 1)[0].strip()
     return json.loads(payload)
 
 
@@ -158,6 +160,66 @@ def test_task_tool_returns_structured_subagent_envelope():
     assert envelope["cache"]["read_tokens"] == 4
     assert envelope["cache"]["write_tokens"] == 1
     assert envelope["summary"] == "review complete"
+
+
+def test_task_tool_persists_review_receipt_in_docs_reviews(tmp_path, monkeypatch):
+    from core import IterationBudget, QueryEngine
+    from runtime.config import CONFIG
+    from runtime.tokens import TOKENS
+    from tools import all_registered, find_tool_by_name
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "AGENT_STATUS.md").write_text("review state", encoding="utf-8")
+    TOKENS.reset()
+    client = _ScriptedClient([
+        (
+            "text",
+            "review complete",
+            {
+                "input_tokens": 60,
+                "output_tokens": 15,
+                "cache_read_input_tokens": 4,
+                "cache_creation_input_tokens": 1,
+            },
+        ),
+    ])
+    parent = QueryEngine(client=client, max_turns=3, budget=IterationBudget())
+    task_tool = find_tool_by_name(all_registered(), "task")
+
+    out = task_tool.execute(
+        {"description": "final review", "prompt": "review the current change", "subagent_type": "review"},
+        context={"parent_engine": parent, "parent_depth": 0},
+    )
+    envelope = _extract_envelope(out)
+
+    review_files = list((tmp_path / "docs" / "reviews").glob("*.md"))
+    state_files = list((tmp_path / ".sageagent_state" / "subagents").glob("*.md"))
+    log_file = tmp_path / "docs" / "logs" / "subagent_artifacts.log"
+    assert review_files
+    assert state_files
+    assert log_file.exists()
+    assert "[subagent_artifacts]" in out
+    assert str(review_files[0]) in envelope["artifact_paths"]
+    receipt = review_files[0].read_text(encoding="utf-8")
+    assert "Subagent Receipt: review" in receipt
+    assert "review complete" in receipt
+    assert "sageagent.subagent_result.v1" in receipt
+    assert str(review_files[0]) in log_file.read_text(encoding="utf-8")
+
+
+def test_prompt_requires_real_task_when_user_requires_reviewer_evidence():
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    coord = os.path.join(root, "prompt", "subagent_coord.md")
+    verify = os.path.join(root, "prompt", "verification_contract.md")
+
+    coord_text = open(coord, "r", encoding="utf-8").read()
+    verify_text = open(verify, "r", encoding="utf-8").read()
+
+    assert "MUST call the `task` tool" in coord_text
+    assert "Manually writing a `docs/reviews/*.md` file is not a substitute" in coord_text
+    assert "User-required supervisor/reviewer mode" in verify_text
+    assert "Do not replace it with a self-written review file" in verify_text
 
 
 def test_budget_exhausted_task_tool_includes_recovery_envelope():

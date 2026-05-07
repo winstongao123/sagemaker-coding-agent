@@ -162,13 +162,20 @@ Markdown report must include:
 - open high-priority items.
 
 Process rules:
+0. Your first tool-based phase MUST include a real `task` tool call with
+   `subagent_type` set to `plan`, `explore`, `review`, or `verify`. Save the
+   returned subagent artifact/envelope path in `docs/reviews/`. If you do not
+   call the `task` tool, you are not done. A self-written review file is not a
+   substitute.
 1. Act as supervisor.
 2. Keep AGENT_STATUS.md current with goal, plan, completed work, next 3 todos,
    blockers, cost checkpoints, and review state.
 3. Use todo_write if available and keep it synchronized with AGENT_STATUS.md.
-4. Use at least one worker/explorer/reviewer subagent through the task tool if
-   available.
-5. Save every worker/reviewer/subagent output under docs/reviews/ immediately.
+4. Use at least one worker/explorer/reviewer subagent through the task tool.
+   If the tool is truly unavailable, write `docs/reviews/subagent_unavailable.md`
+   with the exact error.
+5. Save every worker/reviewer/subagent output and returned `task` artifact path
+   under docs/reviews/ immediately.
 6. Save command/test summaries under docs/logs/.
 7. Summarize all command/test logs in docs/TEST_REPORT.md.
 8. Use /cost near the start, after implementation, and before final done if
@@ -181,7 +188,9 @@ Process rules:
     approach.
 12. If the same failure repeats 3 times, stop and write ESCALATION.md.
 13. Create mini_release_auditor_result.zip with Python zipfile.
-14. Validate the zip using zipfile.ZipFile(...).testzip().
+14. Validate the zip using zipfile.ZipFile(...).testzip(). Writing
+    create_zip.py or make_zip.py is not enough; you must execute the script
+    or inline Python command and save the validation output before final answer.
 15. Before final answer, verify every required live file exists.
 16. Before final answer, update AGENT_STATUS.md so nothing says review,
     packaging, cost, context, verify, or done is pending.

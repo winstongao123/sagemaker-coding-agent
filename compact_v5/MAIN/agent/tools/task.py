@@ -14,9 +14,11 @@ AGENT_TYPES + worktree complexity across the gate:
 - No worktree isolation (build agent's git-worktree dance lands in Phase 11).
 - No parallel dispatch (Runnable's parallel sub-agent dispatch is async-only).
 
-The tool is marked `should_defer=True` because spawn is low-frequency:
-most turns don't need a sub-agent, so the schema is loaded only when the
-model calls tool_search after seeing the deferred-tool reminder.
+The tool is visible by default in v5.0.1+ software-engineering builds. The
+PS_PS v3 acceptance run showed that hiding `task` behind tool_search lets
+small models finish long coding work without ever dispatching a reviewer.
+The schema is small enough to keep loaded, and the tool remains guarded by
+the shared budget, depth limit, per-role allowlists, and reviewer receipts.
 
 The Phase 7 wiring contract (ADR-013/014) requires the executor to receive
 the parent QueryEngine via `context["parent_engine"]` so the child can share
@@ -26,12 +28,20 @@ the parent's IterationBudget — see acceptance test
 from __future__ import annotations
 
 import json
+import os
+import re
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from .registry import build_tool, register
 
 
 _DESCRIPTION = """Launch a sub-agent for a specific, scoped task.
+
+IMPORTANT: if the user explicitly asks for a worker, reviewer, verifier,
+helper, subagent, independent review, or saved review evidence, you must use
+this tool. A self-written review document is not a substitute for a real
+sub-agent result.
 
 Sub-agents run with a FRESH conversation but share the parent agent's iteration budget — they cannot collectively exceed the cost ceiling. Use a sub-agent when:
 - The task is well-scoped and self-contained (e.g., "summarize this codebase", "find every TODO comment").
@@ -78,6 +88,112 @@ _INPUT_SCHEMA: Dict[str, Any] = {
     },
     "required": ["prompt"],
 }
+
+
+def _safe_slug(value: str, default: str = "subagent") -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", (value or "").strip()).strip("-._")
+    return slug[:80] or default
+
+
+def _atomic_write_text(path: str, text: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def _subagent_receipt_markdown(
+    *,
+    result: Any,
+    envelope: Dict[str, Any],
+    description: str,
+    prompt: str,
+) -> str:
+    prompt_preview = prompt.strip()
+    if len(prompt_preview) > 2000:
+        prompt_preview = prompt_preview[:2000] + "\n...[truncated]"
+    return (
+        f"# Subagent Receipt: {getattr(result, 'agent_type', 'subagent')}\n\n"
+        f"Created: {datetime.utcnow().replace(microsecond=0).isoformat()}Z\n\n"
+        f"Description: {description or '(none)'}\n\n"
+        "## Prompt Preview\n\n"
+        "```text\n"
+        f"{prompt_preview}\n"
+        "```\n\n"
+        "## Result Text\n\n"
+        "```text\n"
+        f"{result.text or '(no text)'}\n"
+        "```\n\n"
+        "## Envelope\n\n"
+        "```json\n"
+        f"{json.dumps(envelope, indent=2, sort_keys=True)}\n"
+        "```\n"
+    )
+
+
+def _persist_subagent_receipts(
+    *,
+    result: Any,
+    envelope: Dict[str, Any],
+    description: str,
+    prompt: str,
+) -> list[str]:
+    """Persist subagent receipts so long software tasks keep review evidence.
+
+    Always write under `.sageagent_state/subagents` when a workspace is known.
+    Also write under `docs/reviews/` and `docs/logs/`. These human-visible
+    receipts are required by the PS_PS final acceptance tests and prevent early
+    helper runs from disappearing before the project docs tree exists.
+    """
+    try:
+        from runtime.config import CONFIG
+        workspace = os.path.abspath(str(getattr(CONFIG, "workspace", "") or os.getcwd()))
+    except Exception:
+        workspace = os.path.abspath(os.getcwd())
+    if not workspace:
+        return []
+
+    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    child = _safe_slug(str(getattr(result, "child_session_id", "") or "child"))
+    kind = _safe_slug(str(getattr(result, "agent_type", "") or "subagent"))
+    filename = f"{stamp}-{kind}-{child}.md"
+    receipt = _subagent_receipt_markdown(
+        result=result,
+        envelope=envelope,
+        description=description,
+        prompt=prompt,
+    )
+
+    paths: list[str] = []
+    state_path = os.path.join(workspace, ".sageagent_state", "subagents", filename)
+    try:
+        _atomic_write_text(state_path, receipt)
+        paths.append(state_path)
+    except Exception:
+        pass
+
+    docs_dir = os.path.join(workspace, "docs")
+    review_path = os.path.join(docs_dir, "reviews", filename)
+    try:
+        _atomic_write_text(review_path, receipt)
+        paths.append(review_path)
+    except Exception:
+        pass
+    log_path = os.path.join(docs_dir, "logs", "subagent_artifacts.log")
+    try:
+        existing = ""
+        if os.path.exists(log_path):
+            with open(log_path, "r", encoding="utf-8") as f:
+                existing = f.read()
+        line = (
+            f"{stamp} agent_type={kind} child_session_id={child} "
+            f"review_artifact={review_path}\n"
+        )
+        _atomic_write_text(log_path, existing + line)
+    except Exception:
+        pass
+    return paths
 
 
 def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
@@ -159,8 +275,20 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         )
     )
 
-    envelope = json.dumps(result.to_envelope(), indent=2, sort_keys=True)
+    envelope_data = result.to_envelope()
+    artifact_paths = _persist_subagent_receipts(
+        result=result,
+        envelope=envelope_data,
+        description=description,
+        prompt=prompt,
+    )
+    if artifact_paths:
+        envelope_data["artifact_paths"] = list(artifact_paths)
+    envelope = json.dumps(envelope_data, indent=2, sort_keys=True)
     envelope_block = f"\n\n[subagent_result_envelope]\n{envelope}"
+    artifact_block = ""
+    if artifact_paths:
+        artifact_block = "\n\n[subagent_artifacts]\n" + "\n".join(artifact_paths)
     try:
         from runtime.audit import AUDIT as _AUDIT
         _AUDIT.log(
@@ -184,15 +312,16 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         pass
 
     if result.error and result.stop_reason in ("depth_exceeded", "invalid_args"):
-        return result.error + envelope_block
+        return result.error + envelope_block + artifact_block
     if result.stop_reason in ("budget_exhausted", "max_turns", "context_overflow"):
         # Surface partial work + reason so the parent can react.
         return (
             f"[Sub-agent stopped: {result.stop_reason}]\n"
             f"{result.text or '(no partial output)'}"
             f"{envelope_block}"
+            f"{artifact_block}"
         )
-    return (result.text or "(sub-agent returned no text)") + envelope_block
+    return (result.text or "(sub-agent returned no text)") + envelope_block + artifact_block
 
 
 def _register():
@@ -210,7 +339,7 @@ def _register():
         is_destructive=False,
         is_concurrency_safe=False,  # parallel sub-agents land later
         requires_approval=False,    # the *child* approval gates fire on its tool calls
-        should_defer=True,          # low-frequency; deferred via Phase 7
-        always_load=False,
+        should_defer=False,         # supervisor/reviewer work must be discoverable
+        always_load=True,
         search_hint="sub-agent fork delegate spawn task launch background",
     ))

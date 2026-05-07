@@ -837,6 +837,10 @@ class Compactor:
             cls.strip_images_from_messages(messages)
         )
         pruned_messages = cls._prune_tool_results_for_summary(summary_messages)
+        pruned_messages, _, _ = cls.repair_tool_result_pairs_for_bedrock(
+            pruned_messages,
+            reason="pre-summary orphaned tool_use repaired",
+        )
         summary_client = cls._summary_client(client)
 
         SUMMARY_SYSTEM_PROMPT = (
@@ -1028,7 +1032,7 @@ class Compactor:
         todo_msg = cls.build_todo_restoration_message()
         if todo_msg:
             post_messages.append(todo_msg)
-        return cls.inject_missing_tool_result_stubs(post_messages)[0]
+        return cls.repair_tool_result_pairs_for_bedrock(post_messages)[0]
 
     @classmethod
     def build_cache_sharing_fork_after_compact(
@@ -1314,6 +1318,95 @@ class Compactor:
                 idx += 1
 
         return repaired, inserted
+
+    @classmethod
+    def repair_tool_result_pairs_for_bedrock(
+        cls,
+        messages: List[Dict[str, Any]],
+        reason: str = "orphaned tool_use repaired",
+    ) -> Tuple[List[Dict[str, Any]], int, int]:
+        """Make tool_use/tool_result pairs valid for Bedrock.
+
+        Bedrock requires any assistant tool_use blocks to be followed
+        immediately by user tool_result blocks with matching IDs, and rejects
+        tool_result IDs that do not match the immediately preceding assistant.
+        Compaction may summarize away one side of that pair, so repair both
+        directions before sending a compacted or summary-input history back to
+        the model.
+        """
+        repaired, inserted = cls.inject_missing_tool_result_stubs(
+            messages,
+            reason=reason,
+        )
+        out: List[Dict[str, Any]] = []
+        expected: set[str] = set()
+        converted = 0
+
+        for msg in repaired:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "user" and isinstance(content, list):
+                new_blocks: List[Any] = []
+                mutated = False
+                seen_results: set[str] = set()
+                for block in content:
+                    if not (
+                        isinstance(block, dict)
+                        and block.get("type") == "tool_result"
+                    ):
+                        new_blocks.append(block)
+                        continue
+
+                    tool_use_id = str(block.get("tool_use_id", ""))
+                    if tool_use_id in expected and tool_use_id not in seen_results:
+                        seen_results.add(tool_use_id)
+                        new_blocks.append(block)
+                        continue
+
+                    converted += 1
+                    mutated = True
+                    raw_content = block.get("content", "")
+                    if isinstance(raw_content, list):
+                        raw_content = json.dumps(raw_content, ensure_ascii=False)
+                    elif not isinstance(raw_content, str):
+                        raw_content = str(raw_content)
+                    if len(raw_content) > cls.SUMMARY_TOOL_RESULT_HEAD:
+                        raw_content = (
+                            raw_content[: cls.SUMMARY_TOOL_RESULT_HEAD]
+                            + "\n... [orphaned tool_result truncated] ..."
+                        )
+                    new_blocks.append({
+                        "type": "text",
+                        "text": (
+                            "[orphaned tool_result converted to text for "
+                            f"Bedrock validation; tool_use_id={tool_use_id}]\n"
+                            f"{raw_content}"
+                        ),
+                    })
+
+                if mutated:
+                    patched = dict(msg)
+                    patched["content"] = new_blocks
+                    out.append(patched)
+                else:
+                    out.append(msg)
+                expected = set()
+                continue
+
+            out.append(msg)
+            if role == "assistant" and isinstance(content, list):
+                expected = {
+                    str(block.get("id", ""))
+                    for block in content
+                    if isinstance(block, dict)
+                    and block.get("type") == "tool_use"
+                    and block.get("id")
+                }
+            else:
+                expected = set()
+
+        return out, inserted, converted
 
     @classmethod
     def run(

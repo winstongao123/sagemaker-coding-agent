@@ -30,19 +30,20 @@ Workspaces:
 - v5: `D:/Github/sageagent_psps_v3_compare_workspaces/v5`
 - v4: `D:/Github/sageagent_psps_v3_compare_workspaces/v4`
 
-## Results
+## Final Results After v5 Fixes
 
 | Dimension | v5 Haiku | v4 Haiku | What it means |
 |---|---:|---:|---|
-| Local cost recorded | `$0.9378 / $5.00` | `$0.3934 / $5.00` | Both stayed under cap. v5 spent more because it actually built/tested the package and ran a verify subagent. |
-| API calls | `85` | `62` | v5 did a complete long task. v4 spent many turns but lost workspace control. |
-| Required live files present | `17 / 18` | `0 / 18` in intended workspace | v5 produced the project in the right workspace. v4 wrote into the repo root instead of the requested workspace. |
-| Tests | `62 passed` | no tests dir in intended workspace | v5 produced runnable code and tests. v4 did not finish in the correct workspace. |
-| Zip | valid, `27` members, `45,501` bytes | no zip in intended workspace | v5 fixed the v1 zip failure class. v4 did not package correctly. |
-| Subagent/reviewer telemetry | verify subagent used; `$0.1809`, cache R/W tracked | no saved comparable reviewer artifact in intended workspace | v5 records subagent cost/cache attribution. |
-| Cache telemetry | read `2,850,417`, write `273,670` tokens | cache lines appear in log, but less structured | v5 has structured cache/read/write stats usable by UI and logs. |
+| Latest local cost recorded | `$0.7146 / $5.00` | `$0.3934 / $5.00` | Both stayed under cap. v5 spent more because it actually built/tested the package and ran a real subagent. |
+| API calls | `55` | `62` | v5 completed the task with fewer calls than the original v4 comparison run. |
+| Final stop reason | `end_turn` | incomplete/wrong workspace | The stricter v5 harness now rejects `fatal_error`; latest v5 ended cleanly. |
+| Required live files present | `18 / 18` | `0 / 18` in intended workspace | v5 produced the project in the right workspace. v4 wrote into the repo root instead of the requested workspace. |
+| Tests | `76 passed` | no tests dir in intended workspace | v5 produced runnable code and tests. v4 did not finish in the correct workspace. |
+| Zip | valid, `58` members, `124,043` bytes | no zip in intended workspace | v5 fixed the v1 zip failure class and validated the output package. |
+| Subagent/reviewer telemetry | plan subagent used; `$0.0500`, cache R/W tracked; artifact saved in `docs/reviews/` | no saved comparable reviewer artifact in intended workspace | v5 records subagent cost/cache attribution and leaves review evidence. |
+| Cache telemetry | read `1,967,864`, write `159,492` tokens | cache lines appear in log, but less structured | v5 has structured cache/read/write stats usable by UI and logs. |
 | Workspace safety | wrote under intended external workspace | wrote `mini_release_auditor/`, `tests/`, `pyproject.toml`, and modified repo `README.md` | v4 reproduced a serious PS problem: workspace drift and repo pollution. |
-| Remaining gap | `docs/reviews/` missing despite verify subagent | large failure | v5 is much better, but v3 prompt must hard-require saving each subagent result immediately. |
+| Remaining gap | none in latest strict v5 run | large failure | The earlier v5 missing-review-artifact and Bedrock pairing failures were fixed and rerun. |
 
 ## Evidence Files
 
@@ -63,24 +64,34 @@ Workspaces:
    The harness now uses `D:/Github/sageagent_psps_v3_compare_workspaces`.
 2. The prompt must forbid shell `cd`, because both agents initially tried it and
    the bash policy blocks it.
-3. v5 can complete the long coding task on Haiku when the workspace is safe:
-   62 tests passed and the zip validated.
-4. v5 still needs stricter acceptance wording around saved subagent review
-   artifacts. The verify subagent ran and was costed, but `docs/reviews/` was not
-   created. v3 now makes this a hard no-done condition.
-5. v4 is not safe enough for this acceptance style: it wrote to the repo root
+3. v5 originally completed the code but missed saved `docs/reviews/` evidence.
+   The `task` tool now persists review receipts automatically under both
+   `.sageagent_state/subagents/` and `docs/reviews/`, and logs paths in
+   `docs/logs/subagent_artifacts.log`.
+4. v5 then exposed real long-session Bedrock pairing bugs after compaction:
+   dangling, orphaned, and duplicate tool_result blocks. Runtime now repairs
+   tool_use/tool_result pairs before compaction-summary calls and before every
+   Bedrock chat call.
+5. The harness was too lenient because it could pass a run that ended with
+   `fatal_error` after artifacts were created. The harness now requires
+   `stop_reason == "end_turn"`.
+6. Latest v5 can complete the long coding task on Haiku when the workspace is safe:
+   76 tests passed, `18/18` required files exist, the zip validates, a subagent was
+   used, and final stop reason is `end_turn`.
+7. v4 is not safe enough for this acceptance style: it wrote to the repo root
    instead of the requested workspace and modified `README.md`. That pollution was
    removed after the run.
 
 ## Explain It Like You Are 9
 
 v5 built the little software project in the right sandbox, tested it, made a real
-zip, and showed how much the main agent and helper agent cost.
+zip, saved the helper note, and showed how much the main agent and helper agent cost.
 
 v4 got confused about which desk it was working on. It started putting homework
 on the wrong desk, then said it was fixed. That is exactly why v5 needed stronger
 workspace/status/review gates.
 
-v5 still forgot to put the helper's written review into the `docs/reviews/`
-folder, so the v3 test says: "after a helper talks, save what it said right away,
-or you are not done."
+During fixing, v5 also showed us a backpack-packing bug: after compaction, one
+tool receipt could be separated from the matching tool request. Bedrock refused
+that. v5 now checks the backpack right before every model call and repairs the
+tool receipts so the model sees a valid history.

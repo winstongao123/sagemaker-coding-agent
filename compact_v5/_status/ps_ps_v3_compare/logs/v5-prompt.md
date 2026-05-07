@@ -39,13 +39,20 @@ Required tree:
 
 Process requirements:
 
+0. Your first tool-based phase MUST include a real `task` tool call with
+   `subagent_type` set to `plan`, `explore`, `review`, or `verify`. Save the
+   returned subagent artifact/envelope path in `docs/reviews/`. If you do not
+   call the `task` tool, the run fails. A self-written review file is not a
+   substitute.
 1. Keep `AGENT_STATUS.md` current with goal, plan, completed work, next 3 todos,
    blockers, cost checkpoints, and review state.
 2. Use a todo list if available. Keep the todo state consistent with
    `AGENT_STATUS.md`.
-3. Use at least one worker/explorer/reviewer subagent if the task tool is
-   available. If not available, write `docs/reviews/subagent_unavailable.md`.
-4. Save worker/reviewer outputs under `docs/reviews/`.
+3. Use at least one worker/explorer/reviewer subagent through the `task` tool.
+   If the tool is truly unavailable, write `docs/reviews/subagent_unavailable.md`
+   with the exact error.
+4. Save worker/reviewer outputs and returned `task` artifact paths under
+   `docs/reviews/`.
 5. Save command summaries under `docs/logs/` and summarize them in
    `docs/TEST_REPORT.md`.
 6. Run targeted tests first, then full tests.
@@ -54,7 +61,9 @@ Process requirements:
 8. Before final answer, update `AGENT_STATUS.md` so nothing says packaging,
    review, cost, context, verify, or done is pending.
 9. Create a valid zip archive `mini_release_auditor_result.zip` using Python
-   `zipfile`, then validate it with `zipfile.ZipFile(...).testzip()`.
+   `zipfile`, then validate it with `zipfile.ZipFile(...).testzip()`. Writing
+   `create_zip.py` or `make_zip.py` is not enough; you MUST execute the script
+   or inline Python command and save the validation output before final answer.
 10. Before final answer, verify the live workspace still contains every required
     source/test/doc file, not only the zip.
 11. Final answer must include a SPEC vs SHIPPED table and exact evidence paths.
