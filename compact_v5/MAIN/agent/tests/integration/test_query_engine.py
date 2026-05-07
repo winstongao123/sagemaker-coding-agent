@@ -622,3 +622,78 @@ def test_final_claim_guard_rejects_stale_status_and_missing_zip(tmp_path, monkey
     assert result.text.startswith("NOT_DONE")
     assert len(client.calls) == 2
     assert any("final-claim guard" in line for line in out)
+
+
+def test_final_claim_guard_checks_required_paths_and_unchecked_status(tmp_path, monkeypatch):
+    """A final claim must not ignore exact paths from the user's required tree."""
+    from core import QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+    monkeypatch.setattr(CONFIG, "enable_status_doc", True)
+    (tmp_path / "AGENT_STATUS.md").write_text(
+        "- [ ] Run full test suite\n- [x] Create README\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("ok", encoding="utf-8")
+    client = _ScriptedClient([
+        ("text", "Project complete. All tests pass."),
+        ("text", "NOT_DONE: missing docs/DESIGN.md."),
+    ])
+    out = []
+    engine = QueryEngine(client=client, max_turns=3)
+    result = engine.run(
+        user_message=(
+            "Required project tree:\n"
+            "- README.md\n"
+            "- docs/DESIGN.md\n"
+            "- pyproject.toml\n"
+        ),
+        system_prompt="sys",
+        tools=all_registered(),
+        output_fn=out.append,
+    )
+
+    assert result.text.startswith("NOT_DONE")
+    assert len(client.calls) == 2
+    injected = str(client.calls[1]["messages"][-1]["content"])
+    assert "unchecked checklist" in injected
+    assert "required path missing: docs/DESIGN.md" in injected
+
+
+def test_final_claim_guard_runs_pytest_before_accepting_test_claim(tmp_path, monkeypatch):
+    """A model-written test report cannot override a failing local pytest probe."""
+    import core.query_engine as query_engine
+    from core import QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+    monkeypatch.setattr(CONFIG, "enable_status_doc", True)
+    (tmp_path / "AGENT_STATUS.md").write_text("Status: COMPLETE\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+
+    class _Completed:
+        returncode = 1
+        stdout = "4 failed, 123 passed"
+        stderr = ""
+
+    monkeypatch.setattr(query_engine.subprocess, "run", lambda *a, **k: _Completed())
+    client = _ScriptedClient([
+        ("text", "Project complete. All tests pass."),
+        ("text", "NOT_DONE: pytest failed."),
+    ])
+    engine = QueryEngine(client=client, max_turns=3)
+    result = engine.run(
+        user_message="Build a Python package with tests.",
+        system_prompt="sys",
+        tools=all_registered(),
+    )
+
+    assert result.text.startswith("NOT_DONE")
+    assert len(client.calls) == 2
+    injected = str(client.calls[1]["messages"][-1]["content"])
+    assert "final pytest guard failed" in injected

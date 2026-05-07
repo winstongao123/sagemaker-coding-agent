@@ -1,31 +1,118 @@
-........................................................................ [ 90%]
-...F....                                                                 [100%]
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.2, pluggy-1.6.0
+codspeed: 4.3.0 (disabled, mode: walltime, callgraph: not supported, timer_resolution: 100.0ns)
+benchmark: 5.2.3 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: D:\Github\sageagent_psps_v4_fresh_workspaces\v5
+configfile: pyproject.toml
+plugins: anyio-4.12.1, langsmith-0.6.8, asyncio-1.3.0, benchmark-5.2.3, codspeed-4.3.0, recording-0.13.4, socket-0.7.0, syrupy-5.1.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 127 items
+
+tests\test_cli.py ....................FF.......                          [ 22%]
+tests\test_models.py ........................                            [ 41%]
+tests\test_report.py .........................                           [ 61%]
+tests\test_search.py .....................FF.......                      [ 85%]
+tests\test_store.py ...................                                  [100%]
+
 ================================== FAILURES ===================================
-___________ TestWorklogStorePersistence.test_invalid_json_recovery ____________
+____________________ TestCLIMain.test_main_invalid_command ____________________
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1907: in parse_known_args
+    namespace, args = self._parse_known_args(args, namespace)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2131: in _parse_known_args
+    stop_index = consume_positionals(start_index)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2087: in consume_positionals
+    take_action(action, args)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1967: in take_action
+    argument_values = self._get_values(action, argument_strings)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2516: in _get_values
+    self._check_value(action, value[0])
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2563: in _check_value
+    raise ArgumentError(action, msg % args)
+E   argparse.ArgumentError: argument command: invalid choice: 'invalid_command' (choose from 'add', 'list', 'show', 'update', 'close', 'reopen', 'search', 'report')
 
-self = <tests.test_store.TestWorklogStorePersistence testMethod=test_invalid_json_recovery>
+During handling of the above exception, another exception occurred:
+tests\test_cli.py:302: in test_main_invalid_command
+    result = main(['invalid_command'])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+mini_research_worklog\cli.py:254: in main
+    parsed_args = parser.parse_args(args)
+                  ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1874: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1909: in parse_known_args
+    self.error(str(err))
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2640: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2627: in exit
+    _sys.exit(status)
+E   SystemExit: 2
+---------------------------- Captured stderr call -----------------------------
+usage: worklog [-h] {add,list,show,update,close,reopen,search,report} ...
+worklog: error: argument command: invalid choice: 'invalid_command' (choose from 'add', 'list', 'show', 'update', 'close', 'reopen', 'search', 'report')
+_________________________ TestCLIMain.test_main_help __________________________
+tests\test_cli.py:307: in test_main_help
+    result = main(['--help'])
+             ^^^^^^^^^^^^^^^^
+mini_research_worklog\cli.py:254: in main
+    parsed_args = parser.parse_args(args)
+                  ^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1874: in parse_args
+    args, argv = self.parse_known_args(args, namespace)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1907: in parse_known_args
+    namespace, args = self._parse_known_args(args, namespace)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2128: in _parse_known_args
+    start_index = consume_optional(start_index)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2068: in consume_optional
+    take_action(action, args, option_string)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1983: in take_action
+    action(self, namespace, argument_values, option_string)
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:1123: in __call__
+    parser.exit()
+C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\argparse.py:2627: in exit
+    _sys.exit(status)
+E   SystemExit: 0
+---------------------------- Captured stdout call -----------------------------
+usage: worklog [-h] {add,list,show,update,close,reopen,search,report} ...
 
-    def test_invalid_json_recovery(self):
-        """Test recovery from corrupted JSON file."""
-        store = WorklogStore(str(self.store_path))
-    
-        # Add an item
-        item = WorklogItem(
-            title="Original Item",
-            researcher="Alice",
-            topic="Topic"
-        )
-        store.add(item)
-    
-        # Verify backup was created with 1 item
-        backup_path = self.store_path.with_suffix('.bak')
->       self.assertTrue(backup_path.exists())
-E       AssertionError: False is not true
+Mini Research Worklog - Track research tasks
 
-tests\test_store.py:343: AssertionError
+positional arguments:
+  {add,list,show,update,close,reopen,search,report}
+                        Command to run
+    add                 Add a new item
+    list                List items
+    show                Show item details
+    update              Update an item
+    close               Close an item
+    reopen              Reopen an item
+    search              Search items
+    report              Generate report
+
+options:
+  -h, --help            show this help message and exit
+___________________ TestSearchFilter.test_combined_filters ____________________
+tests\test_search.py:165: in test_combined_filters
+    assert len(result) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([WorklogItem(title='Fix memory leak', researcher='Alice', topic='Bugs', status=<Status.CLOSED: 'closed'>, tags=['memor...id='43eedccf-6129-4d0f-96e1-36afd02abeaf', created='2026-05-07T16:05:32.949161', updated='2026-05-07T16:05:32.949161')])
+______________ TestSearchFilter.test_combined_filters_no_results ______________
+tests\test_search.py:176: in test_combined_filters_no_results
+    assert len(result) == 0
+E   AssertionError: assert 1 == 0
+E    +  where 1 = len([WorklogItem(title='Fix memory leak', researcher='Alice', topic='Bugs', status=<Status.CLOSED: 'closed'>, tags=['memor...id='4c83248b-244d-4fc0-b4a4-e0a50929d648', created='2026-05-07T16:05:32.956182', updated='2026-05-07T16:05:32.956182')])
 =========================== short test summary info ===========================
-FAILED tests/test_store.py::TestWorklogStorePersistence::test_invalid_json_recovery
-1 failed, 79 passed in 1.72s
+FAILED tests/test_cli.py::TestCLIMain::test_main_invalid_command - SystemExit: 2
+FAILED tests/test_cli.py::TestCLIMain::test_main_help - SystemExit: 0
+FAILED tests/test_search.py::TestSearchFilter::test_combined_filters - Assert...
+FAILED tests/test_search.py::TestSearchFilter::test_combined_filters_no_results
+======================== 4 failed, 123 passed in 1.18s ========================
 
 --- STDERR ---
 C:\Users\winst\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!

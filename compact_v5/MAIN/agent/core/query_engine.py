@@ -43,6 +43,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -2145,6 +2147,8 @@ class QueryEngine:
         )
         if status_lower and any(marker in status_lower for marker in stale_markers):
             problems.append(f"{status_name} still contains pending/failed/not_done state")
+        if status_lower and re.search(r"(?m)^\s*[-*]\s+\[\s\]", status_text):
+            problems.append(f"{status_name} still contains unchecked checklist items")
 
         for rel in ("docs/TEST_REPORT.md", "TEST_REPORT.md"):
             report = _read_rel(rel)
@@ -2169,6 +2173,8 @@ class QueryEngine:
                     if isinstance(block, dict) and block.get("type") == "text":
                         user_text_parts.append(str(block.get("text", "")))
         requested = "\n".join(user_text_parts)
+        for missing in self._missing_requested_paths(requested, workspace):
+            problems.append(f"required path missing: {missing}")
         for match in sorted(set(re.findall(r"([A-Za-z0-9_.\\/\-+]+\.zip)\b", requested))):
             candidate = match.replace("\\", os.sep).replace("/", os.sep)
             if os.path.isabs(candidate):
@@ -2179,6 +2185,10 @@ class QueryEngine:
                 shown = match
             if not exists:
                 problems.append(f"required zip missing: {shown}")
+
+        pytest_problem = self._final_claim_pytest_problem(lower, workspace)
+        if pytest_problem:
+            problems.append(pytest_problem)
 
         if not problems:
             return ""
@@ -2191,6 +2201,87 @@ class QueryEngine:
             "summary. If you cannot fix it, answer NOT_DONE with exact blockers."
         )
         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
+    @staticmethod
+    def _missing_requested_paths(requested: str, workspace: str) -> List[str]:
+        """Best-effort exact-path gate for user-provided deliverable lists."""
+        if not requested:
+            return []
+        candidates: Set[str] = set()
+        path_pattern = re.compile(
+            r"(?<![A-Za-z0-9_./\\-])"
+            r"([A-Za-z0-9_.+ -]+(?:[\\/][A-Za-z0-9_.+ -]+)+/?"
+            r"|[A-Za-z0-9_.+-]+\.(?:py|md|txt|json|toml|yaml|yml|ipynb|zip))"
+        )
+        for raw in path_pattern.findall(requested):
+            item = raw.strip().strip("`'\".,;:")
+            item = re.sub(r"^\s*[-*]\s+", "", item).strip()
+            if not item or item.startswith(("/", "\\")):
+                continue
+            lowered = item.lower()
+            if lowered.startswith(("http://", "https://")):
+                continue
+            candidates.add(item)
+
+        missing: List[str] = []
+        for item in sorted(candidates):
+            rel = item.replace("\\", os.sep).replace("/", os.sep)
+            path = rel if os.path.isabs(rel) else os.path.join(workspace, rel)
+            if item.endswith(("/", "\\")):
+                exists = os.path.isdir(path)
+            else:
+                exists = os.path.exists(path)
+            if not exists:
+                missing.append(item)
+        return missing
+
+    @staticmethod
+    def _final_claim_pytest_problem(final_text_lower: str, workspace: str) -> str:
+        """Run a bounded local pytest probe before accepting strong test claims."""
+        if os.environ.get("SAGEAGENT_DISABLE_FINAL_PYTEST_GUARD"):
+            return ""
+        if not os.path.isdir(os.path.join(workspace, "tests")):
+            return ""
+        if not any(
+            phrase in final_text_lower
+            for phrase in (
+                "all tests pass",
+                "all tests passing",
+                "100% pass",
+                "production-ready",
+                "ready for production",
+                "project complete",
+            )
+        ):
+            return ""
+        log_dir = os.path.join(workspace, ".sageagent_state")
+        log_path = os.path.join(log_dir, "final_claim_pytest.log")
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            result = subprocess.run(
+                [sys.executable, "-m", "pytest", "tests", "-q"],
+                cwd=workspace,
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+            output = (result.stdout or "") + (
+                "\n--- STDERR ---\n" + result.stderr if result.stderr else ""
+            )
+            with open(log_path, "w", encoding="utf-8", errors="replace") as handle:
+                handle.write(output)
+            if result.returncode != 0:
+                summary = ""
+                for line in reversed(output.splitlines()):
+                    if "failed" in line.lower() or "passed" in line.lower():
+                        summary = line.strip()
+                        break
+                if not summary:
+                    summary = f"pytest exited {result.returncode}"
+                return f"final pytest guard failed ({summary}); see {log_path}"
+        except Exception as exc:
+            return f"final pytest guard could not verify tests: {exc}"
+        return ""
 
 
 # ============================================================

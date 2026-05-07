@@ -405,3 +405,26 @@ long software work.
 One more thing we learned: during long work, the conversation backpack must keep
 tool requests and tool receipts matched. v5 now checks and repairs that before
 calling Bedrock, so compaction is safer for long software tasks.
+
+# 2026-05-08 Critical Fresh Comparison Addendum
+
+The fresh v4/v5 Haiku comparison found that v5 is much stronger than v4 for the
+software-engineering workflow, but it also found a remaining false-finish class:
+the agent could claim production-ready while external pytest still failed or an
+exact requested path was missing.
+
+Fix now added:
+
+- final-claim guard checks unchecked `AGENT_STATUS.md` rows
+- final-claim guard extracts exact requested paths from the user prompt
+- final-claim guard runs bounded local `python -m pytest tests -q` before accepting
+  strong test/production claims
+
+Evidence:
+
+- `compact_v5/docs/Critical_PS_PS_V4_FRESH_COMPARE_REPORT.md`
+- `compact_v5/_status/ps_ps_v4_fresh_compare/Critical_RUNNABLE_LESSONS_FOR_FINAL_GUARD.md`
+- `compact_v5/MAIN/agent/tests/integration/test_query_engine.py`
+
+Honest status: this fix is lock-tested locally. A fresh acceptance run after this
+patch is still required before final production-ready confidence.

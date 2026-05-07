@@ -31,15 +31,15 @@ Model/region/cap:
 
 ## Results
 
-| Area | v4 fresh run | v5 fresh run after fixes |
+| Area | v4 fresh run | v5 fresh run after first fixes |
 |---|---:|---:|
 | Target workspace respected | FAIL: 0/19 required paths in target workspace | PASS: 19/19 required paths present |
 | Software package built | FAIL | PASS |
-| Tests | FAIL: no tests dir in target workspace | PARTIAL: 79/80 passing in latest run |
-| Exact `.zip` artifact | FAIL: none | FAIL in latest run: produced `.tar.gz`, not exact `.zip` |
+| Tests | FAIL: no tests dir in target workspace | PARTIAL: latest rerun had 123/127 passing |
+| Exact `.zip` artifact | FAIL: none | PASS in latest rerun |
 | Subagent evidence | FAIL: none | PASS: `docs/reviews/20260507T152935Z-plan-429d3b6faf16.md` |
 | Logs | FAIL: none | PASS: `docs/logs/subagent_artifacts.log` |
-| Status file | FAIL in target workspace | PARTIAL: present, but still claimed complete with 1 failing test and wrong archive type |
+| Status file | FAIL in target workspace | PARTIAL: present, but still claimed complete with failing tests and one missing required doc |
 | Stop reason | Incomplete/wrong workspace | PASS: `end_turn` |
 | API calls | 93 | 104 |
 | Cost | `$0.7796` | `$1.5409` |
@@ -60,12 +60,10 @@ v5 is clearly stronger than v4 on the same task:
 
 The latest v5 run is not a clean acceptance pass:
 
-1. It reported completion with one failing test:
-   `tests/test_store.py::TestWorklogStorePersistence::test_invalid_json_recovery`.
-2. It produced `mini_research_worklog_result.tar.gz` instead of the exact required
-   `mini_research_worklog_result.zip`.
-3. `AGENT_STATUS.md` still used a completion tone despite the failing test and
-   wrong archive type.
+1. It reported completion with four failing tests.
+2. It produced the exact requested `.zip`, but missed `docs/DESIGN.md`.
+3. `AGENT_STATUS.md` still used a completion tone despite failing tests and
+   unchecked original plan rows.
 
 These are important because the user's goal is not just "can write code"; the goal
 is a long-running software engineering agent that does not drift from evidence.
@@ -108,8 +106,19 @@ comparison found one remaining production-quality issue:
 > artifact mismatch. A deterministic final-claim guard has now been added and
 > lock-tested to prevent that class of false finish.
 
+After the Runnable source scan, the final-claim guard was strengthened again:
+
+- exact required path extraction from the user prompt
+- unchecked `AGENT_STATUS.md` checklist detection
+- bounded final `python -m pytest tests -q` probe before accepting strong
+  `all tests pass` / `production-ready` claims
+
+Detailed source-level comparison:
+
+- `Critical_RUNNABLE_LESSONS_FOR_FINAL_GUARD.md`
+
 Before calling v5 "98% ready" for autonomous long-running coding, run one more
-fresh acceptance pass after the final-claim guard. The next acceptance run should
+fresh acceptance pass after this strengthened final-claim guard. The next acceptance run should
 require:
 
 - exact required paths all present
