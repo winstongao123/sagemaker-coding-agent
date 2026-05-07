@@ -36,9 +36,7 @@ Dropped (dev-only artefacts):
 - _archive/ (historical references)
 - __pycache__/, .pytest_cache/, .snapshots/, .ipynb_checkpoints/
 - _rebuild_zip.py + verify_ship_zip.py (meta tools — repo-only)
-- powerbi-dashboard variants (not in v5 base)
-- html skill reference/example assets under skills/html/references/
-- Clara long-form review prompt pack/reference notes; keep skills/clara/SKILL.md
+- powerbi-dashboard variants (v4/reference-only; not part of v5 production zip)
 """
 
 from __future__ import annotations
@@ -78,12 +76,6 @@ EXCLUDE_DIR_PATTERNS = []
 EXCLUDE_REL_PATHS = {
     "MAIN/agent/tests",   # entire tests dir — dev only
     "tests",              # also catches it after the SRC_DIR strip
-    "MAIN/agent/skills/clara/prompts",
-    "skills/clara/prompts",
-    "MAIN/agent/skills/clara/FULL_REVIEW.md",
-    "skills/clara/FULL_REVIEW.md",
-    "MAIN/agent/skills/clara/V4_NOTES.md",
-    "skills/clara/V4_NOTES.md",
 }
 EXCLUDE_FILE_PATTERNS = [
     "*.pyc",

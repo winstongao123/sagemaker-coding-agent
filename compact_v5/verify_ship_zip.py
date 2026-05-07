@@ -69,6 +69,18 @@ REQUIRED_USER_DOCS = {
     "docs/PS_PS_FINAL_TEST.md",
 }
 
+REQUIRED_SKILL_ASSETS = {
+    "skills/clara/FULL_REVIEW.md",
+    "skills/clara/V4_NOTES.md",
+    "skills/clara/prompts/00_CONTEXT.md",
+    "skills/clara/prompts/01_DISCOVERY.md",
+    "skills/clara/prompts/02_COMPONENT1.md",
+    "skills/clara/prompts/03_COMPONENT2_3.md",
+    "skills/clara/prompts/04_PROD_READINESS.md",
+    "skills/clara/prompts/05_SYNTHESIS.md",
+    "skills/clara/prompts/HOW_TO_USE.md",
+}
+
 FORBIDDEN_PATTERNS = [
     re.compile(r"(^|/)tests(/|$)"),    # entire tests dir — dev only
     re.compile(r"(^|/)test_.*\.py$"),  # any individual test file
@@ -150,6 +162,11 @@ def main(zip_path: str = "../compact_v5.zip") -> int:
     print("\n== Required user-facing final test docs ==")
     for doc in sorted(REQUIRED_USER_DOCS):
         if not _check(doc, doc in names):
+            failures += 1
+
+    print("\n== Required v4 Clara skill assets preserved ==")
+    for asset in sorted(REQUIRED_SKILL_ASSETS):
+        if not _check(asset, asset in names):
             failures += 1
 
     print("\n== Forbidden patterns (dev artefacts) ==")
