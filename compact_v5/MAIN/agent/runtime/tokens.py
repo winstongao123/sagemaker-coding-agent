@@ -390,9 +390,13 @@ class TokenTracker:
         # by default; sub-agents accumulate under their type-string key.
         self.parent_input_tokens = 0
         self.parent_output_tokens = 0
+        self.parent_cache_read_tokens = 0
+        self.parent_cache_write_tokens = 0
         self.parent_cost = 0.0
         self.subagent_input_tokens: Dict[str, int] = {}
         self.subagent_output_tokens: Dict[str, int] = {}
+        self.subagent_cache_read_tokens: Dict[str, int] = {}
+        self.subagent_cache_write_tokens: Dict[str, int] = {}
         self.subagent_cost: Dict[str, float] = {}
         # B+2: per-model usage is keyed by canonical model id so Bedrock
         # inference-profile prefixes collapse into one reporting row.
@@ -473,6 +477,8 @@ class TokenTracker:
             if agent_kind == "parent":
                 self.parent_input_tokens += input_tokens
                 self.parent_output_tokens += output_tokens
+                self.parent_cache_read_tokens += cache_read
+                self.parent_cache_write_tokens += cache_write
                 self.parent_cost += cost
             else:
                 self.subagent_input_tokens[agent_kind] = (
@@ -480,6 +486,12 @@ class TokenTracker:
                 )
                 self.subagent_output_tokens[agent_kind] = (
                     self.subagent_output_tokens.get(agent_kind, 0) + output_tokens
+                )
+                self.subagent_cache_read_tokens[agent_kind] = (
+                    self.subagent_cache_read_tokens.get(agent_kind, 0) + cache_read
+                )
+                self.subagent_cache_write_tokens[agent_kind] = (
+                    self.subagent_cache_write_tokens.get(agent_kind, 0) + cache_write
                 )
                 self.subagent_cost[agent_kind] = (
                     self.subagent_cost.get(agent_kind, 0.0) + cost
@@ -575,9 +587,19 @@ class TokenTracker:
                 f"{model}: ${stats['cost_usd']:.4f}"
                 for model, stats in sorted(self.model_usage.items())
             ) or "none"
-            per_agent_parts = [f"parent=${self.parent_cost:.4f}"]
+            per_agent_parts = [
+                (
+                    f"parent=${self.parent_cost:.4f}"
+                    f" cache={self.parent_cache_read_tokens:,}/"
+                    f"{self.parent_cache_write_tokens:,}"
+                )
+            ]
             per_agent_parts.extend(
-                f"{kind}=${cost:.4f}"
+                (
+                    f"{kind}=${cost:.4f}"
+                    f" cache={self.subagent_cache_read_tokens.get(kind, 0):,}/"
+                    f"{self.subagent_cache_write_tokens.get(kind, 0):,}"
+                )
                 for kind, cost in sorted(self.subagent_cost.items())
             )
             cache_total = self.session_cache_read + self.session_cache_write
@@ -606,9 +628,13 @@ class TokenTracker:
                 "api.calls": self.api_calls,
                 "context_window.tokens": self.context_window_tokens,
                 "agents.parent.cost_usd": round(self.parent_cost, 6),
+                "agents.parent.cache_read": self.parent_cache_read_tokens,
+                "agents.parent.cache_write": self.parent_cache_write_tokens,
                 "agents.subagent.cost_usd": {
                     k: round(v, 6) for k, v in self.subagent_cost.items()
                 },
+                "agents.subagent.cache_read": dict(self.subagent_cache_read_tokens),
+                "agents.subagent.cache_write": dict(self.subagent_cache_write_tokens),
                 "models": {
                     model_id: {
                         **stats,
@@ -632,9 +658,13 @@ class TokenTracker:
             "last_cost_usd": round(self.last_cost, 6),
             "parent_input_tokens": self.parent_input_tokens,
             "parent_output_tokens": self.parent_output_tokens,
+            "parent_cache_read_tokens": self.parent_cache_read_tokens,
+            "parent_cache_write_tokens": self.parent_cache_write_tokens,
             "parent_cost_usd": round(self.parent_cost, 6),
             "subagent_input_tokens": dict(self.subagent_input_tokens),
             "subagent_output_tokens": dict(self.subagent_output_tokens),
+            "subagent_cache_read_tokens": dict(self.subagent_cache_read_tokens),
+            "subagent_cache_write_tokens": dict(self.subagent_cache_write_tokens),
             "subagent_cost_usd": {k: round(v, 6) for k, v in self.subagent_cost.items()},
             "model_usage": {
                 model_id: {
@@ -665,9 +695,23 @@ class TokenTracker:
             self.last_cost = float(stats.get("last_cost_usd", 0.0))
             self.parent_input_tokens = int(stats.get("parent_input_tokens", 0))
             self.parent_output_tokens = int(stats.get("parent_output_tokens", 0))
+            self.parent_cache_read_tokens = int(
+                stats.get("parent_cache_read_tokens", 0)
+            )
+            self.parent_cache_write_tokens = int(
+                stats.get("parent_cache_write_tokens", 0)
+            )
             self.parent_cost = float(stats.get("parent_cost_usd", 0.0))
             self.subagent_input_tokens = dict(stats.get("subagent_input_tokens", {}))
             self.subagent_output_tokens = dict(stats.get("subagent_output_tokens", {}))
+            self.subagent_cache_read_tokens = {
+                k: int(v)
+                for k, v in stats.get("subagent_cache_read_tokens", {}).items()
+            }
+            self.subagent_cache_write_tokens = {
+                k: int(v)
+                for k, v in stats.get("subagent_cache_write_tokens", {}).items()
+            }
             self.subagent_cost = {
                 k: float(v) for k, v in stats.get("subagent_cost_usd", {}).items()
             }

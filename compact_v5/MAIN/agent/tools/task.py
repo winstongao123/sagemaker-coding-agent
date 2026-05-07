@@ -126,12 +126,17 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         )
     except Exception:
         subagent_model = ""
+    output_fn = print
+    if isinstance(context, dict) and callable(context.get("output_fn")):
+        output_fn = context["output_fn"]
 
     # Lazy-import to avoid circular import: subagent.spawn imports
     # core.query_engine which (via tools/__init__.py:bootstrap_built_ins)
     # imports this module.
     from subagent.spawn import spawn_subagent
 
+    summary = description or prompt.replace("\n", " ")[:120]
+    output_fn(f"[subagent:{subagent_type}] started: {summary}")
     result = spawn_subagent(
         parent_engine=parent_engine,
         prompt=prompt,
@@ -139,6 +144,19 @@ def _task_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
         parent_depth=parent_depth,
         model_id=subagent_model or None,
         plan_mode=bool(context.get("plan_mode", False)),
+        output_fn=output_fn,
+    )
+    token_delta = result.token_delta or {}
+    output_fn(
+        "[subagent:{kind}] finished: stop={stop} turns={turns} "
+        "cost=${cost:.4f} cache={cache_read:,}/{cache_write:,}".format(
+            kind=subagent_type,
+            stop=result.stop_reason or "unknown",
+            turns=int(getattr(result, "turns_used", 0) or 0),
+            cost=float(token_delta.get("cost_usd", 0.0) or 0.0),
+            cache_read=int(token_delta.get("cache_read_tokens", 0) or 0),
+            cache_write=int(token_delta.get("cache_write_tokens", 0) or 0),
+        )
     )
 
     envelope = json.dumps(result.to_envelope(), indent=2, sort_keys=True)

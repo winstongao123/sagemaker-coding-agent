@@ -237,6 +237,100 @@ def test_thinking_budget_widget_html_shows_state():
     assert "OFF" in html2
 
 
+def test_widget_status_shows_cache_savings_and_subagent_attribution():
+    from ui.chat_ui import V4WidgetChatUI, _IPYWIDGETS_OK
+    if not _IPYWIDGETS_OK:
+        pytest.skip("ipywidgets not installed")
+    from agent import Agent
+    from runtime.bedrock_client import BedrockClient
+    from runtime.config import CONFIG
+    from runtime.tokens import TOKENS
+    from tools.todo import restore_todos
+
+    TOKENS.reset()
+    restore_todos([
+        {
+            "content": "Review subagent evidence",
+            "status": "in_progress",
+            "activeForm": "Reviewing subagent evidence",
+        }
+    ])
+    client = BedrockClient(model_id=CONFIG.model_id, region=CONFIG.region, mock_mode=True)
+    ui = V4WidgetChatUI(Agent(client=client))
+    TOKENS.add(
+        {
+            "input_tokens": 1000,
+            "output_tokens": 200,
+            "cache_read_input_tokens": 100,
+            "cache_creation_input_tokens": 50,
+        },
+        model_id=CONFIG.model_id,
+        agent_kind="parent",
+    )
+    TOKENS.add(
+        {
+            "input_tokens": 500,
+            "output_tokens": 100,
+            "cache_read_input_tokens": 40,
+            "cache_creation_input_tokens": 20,
+        },
+        model_id=CONFIG.model_id,
+        agent_kind="review",
+    )
+
+    ui._render_status()
+    html = ui._tokens_html.value
+    assert "Cache R/W 140/70" in html
+    assert "Saved:" in html
+    assert "Without cache:" in html
+    assert "Agents: parent" in html
+    assert "review $" in html
+    assert "cache 40/20" in html
+    assert "Todos (1/1 active)" in ui._todo_display.value
+
+
+def test_task_tool_streams_subagent_lifecycle_to_output_fn(monkeypatch):
+    from tools import task as task_tool
+
+    class FakeResult:
+        text = "review complete"
+        stop_reason = "end_turn"
+        turns_used = 2
+        error = ""
+        token_delta = {
+            "cost_usd": 0.0123,
+            "cache_read_tokens": 40,
+            "cache_write_tokens": 20,
+        }
+        child_session_id = "child-1"
+
+        def to_envelope(self):
+            return {
+                "schema": "sageagent.subagent_result.v1",
+                "stop_reason": self.stop_reason,
+            }
+
+    def fake_spawn_subagent(**kwargs):
+        kwargs["output_fn"]("[child says hello]")
+        return FakeResult()
+
+    monkeypatch.setattr("subagent.spawn.spawn_subagent", fake_spawn_subagent)
+    outputs = []
+    result = task_tool._task_executor(
+        {
+            "prompt": "Review the package",
+            "subagent_type": "review",
+            "description": "final review",
+        },
+        context={"parent_engine": object(), "output_fn": outputs.append},
+    )
+
+    assert outputs[0] == "[subagent:review] started: final review"
+    assert "[child says hello]" in outputs
+    assert outputs[-1] == "[subagent:review] finished: stop=end_turn turns=2 cost=$0.0123 cache=40/20"
+    assert "review complete" in result
+
+
 # ============================================================
 # Test 7 — chat.ipynb file is well-formed JSON with required cells
 # ============================================================

@@ -1473,6 +1473,7 @@ class QueryEngine:
                 "skill_manager": self.skill_manager,
                 "session_id": self.session_id,
                 "abort_events": self.abort_events,
+                "output_fn": output_fn,
             })
             text = _coerce_tool_result_to_text(raw)
             try:

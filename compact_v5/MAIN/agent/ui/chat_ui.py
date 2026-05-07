@@ -492,6 +492,70 @@ class V4WidgetChatUI(WidgetChatUI):
             content = "".join(rows)
         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
 
+    def _render_todos(self) -> None:
+        c = self._colors()
+        try:
+            from tools.todo import get_current_todos
+            todos = get_current_todos(load_disk=True)
+        except Exception:
+            todos = []
+        active = [t for t in todos if t.get("status") != "completed"]
+        if not todos:
+            self._todo_display.value = (
+                f"<div style='color:{c['muted']};font-size:11px;margin:2px 0;'>"
+                "Todos: none yet. For long work, ask the agent to use todo_write "
+                "and keep AGENT_STATUS.md current.</div>"
+            )
+            return
+        rows = []
+        for item in todos[:12]:
+            status = str(item.get("status", "pending"))
+            content = self._escape(item.get("content", ""))
+            color = "#4caf50" if status == "completed" else ("#ff9800" if status == "in_progress" else c["muted"])
+            rows.append(
+                f"<div style='padding:2px 0;color:{color};font-size:12px;'>"
+                f"{self._escape(status)} - {content}</div>"
+            )
+        if len(todos) > 12:
+            rows.append(
+                f"<div style='padding:2px 0;color:{c['muted']};font-size:11px;'>"
+                f"... {len(todos) - 12} more</div>"
+            )
+        self._todo_display.value = (
+            f"<details open style='background:{c['bg']};border:1px solid {c['border']};"
+            "padding:5px 10px;margin-bottom:5px;'>"
+            f"<summary style='cursor:pointer;color:{c['fg']};font-weight:bold;font-size:12px;'>"
+            f"Todos ({len(active)}/{len(todos)} active)</summary>"
+            f"<div style='margin-top:5px;'>{''.join(rows)}</div></details>"
+        )
+
+    def _agent_attribution_line(self, stats: dict) -> str:
+        parent_cost = float(stats.get("parent_cost_usd", 0.0) or 0.0)
+        parent_in = int(stats.get("parent_input_tokens", 0) or 0)
+        parent_out = int(stats.get("parent_output_tokens", 0) or 0)
+        parent_cache_read = int(stats.get("parent_cache_read_tokens", 0) or 0)
+        parent_cache_write = int(stats.get("parent_cache_write_tokens", 0) or 0)
+        sub_costs = stats.get("subagent_cost_usd", {}) or {}
+        sub_inputs = stats.get("subagent_input_tokens", {}) or {}
+        sub_outputs = stats.get("subagent_output_tokens", {}) or {}
+        sub_cache_read = stats.get("subagent_cache_read_tokens", {}) or {}
+        sub_cache_write = stats.get("subagent_cache_write_tokens", {}) or {}
+        parts = [
+            (
+                f"parent ${parent_cost:.4f} "
+                f"({parent_in:,}/{parent_out:,}; cache {parent_cache_read:,}/{parent_cache_write:,})"
+            )
+        ]
+        for kind in sorted(sub_costs):
+            parts.append(
+                f"{self._escape(kind)} ${float(sub_costs.get(kind, 0.0) or 0.0):.4f} "
+                f"({int(sub_inputs.get(kind, 0) or 0):,}/"
+                f"{int(sub_outputs.get(kind, 0) or 0):,}; "
+                f"cache {int(sub_cache_read.get(kind, 0) or 0):,}/"
+                f"{int(sub_cache_write.get(kind, 0) or 0):,})"
+            )
+        return " | ".join(parts)
+
     def _render_status(self) -> None:
         try:
             from runtime.config import CONFIG
@@ -521,6 +585,18 @@ class V4WidgetChatUI(WidgetChatUI):
                 "session_cost_usd": 0.0,
                 "last_cost_usd": 0.0,
                 "context_window_tokens": 0,
+                "session_cache_read": 0,
+                "session_cache_write": 0,
+                "parent_input_tokens": 0,
+                "parent_output_tokens": 0,
+                "parent_cache_read_tokens": 0,
+                "parent_cache_write_tokens": 0,
+                "parent_cost_usd": 0.0,
+                "subagent_input_tokens": {},
+                "subagent_output_tokens": {},
+                "subagent_cache_read_tokens": {},
+                "subagent_cache_write_tokens": {},
+                "subagent_cost_usd": {},
             }
         try:
             iter_used = self.agent.budget.used()
@@ -530,6 +606,19 @@ class V4WidgetChatUI(WidgetChatUI):
             iter_total = 0
         cost = float(stats.get("session_cost_usd", 0.0) or 0.0)
         last_cost = float(stats.get("last_cost_usd", 0.0) or 0.0)
+        cache_read = int(stats.get("session_cache_read", 0) or 0)
+        cache_write = int(stats.get("session_cache_write", 0) or 0)
+        cache_total = cache_read + cache_write
+        cache_basis = max(
+            1,
+            int(stats.get("session_input", 0) or 0) + cache_total,
+        )
+        cache_pct = min(100.0, (cache_read / cache_basis) * 100.0)
+        try:
+            cache_savings = float(TOKENS.get_cache_savings_usd())
+        except Exception:
+            cache_savings = 0.0
+        original_cost = cost + cache_savings
         context_tokens = int(
             stats.get("context_window_tokens", 0)
             or stats.get("session_total", 0)
@@ -545,11 +634,14 @@ class V4WidgetChatUI(WidgetChatUI):
         except Exception:
             skills_count = 0
         thinking_state = "ON" if self._thinking_checkbox.value else "OFF"
+        subagent_count = len(stats.get("subagent_cost_usd", {}) or {})
+        self._render_todos()
         self._status_html.value = "<span style='color:#4caf50'><b>* Ready</b></span>"
         self._tokens_html.value = (
             "<div style='font-size:11px;color:gray;line-height:1.7;'>"
-            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Calls {int(stats.get('api_calls', 0)):,}</div>"
-            f"<div>Cost: ${cost:.4f} | Last: ${last_cost:.4f} | {pricing}</div>"
+            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Cache R/W {cache_read:,}/{cache_write:,} | Calls {int(stats.get('api_calls', 0)):,}</div>"
+            f"<div>Cost: ${cost:.4f} | Last: ${last_cost:.4f} | Without cache: ${original_cost:.4f} | Saved: <b style='color:#4caf50'>${cache_savings:.4f}</b> ({cache_pct:.0f}% cached) | {pricing}</div>"
+            f"<div style='color:#8aa0b8;'>Agents: {self._agent_attribution_line(stats)}</div>"
             f"<div style='color:#2ca02c;'>Context: {context_pct:.1f}% ({context_tokens:,} / {context_max:,})</div>"
             f"<div style='height:4px;background:#333;width:100%;'><div style='height:4px;background:#2ca02c;width:{context_pct:.1f}%;'></div></div>"
             f"<div style='color:#2ca02c;'>Budget: {budget_pct:.0f}% ({budget_text})</div>"
@@ -564,7 +656,7 @@ class V4WidgetChatUI(WidgetChatUI):
             f"| Auth: {'ON' if auth else 'OFF'} "
             f"| Approval: {'ON' if self._approval_toggle.value else 'OFF'} "
             f"| Auto-Compact: {'ON' if self._auto_compact.value else 'OFF'} "
-            f"| Sub-Agents: {'ON' if self._subagent_toggle.value else 'OFF'} "
+            f"| Sub-Agents: {'ON' if self._subagent_toggle.value else 'OFF'} ({subagent_count} used; Stop applies to parent + child) "
             f"| Skills: {skills_count} | Exec: {exec_mode} "
             f"| Iter: {iter_used}/{iter_total}"
             "</span>"
@@ -622,6 +714,9 @@ class V4WidgetChatUI(WidgetChatUI):
                     logging.warning(f"[chat-ui] slash-command dispatch error: {cmd_exc}")
             streamed = []
             result = self.agent.run(msg, output_fn=lambda s: streamed.append(str(s)))
+            ops = [s.strip() for s in streamed if str(s).strip().startswith("[")]
+            if ops:
+                self._append_message("system", "\n".join(ops[-30:]))
             self._append_message("assistant", result.text or "\n".join(streamed) or f"stop_reason: {result.stop_reason}")
         except Exception as exc:  # noqa: BLE001
             logging.exception("[chat-ui] agent.run() raised")
