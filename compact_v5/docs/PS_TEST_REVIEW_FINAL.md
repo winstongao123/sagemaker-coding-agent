@@ -250,6 +250,7 @@ R-tier matrix, and final production review.
 |---|---|---|
 | Notebook has v4-style model dropdown | `tests/integration/test_notebook_smoke.py` | `22 passed`; includes lock for `model_dropdown`, Sydney region, and Sonnet 4.5 default. |
 | Default model and region match v4 intent | `entry.py`, `runtime/config.py`, `chat.ipynb` | First `BEDROCK_MODELS` entry is `Claude 4.5 Sonnet (AU) - default`; region is `ap-southeast-2`. |
+| AWS/S3 safety keeps v4 guardrails | `tests/unit/test_security_manager.py` | Explicit locks verify Bedrock-only blocks S3, Bedrock runtime is allowed, S3 read calls are allowed only when Bedrock-only is disabled, and S3 delete calls stay regex-blocked. |
 | Minimum company zip excludes docs/tests/audit evidence | `verify_ship_zip.py` | Ship verifier passes; zip has no `docs/`, `_status/`, `tests/`, or design HTML. |
 | R-tier matrix complete | `r_tier_test_matrix.json` | 42 rows total: 28 `READY`, 14 `DISPOSITION_OK`. |
 | Final R-tier gate | `r_tier_gate.py --repo-root .` | Passed. |

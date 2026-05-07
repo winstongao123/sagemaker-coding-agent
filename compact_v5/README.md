@@ -82,6 +82,11 @@ python _rebuild_zip.py
 ## Runtime Constraints
 
 - Bedrock-only runtime path; no Anthropic API dependency.
+- Default Bedrock-only mode blocks all AWS services except `bedrock-runtime`.
+- If Bedrock-only is unticked for a task that needs S3, Python `boto3`
+  S3 read calls such as `list_objects_v2`, `get_object`, and `head_object`
+  are allowed through the approval gate, but S3 deletes remain blocked by
+  regex guardrails: `delete_object`, `delete_objects`, and `delete_bucket`.
 - No GitHub network at runtime.
 - Python execution is sandboxed via allowlist and AST checks.
 - Skill auto-trigger is OFF by default.

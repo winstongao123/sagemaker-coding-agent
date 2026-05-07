@@ -254,6 +254,44 @@ def test_validate_python_aws_bedrock_only_allows_bedrock_runtime(workspace, monk
     assert ok is True, f"unexpected reject: {msg}"
 
 
+def test_validate_python_allows_s3_read_when_bedrock_only_disabled(workspace, monkeypatch):
+    """User policy: S3 reads are allowed only when Bedrock-only is unticked."""
+    from runtime.config import CONFIG
+    monkeypatch.setattr(CONFIG, "aws_bedrock_only", False)
+    from security.manager import rebuild_singleton_for_tests
+    rebuild_singleton_for_tests()
+    from security import SECURITY
+
+    code = (
+        "import boto3\n"
+        "s3 = boto3.client('s3')\n"
+        "s3.list_objects_v2(Bucket='example-bucket', Prefix='safe/')\n"
+        "s3.get_object(Bucket='example-bucket', Key='safe/file.txt')\n"
+        "s3.head_object(Bucket='example-bucket', Key='safe/file.txt')\n"
+    )
+    ok, msg = SECURITY.validate_python(code)
+    assert ok is True, f"unexpected reject: {msg}"
+
+
+@pytest.mark.parametrize("call", [
+    "s3.delete_object(Bucket='example-bucket', Key='safe/file.txt')",
+    "s3.delete_objects(Bucket='example-bucket', Delete={'Objects': []})",
+    "s3.delete_bucket(Bucket='example-bucket')",
+])
+def test_validate_python_blocks_s3_delete_even_when_s3_reads_allowed(workspace, monkeypatch, call):
+    """S3 delete is regex-guarded and blocked even when S3 read access is enabled."""
+    from runtime.config import CONFIG
+    monkeypatch.setattr(CONFIG, "aws_bedrock_only", False)
+    from security.manager import rebuild_singleton_for_tests
+    rebuild_singleton_for_tests()
+    from security import SECURITY
+
+    code = "import boto3\ns3 = boto3.client('s3')\n" + call
+    ok, msg = SECURITY.validate_python(code)
+    assert ok is False
+    assert "delete" in msg.lower() or "blocked" in msg.lower()
+
+
 # ============================================================
 # Secret scanning
 # ============================================================

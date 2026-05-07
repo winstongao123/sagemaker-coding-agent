@@ -145,6 +145,12 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 
 - The notebook default is real Bedrock mode (`CONFIG.mock_mode = False`), matching v4 production use.
 - Tick Mock Mode only for a no-AWS smoke test.
+- Bedrock-only is the safest mode: it allows `bedrock-runtime` and blocks
+  S3/Lambda/Textract/etc.
+- If you need S3 reads, untick Bedrock-only before launching. v5 then allows
+  Python `boto3` S3 read calls through the approval gate, but still blocks S3
+  destructive calls by regex: `delete_object`, `delete_objects`, and
+  `delete_bucket`.
 - The notebook default region is `ap-southeast-2` (Sydney), matching v4.
 - The notebook default model is the first `BEDROCK_MODELS` entry: `Claude 4.5 Sonnet (AU) - default`.
 - The model dropdown includes the v4-style choices: Sonnet 4.5 AU, Haiku 4.5 AU, Sonnet 4.6 AU, Opus 4.6 AU, Opus 4.5 Global, and Claude 3 fallback models.
