@@ -11,7 +11,7 @@ PORT_LOG: #036.
 Kept (runtime essentials):
 - chat.ipynb (entry notebook, at zip root)
 - docs/htmls/V5_DESIGN_OVERVIEW.html (user-facing v5 architecture overview)
-- docs/PS_TEST_REVIEW_FINAL.md + docs/PS_PS_FINAL_TEST.md (user-facing final
+- docs/PS_TEST_REVIEW_FINAL.md + docs/PS_PS_FINAL_TEST*.md (user-facing final
   test/review instructions; copied from _status for ship visibility)
 - chat.md (companion — kept; v4 dropped it but v5 keeps it because it documents
             PS Issues #2 + #4 widget surface and the OUT-OF-SCOPE list)
@@ -55,6 +55,8 @@ EXTRA_FILES = {
         "docs/PS_TEST_REVIEW_FINAL.md",
     os.path.join("docs", "PS_PS_FINAL_TEST.md"):
         "docs/PS_PS_FINAL_TEST.md",
+    os.path.join("docs", "PS_PS_FINAL_TEST_v2.md"):
+        "docs/PS_PS_FINAL_TEST_v2.md",
 }
 
 EXCLUDE_DIR_NAMES = {

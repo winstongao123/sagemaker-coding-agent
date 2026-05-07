@@ -283,3 +283,28 @@ rolling back v5 architecture.
 | Todo/status visibility | The UI now renders a compact todo panel even before todos exist, nudging long tasks toward `todo_write` and `AGENT_STATUS.md`. | Long-running work has visible state instead of disappearing behind chat text. |
 | Approval and ask-user boxes | Hidden duplicate placeholders were removed. | v5 already has real `PermissionDialog` and `ask_user` tool surfaces; duplicate dead UI would be misleading. |
 | Docs | Stale "minimal MVP" UI claims were replaced with final v5.0.1 UI behavior. | Future workers will not accidentally downgrade v5 back to the old MVP description. |
+
+## Local Final Acceptance Smoke
+
+Date: 2026-05-07
+
+Before the human AWS acceptance run, a local mock-mode acceptance smoke verified
+the notebook/process plumbing without spending Bedrock budget.
+
+Evidence:
+
+- `compact_v5/_status/final_local_acceptance/local-final-acceptance-summary.md`
+- `compact_v5/_status/final_local_acceptance/ui-final-visual.html`
+- `compact_v5/_status/final_local_acceptance/ui-final-visual.png`
+
+Result:
+
+- UI shows `Cache R/W`, cache savings, parent/subagent attribution, and todo/status visibility.
+- The `task` tool streamed subagent start/finish messages.
+- `/cost` showed per-model, per-agent, and cache totals.
+- `/context` returned a current context estimate.
+- `/verify full` passed against fresh status, tests, review, results, subagent, and telemetry evidence.
+- `/done full` passed and produced a ready-to-ship local gate result.
+
+This local smoke validates UI/process mechanics. The human `PS_PS_FINAL_TEST_v2.md`
+run remains the real Bedrock acceptance test for model coding behavior.

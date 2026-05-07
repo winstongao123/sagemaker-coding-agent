@@ -4,7 +4,8 @@ Start here if you do not want to inspect source code directly:
 
 - `htmls/V5_DESIGN_OVERVIEW.html` - visual, simple current-snapshot v5 architecture and production-readiness map.
 - `PS_TEST_REVIEW_FINAL.md` - final evidence summary: what was tested, fixed, reviewed, skipped, and approved.
-- `PS_PS_FINAL_TEST.md` - hands-on long-running software engineering acceptance test for you to run in SageMaker.
+- `PS_PS_FINAL_TEST_v2.md` - current hands-on long-running software engineering acceptance test for you to run in SageMaker.
+- `PS_PS_FINAL_TEST.md` - original v1 acceptance prompt, retained for history.
 - `PS_V5_TEST_PLAYBOOK.md` - how the AWS/R-tier test loop proves production readiness.
 - `PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md` - what changed from v4.
 - `PS_V5_LEARNINGS_FROM_REPOS.md` - lessons from Runnable, Hermes, Learning Factory, and v4.
