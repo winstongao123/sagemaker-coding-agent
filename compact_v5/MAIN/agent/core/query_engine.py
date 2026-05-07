@@ -41,7 +41,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .budget import IterationBudget
@@ -406,6 +409,10 @@ class QueryEngine:
         self._tool_failure_counts: Dict[Tuple[str, str], int] = {}
         self._tool_failure_class_counts: Dict[Tuple[str, str], int] = {}
         self._consecutive_tool_failures = 0
+        # Long software tasks need a model-visible closure nudge before the
+        # hard max_turns cap, otherwise the last state file can stay stale.
+        self._turn_budget_warning_sent = False
+        self._final_claim_guard_sent = False
 
     # ------------------------------------------------------------
     # Public entry: run(...)
@@ -797,6 +804,12 @@ class QueryEngine:
             except Exception:
                 pass
 
+            turn_messages = self._inject_turn_budget_warning_if_needed(
+                turn_messages,
+                turn_index=turn,
+                output_fn=output_fn,
+            )
+
             # Bedrock invocation.
             try:
                 response = self._chat_with_fallback(
@@ -1074,6 +1087,15 @@ class QueryEngine:
                     Compactor.set_transition_reason(TransitionReason.END_TURN.value)
                 except Exception:
                     pass
+                guard = self._final_claim_guard_message(response.text or "")
+                if guard:
+                    output_fn("[final-claim guard: evidence is not ready; continuing]")
+                    self.messages.append({
+                        "role": "user",
+                        "content": [{"type": "text", "text": guard}],
+                        "is_meta": True,
+                    })
+                    continue
                 if response.text:
                     output_fn(response.text)
                 break
@@ -1183,6 +1205,7 @@ class QueryEngine:
         else:  # for-loop fell through without break
             stop_reason = "max_turns"
             output_fn(f"[Max turns reached: {self.max_turns}]")
+            self._record_max_turn_resume_state(output_fn, turns_used=turns_used)
 
         return QueryResult(
             text=last_text,
@@ -1974,6 +1997,200 @@ class QueryEngine:
             last["content"] = [{"type": "text", "text": reminder}]
         out[-1] = last
         return out
+
+    def _inject_turn_budget_warning_if_needed(
+        self,
+        messages: List[Dict[str, Any]],
+        *,
+        turn_index: int,
+        output_fn: Callable[[str], None],
+    ) -> List[Dict[str, Any]]:
+        """Transiently nudge long-running parent tasks to close or checkpoint.
+
+        This does not mutate `self.messages`. It only affects the next model
+        request once the run is near the hard max_turns cap.
+        """
+        if self._turn_budget_warning_sent:
+            return messages
+        if self.agent_kind != "parent":
+            return messages
+        warning_window = max(1, min(5, self.max_turns // 10))
+        turns_remaining = self.max_turns - turn_index
+        if turns_remaining > warning_window:
+            return messages
+
+        self._turn_budget_warning_sent = True
+        body = (
+            f"Turn budget warning: {turns_remaining} of {self.max_turns} turns remain. "
+            "Prioritize closure over optional work. If deliverables are complete, "
+            "update AGENT_STATUS.md, run the smallest useful verification, and give "
+            "the final SPEC vs SHIPPED/evidence summary now. If deliverables are not "
+            "complete, update AGENT_STATUS.md with exact remaining work and say "
+            "NOT_DONE instead of continuing broad implementation."
+        )
+        try:
+            output_fn(f"[Turn budget warning: {turns_remaining} turns remaining]")
+        except Exception:
+            pass
+        return self._append_transient_text_reminder(messages, body)
+
+    @staticmethod
+    def _append_transient_text_reminder(
+        messages: List[Dict[str, Any]],
+        body: str,
+    ) -> List[Dict[str, Any]]:
+        reminder = xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+        out = list(messages)
+        if not out or out[-1].get("role") != "user":
+            out.append({"role": "user", "content": [{"type": "text", "text": reminder}]})
+            return out
+        last = dict(out[-1])
+        content = last.get("content")
+        if isinstance(content, str):
+            last["content"] = [
+                {"type": "text", "text": content},
+                {"type": "text", "text": reminder},
+            ]
+        elif isinstance(content, list):
+            last["content"] = list(content) + [{"type": "text", "text": reminder}]
+        else:
+            last["content"] = [{"type": "text", "text": reminder}]
+        out[-1] = last
+        return out
+
+    def _record_max_turn_resume_state(
+        self,
+        output_fn: Callable[[str], None],
+        *,
+        turns_used: int,
+    ) -> None:
+        """Best-effort AGENT_STATUS.md append when max_turns interrupts a run."""
+        try:
+            from runtime.config import CONFIG
+        except Exception:
+            return
+        if not getattr(CONFIG, "enable_status_doc", True):
+            return
+        workspace = getattr(CONFIG, "workspace", "") or os.getcwd()
+        status_name = getattr(CONFIG, "status_doc", "AGENT_STATUS.md") or "AGENT_STATUS.md"
+        status_path = os.path.join(workspace, status_name)
+        try:
+            os.makedirs(os.path.dirname(status_path) or ".", exist_ok=True)
+            existing = ""
+            if os.path.exists(status_path):
+                with open(status_path, "r", encoding="utf-8") as handle:
+                    existing = handle.read()
+            marker = "<!-- SAGEAGENT_MAX_TURNS_RESUME_STATE -->"
+            prior = existing.split(marker, 1)[0].rstrip()
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            section = (
+                f"\n\n{marker}\n"
+                "## SageAgent Resume State\n\n"
+                f"- Updated: {stamp}\n"
+                "- Stop reason: max_turns\n"
+                f"- Turns used in interrupted run: {turns_used} / {self.max_turns}\n"
+                "- Completion claim: NOT_DONE until the next run verifies deliverables.\n"
+                "- Next action: read this file, inspect recent artifacts/logs, run the "
+                "smallest relevant verification, then either finish or update this "
+                "section with remaining work.\n"
+            )
+            with open(status_path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write((prior + section).lstrip())
+            try:
+                output_fn(f"[AGENT_STATUS.md updated for max_turns resume: {status_path}]")
+            except Exception:
+                pass
+        except Exception as exc:
+            try:
+                output_fn(f"[AGENT_STATUS.md max_turns resume update failed: {exc}]")
+            except Exception:
+                pass
+
+    def _final_claim_guard_message(self, text: str) -> str:
+        """Return a correction reminder when a final success claim contradicts files."""
+        if self._final_claim_guard_sent:
+            return ""
+        lower = (text or "").lower()
+        claim_words = (
+            "complete", "production-ready", "ready for production",
+            "successfully built", "all tests pass", "all tests passing",
+            "project complete",
+        )
+        if not any(word in lower for word in claim_words):
+            return ""
+        problems: List[str] = []
+        try:
+            from runtime.config import CONFIG
+            workspace = getattr(CONFIG, "workspace", "") or os.getcwd()
+            status_name = getattr(CONFIG, "status_doc", "AGENT_STATUS.md") or "AGENT_STATUS.md"
+        except Exception:
+            workspace = os.getcwd()
+            status_name = "AGENT_STATUS.md"
+
+        def _read_rel(rel: str) -> str:
+            try:
+                path = os.path.join(workspace, rel)
+                if os.path.isfile(path):
+                    with open(path, "r", encoding="utf-8", errors="replace") as handle:
+                        return handle.read(120_000)
+            except Exception:
+                return ""
+            return ""
+
+        status_text = _read_rel(status_name)
+        status_lower = status_text.lower()
+        stale_markers = (
+            "in_progress", "pending", "not_done", "failed", "1 failed",
+            "tests failed", "packaging (pending)", "review (pending)",
+        )
+        if status_lower and any(marker in status_lower for marker in stale_markers):
+            problems.append(f"{status_name} still contains pending/failed/not_done state")
+
+        for rel in ("docs/TEST_REPORT.md", "TEST_REPORT.md"):
+            report = _read_rel(rel)
+            report_lower = report.lower()
+            if report_lower and (
+                re.search(r"\b[1-9]\d*\s+failed\b", report_lower)
+                or re.search(r"\bfailed:\s*[1-9]\d*\b", report_lower)
+                or "98.75%" in report_lower
+                or "79/80" in report_lower
+            ):
+                problems.append(f"{rel} reports failing or partial tests")
+
+        user_text_parts: List[str] = []
+        for msg in self.messages:
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                user_text_parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        user_text_parts.append(str(block.get("text", "")))
+        requested = "\n".join(user_text_parts)
+        for match in sorted(set(re.findall(r"([A-Za-z0-9_.\\/\-+]+\.zip)\b", requested))):
+            candidate = match.replace("\\", os.sep).replace("/", os.sep)
+            if os.path.isabs(candidate):
+                exists = os.path.isfile(candidate)
+                shown = candidate
+            else:
+                exists = os.path.isfile(os.path.join(workspace, candidate))
+                shown = match
+            if not exists:
+                problems.append(f"required zip missing: {shown}")
+
+        if not problems:
+            return ""
+        self._final_claim_guard_sent = True
+        body = (
+            "Final-claim guard: do not claim completion yet. Evidence conflicts with "
+            "your final answer:\n- " + "\n- ".join(problems) +
+            "\nFix the issue, rerun the smallest relevant verification, update "
+            "AGENT_STATUS.md/docs, and only then provide the final SPEC vs SHIPPED "
+            "summary. If you cannot fix it, answer NOT_DONE with exact blockers."
+        )
+        return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
 
 
 # ============================================================

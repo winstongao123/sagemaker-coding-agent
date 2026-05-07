@@ -1,0 +1,32 @@
+........................................................................ [ 90%]
+...F....                                                                 [100%]
+================================== FAILURES ===================================
+___________ TestWorklogStorePersistence.test_invalid_json_recovery ____________
+
+self = <tests.test_store.TestWorklogStorePersistence testMethod=test_invalid_json_recovery>
+
+    def test_invalid_json_recovery(self):
+        """Test recovery from corrupted JSON file."""
+        store = WorklogStore(str(self.store_path))
+    
+        # Add an item
+        item = WorklogItem(
+            title="Original Item",
+            researcher="Alice",
+            topic="Topic"
+        )
+        store.add(item)
+    
+        # Verify backup was created with 1 item
+        backup_path = self.store_path.with_suffix('.bak')
+>       self.assertTrue(backup_path.exists())
+E       AssertionError: False is not true
+
+tests\test_store.py:343: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_store.py::TestWorklogStorePersistence::test_invalid_json_recovery
+1 failed, 79 passed in 1.72s
+
+--- STDERR ---
+C:\Users\winst\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!
+  warnings.warn(

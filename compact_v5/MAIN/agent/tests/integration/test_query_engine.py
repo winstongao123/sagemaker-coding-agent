@@ -252,6 +252,41 @@ def test_tool_search_round_trip_promotes_deferred_tool():
     )
 
 
+def test_engine_warns_and_records_status_on_max_turns(tmp_path, monkeypatch):
+    """Long software runs get a finalization nudge and resume state at max_turns."""
+    from core import QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+    monkeypatch.setattr(CONFIG, "enable_status_doc", True)
+    (tmp_path / "AGENT_STATUS.md").write_text(
+        "# Status\n\nCurrent phase: implementing", encoding="utf-8",
+    )
+    client = _ScriptedClient([
+        ("tool", f"call_{i}", "read_file", {"file_path": f"x{i}.txt"})
+        for i in range(5)
+    ])
+    out = []
+    engine = QueryEngine(client=client, max_turns=3)
+    result = engine.run(
+        user_message="loop",
+        system_prompt="sys",
+        tools=all_registered(),
+        output_fn=out.append,
+    )
+
+    assert result.stop_reason == "max_turns"
+    last_messages = client.calls[-1]["messages"]
+    assert "Turn budget warning" in str(last_messages[-1]["content"])
+    status_text = (tmp_path / "AGENT_STATUS.md").read_text(encoding="utf-8")
+    assert "SAGEAGENT_MAX_TURNS_RESUME_STATE" in status_text
+    assert "Stop reason: max_turns" in status_text
+    assert "Completion claim: NOT_DONE" in status_text
+    assert any("AGENT_STATUS.md updated for max_turns resume" in line for line in out)
+
+
 # ============================================================
 # Test 5 — IterationBudget gate stops the loop
 # ============================================================
@@ -281,10 +316,13 @@ def test_engine_stops_on_budget_exhausted():
 # Test 6 — max_turns cap
 # ============================================================
 
-def test_engine_stops_at_max_turns():
+def test_engine_stops_at_max_turns(monkeypatch):
     """If model never returns end_turn, the loop must exit cleanly at max_turns."""
     from core import QueryEngine
     from tools import all_registered
+    from runtime.config import CONFIG
+
+    monkeypatch.setattr(CONFIG, "enable_status_doc", False)
 
     # Always returns tool_use for read_file → engine never reaches end_turn.
     looping_script = [
@@ -549,3 +587,38 @@ def test_discovered_tools_reset_between_runs():
     # And the discovered set itself is empty after the second run starts (only
     # populated if the second run also calls tool_search, which it doesn't).
     assert "view_image" not in engine._discovered_tool_names
+
+
+def test_final_claim_guard_rejects_stale_status_and_missing_zip(tmp_path, monkeypatch):
+    """A done claim must not end the run when local evidence is still red."""
+    from core import QueryEngine
+    from runtime.config import CONFIG
+    from tools import all_registered
+
+    monkeypatch.setattr(CONFIG, "workspace", str(tmp_path))
+    monkeypatch.setattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+    monkeypatch.setattr(CONFIG, "enable_status_doc", True)
+    (tmp_path / "AGENT_STATUS.md").write_text(
+        "Current phase: PENDING\nTests: 79/80, 1 failed\n", encoding="utf-8",
+    )
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "TEST_REPORT.md").write_text(
+        "1 failed, 79 passed", encoding="utf-8",
+    )
+    client = _ScriptedClient([
+        ("text", "Project complete. All tests pass."),
+        ("text", "NOT_DONE: tests and zip still need correction."),
+    ])
+    out = []
+    engine = QueryEngine(client=client, max_turns=3)
+    result = engine.run(
+        user_message="Required artifact: mini_research_worklog_result.zip",
+        system_prompt="sys",
+        tools=all_registered(),
+        output_fn=out.append,
+    )
+
+    assert result.stop_reason == "end_turn"
+    assert result.text.startswith("NOT_DONE")
+    assert len(client.calls) == 2
+    assert any("final-claim guard" in line for line in out)
