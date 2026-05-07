@@ -68,6 +68,7 @@ REQUIRED_USER_DOCS = {
     "docs/PS_TEST_REVIEW_FINAL.md",
     "docs/PS_PS_FINAL_TEST.md",
     "docs/PS_PS_FINAL_TEST_v2.md",
+    "docs/PS_PS_FINAL_TEST_v3.md",
 }
 
 REQUIRED_SKILL_ASSETS = {

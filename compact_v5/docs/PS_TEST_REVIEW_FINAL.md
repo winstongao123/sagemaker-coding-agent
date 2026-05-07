@@ -355,3 +355,44 @@ Explain it like you are 9:
 v5 built the toy app and all the tests passed, but it taped the final box wrong.
 We fixed the box so we can inspect the homework, then made the next test say:
 "open the box and prove it is a real zip before saying finished."
+
+## AWS v3 Haiku v4-vs-v5 Comparison
+
+Date: 2026-05-07
+
+Evidence:
+
+- `compact_v5/_status/ps_ps_v3_compare/PS_PS_V3_COMPARE_REPORT.md`
+- `compact_v5/_status/ps_ps_v3_compare/logs/v5-summary.json`
+- `compact_v5/_status/ps_ps_v3_compare/logs/v5-agent-output.log`
+- `compact_v5/_status/ps_ps_v3_compare/logs/v4-summary.json`
+- `compact_v5/_status/ps_ps_v3_compare/logs/v4-agent-output.log`
+
+Same benchmark, same Haiku model, same `$5.00` cap.
+
+| Check | v5 | v4 |
+|---|---|---|
+| Intended workspace files | `17/18` present | `0/18` present |
+| Tests | `62 passed` | no tests dir in intended workspace |
+| Zip | valid, 27 members | no zip in intended workspace |
+| Cost | `$0.9378 / $5.00` | `$0.3934 / $5.00` |
+| Subagent telemetry | verify subagent cost/cache recorded | no comparable saved evidence |
+| Workspace safety | wrote to intended external workspace | wrote into repo root and modified `README.md` |
+
+What v3 caught:
+
+- v5 can complete a non-trivial Haiku software build with tests, package, cache
+  metrics, and subagent cost attribution under the cap.
+- v4 reproduced a major PS problem: it drifted out of the requested workspace.
+- v5 still missed one process artifact: `docs/reviews/` was absent despite using
+  a verify subagent. `PS_PS_FINAL_TEST_v3.md` now makes saved helper/reviewer
+  evidence an explicit hard pass criterion.
+
+Explain it like you are 9:
+
+v5 did almost all the homework on the right desk and passed the tests. It forgot
+to put the helper's note into the review folder, so v3 now says that folder is
+mandatory.
+
+v4 got confused and put homework on the wrong desk. That is why v5 is better for
+long software work, but v3 still checks that v5 saves every helper note.

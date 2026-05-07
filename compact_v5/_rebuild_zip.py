@@ -57,6 +57,8 @@ EXTRA_FILES = {
         "docs/PS_PS_FINAL_TEST.md",
     os.path.join("docs", "PS_PS_FINAL_TEST_v2.md"):
         "docs/PS_PS_FINAL_TEST_v2.md",
+    os.path.join("docs", "PS_PS_FINAL_TEST_v3.md"):
+        "docs/PS_PS_FINAL_TEST_v3.md",
 }
 
 EXCLUDE_DIR_NAMES = {
