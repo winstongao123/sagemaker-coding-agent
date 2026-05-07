@@ -308,3 +308,47 @@ Result:
 
 This local smoke validates UI/process mechanics. The human `PS_PS_FINAL_TEST_v2.md`
 run remains the real Bedrock acceptance test for model coding behavior.
+
+## AWS v1 Human Acceptance Trial
+
+Date: 2026-05-07
+
+Evidence:
+
+- `compact_v5/_status/aws_acceptance_v1/PS_PS_FINAL_TEST_V1_AWS_REVIEW.md`
+- `compact_v5/_status/aws_acceptance_v1/v1-aws-visual-summary.png`
+- `compact_v5/_status/aws_acceptance_v1/v1-operator-final-pytest.log`
+- `compact_v5/_status/aws_acceptance_v1/v1-operator-zip-validation.log`
+- `compact_v5/_status/aws_acceptance_v1/v5_final_acceptance_results.zip`
+
+Result: **partial pass, not a clean unattended pass**.
+
+What v1 proved:
+
+- Real Bedrock Claude 4.5 Sonnet built the `mini_issue_tracker` software package.
+- Planning and review subagents ran and their costs were recorded.
+- Reviewer findings were fixed.
+- Final tests passed: `80 passed`.
+
+What v1 caught:
+
+- `$2.00` was too low for a full Sonnet supervisor/reviewer/fix/package cycle.
+- Cost gates stop between calls, so a final turn can overshoot slightly.
+- v5 failed the final packaging discipline: it created a file at the zip path,
+  but Python reported `BadZipFile`.
+- Final status discipline still needs the v2 acceptance prompt to force
+  `AGENT_STATUS.md` and zip validation to agree before done.
+
+What was fixed after v1:
+
+- Codex/operator rebuilt a valid evidence zip so the generated project can be
+  inspected.
+- `PS_PS_FINAL_TEST_v2.md` now recommends a `$5.00` Sonnet cap, explains the cap
+  overshoot behavior, and requires `zipfile.testzip()` plus current final status
+  before claiming done.
+
+Explain it like you are 9:
+
+v5 built the toy app and all the tests passed, but it taped the final box wrong.
+We fixed the box so we can inspect the homework, then made the next test say:
+"open the box and prove it is a real zip before saying finished."

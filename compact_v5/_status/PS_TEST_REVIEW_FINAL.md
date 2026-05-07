@@ -139,7 +139,7 @@ in future polish."
 | 150 live Bedrock turns | Use approved prebuilt 150-logical-turn substitute. | Runnable can inspire long coherence. | v4 not enough. | Budget discipline argues against waste. | Evidence must say what was actually tested. | Covered; R19-U10 READY with caveat. | Use a saved long book, not pay to rewrite it. |
 | Full OTel/export pipeline | Keep local JSONL/metrics for v5.0.1. | Runnable has richer telemetry patterns. | v4 thinner. | Observability ideas. | Process evidence. | Documented future; local telemetry sufficient. | Keep a good notebook now; fancy dashboard later. |
 | Perfect direct clarification UX | Accept nonblocking polish. | Runnable has richer ask-user style. | v4 simpler. | Not central. | Process says track followup. | Future v5.0.2 polish. | It asks okay now; later ask prettier. |
-| Perfect subagent side-metric display | Accept nonblocking polish. | Runnable-like richer child telemetry possible. | v4 thinner. | Helpful attribution ideas. | Evidence trail covers current proof. | Future v5.0.2 polish. | Receipt works; later make it prettier. |
+| Separate live subagent notebook window | Do not add for v5.0.1. Keep the main notebook as supervisor. | Runnable has richer child process UI. | v4 stayed in one notebook. | Helpful attribution ideas. | Evidence trail covers current proof. | v5 shows subagent lifecycle, token/cache/cost, and envelopes in the main UI instead. | One dashboard shows the helper receipts. |
 | Bulky optional skill examples in ship zip | Exclude from company runtime zip. | Reference assets useful for dev. | Some came from v4 docs. | Not needed. | Not needed. | Packaging decision; runtime import smoke passed. | Pack the toolbox, not the library shelf. |
 
 | Skipped Or Not Copied | Source Repo | Why We Skipped It | Explain Like You Are 9 |
@@ -156,7 +156,7 @@ in future polish."
 | Learning Factory repo-specific automation | Learning Factory | We adopted the no-drift process, but not every repo-specific script/hook. | We copied the study habit, not the exact school timetable. |
 | Full optional skill reference packs in company zip | v4/v5 docs assets | They are useful examples for development, but not needed for the main production runtime. | We packed the toolbox, not the big instruction-library shelf. |
 | Perfect clarification UX | Final review follow-up | Current behavior is safe enough; direct `ask_user` polish is tracked for v5.0.2. | It asks okay now; later we can make it ask more neatly. |
-| Richer subagent side-metric display | Final review follow-up | Core cost/token/cache telemetry exists; prettier per-helper display is nonblocking polish. | It counts the helpers' snacks; later the receipt can be prettier. |
+| Separate live subagent window | Final UI review | v5 uses synchronous notebook subagents; adding separate child windows would add complexity and risk. The main UI now shows child lifecycle plus per-helper token/cache/cost attribution. | Helpers work inside the main room, but their receipts are visible. |
 | Perfect `/dream` output shape | Final review follow-up | `/dream` passed memory-preservation tests; output formatting polish is future work. | The notebook remembers the facts; later we can make the handwriting nicer. |
 | Mermaid-based final HTML diagrams | Docs packaging | Mermaid caused syntax/display problems, so the final HTML uses plain HTML flow boxes. | We used simple boxes instead of a fancy drawing tool that sometimes breaks. |
 
@@ -278,5 +278,77 @@ rolling back v5 architecture.
 | Compact | Button now uses the v5 `Compactor` path directly instead of a nonexistent `/compact` command. | Manual compaction works from the notebook. |
 | Clean | Button removes local non-session traces and keeps sessions, matching the v4 safety intent. | Users can clean scratch/audit traces without losing conversation continuity. |
 | Sub-agent panel | Dropdowns now feed notebook sub-agent preferences into the dynamic prompt tail. | The model receives the operator's intended explorer/worker/reviewer preference without forcing unnecessary subagents. |
+| Sub-agent visibility | The `task` tool now streams `[subagent:<type>] started/finished` messages into the notebook output path. | The main session remains the supervisor window, but users can see when helpers start, finish, stop, and how much they cost. |
+| Cache and savings metrics | The bottom metrics panel now shows `Cache R/W`, `Without cache`, `Saved`, and parent/subagent token/cache/cost attribution inline. | The user can see whether prompt caching is working and how much money it saved without running `/cost`. |
+| Todo/status visibility | The UI now renders a compact todo panel even before todos exist, nudging long tasks toward `todo_write` and `AGENT_STATUS.md`. | Long-running work has visible state instead of disappearing behind chat text. |
 | Approval and ask-user boxes | Hidden duplicate placeholders were removed. | v5 already has real `PermissionDialog` and `ask_user` tool surfaces; duplicate dead UI would be misleading. |
 | Docs | Stale "minimal MVP" UI claims were replaced with final v5.0.1 UI behavior. | Future workers will not accidentally downgrade v5 back to the old MVP description. |
+
+## Local Final Acceptance Smoke
+
+Date: 2026-05-07
+
+Before the human AWS acceptance run, a local mock-mode acceptance smoke verified
+the notebook/process plumbing without spending Bedrock budget.
+
+Evidence:
+
+- `compact_v5/_status/final_local_acceptance/local-final-acceptance-summary.md`
+- `compact_v5/_status/final_local_acceptance/ui-final-visual.html`
+- `compact_v5/_status/final_local_acceptance/ui-final-visual.png`
+
+Result:
+
+- UI shows `Cache R/W`, cache savings, parent/subagent attribution, and todo/status visibility.
+- The `task` tool streamed subagent start/finish messages.
+- `/cost` showed per-model, per-agent, and cache totals.
+- `/context` returned a current context estimate.
+- `/verify full` passed against fresh status, tests, review, results, subagent, and telemetry evidence.
+- `/done full` passed and produced a ready-to-ship local gate result.
+
+This local smoke validates UI/process mechanics. The human `PS_PS_FINAL_TEST_v2.md`
+run remains the real Bedrock acceptance test for model coding behavior.
+
+## AWS v1 Human Acceptance Trial
+
+Date: 2026-05-07
+
+Evidence:
+
+- `compact_v5/_status/aws_acceptance_v1/PS_PS_FINAL_TEST_V1_AWS_REVIEW.md`
+- `compact_v5/_status/aws_acceptance_v1/v1-aws-visual-summary.png`
+- `compact_v5/_status/aws_acceptance_v1/v1-operator-final-pytest.log`
+- `compact_v5/_status/aws_acceptance_v1/v1-operator-zip-validation.log`
+- `compact_v5/_status/aws_acceptance_v1/v5_final_acceptance_results.zip`
+
+Result: **partial pass, not a clean unattended pass**.
+
+What v1 proved:
+
+- Real Bedrock Claude 4.5 Sonnet built the `mini_issue_tracker` software package.
+- Planning and review subagents ran and their costs were recorded.
+- Reviewer findings were fixed.
+- Final tests passed: `80 passed`.
+
+What v1 caught:
+
+- `$2.00` was too low for a full Sonnet supervisor/reviewer/fix/package cycle.
+- Cost gates stop between calls, so a final turn can overshoot slightly.
+- v5 failed the final packaging discipline: it created a file at the zip path,
+  but Python reported `BadZipFile`.
+- Final status discipline still needs the v2 acceptance prompt to force
+  `AGENT_STATUS.md` and zip validation to agree before done.
+
+What was fixed after v1:
+
+- Codex/operator rebuilt a valid evidence zip so the generated project can be
+  inspected.
+- `PS_PS_FINAL_TEST_v2.md` now recommends a `$5.00` Sonnet cap, explains the cap
+  overshoot behavior, and requires `zipfile.testzip()` plus current final status
+  before claiming done.
+
+Explain it like you are 9:
+
+v5 built the toy app and all the tests passed, but it taped the final box wrong.
+We fixed the box so we can inspect the homework, then made the next test say:
+"open the box and prove it is a real zip before saying finished."

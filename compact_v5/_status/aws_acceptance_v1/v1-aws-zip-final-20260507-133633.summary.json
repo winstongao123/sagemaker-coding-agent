@@ -1,0 +1,52 @@
+{
+  "run_id": "20260507-133633",
+  "cap_usd": 0.3,
+  "previous_spend_usd": 3.0737622250000003,
+  "model": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "started": "2026-05-07 13:36:33",
+  "stop_reason": "max_turns",
+  "turns_used": 8,
+  "text": "Let me try using tar with a .tar.gz extension and proper Windows path handling.",
+  "cost_final": "Total: $0.08 (cache 100% | saved ~$0.2101) (8 API calls)\nPer-model: anthropic.claude-sonnet-4-5-20250929-v1:0: $0.0837\nPer-agent: parent=$0.0837 cache=77,833/8,490\nCache: read=77,833 write=8,490 total=86,323\nTokens: In:17 Out:1,396 Total:1,413\nSession cost: $0.08 (cache 100% | saved ~$0.2101)\nParent: in=17 out=1,396\nLimit: $0.30 (warn-and-continue)",
+  "context_final": "Context window estimate: 11,552 tokens (based on last response usage). Use /cost for full session view.",
+  "token_stats": {
+    "session_input": 17,
+    "session_output": 1396,
+    "session_total": 1413,
+    "session_cache_read": 77833,
+    "session_cache_write": 8490,
+    "last_input": 2,
+    "last_output": 72,
+    "api_calls": 8,
+    "session_cost_usd": 0.08374,
+    "last_cost_usd": 0.006734,
+    "parent_input_tokens": 17,
+    "parent_output_tokens": 1396,
+    "parent_cache_read_tokens": 77833,
+    "parent_cache_write_tokens": 8490,
+    "parent_cost_usd": 0.08374,
+    "subagent_input_tokens": {},
+    "subagent_output_tokens": {},
+    "subagent_cache_read_tokens": {},
+    "subagent_cache_write_tokens": {},
+    "subagent_cost_usd": {},
+    "model_usage": {
+      "anthropic.claude-sonnet-4-5-20250929-v1:0": {
+        "input_tokens": 17,
+        "output_tokens": 1396,
+        "cache_read_input_tokens": 77833,
+        "cache_creation_input_tokens": 8490,
+        "cost_usd": 0.08374,
+        "api_calls": 8
+      }
+    },
+    "context_window_tokens": 11552
+  },
+  "session_cost_usd": 0.08374014,
+  "api_calls": 8,
+  "finished": "2026-05-07 13:37:07",
+  "zip_exists": true,
+  "zip_size": 47317,
+  "post_pytest_exit": 0,
+  "post_pytest_log": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\aws_acceptance_v1\\v1-final-pytest-20260507-133633.log"
+}

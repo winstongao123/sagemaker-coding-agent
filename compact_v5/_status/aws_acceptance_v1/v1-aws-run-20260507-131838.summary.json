@@ -1,0 +1,83 @@
+{
+  "run_id": "20260507-131838",
+  "workspace": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\aws_acceptance_v1\\workspace",
+  "model": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "region": "ap-southeast-2",
+  "hard_cap_usd": 2.0,
+  "mock_mode": false,
+  "started": "2026-05-07 13:18:39",
+  "cost_start": "Total: $0.0000 (0 API calls)\nPer-model: none\nPer-agent: parent=$0.0000 cache=0/0\nCache: read=0 write=0 total=0\nTokens: In:0 Out:0 Total:0\nSession cost: $0.0000\nParent: in=0 out=0\nLimit: $2.00 (warn-and-continue)",
+  "context_start": "Context window estimate: 0 tokens (based on last response usage). Use /cost for full session view.",
+  "stop_reason": "cost_cap",
+  "turns_used": 0,
+  "text": "maxBudgetUsd hard cap reached: $2.0575 >= $2.0000",
+  "cost_final": "Total: $2.06 (cache 100% | saved ~$1.9940) (31 API calls)\nPer-model: anthropic.claude-sonnet-4-5-20250929-v1:0: $2.0575\nPer-agent: parent=$1.4656 cache=710,201/125,179, plan=$0.1039 cache=4,899/7,814, review=$0.4879 cache=23,430/95,756\nCache: read=738,530 write=228,749 total=967,279\nTokens: In:70 Out:52,739 Total:52,809\nSession cost: $2.06 (cache 100% | saved ~$1.9940)\nParent: in=49 out=43,328\nLimit: $2.00 (warn-and-continue)",
+  "context_final": "Context window estimate: 63,732 tokens (based on last response usage). Use /cost for full session view.",
+  "token_stats": {
+    "session_input": 70,
+    "session_output": 52739,
+    "session_total": 52809,
+    "session_cache_read": 738530,
+    "session_cache_write": 228749,
+    "last_input": 2,
+    "last_output": 641,
+    "api_calls": 31,
+    "session_cost_usd": 2.057498,
+    "last_cost_usd": 0.069379,
+    "parent_input_tokens": 49,
+    "parent_output_tokens": 43328,
+    "parent_cache_read_tokens": 710201,
+    "parent_cache_write_tokens": 125179,
+    "parent_cost_usd": 1.465642,
+    "subagent_input_tokens": {
+      "plan": 6,
+      "review": 15
+    },
+    "subagent_output_tokens": {
+      "plan": 4247,
+      "review": 5164
+    },
+    "subagent_cache_read_tokens": {
+      "plan": 4899,
+      "review": 23430
+    },
+    "subagent_cache_write_tokens": {
+      "plan": 7814,
+      "review": 95756
+    },
+    "subagent_cost_usd": {
+      "plan": 0.103925,
+      "review": 0.487931
+    },
+    "model_usage": {
+      "anthropic.claude-sonnet-4-5-20250929-v1:0": {
+        "input_tokens": 70,
+        "output_tokens": 52739,
+        "cache_read_input_tokens": 738530,
+        "cache_creation_input_tokens": 228749,
+        "cost_usd": 2.057498,
+        "api_calls": 31
+      }
+    },
+    "context_window_tokens": 63732
+  },
+  "session_cost_usd": 2.057498025,
+  "api_calls": 31,
+  "finished": "2026-05-07 13:29:27",
+  "expected_files": {
+    "AGENT_STATUS.md": true,
+    "README.md": true,
+    "pyproject.toml": true,
+    "issue_tracker/models.py": true,
+    "issue_tracker/store.py": true,
+    "issue_tracker/cli.py": true,
+    "tests/test_models.py": true,
+    "docs/DESIGN.md": true,
+    "docs/TEST_REPORT.md": true,
+    "docs/REVIEW.md": true
+  },
+  "zip_exists": false,
+  "workspace_file_count": 47,
+  "post_pytest_exit": 0,
+  "post_pytest_log": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\aws_acceptance_v1\\v1-local-pytest-20260507-131838.log"
+}
