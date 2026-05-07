@@ -281,11 +281,14 @@ def test_widget_status_shows_cache_savings_and_subagent_attribution():
     ui._render_status()
     html = ui._tokens_html.value
     assert "Cache R/W 140/70" in html
+    assert "Saved $0." in html
     assert "Saved:" in html
     assert "Without cache:" in html
+    assert "Reasoning: Thinking" in html
     assert "Agents: parent" in html
     assert "review $" in html
     assert "cache 40/20" in html
+    assert "Reasoning: Thinking" in ui._mode_html.value
     assert "Todos (1/1 active)" in ui._todo_display.value
 
 
@@ -624,6 +627,26 @@ def test_v4_style_ui_model_dropdown_updates_config_and_live_client(monkeypatch):
 
     assert CONFIG.model_id == target
     assert ui.agent.client.model_id == target
+
+
+def test_v4_style_ui_render_rebuilds_fresh_widget_models_after_first_display():
+    """SageMaker/Jupyter can retain stale widget-view state across reruns.
+    The v5 UI must be able to hand the frontend a fresh model tree when
+    display(ui.render()) is called again, instead of reusing stale model IDs.
+    """
+    ui = _v4_widget_ui_or_skip()
+
+    first = ui.render()
+    first_model_id = getattr(first, "model_id", "")
+    second = ui.render()
+    second_model_id = getattr(second, "model_id", "")
+
+    assert first_model_id
+    assert second_model_id
+    assert second is not first
+    assert second_model_id != first_model_id
+    assert "Cache R/W" in ui._tokens_html.value
+    assert "Reasoning: Thinking" in ui._tokens_html.value
 
 
 def test_v4_style_ui_removes_dead_approval_and_ask_user_placeholders(monkeypatch):

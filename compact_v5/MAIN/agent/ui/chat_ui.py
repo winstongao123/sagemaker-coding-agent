@@ -280,6 +280,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._chat_height = 500
         self._run_thread = None
         self._run_lock = threading.Lock()
+        self._render_generation = 0
         self._build()
 
     @staticmethod
@@ -476,7 +477,15 @@ class V4WidgetChatUI(WidgetChatUI):
             region = CONFIG.region
         except Exception:
             region = ""
-        self._header.value = f"<div style='border-bottom:1px solid {c['border']};padding-bottom:8px;margin-bottom:8px;'><h2 style='margin:0;color:#4a9eff;'>SageMaker Coding Agent</h2><p style='margin:4px 0;color:{c['muted']};font-size:12px;'>{tool_count} tools | {saved_count} saved sessions | {self._escape(region)}</p></div>"
+        self._header.value = (
+            f"<div style='border-bottom:1px solid {c['border']};"
+            "padding-bottom:8px;margin-bottom:8px;'>"
+            "<h2 style='margin:0;color:#4a9eff;'>SageMaker Coding Agent</h2>"
+            f"<p style='margin:4px 0;color:{c['muted']};font-size:12px;'>"
+            f"{tool_count} tools | {saved_count} saved sessions | "
+            f"{self._escape(region)} | cache + reasoning visible below every turn"
+            "</p></div>"
+        )
 
     def _render_chat(self) -> None:
         c = self._colors()
@@ -634,13 +643,18 @@ class V4WidgetChatUI(WidgetChatUI):
         except Exception:
             skills_count = 0
         thinking_state = "ON" if self._thinking_checkbox.value else "OFF"
+        reasoning_text = (
+            f"Reasoning: Thinking {thinking_state} "
+            f"(budget {int(self._thinking_budget_slider.value)})"
+        )
         subagent_count = len(stats.get("subagent_cost_usd", {}) or {})
         self._render_todos()
         self._status_html.value = "<span style='color:#4caf50'><b>* Ready</b></span>"
         self._tokens_html.value = (
             "<div style='font-size:11px;color:gray;line-height:1.7;'>"
-            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Cache R/W {cache_read:,}/{cache_write:,} | Calls {int(stats.get('api_calls', 0)):,}</div>"
+            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Cache R/W {cache_read:,}/{cache_write:,} | Saved ${cache_savings:.4f} | Calls {int(stats.get('api_calls', 0)):,}</div>"
             f"<div>Cost: ${cost:.4f} | Last: ${last_cost:.4f} | Without cache: ${original_cost:.4f} | Saved: <b style='color:#4caf50'>${cache_savings:.4f}</b> ({cache_pct:.0f}% cached) | {pricing}</div>"
+            f"<div style='color:#8aa0b8;'>{reasoning_text}</div>"
             f"<div style='color:#8aa0b8;'>Agents: {self._agent_attribution_line(stats)}</div>"
             f"<div style='color:#2ca02c;'>Context: {context_pct:.1f}% ({context_tokens:,} / {context_max:,})</div>"
             f"<div style='height:4px;background:#333;width:100%;'><div style='height:4px;background:#2ca02c;width:{context_pct:.1f}%;'></div></div>"
@@ -652,7 +666,7 @@ class V4WidgetChatUI(WidgetChatUI):
             "<span style='color:#8aa0b8;font-size:11px;'>"
             f"Model: {model} | Status: <b style='color:#2ca02c'>{status_text}</b> "
             f"| Plan: {'ON' if self._plan_mode.value else 'OFF'} "
-            f"| Thinking: {thinking_state} (budget {int(self._thinking_budget_slider.value)}) "
+            f"| {reasoning_text} "
             f"| Auth: {'ON' if auth else 'OFF'} "
             f"| Approval: {'ON' if self._approval_toggle.value else 'OFF'} "
             f"| Auto-Compact: {'ON' if self._auto_compact.value else 'OFF'} "
@@ -949,6 +963,15 @@ class V4WidgetChatUI(WidgetChatUI):
         return self._run_thread
 
     def render(self) -> Any:
+        # Jupyter/SageMaker can keep stale widget-view state after a notebook
+        # rerun or zip replacement, which surfaces as "Error displaying widget:
+        # model not found". Rebuild a fresh widget model tree at render time so
+        # `display(ui.render())` always hands the frontend live model IDs.
+        if self._render_generation:
+            self._build()
+        else:
+            self._render_status()
+        self._render_generation += 1
         return self._panel
 
 
