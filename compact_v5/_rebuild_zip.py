@@ -11,6 +11,8 @@ PORT_LOG: #036.
 Kept (runtime essentials):
 - chat.ipynb (entry notebook, at zip root)
 - docs/htmls/V5_DESIGN_OVERVIEW.html (user-facing v5 architecture overview)
+- docs/PS_TEST_REVIEW_FINAL.md + docs/PS_PS_FINAL_TEST.md (user-facing final
+  test/review instructions; copied from _status for ship visibility)
 - chat.md (companion — kept; v4 dropped it but v5 keeps it because it documents
             PS Issues #2 + #4 widget surface and the OUT-OF-SCOPE list)
 - memory.md, AGENT_STATUS.md (auto-loaded persistent files at zip root)
@@ -30,7 +32,7 @@ Dropped (dev-only artefacts):
 - tests/ (entire suite — dev verification, not runtime)
 - changelogs/ (per-phase release notes — repo-only)
 - _status/ (V5_BUILD_STATUS, V5_DESIGN_DECISIONS, V5_RUNNABLE_PORT_LOG, codex_reviews)
-- docs/ (audit docs internal)
+- docs/ (audit docs internal), except final user-facing docs/HTML listed above
 - _archive/ (historical references)
 - __pycache__/, .pytest_cache/, .snapshots/, .ipynb_checkpoints/
 - _rebuild_zip.py + verify_ship_zip.py (meta tools — repo-only)
@@ -51,6 +53,10 @@ ARCHIVE_PREFIX = SRC_DIR.replace(os.sep, "/") + "/"
 EXTRA_FILES = {
     os.path.join("docs", "htmls", "V5_DESIGN_OVERVIEW.html"):
         "docs/htmls/V5_DESIGN_OVERVIEW.html",
+    os.path.join("docs", "PS_TEST_REVIEW_FINAL.md"):
+        "docs/PS_TEST_REVIEW_FINAL.md",
+    os.path.join("docs", "PS_PS_FINAL_TEST.md"):
+        "docs/PS_PS_FINAL_TEST.md",
 }
 
 EXCLUDE_DIR_NAMES = {

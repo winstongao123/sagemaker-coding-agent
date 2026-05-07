@@ -64,6 +64,11 @@ REQUIRED_HTML_ASSETS = {
     "docs/htmls/V5_DESIGN_OVERVIEW.html",
 }
 
+REQUIRED_USER_DOCS = {
+    "docs/PS_TEST_REVIEW_FINAL.md",
+    "docs/PS_PS_FINAL_TEST.md",
+}
+
 FORBIDDEN_PATTERNS = [
     re.compile(r"(^|/)tests(/|$)"),    # entire tests dir — dev only
     re.compile(r"(^|/)test_.*\.py$"),  # any individual test file
@@ -140,6 +145,11 @@ def main(zip_path: str = "../compact_v5.zip") -> int:
     print("\n== Required production HTML assets ==")
     for asset in sorted(REQUIRED_HTML_ASSETS):
         if not _check(asset, asset in names):
+            failures += 1
+
+    print("\n== Required user-facing final test docs ==")
+    for doc in sorted(REQUIRED_USER_DOCS):
+        if not _check(doc, doc in names):
             failures += 1
 
     print("\n== Forbidden patterns (dev artefacts) ==")
