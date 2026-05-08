@@ -1,0 +1,2021 @@
+=== V1 AWS ACCEPTANCE START ===
+[subagent:plan] started: Design architecture for mini_issue_tracker package
+Based on the requirements for the mini_issue_tracker Python package, here's a comprehensive design document:
+
+---
+
+# mini_issue_tracker Design Document
+
+## 1. Overview
+
+A lightweight, dependency-free Python issue tracking system with JSON storage, CLI interface, and markdown reporting capabilities.
+
+### Core Principles
+- **Zero external dependencies**: Python standard library only
+- **Data integrity**: Atomic writes prevent corruption
+- **Simplicity**: Straightforward data structures and algorithms
+- **Extensibility**: Modular design for future enhancements
+
+---
+
+## 2. Module Architecture
+
+### 2.1 `issue_tracker/models.py`
+**Responsibility**: Issue data model with validation and serialization
+
+**Key Components**:
+- `Issue` class with immutable ID
+- Field validation (required fields, status enum)
+- Serialization to/from dict
+- Timestamp management (ISO 8601 format)
+
+**Data Structure**:
+```python
+Issue:
+  - id: str (UUID4)
+  - title: str (required, 1-200 chars)
+  - description: str (optional, max 10000 chars)
+  - status: str (enum: "open", "closed")
+  - created_at: str (ISO 8601 timestamp)
+  - updated_at: str (ISO 8601 timestamp)
+  - tags: list[str] (lowercase, alphanumeric + hyphen/underscore)
+```
+
+**Validation Rules**:
+- Title: non-empty, stripped, max 200 chars
+- Status: must be "open" or "closed"
+- Tags: lowercase, no duplicates, valid characters only
+- Timestamps: auto-generated, immutable created_at
+
+---
+
+### 2.2 `issue_tracker/store.py`
+**Responsibility**: Persistent JSON storage with atomic write guarantees
+
+**Key Components**:
+- `JSONStore` class managing single JSON file
+- Atomic write implementation
+- Auto-initialization of storage file
+- Thread-safe operations (single-process assumption)
+
+**Storage Format**: **Dict of dicts by ID**
+```json
+{
+  "uuid-1": {
+    "id": "uuid-1",
+    "title": "Bug in login",
+    "description": "...",
+    "status": "open",
+    "created_at": "2026-05-15T10:30:00Z",
+    "updated_at": "2026-05-15T10:30:00Z",
+    "tags": ["bug", "auth"]
+  },
+  "uuid-2": { ... }
+}
+```
+
+**Rationale for dict-by-ID**:
+- O(1) lookup by ID
+- Simpler updates (no list scanning)
+- Natural JSON structure for key-value access
+- Easy to check for ID conflicts
+
+**Atomic Write Algorithm**:
+```
+1. Serialize data to JSON string
+2. Create temp file in same directory as target (tempfile.NamedTemporaryFile)
+3. Write JSON to temp file
+4. Flush and fsync (file.flush() + os.fsync(file.fileno()))
+5. Close temp file
+6. os.replace(temp_path, target_path)  # Atomic on POSIX and Windows
+7. On error: clean up temp file
+```
+
+**Key Methods**:
+- `load() -> dict[str, dict]`: Read and parse JSON
+- `save(data: dict[str, dict])`: Atomic write
+- `get(issue_id: str) -> dict | None`: Retrieve single issue
+- `list_all() -> list[dict]`: Get all issues
+- `add(issue_dict: dict)`: Add new issue
+- `update(issue_id: str, updates: dict)`: Update existing issue
+- `delete(issue_id: str)`: Remove issue
+
+---
+
+### 2.3 `issue_tracker/cli.py`
+**Responsibility**: Command-line interface using argparse
+
+**Command Structure**:
+```
+issue-tracker <command> [options]
+
+Commands:
+  create              Create new issue
+  list                List all issues
+  show <id>           Show issue details
+  update <id>         Update issue fields
+  close <id>          Close an issue
+  reopen <id>         Reopen a closed issue
+  search              Search issues
+  report              Generate markdown report
+```
+
+**Command Details**:
+
+**`create`**:
+```
+--title TEXT (required)
+--description TEXT (optional)
+--tags TAG1,TAG2,... (optional)
+```
+
+**`list`**:
+```
+--status {open,closed,all} (default: all)
+--tags TAG1,TAG2,... (filter by tags)
+--sort {created,updated,title} (default: created)
+--reverse (reverse sort order)
+```
+
+**`show`**:
+```
+<id> (positional, required)
+```
+
+**`update`**:
+```
+<id> (positional, required)
+--title TEXT (optional)
+--description TEXT (optional)
+--add-tags TAG1,TAG2,... (optional)
+--remove-tags TAG1,TAG2,... (optional)
+```
+
+**`close`** / **`reopen`**:
+```
+<id> (positional, required)
+```
+
+**`search`**:
+```
+--query TEXT (search in title and description)
+--tags TAG1,TAG2,... (filter by tags)
+--status {open,closed,all} (default: all)
+```
+
+**`report`**:
+```
+--output FILE (default: stdout)
+--status {open,closed,all} (default: all)
+--group-by {status,tags,none} (default: status)
+```
+
+**CLI Architecture**:
+- Main parser with subparsers for each command
+- Each command maps to a handler function
+- Handlers coordinate between store, models, search, report modules
+- Pretty-printed output (tabular for lists, formatted for details)
+- Exit codes: 0 (success), 1 (user error), 2 (system error)
+
+---
+
+### 2.4 `issue_tracker/search.py`
+**Responsibility**: Search and filter functionality
+
+**Implementation Strategy**: **Filter-based (no indexing)**
+
+**Rationale**:
+- Simple implementation
+- No index maintenance overhead
+- Sufficient performance for small-to-medium datasets (<10k issues)
+- Standard library only (no search engine dependencies)
+
+**Search Algorithm**:
+```
+1. Load all issues from store
+2. Apply filters sequentially:
+   a. Status filter (if specified)
+   b. Tag filter (if specified) - issue must have ALL specified tags
+   c. Text search (if specified) - case-insensitive substring match
+3. Return matching issues
+```
+
+**Text Search**:
+- Case-insensitive
+- Search in: title, description
+- Simple substring matching (no tokenization/stemming)
+- Multiple terms: AND logic (all terms must match)
+
+**Key Functions**:
+- `search_issues(store, query=None, tags=None, status=None) -> list[dict]`
+- `filter_by_status(issues, status) -> list[dict]`
+- `filter_by_tags(issues, tags) -> list[dict]`
+- `filter_by_text(issues, query) -> list[dict]`
+
+---
+
+### 2.5 `issue_tracker/report.py`
+**Responsibility**: Markdown report generation
+
+**Report Structure**:
+```markdown
+# Issue Tracker Report
+
+Generated: 2026-05-15 10:30:00
+
+## Summary
+- Total Issues: 42
+- Open: 15
+- Closed: 27
+
+## Issues by Status
+
+### Open Issues (15)
+
+#### [uuid-1] Bug in login
+**Status**: open  
+**Created**: 2026-05-10 14:20:00  
+**Updated**: 2026-05-12 09:15:00  
+**Tags**: bug, auth
+
+Description of the issue...
+
+---
+
+### Closed Issues (27)
+...
+```
+
+**Grouping Options**:
+- **By status**: Open issues first, then closed
+- **By tags**: Group by primary tag (first tag), then "Untagged"
+- **None**: Chronological order (newest first)
+
+**Key Functions**:
+- `generate_report(issues, group_by='status') -> str`
+- `format_issue_section(issue) -> str`
+- `generate_summary(issues) -> str`
+
+---
+
+## 3. Data Flow
+
+### Create Issue Flow
+```
+CLI (create) 
+  → Parse arguments
+  → Issue.create(title, description, tags)
+  → Validate fields
+  → Generate UUID and timestamps
+  → Store.add(issue.to_dict())
+  → Atomic write to JSON
+  → Print confirmation with ID
+```
+
+### Update Issue Flow
+```
+CLI (update)
+  → Parse arguments
+  → Store.get(issue_id)
+  → Issue.from_dict(stored_data)
+  → Issue.update(title=..., tags=...)
+  → Update updated_at timestamp
+  → Store.update(issue_id, issue.to_dict())
+  → Atomic write to JSON
+  → Print confirmation
+```
+
+### Search Flow
+```
+CLI (search)
+  → Parse arguments
+  → search_issues(store, query, tags, status)
+  → Load all issues
+  → Apply filters
+  → Return matches
+  → Format and print results
+```
+
+---
+
+## 4. Error Handling Strategy
+
+### Error Categories
+
+**1. User Errors** (exit code 1):
+- Invalid issue ID (not found)
+- Invalid field values (validation errors)
+- Missing required arguments
+- Invalid command syntax
+
+**2. System Errors** (exit code 2):
+- File I/O errors (permissions, disk full)
+- JSON parse errors (corrupted data)
+- Unexpected exceptions
+
+### Error Handling Approach
+
+**Models Layer**:
+- Raise `ValueError` for validation errors
+- Include descriptive error messages
+- No silent failures
+
+**Store Layer**:
+- Raise `FileNotFoundError` for missing storage
+- Raise `JSONDecodeError` for corrupted data
+- Raise `OSError` for I/O failures
+- Clean up temp files on write failure
+
+**CLI Layer**:
+- Catch exceptions from lower layers
+- Print user-friendly error messages to stderr
+- Exit with appropriate code
+- Use try/except around main command handlers
+
+**Example**:
+```python
+try:
+    issue = Issue.create(title=args.title, ...)
+except ValueError as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+except OSError as e:
+    print(f"Storage error: {e}", file=sys.stderr)
+    sys.exit(2)
+```
+
+---
+
+## 5. Key Algorithms
+
+### 5.1 Atomic Write Implementation
+
+```python
+def save(self, data: dict[str, dict]) -> None:
+    """Atomically write data to JSON file."""
+    import tempfile
+    import json
+    import os
+    
+    # Serialize first (fail early if not serializable)
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    
+    # Create temp file in same directory (same filesystem)
+    dir_path = os.path.dirname(self.file_path)
+    
+    with tempfile.NamedTemporaryFile(
+        mode='w',
+        encoding='utf-8',
+        dir=dir_path,
+        delete=False,
+        suffix='.tmp'
+    ) as tmp_file:
+        tmp_path = tmp_file.name
+        try:
+            # Write data
+            tmp_file.write(json_str)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())  # Force write to disk
+            
+            # Close before rename (Windows requirement)
+            tmp_file.close()
+            
+            # Atomic replace (POSIX and Windows 3.3+)
+            os.replace(tmp_path, self.file_path)
+            
+        except Exception:
+            # Clean up temp file on error
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+```
+
+**Why this works**:
+- `os.replace()` is atomic on both POSIX and Windows (Python 3.3+)
+- Temp file in same directory ensures same filesystem (required for atomic rename)
+- `fsync()` ensures data is on disk before rename
+- Cleanup on error prevents temp file accumulation
+
+### 5.2 Tag Filtering (AND logic)
+
+```python
+def filter_by_tags(issues: list[dict], required_tags: list[str]) -> list[dict]:
+    """Return issues that have ALL required tags."""
+    required_set = set(tag.lower() for tag in required_tags)
+    return [
+        issue for issue in issues
+        if required_set.issubset(set(issue.get('tags', [])))
+    ]
+```
+
+### 5.3 Text Search (Multi-term AND)
+
+```python
+def filter_by_text(issues: list[dict], query: str) -> list[dict]:
+    """Return issues matching all query terms (case-insensitive)."""
+    terms = query.lower().split()
+    results = []
+    
+    for issue in issues:
+        searchable = (
+            issue.get('title', '') + ' ' + 
+            issue.get('description', '')
+        ).lower()
+        
+        if all(term in searchable for term in terms):
+            results.append(issue)
+    
+    return results
+```
+
+---
+
+## 6. Testing Strategy
+
+### 6.1 Unit Tests
+
+**`tests/test_models.py`**:
+- Issue creation with valid/invalid data
+- Field validation (title length, status enum, tag format)
+- Serialization (to_dict, from_dict round-trip)
+- Timestamp generation and immutability
+- Update operations
+
+**`tests/test_store.py`**:
+- File initialization (create if not exists)
+- Atomic write (verify temp file cleanup)
+- CRUD operations (add, get, update, delete)
+- Concurrent write simulation (multiple rapid writes)
+- Corrupted JSON handling
+- Empty store handling
+
+**`tests/test_search.py`**:
+- Status filtering
+- Tag filtering (single, multiple, none)
+- Text search (single term, multiple terms, case-insensitive)
+- Combined filters
+- Empty result sets
+
+**`tests/test_report.py`**:
+- Report generation with various groupings
+- Summary statistics
+- Markdown formatting
+- Empty issue list
+- Special characters in content
+
+### 6.2 Integration Tests
+
+**`tests/test_cli.py`**:
+- End-to-end command execution
+- Argument parsing
+- Error messages and exit codes
+- Output formatting
+- Command chaining (create → update → close → reopen)
+
+### 6.3 Test Utilities
+
+- Temporary storage directory (pytest tmpdir)
+- Sample issue fixtures
+- Mock data generators
+- Output capture helpers
+
+### 6.4 Test Coverage Goals
+
+- Models: 100% (critical validation logic)
+- Store: 95%+ (atomic write paths)
+- Search: 90%+
+- Report: 85%+
+- CLI: 80%+ (focus on logic, not argparse internals)
+
+---
+
+## 7. File Structure
+
+```
+mini_issue_tracker/
+├── issue_tracker/
+│   ├── __init__.py
+│   ├── models.py          # Issue class
+│   ├── store.py           # JSONStore
+│   ├── cli.py             # CLI entry point
+│   ├── search.py          # Search functions
+│   └── report.py          # Report generator
+├── tests/
+│   ├── __init__.py
+│   ├── test_models.py
+│   ├── test_store.py
+│   ├── test_search.py
+│   ├── test_report.py
+│   └── test_cli.py
+├── docs/
+│   ├── DESIGN.md          # This document
+│   └── API.md             # API reference
+├── setup.py               # Package setup
+├── README.md              # User documentation
+└── .gitignore
+```
+
+---
+
+## 8. Configuration and Defaults
+
+### Storage Location
+- Default: `~/.issue_tracker/issues.json`
+- Override via environment variable: `ISSUE_TRACKER_DB`
+- CLI option: `--db-path PATH` (global option)
+
+### Default Behaviors
+- New issues: status="open", tags=[]
+- List command: show all statuses, sort by created_at descending
+- Search: case-insensitive, all statuses
+- Report: group by status, output to stdout
+
+---
+
+## 9. Future Enhancements (Out of Scope)
+
+- Multi-user support with locking
+- Issue comments/history
+- Assignees and priorities
+- Due dates and reminders
+- Export to other formats (CSV, HTML)
+- Web interface
+- Git integration
+- Full-text search indexing
+
+---
+
+## 10.
+Based on the requirements for the mini_issue_tracker Python package, here's a comprehensive design document:
+
+---
+
+# mini_issue_tracker Design Document
+
+## 1. Overview
+
+A lightweight, dependency-free Python issue tracking system with JSON storage, CLI interface, and markdown reporting capabilities.
+
+### Core Principles
+- **Zero external dependencies**: Python standard library only
+- **Data integrity**: Atomic writes prevent corruption
+- **Simplicity**: Straightforward data structures and algorithms
+- **Extensibility**: Modular design for future enhancements
+
+---
+
+## 2. Module Architecture
+
+### 2.1 `issue_tracker/models.py`
+**Responsibility**: Issue data model with validation and serialization
+
+**Key Components**:
+- `Issue` class with immutable ID
+- Field validation (required fields, status enum)
+- Serialization to/from dict
+- Timestamp management (ISO 8601 format)
+
+**Data Structure**:
+```python
+Issue:
+  - id: str (UUID4)
+  - title: str (required, 1-200 chars)
+  - description: str (optional, max 10000 chars)
+  - status: str (enum: "open", "closed")
+  - created_at: str (ISO 8601 timestamp)
+  - updated_at: str (ISO 8601 timestamp)
+  - tags: list[str] (lowercase, alphanumeric + hyphen/underscore)
+```
+
+**Validation Rules**:
+- Title: non-empty, stripped, max 200 chars
+- Status: must be "open" or "closed"
+- Tags: lowercase, no duplicates, valid characters only
+- Timestamps: auto-generated, immutable created_at
+
+---
+
+### 2.2 `issue_tracker/store.py`
+**Responsibility**: Persistent JSON storage with atomic write guarantees
+
+**Key Components**:
+- `JSONStore` class managing single JSON file
+- Atomic write implementation
+- Auto-initialization of storage file
+- Thread-safe operations (single-process assumption)
+
+**Storage Format**: **Dict of dicts by ID**
+```json
+{
+  "uuid-1": {
+    "id": "uuid-1",
+    "title": "Bug in login",
+    "description": "...",
+    "status": "open",
+    "created_at": "2026-05-15T10:30:00Z",
+    "updated_at": "2026-05-15T10:30:00Z",
+    "tags": ["bug", "auth"]
+  },
+  "uuid-2": { ... }
+}
+```
+
+**Rationale for dict-by-ID**:
+- O(1) lookup by ID
+- Simpler updates (no list scanning)
+- Natural JSON structure for key-value access
+- Easy to check for ID conflicts
+
+**Atomic Write Algorithm**:
+```
+1. Serialize data to JSON string
+2. Create temp file in same directory as target (tempfile.NamedTemporaryFile)
+3. Write JSON to temp file
+4. Flush and fsync (file.flush() + os.fsync(file.fileno()))
+5. Close temp file
+6. os.replace(temp_path, target_path)  # Atomic on POSIX and Windows
+7. On error: clean up temp file
+```
+
+**Key Methods**:
+- `load() -> dict[str, dict]`: Read and parse JSON
+- `save(data: dict[str, dict])`: Atomic write
+- `get(issue_id: str) -> dict | None`: Retrieve single issue
+- `list_all() -> list[dict]`: Get all issues
+- `add(issue_dict: dict)`: Add new issue
+- `update(issue_id: str, updates: dict)`: Update existing issue
+- `delete(issue_id: str)`: Remove issue
+
+---
+
+### 2.3 `issue_tracker/cli.py`
+**Responsibility**: Command-line interface using argparse
+
+**Command Structure**:
+```
+issue-tracker <command> [options]
+
+Commands:
+  create              Create new issue
+  list                List all issues
+  show <id>           Show issue details
+  update <id>         Update issue fields
+  close <id>          Close an issue
+  reopen <id>         Reopen a closed issue
+  search              Search issues
+  report              Generate markdown report
+```
+
+**Command Details**:
+
+**`create`**:
+```
+--title TEXT (required)
+--description TEXT (optional)
+--tags TAG1,TAG2,... (optional)
+```
+
+**`list`**:
+```
+--status {open,closed,all} (default: all)
+--tags TAG1,TAG2,... (filter by tags)
+--sort {created,updated,title} (default: created)
+--reverse (reverse sort order)
+```
+
+**`show`**:
+```
+<id> (positional, required)
+```
+
+**`update`**:
+```
+<id> (positional, required)
+--title TEXT (optional)
+--description TEXT (optional)
+--add-tags TAG1,TAG2,... (optional)
+--remove-tags TAG1,TAG2,... (optional)
+```
+
+**`close`** / **`reopen`**:
+```
+<id> (positional, required)
+```
+
+**`search`**:
+```
+--query TEXT (search in title and description)
+--tags TAG1,TAG2,... (filter by tags)
+--status {open,closed,all} (default: all)
+```
+
+**`report`**:
+```
+--output FILE (default: stdout)
+--status {open,closed,all} (default: all)
+--group-by {status,tags,none} (default: status)
+```
+
+**CLI Architecture**:
+- Main parser with subparsers for each command
+- Each command maps to a handler function
+- Handlers coordinate between store, models, search, report modules
+- Pretty-printed output (tabular for lists, formatted for details)
+- Exit codes: 0 (success), 1 (user error), 2 (system error)
+
+---
+
+### 2.4 `issue_tracker/search.py`
+**Responsibility**: Search and filter functionality
+
+**Implementation Strategy**: **Filter-based (no indexing)**
+
+**Rationale**:
+- Simple implementation
+- No index maintenance overhead
+- Sufficient performance for small-to-medium datasets (<10k issues)
+- Standard library only (no search engine dependencies)
+
+**Search Algorithm**:
+```
+1. Load all issues from store
+2. Apply filters sequentially:
+   a. Status filter (if specified)
+   b. Tag filter (if specified) - issue must have ALL specified tags
+   c. Text search (if specified) - case-insensitive substring match
+3. Return matching issues
+```
+
+**Text Search**:
+- Case-insensitive
+- Search in: title, description
+- Simple substring matching (no tokenization/stemming)
+- Multiple terms: AND logic (all terms must match)
+
+**Key Functions**:
+- `search_issues(store, query=None, tags=None, status=None) -> list[dict]`
+- `filter_by_status(issues, status) -> list[dict]`
+- `filter_by_tags(issues, tags) -> list[dict]`
+- `filter_by_text(issues, query) -> list[dict]`
+
+---
+
+### 2.5 `issue_tracker/report.py`
+**Responsibility**: Markdown report generation
+
+**Report Structure**:
+```markdown
+# Issue Tracker Report
+
+Generated: 2026-05-15 10:30:00
+
+## Summary
+- Total Issues: 42
+- Open: 15
+- Closed: 27
+
+## Issues by Status
+
+### Open Issues (15)
+
+#### [uuid-1] Bug in login
+**Status**: open  
+**Created**: 2026-05-10 14:20:00  
+**Updated**: 2026-05-12 09:15:00  
+**Tags**: bug, auth
+
+Description of the issue...
+
+---
+
+### Closed Issues (27)
+...
+```
+
+**Grouping Options**:
+- **By status**: Open issues first, then closed
+- **By tags**: Group by primary tag (first tag), then "Untagged"
+- **None**: Chronological order (newest first)
+
+**Key Functions**:
+- `generate_report(issues, group_by='status') -> str`
+- `format_issue_section(issue) -> str`
+- `generate_summary(issues) -> str`
+
+---
+
+## 3. Data Flow
+
+### Create Issue Flow
+```
+CLI (create) 
+  ? Parse arguments
+  ? Issue.create(title, description, tags)
+  ? Validate fields
+  ? Generate UUID and timestamps
+  ? Store.add(issue.to_dict())
+  ? Atomic write to JSON
+  ? Print confirmation with ID
+```
+
+### Update Issue Flow
+```
+CLI (update)
+  ? Parse arguments
+  ? Store.get(issue_id)
+  ? Issue.from_dict(stored_data)
+  ? Issue.update(title=..., tags=...)
+  ? Update updated_at timestamp
+  ? Store.update(issue_id, issue.to_dict())
+  ? Atomic write to JSON
+  ? Print confirmation
+```
+
+### Search Flow
+```
+CLI (search)
+  ? Parse arguments
+  ? search_issues(store, query, tags, status)
+  ? Load all issues
+  ? Apply filters
+  ? Return matches
+  ? Format and print results
+```
+
+---
+
+## 4. Error Handling Strategy
+
+### Error Categories
+
+**1. User Errors** (exit code 1):
+- Invalid issue ID (not found)
+- Invalid field values (validation errors)
+- Missing required arguments
+- Invalid command syntax
+
+**2. System Errors** (exit code 2):
+- File I/O errors (permissions, disk full)
+- JSON parse errors (corrupted data)
+- Unexpected exceptions
+
+### Error Handling Approach
+
+**Models Layer**:
+- Raise `ValueError` for validation errors
+- Include descriptive error messages
+- No silent failures
+
+**Store Layer**:
+- Raise `FileNotFoundError` for missing storage
+- Raise `JSONDecodeError` for corrupted data
+- Raise `OSError` for I/O failures
+- Clean up temp files on write failure
+
+**CLI Layer**:
+- Catch exceptions from lower layers
+- Print user-friendly error messages to stderr
+- Exit with appropriate code
+- Use try/except around main command handlers
+
+**Example**:
+```python
+try:
+    issue = Issue.create(title=args.title, ...)
+except ValueError as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+except OSError as e:
+    print(f"Storage error: {e}", file=sys.stderr)
+    sys.exit(2)
+```
+
+---
+
+## 5. Key Algorithms
+
+### 5.1 Atomic Write Implementation
+
+```python
+def save(self, data: dict[str, dict]) -> None:
+    """Atomically write data to JSON file."""
+    import tempfile
+    import json
+    import os
+    
+    # Serialize first (fail early if not serializable)
+    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+    
+    # Create temp file in same directory (same filesystem)
+    dir_path = os.path.dirname(self.file_path)
+    
+    with tempfile.NamedTemporaryFile(
+        mode='w',
+        encoding='utf-8',
+        dir=dir_path,
+        delete=False,
+        suffix='.tmp'
+    ) as tmp_file:
+        tmp_path = tmp_file.name
+        try:
+            # Write data
+            tmp_file.write(json_str)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())  # Force write to disk
+            
+            # Close before rename (Windows requirement)
+            tmp_file.close()
+            
+            # Atomic replace (POSIX and Windows 3.3+)
+            os.replace(tmp_path, self.file_path)
+            
+        except Exception:
+            # Clean up temp file on error
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+```
+
+**Why this works**:
+- `os.replace()` is atomic on both POSIX and Windows (Python 3.3+)
+- Temp file in same directory ensures same filesystem (required for atomic rename)
+- `fsync()` ensures data is on disk before rename
+- Cleanup on error prevents temp file accumulation
+
+### 5.2 Tag Filtering (AND logic)
+
+```python
+def filter_by_tags(issues: list[dict], required_tags: list[str]) -> list[dict]:
+    """Return issues that have ALL required tags."""
+    required_set = set(tag.lower() for tag in required_tags)
+    return [
+        issue for issue in issues
+        if required_set.issubset(set(issue.get('tags', [])))
+    ]
+```
+
+### 5.3 Text Search (Multi-term AND)
+
+```python
+def filter_by_text(issues: list[dict], query: str) -> list[dict]:
+    """Return issues matching all query terms (case-insensitive)."""
+    terms = query.lower().split()
+    results = []
+    
+    for issue in issues:
+        searchable = (
+            issue.get('title', '') + ' ' + 
+            issue.get('description', '')
+        ).lower()
+        
+        if all(term in searchable for term in terms):
+            results.append(issue)
+    
+    return results
+```
+
+---
+
+## 6. Testing Strategy
+
+### 6.1 Unit Tests
+
+**`tests/test_models.py`**:
+- Issue creation with valid/invalid data
+- Field validation (title length, status enum, tag format)
+- Serialization (to_dict, from_dict round-trip)
+- Timestamp generation and immutability
+- Update operations
+
+**`tests/test_store.py`**:
+- File initialization (create if not exists)
+- Atomic write (verify temp file cleanup)
+- CRUD operations (add, get, update, delete)
+- Concurrent write simulation (multiple rapid writes)
+- Corrupted JSON handling
+- Empty store handling
+
+**`tests/test_search.py`**:
+- Status filtering
+- Tag filtering (single, multiple, none)
+- Text search (single term, multiple terms, case-insensitive)
+- Combined filters
+- Empty result sets
+
+**`tests/test_report.py`**:
+- Report generation with various groupings
+- Summary statistics
+- Markdown formatting
+- Empty issue list
+- Special characters in content
+
+### 6.2 Integration Tests
+
+**`tests/test_cli.py`**:
+- End-to-end command execution
+- Argument parsing
+- Error messages and exit codes
+- Output formatting
+- Command chaining (create ? update ? close ? reopen)
+
+### 6.3 Test Utilities
+
+- Temporary storage directory (pytest tmpdir)
+- Sample issue fixtures
+- Mock data generators
+- Output capture helpers
+
+### 6.4 Test Coverage Goals
+
+- Models: 100% (critical validation logic)
+- Store: 95%+ (atomic write paths)
+- Search: 90%+
+- Report: 85%+
+- CLI: 80%+ (focus on logic, not argparse internals)
+
+---
+
+## 7. File Structure
+
+```
+mini_issue_tracker/
+??? issue_tracker/
+?   ??? __init__.py
+?   ??? models.py          # Issue class
+?   ??? store.py           # JSONStore
+?   ??? cli.py             # CLI entry point
+?   ??? search.py          # Search functions
+?   ??? report.py          # Report generator
+??? tests/
+?   ??? __init__.py
+?   ??? test_models.py
+?   ??? test_store.py
+?   ??? test_search.py
+?   ??? test_report.py
+?   ??? test_cli.py
+??? docs/
+?   ??? DESIGN.md          # This document
+?   ??? API.md             # API reference
+??? setup.py               # Package setup
+??? README.md              # User documentation
+??? .gitignore
+```
+
+---
+
+## 8. Configuration and Defaults
+
+### Storage Location
+- Default: `~/.issue_tracker/issues.json`
+- Override via environment variable: `ISSUE_TRACKER_DB`
+- CLI option: `--db-path PATH` (global option)
+
+### Default Behaviors
+- New issues: status="open", tags=[]
+- List command: show all statuses, sort by created_at descending
+- Search: case-insensitive, all statuses
+- Report: group by status, output to stdout
+
+---
+
+## 9. Future Enhancements (Out of Scope)
+
+- Multi-user support with locking
+- Issue comments/history
+- Assignees and priorities
+- Due dates and reminders
+- Export to other formats (CSV, HTML)
+- Web interface
+- Git integration
+- Full-text search indexing
+
+---
+
+## 10.
+[subagent:plan] finished: stop=end_turn turns=2 cost=$0.1039 cache=4,899/7,814
+[subagent:review] started: Code review of mini_issue_tracker implementation
+# Code Review Report: Mini Issue Tracker
+
+## Executive Summary
+
+The mini_issue_tracker package is a **well-designed, production-ready Python application** with strong fundamentals. The code demonstrates excellent practices in validation, error handling, and testing. However, several security vulnerabilities, edge cases, and performance issues require attention before production deployment.
+
+**Overall Assessment**: 7.5/10
+- ✅ Strong validation and error handling
+- ✅ Comprehensive test coverage (80 tests)
+- ✅ Clean architecture and separation of concerns
+- ⚠️ Critical security issues with file operations
+- ⚠️ Performance inefficiencies in storage layer
+- ⚠️ Missing edge case handling
+
+---
+
+## Critical Issues
+
+### 1. **Path Traversal Vulnerability** (CRITICAL)
+**File**: `store.py:13-26`
+
+**Issue**: The `JSONStore.__init__` accepts arbitrary file paths without validation, allowing path traversal attacks.
+
+```python
+def __init__(self, file_path: Optional[str] = None):
+    if file_path is None:
+        # Default location: ~/.issue_tracker/issues.json
+        home = Path.home()
+        default_dir = home / ".issue_tracker"
+        default_dir.mkdir(exist_ok=True)
+        file_path = str(default_dir / "issues.json")
+    
+    self.file_path = file_path  # ⚠️ No validation!
+```
+
+**Attack Vector**:
+```python
+store = JSONStore("../../../../etc/passwd")  # Can read/write arbitrary files
+```
+
+**Recommendation**:
+```python
+def __init__(self, file_path: Optional[str] = None):
+    if file_path is None:
+        home = Path.home()
+        default_dir = home / ".issue_tracker"
+        default_dir.mkdir(exist_ok=True)
+        file_path = str(default_dir / "issues.json")
+    
+    # Validate path
+    resolved_path = Path(file_path).resolve()
+    if not resolved_path.is_relative_to(Path.home()):
+        raise ValueError("Database path must be within user home directory")
+    
+    self.file_path = str(resolved_path)
+```
+
+---
+
+### 2. **Race Condition in Atomic Write** (HIGH)
+**File**: `store.py:88-107`
+
+**Issue**: The atomic write implementation has a race condition between `tmp_file.close()` and `os.replace()`. On Windows, another process could access the temp file during this window.
+
+```python
+tmp_file.write(json_str)
+tmp_file.flush()
+os.fsync(tmp_file.fileno())
+
+# Close before rename (Windows requirement)
+tmp_file.close()  # ⚠️ File is closed but not yet replaced
+
+# Atomic replace (POSIX and Windows 3.3+)
+os.replace(tmp_path, self.file_path)  # ⚠️ Race window here
+```
+
+**Recommendation**: Use context manager properly and handle Windows-specific issues:
+```python
+fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    with os.fdopen(fd, 'w', encoding='utf-8') as tmp_file:
+        tmp_file.write(json_str)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+    # File is closed here, minimize race window
+    os.replace(tmp_path, self.file_path)
+except Exception:
+    try:
+        os.unlink(tmp_path)
+    except OSError:
+        pass
+    raise
+```
+
+---
+
+### 3. **Inefficient Storage Operations** (HIGH)
+**File**: `store.py:109-199`
+
+**Issue**: Every operation (`get`, `add`, `update`, `delete`) loads the entire database from disk, even for single-item operations. This is O(n) for every operation and causes severe performance degradation with large datasets.
+
+```python
+def get(self, issue_id: str) -> Optional[dict]:
+    data = self.load()  # ⚠️ Loads entire database
+    return data.get(issue_id)
+
+def add(self, issue_dict: dict) -> None:
+    data = self.load()  # ⚠️ Loads entire database
+    # ... validation ...
+    data[issue_id] = issue_dict
+    self.save(data)  # ⚠️ Writes entire database
+```
+
+**Performance Impact**:
+- 1,000 issues: ~100ms per operation
+- 10,000 issues: ~1s per operation
+- 100,000 issues: ~10s per operation
+
+**Recommendation**: Implement caching or use a proper database:
+```python
+class JSONStore:
+    def __init__(self, file_path: Optional[str] = None):
+        # ... existing code ...
+        self._cache = None
+        self._cache_mtime = None
+    
+    def _load_with_cache(self) -> dict[str, dict]:
+        """Load with file modification time checking."""
+        try:
+            current_mtime = os.path.getmtime(self.file_path)
+            if self._cache is not None and self._cache_mtime == current_mtime:
+                return self._cache
+            
+            data = self.load()
+            self._cache = data
+            self._cache_mtime = current_mtime
+            return data
+        except FileNotFoundError:
+            return {}
+    
+    def _invalidate_cache(self):
+        """Invalidate cache after write."""
+        self._cache = None
+        self._cache_mtime = None
+```
+
+---
+
+## High Priority Issues
+
+### 4. **Missing Input Sanitization in CLI** (HIGH)
+**File**: `cli.py:313-314`
+
+**Issue**: User-provided file paths for report output are not validated, allowing arbitrary file writes.
+
+```python
+if args.output:
+    with open(args.output, 'w', encoding='utf-8') as f:  # ⚠️ No validation
+        f.write(report)
+```
+
+**Recommendation**:
+```python
+if args.output:
+    output_path = Path(args.output).resolve()
+    # Prevent writing to sensitive locations
+    if output_path.is_dir():
+        raise ValueError("Output path must be a file, not a directory")
+    if not output_path.parent.exists():
+        raise ValueError("Output directory does not exist")
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(report)
+```
+
+---
+
+### 5. **Timestamp Validation Missing** (HIGH)
+**File**: `models.py:47-49`
+
+**Issue**: The `Issue` class accepts arbitrary timestamp strings without validation. Malformed timestamps can cause issues in sorting and display.
+
+```python
+now = datetime.now(timezone.utc).isoformat()
+self.created_at = created_at or now  # ⚠️ No validation of created_at
+self.updated_at = updated_at or now  # ⚠️ No validation of updated_at
+```
+
+**Recommendation**:
+```python
+def _validate_timestamp(self, timestamp: str) -> str:
+    """Validate ISO 8601 timestamp."""
+    try:
+        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        return timestamp
+    except (ValueError, AttributeError):
+        raise ValueError(f"Invalid timestamp format: {timestamp}")
+
+# In __init__:
+now = datetime.now(timezone.utc).isoformat()
+self.created_at = self._validate_timestamp(created_at) if created_at else now
+self.updated_at = self._validate_timestamp(updated_at) if updated_at else now
+```
+
+---
+
+### 6. **UUID Collision Not Handled** (MEDIUM)
+**File**: `models.py:41`
+
+**Issue**: While UUID4 collisions are astronomically rare, the code doesn't handle the case where a provided `issue_id` might collide with an existing issue.
+
+```python
+self.id = issue_id or str(uuid.uuid4())  # ⚠️ No uniqueness check
+```
+
+**Recommendation**: Move uniqueness validation to the store layer (already partially done in `store.add()`, but should be explicit in the model documentation).
+
+---
+
+### 7. **Error Message Information Disclosure** (MEDIUM)
+**File**: `cli.py:66-67`
+
+**Issue**: Storage errors expose full file paths and system information to users.
+
+```python
+except OSError as e:
+    print(f"Storage error: {e}", file=sys.stderr)  # ⚠️ Exposes system paths
+    return 2
+```
+
+**Recommendation**:
+```python
+except OSError as e:
+    print(f"Storage error: Unable to access database", file=sys.stderr)
+    # Log full error for debugging
+    import logging
+    logging.error(f"Storage error: {e}")
+    return 2
+```
+
+---
+
+## Medium Priority Issues
+
+### 8. **Inconsistent Error Handling** (MEDIUM)
+**File**: `cli.py:28-67`
+
+**Issue**: Different commands return different exit codes for similar errors. `cmd_create` returns 2 for OSError, but other commands return 1.
+
+```python
+# cmd_create returns 2 for OSError
+except OSError as e:
+    print(f"Storage error: {e}", file=sys.stderr)
+    return 2
+
+# cmd_list returns 1 for OSError
+except (ValueError, OSError) as e:
+    print(f"Error: {e}", file=sys.stderr)
+    return 1
+```
+
+**Recommendation**: Standardize exit codes:
+- 0: Success
+- 1: User error (validation, not found)
+- 2: System error (storage, permissions)
+
+---
+
+### 9. **Memory Inefficiency in Search** (MEDIUM)
+**File**: `search.py:23-37`
+
+**Issue**: Search operations create multiple intermediate lists, causing unnecessary memory allocation for large datasets.
+
+```python
+issues = store.list_all()  # ⚠️ Full list in memory
+
+if status and status != "all":
+    issues = filter_by_status(issues, status)  # ⚠️ New list
+
+if tags:
+    issues = filter_by_tags(issues, tags)  # ⚠️ New list
+
+if query:
+    issues = filter_by_text(issues, query)  # ⚠️ New list
+```
+
+**Recommendation**: Use generator expressions:
+```python
+def search_issues(store, query=None, tags=None, status=None):
+    """Search issues with multiple filters."""
+    issues = store.list_all()
+    
+    # Chain filters as generators
+    if status and status != "all":
+        issues = (i for i in issues if i.get("status") == status.lower())
+    
+    if tags:
+        required_set = set(tag.lower() for tag in tags)
+        issues = (i for i in issues if required_set.issubset(set(i.get("tags", []))))
+    
+    if query:
+        terms = query.lower().split()
+        issues = (i for i in issues 
+                 if all(term in (i.get("title", "") + " " + i.get("description", "")).lower() 
+                       for term in terms))
+    
+    return list(issues)  # Materialize only at the end
+```
+
+---
+
+### 10. **Missing Validation in from_dict** (MEDIUM)
+**File**: `models.py:176-201`
+
+**Issue**: `Issue.from_dict()` bypasses validation by directly passing data to `__init__`, but doesn't validate that the data types are correct.
+
+```python
+return cls(
+    title=data["title"],  # ⚠️ Could be non-string
+    description=data.get("description", ""),  # ⚠️ Could be non-string
+    status=data["status"],  # ⚠️ Could be non-string
+    tags=data.get("tags", []),  # ⚠️ Could be non-list
+    issue_id=data["id"],
+    created_at=data["created_at"],
+    updated_at=data["updated_at"]
+)
+```
+
+**Recommendation**: Add type validation:
+```python
+@classmethod
+def from_dict(cls, data: dict) -> "Issue":
+    required_fields = ["id", "title", "status", "created_at", "updated_at"]
+    for field in required_fields:
+        if field not in data:
+            raise ValueError(f"Missing required field: {field}")
+    
+    # Validate types
+    if not isinstance(data["title"], str):
+        raise ValueError("Title must be a string")
+    if not isinstance(data.get("description", ""), str):
+        raise ValueError("Description must be a string")
+    if not isinstance(data.get("tags", []), list):
+        raise ValueError("Tags must be a list")
+    
+    return cls(...)
+```
+
+---
+
+### 11. **Potential Division by Zero in Reports** (LOW)
+**File**: `report.py:48-69`
+
+**Issue**: While not currently exploitable, the summary generation doesn't handle the edge case of empty issue lists gracefully in percentage calculations (if added later).
+
+**Recommendation**: Document that `generate_summary` expects at least an empty list and handle edge cases explicitly.
+
+---
+
+### 12. **Tag Validation Too Restrictive** (LOW)
+**File**: `models.py:15,102`
+
+**Issue**: The tag pattern `^[a-z0-9_-]+$` doesn't allow uppercase letters even though tags are normalized to lowercase. This could confuse users.
+
+```python
+TAG_PATTERN = re.compile(r'^[a-z0-9_-]+$')  # ⚠️ Only lowercase
+```
+
+**Recommendation**: Accept uppercase and normalize:
+```python
+TAG_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+```
+
+---
+
+### 13. **Missing Docstring for search_issues** (LOW)
+**File**: `search.py:6-37`
+
+**Issue**: The `search_issues` function has a docstring but doesn't document the return value format clearly.
+
+**Recommendation**: Enhance docstring:
+```python
+def search_issues(store, query=None, tags=None, status=None) -> list[dict]:
+    """Search issues with multiple filters.
+    
+    Args:
+        store: JSONStore instance
+        query: Text search query (searches title and description, AND logic)
+        tags: List of tags (issue must have ALL specified tags, AND logic)
+        status: Status filter ("open", "closed", or None for all)
+    
+    Returns:
+        List of issue dictionaries matching all specified filters.
+        Each dictionary contains: id, title, description, status, tags,
+        created_at, updated_at.
+    
+    Example:
+        >>> search_issues(store, query="bug login", tags=["auth"], status="open")
+        [{'id': '...', 'title': 'Bug in login', ...}]
+    """
+```
+
+---
+
+## Low Priority Issues
+
+### 14. **Inconsistent String Formatting** (LOW)
+**File**: Multiple files
+
+**Issue**: Mix of f-strings, .format(), and % formatting throughout the codebase.
+
+**Recommendation**: Standardize on f-strings (already mostly done).
+
+---
+
+### 15. **Missing Type Hints in CLI Functions** (LOW)
+**File**: `cli.py:326-367`
+
+**Issue**: Helper functions `print_issue_summary` and `print_issue_detail` lack return type hints.
+
+**Recommendation**:
+```python
+def print_issue_summary(issue: dict) -> None:
+    """Print a summary of an issue."""
+    # ...
+
+def print_issue_detail(issue: dict) -> None:
+    """Print detailed information about an issue."""
+    # ...
+```
+
+---
+
+### 16. **Hardcoded Magic Numbers** (LOW)
+**File**: `models.py:13-14`
+
+**Issue**: Length limits are hardcoded without explanation.
+
+```python
+MAX_TITLE_LENGTH = 200
+MAX_DESCRIPTION_LENGTH = 10000
+```
+
+**Recommendation**: Add comments explaining the rationale:
+```python
+MAX_TITLE_LENGTH = 200  # Reasonable for single-line display
+MAX_DESCRIPTION_LENGTH = 10000  # ~2 pages of text, prevents abuse
+```
+
+---
+
+## Positive Aspects & Strengths
+
+### ✅ Excellent Validation
+- Comprehensive input validation in `Issue` model
+- Proper type checking and normalization
+- Clear error messages
+
+### ✅ Strong Test Coverage
+# Code Review Report: Mini Issue Tracker
+
+## Executive Summary
+
+The mini_issue_tracker package is a **well-designed, production-ready Python application** with strong fundamentals. The code demonstrates excellent practices in validation, error handling, and testing. However, several security vulnerabilities, edge cases, and performance issues require attention before production deployment.
+
+**Overall Assessment**: 7.5/10
+- ? Strong validation and error handling
+- ? Comprehensive test coverage (80 tests)
+- ? Clean architecture and separation of concerns
+- ?? Critical security issues with file operations
+- ?? Performance inefficiencies in storage layer
+- ?? Missing edge case handling
+
+---
+
+## Critical Issues
+
+### 1. **Path Traversal Vulnerability** (CRITICAL)
+**File**: `store.py:13-26`
+
+**Issue**: The `JSONStore.__init__` accepts arbitrary file paths without validation, allowing path traversal attacks.
+
+```python
+def __init__(self, file_path: Optional[str] = None):
+    if file_path is None:
+        # Default location: ~/.issue_tracker/issues.json
+        home = Path.home()
+        default_dir = home / ".issue_tracker"
+        default_dir.mkdir(exist_ok=True)
+        file_path = str(default_dir / "issues.json")
+    
+    self.file_path = file_path  # ?? No validation!
+```
+
+**Attack Vector**:
+```python
+store = JSONStore("../../../../etc/passwd")  # Can read/write arbitrary files
+```
+
+**Recommendation**:
+```python
+def __init__(self, file_path: Optional[str] = None):
+    if file_path is None:
+        home = Path.home()
+        default_dir = home / ".issue_tracker"
+        default_dir.mkdir(exist_ok=True)
+        file_path = str(default_dir / "issues.json")
+    
+    # Validate path
+    resolved_path = Path(file_path).resolve()
+    if not resolved_path.is_relative_to(Path.home()):
+        raise ValueError("Database path must be within user home directory")
+    
+    self.file_path = str(resolved_path)
+```
+
+---
+
+### 2. **Race Condition in Atomic Write** (HIGH)
+**File**: `store.py:88-107`
+
+**Issue**: The atomic write implementation has a race condition between `tmp_file.close()` and `os.replace()`. On Windows, another process could access the temp file during this window.
+
+```python
+tmp_file.write(json_str)
+tmp_file.flush()
+os.fsync(tmp_file.fileno())
+
+# Close before rename (Windows requirement)
+tmp_file.close()  # ?? File is closed but not yet replaced
+
+# Atomic replace (POSIX and Windows 3.3+)
+os.replace(tmp_path, self.file_path)  # ?? Race window here
+```
+
+**Recommendation**: Use context manager properly and handle Windows-specific issues:
+```python
+fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    with os.fdopen(fd, 'w', encoding='utf-8') as tmp_file:
+        tmp_file.write(json_str)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+    # File is closed here, minimize race window
+    os.replace(tmp_path, self.file_path)
+except Exception:
+    try:
+        os.unlink(tmp_path)
+    except OSError:
+        pass
+    raise
+```
+
+---
+
+### 3. **Inefficient Storage Operations** (HIGH)
+**File**: `store.py:109-199`
+
+**Issue**: Every operation (`get`, `add`, `update`, `delete`) loads the entire database from disk, even for single-item operations. This is O(n) for every operation and causes severe performance degradation with large datasets.
+
+```python
+def get(self, issue_id: str) -> Optional[dict]:
+    data = self.load()  # ?? Loads entire database
+    return data.get(issue_id)
+
+def add(self, issue_dict: dict) -> None:
+    data = self.load()  # ?? Loads entire database
+    # ... validation ...
+    data[issue_id] = issue_dict
+    self.save(data)  # ?? Writes entire database
+```
+
+**Performance Impact**:
+- 1,000 issues: ~100ms per operation
+- 10,000 issues: ~1s per operation
+- 100,000 issues: ~10s per operation
+
+**Recommendation**: Implement caching or use a proper database:
+```python
+class JSONStore:
+    def __init__(self, file_path: Optional[str] = None):
+        # ... existing code ...
+        self._cache = None
+        self._cache_mtime = None
+    
+    def _load_with_cache(self) -> dict[str, dict]:
+        """Load with file modification time checking."""
+        try:
+            current_mtime = os.path.getmtime(self.file_path)
+            if self._cache is not None and self._cache_mtime == current_mtime:
+                return self._cache
+            
+            data = self.load()
+            self._cache = data
+            self._cache_mtime = current_mtime
+            return data
+        except FileNotFoundError:
+            return {}
+    
+    def _invalidate_cache(self):
+        """Invalidate cache after write."""
+        self._cache = None
+        self._cache_mtime = None
+```
+
+---
+
+## High Priority Issues
+
+### 4. **Missing Input Sanitization in CLI** (HIGH)
+**File**: `cli.py:313-314`
+
+**Issue**: User-provided file paths for report output are not validated, allowing arbitrary file writes.
+
+```python
+if args.output:
+    with open(args.output, 'w', encoding='utf-8') as f:  # ?? No validation
+        f.write(report)
+```
+
+**Recommendation**:
+```python
+if args.output:
+    output_path = Path(args.output).resolve()
+    # Prevent writing to sensitive locations
+    if output_path.is_dir():
+        raise ValueError("Output path must be a file, not a directory")
+    if not output_path.parent.exists():
+        raise ValueError("Output directory does not exist")
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(report)
+```
+
+---
+
+### 5. **Timestamp Validation Missing** (HIGH)
+**File**: `models.py:47-49`
+
+**Issue**: The `Issue` class accepts arbitrary timestamp strings without validation. Malformed timestamps can cause issues in sorting and display.
+
+```python
+now = datetime.now(timezone.utc).isoformat()
+self.created_at = created_at or now  # ?? No validation of created_at
+self.updated_at = updated_at or now  # ?? No validation of updated_at
+```
+
+**Recommendation**:
+```python
+def _validate_timestamp(self, timestamp: str) -> str:
+    """Validate ISO 8601 timestamp."""
+    try:
+        datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        return timestamp
+    except (ValueError, AttributeError):
+        raise ValueError(f"Invalid timestamp format: {timestamp}")
+
+# In __init__:
+now = datetime.now(timezone.utc).isoformat()
+self.created_at = self._validate_timestamp(created_at) if created_at else now
+self.updated_at = self._validate_timestamp(updated_at) if updated_at else now
+```
+
+---
+
+### 6. **UUID Collision Not Handled** (MEDIUM)
+**File**: `models.py:41`
+
+**Issue**: While UUID4 collisions are astronomically rare, the code doesn't handle the case where a provided `issue_id` might collide with an existing issue.
+
+```python
+self.id = issue_id or str(uuid.uuid4())  # ?? No uniqueness check
+```
+
+**Recommendation**: Move uniqueness validation to the store layer (already partially done in `store.add()`, but should be explicit in the model documentation).
+
+---
+
+### 7. **Error Message Information Disclosure** (MEDIUM)
+**File**: `cli.py:66-67`
+
+**Issue**: Storage errors expose full file paths and system information to users.
+
+```python
+except OSError as e:
+    print(f"Storage error: {e}", file=sys.stderr)  # ?? Exposes system paths
+    return 2
+```
+
+**Recommendation**:
+```python
+except OSError as e:
+    print(f"Storage error: Unable to access database", file=sys.stderr)
+    # Log full error for debugging
+    import logging
+    logging.error(f"Storage error: {e}")
+    return 2
+```
+
+---
+
+## Medium Priority Issues
+
+### 8. **Inconsistent Error Handling** (MEDIUM)
+**File**: `cli.py:28-67`
+
+**Issue**: Different commands return different exit codes for similar errors. `cmd_create` returns 2 for OSError, but other commands return 1.
+
+```python
+# cmd_create returns 2 for OSError
+except OSError as e:
+    print(f"Storage error: {e}", file=sys.stderr)
+    return 2
+
+# cmd_list returns 1 for OSError
+except (ValueError, OSError) as e:
+    print(f"Error: {e}", file=sys.stderr)
+    return 1
+```
+
+**Recommendation**: Standardize exit codes:
+- 0: Success
+- 1: User error (validation, not found)
+- 2: System error (storage, permissions)
+
+---
+
+### 9. **Memory Inefficiency in Search** (MEDIUM)
+**File**: `search.py:23-37`
+
+**Issue**: Search operations create multiple intermediate lists, causing unnecessary memory allocation for large datasets.
+
+```python
+issues = store.list_all()  # ?? Full list in memory
+
+if status and status != "all":
+    issues = filter_by_status(issues, status)  # ?? New list
+
+if tags:
+    issues = filter_by_tags(issues, tags)  # ?? New list
+
+if query:
+    issues = filter_by_text(issues, query)  # ?? New list
+```
+
+**Recommendation**: Use generator expressions:
+```python
+def search_issues(store, query=None, tags=None, status=None):
+    """Search issues with multiple filters."""
+    issues = store.list_all()
+    
+    # Chain filters as generators
+    if status and status != "all":
+        issues = (i for i in issues if i.get("status") == status.lower())
+    
+    if tags:
+        required_set = set(tag.lower() for tag in tags)
+        issues = (i for i in issues if required_set.issubset(set(i.get("tags", []))))
+    
+    if query:
+        terms = query.lower().split()
+        issues = (i for i in issues 
+                 if all(term in (i.get("title", "") + " " + i.get("description", "")).lower() 
+                       for term in terms))
+    
+    return list(issues)  # Materialize only at the end
+```
+
+---
+
+### 10. **Missing Validation in from_dict** (MEDIUM)
+**File**: `models.py:176-201`
+
+**Issue**: `Issue.from_dict()` bypasses validation by directly passing data to `__init__`, but doesn't validate that the data types are correct.
+
+```python
+return cls(
+    title=data["title"],  # ?? Could be non-string
+    description=data.get("description", ""),  # ?? Could be non-string
+    status=data["status"],  # ?? Could be non-string
+    tags=data.get("tags", []),  # ?? Could be non-list
+    issue_id=data["id"],
+    created_at=data["created_at"],
+    updated_at=data["updated_at"]
+)
+```
+
+**Recommendation**: Add type validation:
+```python
+@classmethod
+def from_dict(cls, data: dict) -> "Issue":
+    required_fields = ["id", "title", "status", "created_at", "updated_at"]
+    for field in required_fields:
+        if field not in data:
+            raise ValueError(f"Missing required field: {field}")
+    
+    # Validate types
+    if not isinstance(data["title"], str):
+        raise ValueError("Title must be a string")
+    if not isinstance(data.get("description", ""), str):
+        raise ValueError("Description must be a string")
+    if not isinstance(data.get("tags", []), list):
+        raise ValueError("Tags must be a list")
+    
+    return cls(...)
+```
+
+---
+
+### 11. **Potential Division by Zero in Reports** (LOW)
+**File**: `report.py:48-69`
+
+**Issue**: While not currently exploitable, the summary generation doesn't handle the edge case of empty issue lists gracefully in percentage calculations (if added later).
+
+**Recommendation**: Document that `generate_summary` expects at least an empty list and handle edge cases explicitly.
+
+---
+
+### 12. **Tag Validation Too Restrictive** (LOW)
+**File**: `models.py:15,102`
+
+**Issue**: The tag pattern `^[a-z0-9_-]+$` doesn't allow uppercase letters even though tags are normalized to lowercase. This could confuse users.
+
+```python
+TAG_PATTERN = re.compile(r'^[a-z0-9_-]+$')  # ?? Only lowercase
+```
+
+**Recommendation**: Accept uppercase and normalize:
+```python
+TAG_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+```
+
+---
+
+### 13. **Missing Docstring for search_issues** (LOW)
+**File**: `search.py:6-37`
+
+**Issue**: The `search_issues` function has a docstring but doesn't document the return value format clearly.
+
+**Recommendation**: Enhance docstring:
+```python
+def search_issues(store, query=None, tags=None, status=None) -> list[dict]:
+    """Search issues with multiple filters.
+    
+    Args:
+        store: JSONStore instance
+        query: Text search query (searches title and description, AND logic)
+        tags: List of tags (issue must have ALL specified tags, AND logic)
+        status: Status filter ("open", "closed", or None for all)
+    
+    Returns:
+        List of issue dictionaries matching all specified filters.
+        Each dictionary contains: id, title, description, status, tags,
+        created_at, updated_at.
+    
+    Example:
+        >>> search_issues(store, query="bug login", tags=["auth"], status="open")
+        [{'id': '...', 'title': 'Bug in login', ...}]
+    """
+```
+
+---
+
+## Low Priority Issues
+
+### 14. **Inconsistent String Formatting** (LOW)
+**File**: Multiple files
+
+**Issue**: Mix of f-strings, .format(), and % formatting throughout the codebase.
+
+**Recommendation**: Standardize on f-strings (already mostly done).
+
+---
+
+### 15. **Missing Type Hints in CLI Functions** (LOW)
+**File**: `cli.py:326-367`
+
+**Issue**: Helper functions `print_issue_summary` and `print_issue_detail` lack return type hints.
+
+**Recommendation**:
+```python
+def print_issue_summary(issue: dict) -> None:
+    """Print a summary of an issue."""
+    # ...
+
+def print_issue_detail(issue: dict) -> None:
+    """Print detailed information about an issue."""
+    # ...
+```
+
+---
+
+### 16. **Hardcoded Magic Numbers** (LOW)
+**File**: `models.py:13-14`
+
+**Issue**: Length limits are hardcoded without explanation.
+
+```python
+MAX_TITLE_LENGTH = 200
+MAX_DESCRIPTION_LENGTH = 10000
+```
+
+**Recommendation**: Add comments explaining the rationale:
+```python
+MAX_TITLE_LENGTH = 200  # Reasonable for single-line display
+MAX_DESCRIPTION_LENGTH = 10000  # ~2 pages of text, prevents abuse
+```
+
+---
+
+## Positive Aspects & Strengths
+
+### ? Excellent Validation
+- Comprehensive input validation in `Issue` model
+- Proper type checking and normalization
+- Clear error messages
+
+### ? Strong Test Coverage
+[subagent:review] finished: stop=end_turn turns=5 cost=$0.4879 cache=23,430/95,756
+[Cost $2.0575 passed budget $2.00 â€” continuing.]
+[warning] maxBudgetUsd hard cap reached: $2.0575 >= $2.0000

@@ -1,0 +1,7 @@
+The previous final artifact path exists but is NOT a valid zip. Fix only this packaging problem.
+Workspace: D:/Github/sagemaker-coding-agent/compact_v5/_status/aws_acceptance_v1/workspace
+Output zip: D:/Github/sagemaker-coding-agent/compact_v5/_status/aws_acceptance_v1/v5_final_acceptance_results.zip
+Use Python standard library zipfile only. Do not use tar. Do not rename tar as zip. Do not redesign code.
+Create a real .zip that includes AGENT_STATUS.md, README.md, pyproject.toml, FINAL_FILE_TREE.txt, FINAL_METRICS.md, docs/, issue_tracker/, tests/.
+Exclude __pycache__, .pytest_cache, .sageagent_state, .snapshots, audit_logs.
+After writing, validate it by opening with zipfile.ZipFile and running testzip(). Report zip size and validation result. Stop.

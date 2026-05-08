@@ -1,0 +1,21 @@
+Continue the PS_PS_FINAL_TEST v1 acceptance run in this existing workspace:
+D:/Github/sagemaker-coding-agent/compact_v5/_status/aws_acceptance_v1/workspace
+
+Previous run status:
+- Real AWS Sonnet spend already recorded: $2.0575.
+- Continuation hard cap for this run: $1.45. Do not waste calls.
+- Project files exist and local pytest already passed 80 tests.
+- Final zip was NOT created because the first run hit cost_cap.
+- Review evidence exists at docs/REVIEW.md and docs/reviews/code_review_subagent.md.
+
+Your job now is narrow and evidence-driven:
+1. Read AGENT_STATUS.md, docs/REVIEW.md, docs/TEST_REPORT.md, and current code.
+2. Fix the review's ship-relevant issues that are reasonable for this toy package, especially path/output path validation, timestamp/type validation, and error handling. Avoid overengineering.
+3. Run targeted tests, then full pytest.
+4. Update docs/CHANGELOG.md, docs/TEST_REPORT.md, docs/REVIEW.md, AGENT_STATUS.md.
+5. Create FINAL_FILE_TREE.txt and FINAL_METRICS.md.
+6. Create the final zip here:
+D:/Github/sagemaker-coding-agent/compact_v5/_status/aws_acceptance_v1/v5_final_acceptance_results.zip
+7. Final answer must include SPEC vs SHIPPED table and evidence paths.
+
+If you cannot complete within the continuation budget, stop with ESCALATION.md and do not pretend done.
