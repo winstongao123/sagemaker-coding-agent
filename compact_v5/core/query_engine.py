@@ -75,6 +75,9 @@ class QueryResult:
                        "context_overflow" | "fatal_error".
     `turns_used`     â€” count of model turns executed during this run.
     `budget_used`    â€” IterationBudget.used() snapshot at exit.
+    `thinking`       â€” display-only extended-thinking text captured during
+                       this run. Signed thinking blocks stay in `messages`;
+                       this field is for UI/log visibility only.
     `error`          â€” short message when stop_reason indicates failure.
     """
     text: str = ""
@@ -82,6 +85,7 @@ class QueryResult:
     stop_reason: str = ""
     turns_used: int = 0
     budget_used: int = 0
+    thinking: str = ""
     error: Optional[str] = None
 
 
@@ -629,6 +633,7 @@ class QueryEngine:
             output_fn(f"[prompt-cache invariant] {_warning}")
 
         last_text = ""
+        thinking_trace: List[str] = []
         stop_reason = ""
         turns_used = 0
 
@@ -806,6 +811,7 @@ class QueryEngine:
                         stop_reason=stop_reason,
                         turns_used=turns_used,
                         budget_used=self.budget.used(),
+                        thinking="\n\n".join(thinking_trace),
                         error="context_overflow: pre-api guard",
                     )
                 turn_messages = Compactor.sanitize_messages_surrogates(turn_messages)
@@ -847,6 +853,7 @@ class QueryEngine:
                     stop_reason=stop_reason,
                     turns_used=turns_used,
                     budget_used=self.budget.used(),
+                    thinking="\n\n".join(thinking_trace),
                     error=f"{category}: {debug}",
                 )
 
@@ -856,6 +863,9 @@ class QueryEngine:
             except Exception:
                 pass
             turns_used += 1
+            response_thinking = getattr(response, "thinking", "") or ""
+            if response_thinking:
+                thinking_trace.append(response_thinking)
 
             # Block B (PORT_LOG #039+#040): record token usage + per-agent
             # attribution. "parent" or sub-agent type-string. Best-effort â€”
@@ -1221,6 +1231,7 @@ class QueryEngine:
             stop_reason=stop_reason or "end_turn",
             turns_used=turns_used,
             budget_used=self.budget.used(),
+            thinking="\n\n".join(thinking_trace),
         )
 
     def _dispatch_single_tool_call(

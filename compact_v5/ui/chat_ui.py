@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
 def _invoke_dream(agent: Any) -> str:
@@ -493,11 +493,17 @@ class V4WidgetChatUI(WidgetChatUI):
             content = f"<p style='color:{c['fg']};text-align:center;padding:20px;'>Type a message below to start.</p>"
         else:
             rows = []
-            for role, text, ts in self._messages:
+            for message in self._messages:
+                if len(message) == 4:
+                    role, text, ts, meta = message
+                else:
+                    role, text, ts = message
+                    meta = {}
                 color = "#26c6da" if role == "user" else ("#42a5f5" if role == "assistant" else "#ef5350")
                 label = "You" if role == "user" else ("Agent" if role == "assistant" else "System")
                 body = self._escape(text).replace("\n", "<br>")
-                rows.append(f"<div style='margin:8px 0;border-left:3px solid {color};padding-left:10px;'><b style='color:{color};'>[{ts}] {label}:</b><div style='color:{c['fg']};margin-top:4px;line-height:1.5;'>{body}</div></div>")
+                meta_html = self._render_turn_meta(meta, c) if role == "assistant" else ""
+                rows.append(f"<div style='margin:8px 0;border-left:3px solid {color};padding-left:10px;'><b style='color:{color};'>[{ts}] {label}:</b><div style='color:{c['fg']};margin-top:4px;line-height:1.5;'>{body}</div>{meta_html}</div>")
             content = "".join(rows)
         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
 
@@ -676,8 +682,75 @@ class V4WidgetChatUI(WidgetChatUI):
             "</span>"
         )
 
-    def _append_message(self, role: str, content: str) -> None:
-        self._messages.append((role, content, datetime.now().strftime("%H:%M:%S")))
+    def _render_turn_meta(self, meta: Any, colors: Dict[str, str]) -> str:
+        if not isinstance(meta, dict) or not meta:
+            return ""
+        input_tokens = int(meta.get("input_tokens", 0) or 0)
+        output_tokens = int(meta.get("output_tokens", 0) or 0)
+        cache_read = int(meta.get("cache_read", meta.get("cache_read_tokens", 0)) or 0)
+        cache_write = int(meta.get("cache_write", meta.get("cache_write_tokens", 0)) or 0)
+        calls = int(meta.get("api_calls", 0) or 0)
+        cost = float(meta.get("cost_usd", 0.0) or 0.0)
+        saved = float(meta.get("cache_saved_usd", 0.0) or 0.0)
+        without_cache = cost + saved
+        thinking = str(meta.get("thinking", "") or "").strip()
+        reasoning_state = self._escape(meta.get("reasoning_state", "Thinking OFF"))
+        summary = (
+            f"In {input_tokens:,} | Out {output_tokens:,} | "
+            f"Cache R/W {cache_read:,}/{cache_write:,} | "
+            f"Cost ${cost:.4f} | Without cache ${without_cache:.4f} | "
+            f"Saved <b style='color:#4caf50'>${saved:.4f}</b> | "
+            f"Calls {calls:,} | {reasoning_state}"
+        )
+        thinking_html = ""
+        if thinking:
+            safe = self._escape(thinking[:8000]).replace("\n", "<br>")
+            more = "" if len(thinking) <= 8000 else "<br>[thinking truncated in UI; full text remains in runtime/audit logs]"
+            thinking_html = (
+                "<details style='margin-top:4px;'>"
+                "<summary style='cursor:pointer;color:#ab47bc;'>Reasoning / thinking captured for this turn</summary>"
+                f"<div style='border-left:3px solid #ab47bc;padding-left:8px;color:{colors['muted']};"
+                f"font-size:11px;line-height:1.45;margin-top:4px;'>{safe}{more}</div></details>"
+            )
+        return (
+            f"<div style='color:{colors['muted']};font-size:11px;margin-top:6px;"
+            f"border-top:1px solid {colors['border']};padding-top:4px;'>"
+            f"{summary}{thinking_html}</div>"
+        )
+
+    def _stats_snapshot(self) -> Dict[str, Any]:
+        try:
+            from runtime.tokens import TOKENS
+            stats = dict(TOKENS.get_stats())
+            stats["_cache_savings_usd"] = float(TOKENS.get_cache_savings_usd())
+            return stats
+        except Exception:
+            return {"_cache_savings_usd": 0.0}
+
+    def _turn_meta_from_stats(self, before: Dict[str, Any], after: Dict[str, Any], result: Any) -> Dict[str, Any]:
+        def _num(key: str) -> float:
+            return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
+
+        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
+        thinking_budget = int(getattr(self.agent, "thinking_budget", 4096) or 4096)
+        return {
+            "input_tokens": int(_num("session_input")),
+            "output_tokens": int(_num("session_output")),
+            "cache_read": int(_num("session_cache_read")),
+            "cache_write": int(_num("session_cache_write")),
+            "api_calls": int(_num("api_calls")),
+            "cost_usd": max(0.0, _num("session_cost_usd")),
+            "cache_saved_usd": max(
+                0.0,
+                float(after.get("_cache_savings_usd", 0.0) or 0.0)
+                - float(before.get("_cache_savings_usd", 0.0) or 0.0),
+            ),
+            "thinking": getattr(result, "thinking", "") or "",
+            "reasoning_state": f"Thinking {thinking_state} (budget {thinking_budget})",
+        }
+
+    def _append_message(self, role: str, content: str, meta: Optional[Dict[str, Any]] = None) -> None:
+        self._messages.append((role, content, datetime.now().strftime("%H:%M:%S"), meta or {}))
         self._render_chat()
 
     def _dispatch_ui_command(self, command: str) -> None:
@@ -727,11 +800,18 @@ class V4WidgetChatUI(WidgetChatUI):
                 except Exception as cmd_exc:
                     logging.warning(f"[chat-ui] slash-command dispatch error: {cmd_exc}")
             streamed = []
+            before_stats = self._stats_snapshot()
             result = self.agent.run(msg, output_fn=lambda s: streamed.append(str(s)))
+            after_stats = self._stats_snapshot()
+            turn_meta = self._turn_meta_from_stats(before_stats, after_stats, result)
             ops = [s.strip() for s in streamed if str(s).strip().startswith("[")]
             if ops:
                 self._append_message("system", "\n".join(ops[-30:]))
-            self._append_message("assistant", result.text or "\n".join(streamed) or f"stop_reason: {result.stop_reason}")
+            self._append_message(
+                "assistant",
+                result.text or "\n".join(streamed) or f"stop_reason: {result.stop_reason}",
+                meta=turn_meta,
+            )
         except Exception as exc:  # noqa: BLE001
             logging.exception("[chat-ui] agent.run() raised")
             self._append_message("system", f"[chat-ui] error: {type(exc).__name__}: {exc}")
