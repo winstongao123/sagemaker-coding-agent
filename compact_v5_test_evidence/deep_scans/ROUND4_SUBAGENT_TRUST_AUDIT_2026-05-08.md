@@ -22,7 +22,7 @@ flattened production folder `compact_v5/` and `compact_v5.zip`.
 
 | Area | Agent Finding | Current Validation | Disposition |
 |---|---|---|---|
-| UI display contract | v5 displayed child widgets separately and could produce `Loading widget...` / stale model errors. | Fixed in `compact_v5/ui/chat_ui.py`, `compact_v5/chat.ipynb`, and `compact_v5.zip`: one root widget, no child split. Structural smoke passed. | Fixed, but needs user's SageMaker visual re-test after fresh zip + kernel restart. |
+| UI display contract | v5 displayed child widgets separately and could produce `Loading widget...` / stale model errors. | Fixed in `compact_v5/ui/chat_ui.py`, `compact_v5/chat.ipynb`, and `compact_v5.zip`: one root widget, no child split, and v4-style `clear_output(wait=True)` before display. Structural smoke passed. | Fixed, but needs user's SageMaker visual re-test after fresh zip + kernel restart. |
 | UI run loop / Stop | Older report said `_on_send` was synchronous. | Current flattened `compact_v5/ui/chat_ui.py` uses `threading.Thread` and `_run_thread`; `py_compile` passed. | Fixed in active flattened runtime. |
 | Subagent type mismatch | Older report said UI used invalid `explorer/worker/reviewer`. | Current UI uses `explore`, `review`, `general`, `build`, `plan`; these align with `subagent.agent_types` and task schema. Local alignment smoke passed. | Fixed in active flattened runtime. |
 | `task` tool model override | Older report said `spawn_subagent(..., model_id=...)` did not accept `model_id`. | Current `compact_v5/subagent/spawn.py` accepts `model_id` and resolves child client overrides. | Fixed in active flattened runtime. |
@@ -65,6 +65,21 @@ PS_PS_FINAL_TEST: 0
 powerbi: 0
 ```
 
+## UI Visual Check Artifact
+
+Because this machine cannot attach to the user's remote SageMaker frontend, the
+local visual check is a generated HTML/screenshot artifact plus a structural
+ipywidgets smoke:
+
+- `compact_v5_test_evidence/final_results/UI_V5_VISUAL_CHECK_AFTER_FIX.html`
+- `compact_v5_test_evidence/final_results/UI_V5_VISUAL_CHECK_AFTER_FIX.png`
+- `compact_v5_test_evidence/final_results/UI_V5_VISUAL_CHECK_AFTER_FIX.txt`
+
+The screenshot verifies the intended v4-style dark layout and footer surface.
+The structural smoke verifies the actual runtime widget tree: one root `VBox`,
+dropdowns/buttons/textarea present, `Cache R/W`, `Saved`, and `Sub-Agents`
+status present.
+
 ## Honest Trust Verdict
 
 The audit increases confidence that several previously scary findings are fixed
@@ -83,4 +98,3 @@ from the rebuilt zip:
 
 If the UI still shows repeated `Loading widget...` after those steps, v5 is not
 ready regardless of prior R-tier evidence.
-

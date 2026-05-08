@@ -1,0 +1,1 @@
+UI visual check source generated from compact_v5 create_chat_ui(auto_display=False). Structural smoke passed: one VBox root, controls present, Cache R/W and Saved visible, subagent status visible.
