@@ -971,12 +971,8 @@ class V4WidgetChatUI(WidgetChatUI):
     def display(self) -> "V4WidgetChatUI":
         """Display the complete UI as one root widget, like compact_v4 did."""
         try:
-            from IPython.display import clear_output, display
+            from IPython.display import display
 
-            # v4 cleared the launch-cell output before displaying the widget.
-            # Without this, SageMaker can keep stale widget models in the cell
-            # and later show "Error displaying widget: model not found".
-            clear_output(wait=True)
             display(self.render())
         except UnicodeEncodeError:
             print("UI created. Open this in Jupyter/Studio to render widgets.")
@@ -1041,6 +1037,17 @@ def create_chat_ui(
         )
 
     if _IPYWIDGETS_OK:
+        if auto_display:
+            try:
+                from IPython.display import clear_output
+
+                # Match compact_v4 exactly: clear stale launch-cell output
+                # BEFORE constructing widget models, then display the fresh
+                # root VBox. Clearing after construction can invalidate model
+                # IDs in SageMaker/JupyterLab.
+                clear_output(wait=True)
+            except Exception:
+                pass
         ui = V4WidgetChatUI(agent)
         if auto_display:
             ui.display()

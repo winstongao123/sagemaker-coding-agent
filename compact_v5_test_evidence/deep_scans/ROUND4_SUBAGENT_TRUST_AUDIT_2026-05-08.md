@@ -22,7 +22,7 @@ flattened production folder `compact_v5/` and `compact_v5.zip`.
 
 | Area | Agent Finding | Current Validation | Disposition |
 |---|---|---|---|
-| UI display contract | v5 displayed child widgets separately and could produce `Loading widget...` / stale model errors. | Fixed in `compact_v5/ui/chat_ui.py`, `compact_v5/chat.ipynb`, and `compact_v5.zip`: one root widget, no child split, and v4-style `clear_output(wait=True)` before display. Structural smoke passed. | Fixed, but needs user's SageMaker visual re-test after fresh zip + kernel restart. |
+| UI display contract | v5 displayed child widgets separately and could produce `Loading widget...` / stale model errors. | Fixed in `compact_v5/ui/chat_ui.py`, `compact_v5/chat.ipynb`, and `compact_v5.zip`: one root widget, no child split, and v4-style `clear_output(wait=True)` before widget construction/display. Structural smoke passed. | Fixed, but needs user's SageMaker visual re-test after fresh zip + kernel restart. |
 | UI run loop / Stop | Older report said `_on_send` was synchronous. | Current flattened `compact_v5/ui/chat_ui.py` uses `threading.Thread` and `_run_thread`; `py_compile` passed. | Fixed in active flattened runtime. |
 | Subagent type mismatch | Older report said UI used invalid `explorer/worker/reviewer`. | Current UI uses `explore`, `review`, `general`, `build`, `plan`; these align with `subagent.agent_types` and task schema. Local alignment smoke passed. | Fixed in active flattened runtime. |
 | `task` tool model override | Older report said `spawn_subagent(..., model_id=...)` did not accept `model_id`. | Current `compact_v5/subagent/spawn.py` accepts `model_id` and resolves child client overrides. | Fixed in active flattened runtime. |
