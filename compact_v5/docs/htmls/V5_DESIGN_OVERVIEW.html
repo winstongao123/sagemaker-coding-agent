@@ -153,12 +153,15 @@ footer {
     <table>
       <tr><th>Part</th><th>Kid Version</th><th>Real Version</th></tr>
       <tr><td>Brain</td><td>Decides the next step.</td><td>Bedrock Claude models through the query engine.</td></tr>
-      <tr><td>Notebook</td><td>The steering wheel and dashboard.</td><td>v4-style dark chat UI, model picker, session buttons, Plan Mode, Auto-Compact, Compact/Clean, thinking/budget controls, status, todos, memory, sessions, checkpoints, and audit logs.</td></tr>
+      <tr><td>Notebook</td><td>The steering wheel and dashboard.</td><td>v4-style dark chat UI, model picker, session buttons, Plan Mode, Auto-Compact, Compact/Clean, thinking/budget controls, status, todos, memory, sessions, checkpoints, audit logs, and per-assistant-turn cache/cost/reasoning strips.</td></tr>
       <tr><td>Toolbox</td><td>Reads files, edits files, and runs tests.</td><td>Read/edit/shell/notebook/task/result/memory tools.</td></tr>
       <tr><td>Helpers</td><td>Small robot helpers do side jobs.</td><td>Subagents with structured result envelopes.</td></tr>
       <tr><td>Money meter</td><td>Counts how much model work costs.</td><td>Token, cache, model, tool, subagent, and cost telemetry.</td></tr>
       <tr><td>Inspectors</td><td>Do not let it say done too early.</td><td>Scope audit, local tests, Claude reviews, R-tier gates, and git checkpoints.</td></tr>
     </table>
+    <div class="note">
+      Extended thinking is handled like a signed permission slip. Bedrock may return a thinking block with a signature. On the next turn, v5 may include the previous assistant message again as conversation history, but it must replay only the original signed thinking block. v5 never invents an unsigned thinking block from display text. The UI shows a readable copy for the operator, while the runtime keeps Bedrock's signed block separate.
+    </div>
     <div class="note ok">
       Final state: Claude approved v5.0.1 production readiness after the AWS/R-tier loop. The matrix ended with 28 `READY` rows and 14 `DISPOSITION_OK` rows. Local Bedrock spend recorded by the test ledger was `$1.6757 / $14.25`.
     </div>
@@ -263,7 +266,8 @@ footer {
       <tr><td>Subagents and review-style helper work</td><td>Implemented with structured result envelopes and telemetry.</td></tr>
       <tr><td>Software-builder state/checkpoint/shell/results/gate features</td><td>Implemented in added software-builder blocks.</td></tr>
       <tr><td>Tool-loop quality controls</td><td>Improved after R14/R19-U3 exposed inefficient repeated-tool behavior.</td></tr>
-      <tr><td>v4-style notebook UI</td><td>Restored and wired to v5 runtime: Plan Mode, Auto-Compact, Compact, Clean, model/session controls, v4-style sub-agent model dropdowns backed by <code>CONFIG.agent_overrides</code>, always-visible cache/reasoning metrics, fresh widget models on rerender, and SageMaker-safe child-by-child display when one large root widget fails.</td></tr>
+      <tr><td>v4-style notebook UI</td><td>Restored and wired to v5 runtime: Plan Mode, Auto-Compact, Compact, Clean, model/session controls, v4-style sub-agent model dropdowns backed by <code>CONFIG.agent_overrides</code>, always-visible footer metrics, per-assistant-turn cache/cost/reasoning strips, expandable captured thinking text, fresh widget models on rerender, and SageMaker-safe child-by-child display when one large root widget fails.</td></tr>
+      <tr><td>Bedrock extended-thinking replay</td><td>Fixed after live SageMaker testing found <code>thinking.signature</code> validation errors. v5 preserves model-supplied signed thinking blocks for history replay, drops unsigned thinking blocks before Bedrock calls, and keeps display text only for UI/audit visibility.</td></tr>
       <tr><td>R-tier final gate</td><td>Strengthened so all matrix rows are checked by default.</td></tr>
       <tr><td>Final docs and evidence trail</td><td>Final review, metrics, status, test review, and HTML overview are preserved.</td></tr>
     </table>

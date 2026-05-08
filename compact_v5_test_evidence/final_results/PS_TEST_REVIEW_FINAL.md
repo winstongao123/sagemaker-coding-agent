@@ -428,3 +428,33 @@ Evidence:
 
 Honest status: this fix is lock-tested locally. A fresh acceptance run after this
 patch is still required before final production-ready confidence.
+
+# 2026-05-08 Thinking Replay And Per-Turn UI Metrics Addendum
+
+Live SageMaker testing found two more user-visible gaps after the earlier test
+passes:
+
+| Problem | Why it mattered | Fix applied | Evidence |
+|---|---|---|---|
+| Bedrock `thinking.signature` validation error on the second thinking-enabled turn | Bedrock requires previous assistant thinking blocks to keep their original model signature. v5 had kept display text but could rebuild an unsigned thinking block. | Runtime now preserves signed thinking blocks, replays only signed blocks, drops unsigned thinking before Bedrock chat/count-token calls, and strips thinking entirely for fallback-model retry. | `CRITICAL_BEDROCK_THINKING_SIGNATURE_REGRESSION.md`; Claude Opus reviews approved no drift. |
+| Cache/reasoning were visible in the footer, but not under each assistant message | The UI promised cache + reasoning below every turn, but the message rows did not prove what happened for that turn. | `QueryResult` now carries display-only thinking text; `chat_ui.py` snapshots token/cache/cost before and after a turn and renders inline per-assistant-turn metrics plus expandable thinking text. | `CRITICAL_UI_PER_TURN_METRICS_GAP.md`; `CLAUDE_OPUS_UI_PER_TURN_METRICS_REREVIEW.md` returned `APPROVE` / `NO_DRIFT`. |
+
+Explain it like you are 9:
+
+When Bedrock gives v5 a secret signed reasoning note, v5 must keep that exact
+signed note if it shows the old conversation again. It cannot rewrite the note
+from memory. The notebook also now puts a small receipt under each answer, so
+you can see what that answer cost, how much cache it used, and whether thinking
+was captured.
+
+Why earlier tests missed it:
+
+- They tested one-turn thinking visibility and footer metrics.
+- They did not test the exact two-turn history replay path with signed thinking.
+- They did not assert the message-row contract for per-answer cache/cost/reasoning.
+
+Current status:
+
+- Local regression checks passed.
+- Claude Opus reviewed both fixes and approved them as no-drift.
+- `compact_v5.zip` was rebuilt after the fixes.
