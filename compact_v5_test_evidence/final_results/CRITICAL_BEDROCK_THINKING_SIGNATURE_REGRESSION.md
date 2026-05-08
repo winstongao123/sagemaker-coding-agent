@@ -56,3 +56,22 @@ Any future thinking/reasoning acceptance test must include at least two turns wi
 ## Post-review cleanup
 
 Claude's first review approved the fix and noted that `count_tokens` computed `uses_thinking` from raw messages before sanitization. v5 now sanitizes first, then decides whether the token-count request needs thinking config. This makes chat and count-token paths share the same signed-thinking invariant.
+
+## V4 comparison / no-drift review
+
+Claude Opus reviewed the fix against v4 and confirmed:
+
+- v4 did not replay thinking blocks into model-visible history; it only displayed thinking text through the UI callback.
+- v5's richer replay path is architecturally valid only when signed thinking blocks are preserved.
+- The current fix preserves signed thinking, drops unsigned thinking, keeps display text for UI/metrics, and does not drift cache, tools, compaction, UI, security, or subagent behavior.
+
+Review artifact:
+
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_THINKING_V4_PARITY_DRIFT_REVIEW.md`
+
+Decision:
+
+```text
+VERDICT: APPROVE
+DRIFT DECISION: NO_DRIFT
+```
