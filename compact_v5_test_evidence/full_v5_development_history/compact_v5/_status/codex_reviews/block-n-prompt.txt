@@ -1,0 +1,37 @@
+You are reviewing Block N of v5.0.1 — Parallel dispatch + dedup +
+fuzzy + ephemeral + dynamic-ref.
+
+Block N ships helpers in core/parallel_dispatch.py:
+- MAX_TOOL_WORKERS = 4 (Hermes ceiling).
+- dedup_tool_calls(calls) — same (name, args_hash) duplicates dropped.
+- detect_path_conflicts(calls) — mutator tools (write_file / edit_file
+  / notebook_edit) targeting same path → conflicts dict.
+- fuzzy_resolve_tool_name(query, names) — difflib cutoff=0.7.
+- mark_ephemeral_block / strip_ephemeral_blocks_for_persist — session-
+  log ephemeral handling.
+- inject_dynamic_tool_refs(schemas, refs) — Hermes A36.
+- synthetic_tool_result_stub(tool_use_id, reason).
+- partial_tool_call_warning(ids) — Hermes H2 partial-call handler.
+
+Block N ships the helpers; the ThreadPoolExecutor wiring is gated on
+Block J's real-AWS gate per ADR-037 §3.
+
+Diff range: v5.0.1-block-l..HEAD (Block N commit).
+
+Files changed:
+- NEW compact_v5/MAIN/agent/core/parallel_dispatch.py
+- EXTENDED compact_v5/MAIN/agent/core/__init__.py (re-exports)
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_n.py
+  (11 tests + 3 deferred)
+
+Reference paths:
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block N)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block N)
+- ADR-037: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 743 pass + 14 skip (was 732 + 11; +11 pass + 3 skip).
+verify_ship_zip.py: PASS (128 files / 361.1 KB / 36%).
+
+Apply 3-axis review focused on the helpers + deferral declarations.
+Be specific. Cite file:line. APPROVE if the helpers are correct AND
+the deferrals are properly declared.

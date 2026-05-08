@@ -1,0 +1,142 @@
+You are reviewing Block G of v5.0.1.
+
+Block G deliverable: replace Phase-9's `general`-only placeholder with
+the full v4 AGENT_TYPES registry (7 types) + worktree isolation for
+build agents + verify-skill auto-load + Runnable's coordinator-mode
+slim prompt + DEFAULT_AGENT_PROMPT + Notes appendix.
+
+Diff range: v5.0.1-block-m..HEAD (Block G commit 543ebb6).
+
+Files changed:
+- NEW compact_v5/MAIN/agent/subagent/agent_types.py (~150 LOC)
+  - AgentType dataclass (name, system_suffix, max_turns, one_shot,
+    auto_load_skill, needs_worktree).
+  - AGENT_TYPES dict — 7 entries: general / explore / plan / verify /
+    build / review / fork.
+  - DEFAULT_AGENT_PROMPT verbatim from Runnable constants/prompts.ts:758.
+  - SUBAGENT_NOTES from Runnable constants/prompts.ts:766-770.
+  - ONE_SHOT_BUILTIN_AGENT_TYPES frozenset (computed from AGENT_TYPES so
+    it stays in sync) — explore/plan/verify/review.
+  - get_agent_type / get_agent_prompt(is_coordinator).
+- NEW compact_v5/MAIN/agent/subagent/worktree.py (~120 LOC)
+  - create_worktree(parent_dir) returns (path, source) where source is
+    "git" | "fallback_copy" | "fallback_tempdir" | "error".
+  - 3-tier: git worktree → os.makedirs → tempfile.mkdtemp.
+  - cleanup_worktree(path) — git worktree remove → shutil.rmtree.
+  - Best-effort: never raises into spawn loop.
+- EXTENDED compact_v5/MAIN/agent/subagent/spawn.py
+  - Removed Phase-9 `_AGENT_TYPE_SUFFIXES` placeholder dict.
+  - `_resolve_agent_suffix` consults `agent_types.get_agent_type`.
+  - spawn_subagent: resolves agent_def, clamps max_turns to per-type
+    ceiling (min(caller, agent_def.max_turns)).
+  - For agent_def.needs_worktree=True: create_worktree(workspace)
+    BEFORE child.run; cleanup_worktree in finally clause.
+  - For agent_def.auto_load_skill=<name>: parent.skill_manager
+    .activate(<name>) + body spliced into child_prompt before run.
+  - All wrapped in try/except — best-effort.
+- EXTENDED compact_v5/MAIN/agent/tools/task.py
+  - Validation against AGENT_TYPES (was: Phase-9 placeholder dict).
+  - Error message updated to "Block G supports: ...".
+- EXTENDED compact_v5/MAIN/agent/subagent/__init__.py
+  - Re-exports the new public surface.
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_g.py
+  - 14 tests: 8 TEST_DESIGN-named + 6 behavior locks.
+
+Reference paths:
+- v4 source PRE-EXTRACTED for spot-check (avoid 12K-LOC monolith):
+  if you want lines from v4 sagemaker_agent.py around 6914-7090
+  (AGENT_TYPES) and 8413-8470 (worktree), pre-extract first.
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/tools/AgentTool/constants.ts
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/tools/AgentTool/prompt.ts
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block G around line 234)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block G around line 247)
+- ADR-031: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 656 pass + 6 skip (was 642 + 6 at end of Block M; +14 net new).
+verify_ship_zip.py: PASS (117 files / 328.1 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line.
+
+AXIS A — Errors / bugs / regressions
+- AgentType registry:
+  - 7 entries — names match v4 (general/explore/plan/verify/build/review/fork).
+  - one_shot: True for explore/plan/verify/review only. Lock test
+    test_one_shot_builtin_agent_types_has_explore_plan_verify_review.
+  - needs_worktree: True for build only.
+  - auto_load_skill: only verify has it (=verify).
+- DEFAULT_AGENT_PROMPT verbatim phrasing:
+  - "Do NOT add features, refactor, or introduce abstractions" matches
+    Runnable's anti-gold-plating wording. Lock test
+    test_default_agent_prompt_has_no_gold_plating_phrasing.
+- get_agent_prompt(is_coordinator=True):
+  - Drops the SUBAGENT_NOTES appendix. Lock test
+    test_get_agent_prompt_coordinator_drops_notes.
+- Worktree create/cleanup:
+  - 3-tier fallback handles missing git / OS limitations. Best-effort:
+    no raise into spawn loop.
+  - cleanup_worktree: best-effort returns True iff path absent post-call.
+  - Lock tests test_subagent_build_spawns_worktree +
+    test_worktree_cleanup_on_completion.
+- Spawn dispatch:
+  - Removed Phase-9 placeholder; existing test_subagent.py was updated
+    (1 import change in tools/task.py). Verify all 16 prior tests still pass.
+  - Per-type max_turns clamp: caller can lower further but can't exceed.
+  - Lock test test_agent_max_turns_clamped_by_per_type_ceiling verifies
+    explore.max_turns=20.
+- verify-skill auto-load:
+  - parent.skill_manager.activate(verify) + body spliced into child_prompt.
+  - Lock test test_subagent_verify_loads_verify_skill checks the chat
+    call's `system` arg contains the skill body.
+- Depth limit:
+  - Phase-9 contract preserved. Lock test
+    test_max_subagent_depth_2_blocks_grandchild.
+- Iteration budget shared:
+  - Phase-9 contract preserved. Lock test
+    test_iteration_budget_shared_object_identity.
+- Unknown agent_type:
+  - spawn_subagent + tools/task.py both reject with explicit error.
+  - Lock test test_unknown_agent_type_returns_explicit_error.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Constraint #5 (minimum file structures): 2 new modules under
+  subagent/ (agent_types, worktree) — both serve a distinct surface.
+- Constraint #6 (architecture-first): registry + per-type config
+  table + worktree-isolation pattern is well-trod and adapts cleanly.
+- Constraint #15 (quality, no rush): worktree falls back on missing
+  git rather than blocking the build agent — pragmatic for SageMaker.
+- Q3 axis 2 (agent coordination): 7 specialized agent types vs Phase-9's
+  one is a meaningful capability lift.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+SYNTHESIS_MASTER §Block G has 8 PORT_LOG rows (G-1 through G-8):
+- G-1 loadAgentMemoryPrompt per-agent memory: NOT covered here —
+  intentionally deferred to Block H per ADR-031 §Notes (memory
+  extraction is the architectural fit). Should this be in PORT_LOG
+  with explicit deferral, or just relied on ADR §Notes?
+- G-2 isAgentMemoryPath path-traversal-safe: same — Block H deferral.
+- G-3 ONE_SHOT_BUILTIN_AGENT_TYPES: PORTED (#086).
+- G-4 getPrompt(isCoordinator): PORTED (#086, get_agent_prompt).
+- G-5 Hermes IterationBudget: already covered in Phase 9 PORT_LOG #016
+  (cross-reference acceptable).
+- G-6 DEFAULT_AGENT_PROMPT: PORTED (#086).
+- G-7 Notes appendix: PORTED (#086).
+- G-8 forkSubagent cache-prefix replay: deferred to Block G2 (already
+  in plan as a separate block; cross-reference acceptable).
+- AGENT_TYPES dict G-1 itself: PORTED (#086, #088).
+- Worktree (v4 :8413+): PORTED (#087).
+- Spawn dispatch (v4 :8366+): PORTED (#088).
+
+The G-1/G-2 deferral to Block H should arguably have its own row in
+PORT_LOG to avoid the Block I Axis-C-style oversight. Verify and
+flag.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.

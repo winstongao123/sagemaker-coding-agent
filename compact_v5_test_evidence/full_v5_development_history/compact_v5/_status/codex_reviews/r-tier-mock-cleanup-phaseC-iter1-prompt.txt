@@ -1,0 +1,50 @@
+You are the independent Claude Phase C reviewer for the zero-cost R-tier mock cleanup bundle in D:\Github\sagemaker-coding-agent.
+
+Read files from disk yourself using read-only tools. Do not rely on this prompt for evidence content. Do not write files. Do not run AWS.
+
+Bundle rows:
+- R8 malformed JSON repair, matrix kind=mock, cap $0.00
+- R18-E2 Bedrock 5xx flake mock, matrix kind=mock, cap $0.00
+- R18-E5 corrupt session JSON, matrix kind=mock, cap $0.00
+- R18-E9 disk-full snapshot simulation, matrix kind=mock, cap $0.00
+- R18-E12 audit log rotation, matrix kind=mock, cap $0.00
+
+Review these files:
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/_status/scripts/r_tier_gate.py
+- compact_v5/MAIN/agent/tests/integration/test_r_tier_gate.py
+- compact_v5/MAIN/agent/tests/integration/test_r_tier_mock_cleanup.py
+- compact_v5/_status/codex_reviews/r-tier-mock-cleanup-phaseA-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-mock-cleanup-phaseA-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-mock-cleanup-local-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R8-local-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R18-E2-local-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R18-E5-local-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R18-E9-local-call1.log
+- compact_v5/_status/codex_reviews/r-tier-R18-E12-local-call1.log
+- compact_v5/_status/r-tier-R8-local-call1-telemetry.json
+- compact_v5/_status/r-tier-R18-E2-local-call1-telemetry.json
+- compact_v5/_status/r-tier-R18-E5-local-call1-telemetry.json
+- compact_v5/_status/r-tier-R18-E9-local-call1-telemetry.json
+- compact_v5/_status/r-tier-R18-E12-local-call1-telemetry.json
+- compact_v5/_status/r-tier-R8-local-call1-quality.md
+- compact_v5/_status/r-tier-R18-E2-local-call1-quality.md
+- compact_v5/_status/r-tier-R18-E5-local-call1-quality.md
+- compact_v5/_status/r-tier-R18-E9-local-call1-quality.md
+- compact_v5/_status/r-tier-R18-E12-local-call1-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+
+Required checks:
+1. Confirm the rows are mock-only and no AWS spend is authorized or recorded.
+2. Confirm Phase A returned APPROVE_FOR_LOCAL_MOCK for this bundle.
+3. Confirm the local pytest raw log passed all five tests.
+4. Confirm each row has a per-test local-call log, telemetry JSON with the required final gate keys, quality review with an accepted composite verdict, metrics row with zero cost, and review-log READY row.
+5. Confirm the gate script change is appropriately narrow for mock rows and does not hide or reset any prior diagnostic spend.
+6. Confirm the mock tests genuinely cover each row's ready criterion. If coverage is insufficient, return REJECT and explain the blocking gap.
+
+Return exactly one of these final verdict tokens:
+- GENUINE_PASS if the bundle is ready as zero-cost mock evidence.
+- REJECT if any row is missing evidence, has a coverage gap, records nonzero spend, or the gate change is unsafe.
+
+Also include concise rationale and any non-blocking follow-up notes.

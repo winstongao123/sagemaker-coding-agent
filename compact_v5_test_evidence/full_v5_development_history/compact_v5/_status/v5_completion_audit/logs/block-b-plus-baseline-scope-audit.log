@@ -1,0 +1,18 @@
+=== Block B+ ===
+Expected rows: 8
+Ledger rows: 0
+SHIPPED: 0  PARTIAL: 0  MISSING: 0  DEFERRED: 0  DROPPED: 0  N/A: 0
+Ledger missing: 8  Weak shipped evidence: 0  Unknown disposition: 0
+Ship-blocking rows: B+1, B+2, B+3, B+4, B+5, B+6, B+7, B+8
+Verdict: LEDGER_INCOMPLETE
+
+| row_id | disposition | ship_blocking | evidence_problems | capability |
+|---|---|---:|---|---|
+| B+1 | LEDGER_MISSING | YES | row absent from block ledger | Persist session cost + restore on resume (R11 N8, R7 CT-02..04) |
+| B+2 | LEDGER_MISSING | YES | row absent from block ledger | Canonical-name collapse for per-model usage (R11 N9) |
+| B+3 | LEDGER_MISSING | YES | row absent from block ledger | 4-line cost block format (R11 N10) |
+| B+4 | LEDGER_MISSING | YES | row absent from block ledger | Local OTel-style counters (cost/token by type) (R11 N11) |
+| B+5 | LEDGER_MISSING | YES | row absent from block ledger | Recursive advisor sub-cost accounting (R11 N12) |
+| B+6 | LEDGER_MISSING | YES | row absent from block ledger | contextWindow refresh on every cost update (R11 N13) |
+| B+7 | LEDGER_MISSING | YES | row absent from block ledger | Exit-time atexit cost flush (R11 N14) |
+| B+8 | LEDGER_MISSING | YES | row absent from block ledger | `Config` dataclass explicit PORT_LOG row (V1 lesser #9) |

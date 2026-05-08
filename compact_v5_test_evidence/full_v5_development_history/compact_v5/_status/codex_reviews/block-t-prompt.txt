@@ -1,0 +1,50 @@
+You are reviewing Block T of v5.0.1 — 11 missing v4 tools.
+
+Constraint #1 (v4.10.10 baseline) requires every v4 advertised tool
+to land in v5. Block T restores 11 tools across 5 new files.
+
+Diff range: v5.0.1-block-n..HEAD (Block T commit).
+
+Files changed:
+- NEW tools/v4_documents.py — 6 doc creators consolidated.
+- NEW tools/todo.py — todo_write + todo_read.
+- NEW tools/semantic_search.py — TF-IDF via sklearn.
+- NEW tools/web_fetch.py — requests + HTML→markdown stripper.
+- NEW tools/ask_user.py — provider hook + input() fallback.
+- EXTENDED tools/__init__.py — register all 11 in bootstrap_built_ins.
+- NEW tests/integration/test_block_t.py — 15 tests.
+- MODIFIED tests/integration/test_block_g3.py — coord-context test
+  uses coordinator-specific markers (Phase-7 deferred-tool reminder
+  legitimately mentions create_word now).
+
+Reference paths:
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block T)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block T around line 354)
+- ADR-038: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 760 pass + 14 skip (was 745 + 14; +15 net).
+verify_ship_zip.py: PASS (133 files / 370.9 KB / 36%).
+
+Apply 3-axis review. Be specific.
+
+AXIS A — Errors / bugs / regressions
+- Each tool registers idempotently in bootstrap_built_ins.
+- Lazy-import pattern: missing lib returns "Error: <lib> not installed".
+- 15 lock tests cover all 11 v4 tools + create_html doc note + 3 behavior
+  locks (todo_read empty / web_fetch rejects non-http / ask_user
+  provider exception).
+- Block G3 test fix is correct (coordinator-specific markers; Phase-7
+  reminder is a different surface).
+
+AXIS B — v5 architecture + goals fit
+- Constraint #1: 11 v4 tools restored. v5 ≥ v4 baseline.
+- Constraint #5: 5 new files for 11 tools (doc creators consolidated).
+- Constraint #15: lazy-import pattern keeps deps optional.
+
+AXIS C — Reference-repo coverage
+- All 11 TEST_DESIGN row tools ported.
+- create_html design note locked.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding.

@@ -1,0 +1,89 @@
+You are reviewing Block F2 of v5.0.1 — ITER 3 (re-review after iter-2 fixes).
+
+Iter-2 verdict was APPROVE_WITH_FIXES with 2 findings:
+  1. Meta-lock test test_f2_test_globals_snapshot_restore_pattern
+     itself restored CONFIG to assumed default (False) instead of
+     snapshotting outer state.
+  2. StopDecision.completion_event missing `pct` (Runnable's
+     tengu_token_budget_completed includes it).
+
+Verify each iter-2 fix lands correctly + new lock tests are sound.
+ONLY re-review the iter-3 diff (commit dd33507).
+
+Block F2 deliverable summary: NEW block — auto-continuation under
+iteration budget. Adapted from Runnable's tokenBudget feature to v5's
+existing IterationBudget surface. Cost-cap halt has priority. Default
+OFF via CONFIG.enable_token_budget_continuation. Sub-agents always halt.
+
+Diff range: 9bb2992..HEAD (iter-3 commit dd33507).
+Full Block diff for context: v5.0.1-block-e-f..HEAD.
+
+Iter-3 file changes:
+- MODIFIED compact_v5/MAIN/agent/core/budget_continuation.py
+  - `pct = round((iter_used / iter_total) * 100)` now computed BEFORE
+    the cost-cap early-return (around line 96-99 in current file).
+  - cost-cap completion_event includes "pct": pct.
+  - diminishing/above_threshold completion_event includes "pct": pct.
+- MODIFIED compact_v5/MAIN/agent/tests/integration/test_block_f2.py
+  - test_f2_test_globals_snapshot_restore_pattern now wraps the body
+    in try/finally with `_outer_initial = CONFIG.enable_token_budget_continuation`
+    captured pre-test and restored in the outer finally.
+  - 3 new lock tests:
+    + test_f2_completion_event_includes_pct_for_cost_cap
+    + test_f2_completion_event_includes_pct_for_diminishing
+    + test_f2_completion_event_includes_pct_for_above_threshold
+    Each calls check_iteration_budget() and asserts ce["pct"] is the
+    expected integer.
+
+Reference paths:
+- Runnable source: _archive/compare_code/gg-claude-code-runnable/src/query/tokenBudget.ts
+- Runnable wiring: _archive/compare_code/gg-claude-code-runnable/src/query.ts (lines 1308-1355)
+  Note tengu_token_budget_completed event shape at :1349-1352:
+    queryChainId, queryDepth, continuationCount, pct, turnTokens, budget,
+    diminishingReturns, durationMs.
+
+Tests: 610 pass + 5 skip (was 607 at iter-2; +3 finding-locks).
+verify_ship_zip.py: PASS (113 files / 314.4 KB / 36%).
+
+Apply the 3-axis review template.
+
+AXIS A — Errors / bugs / regressions
+- Verify finding #2 fix:
+  - pct computed before cost-cap early-return — confirm it's not
+    silently used for the iter_total<=0 path (it isn't, that path
+    returns no_budget reason without completion_event).
+  - All 3 stop reasons that produce a completion_event (cost_cap,
+    diminishing, above_threshold) include pct.
+  - The 3 lock tests assert ce["pct"] for each — confirm the assertion
+    integers match the computation: 23/100 → 23, 4/100 → 4, 90/100 → 90.
+- Verify finding #1 fix:
+  - test_f2_test_globals_snapshot_restore_pattern wraps body in
+    try/finally with outer-state capture + restore.
+- Regression check: 610 pass + 5 skip means none of the 607 prior
+  tests broke + 3 new finding-locks all green.
+- Are there any OTHER fields from Runnable's tengu_token_budget_completed
+  shape still missing? (continuation_count, pct, turnTokens, budget,
+  diminishingReturns, durationMs.) v5's analog uses:
+    continuation_count, pct, iter_used (=turnTokens), iter_total
+    (=budget), diminishing (=diminishingReturns), duration_ms
+    (=durationMs), plus cost/cost_limit (v5-specific). Should pass C.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+The iter-3 fix is pure: one early-pct-compute + 2 dict-key additions
++ 1 test outer-snapshot wrap + 3 lock tests. None alter the F2
+contract. FAITHFUL.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+The completion_event shape now matches Runnable's tengu event with
+all 6 numeric fields (mapping above). Nothing else dropped. ALL_PORTED.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if both iter-2 findings have clean fixes with covering
+lock tests AND no new findings emerge. Be specific. Cite file:line.

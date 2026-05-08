@@ -1,0 +1,10 @@
+﻿=== Block J ===
+Expected rows: 0
+Ledger rows: 0
+SHIPPED: 0  PARTIAL: 0  MISSING: 0  DEFERRED: 0  DROPPED: 0  N/A: 0
+Ledger missing: 0  Weak shipped evidence: 0  Unknown disposition: 0
+Ship-blocking rows: NONE
+Verdict: NO_SPEC_ROWS_FOUND
+
+| row_id | disposition | ship_blocking | evidence_problems | capability |
+|---|---|---:|---|---|

@@ -1,0 +1,31 @@
+PHASE A iter-3 confirmation review of R-tier R5.
+
+iter-2 returned REJECT with one finding: the test FUNCTION docstring
+(not the module docstring) still had stale "audit log" wording in
+PASS criteria. iter-3 fixes this last documentation-only gap.
+
+ITER-2 FINDING + ITER-3 FIX
+
+Finding (AXIS A APPROVE_WITH_FIXES + AXIS C APPROVE_WITH_FIXES,
+finalized as REJECT): test function docstring stale.
+FIX APPLIED at lines 99-114 (test_r5_exec_limit_recovery docstring):
+
+PASS criteria:
+  - audit_log has >= _TEST_EXEC_CAP successful python_exec dispatches
+    (the BLOCKED path returns early without audit; query_engine.py:805-819).
+  - The literal "OTHER TOOLS STILL WORK" appears in some tool_result
+    block within agent.messages — direct proof PS#7's fail-as-
+    instruction message reached the model.
+  - A read_file(data.csv) tool_use appears in agent.messages at a
+    LATER index than the blocked tool_result (transcript-order
+    recovery proof).
+  - Final assistant text contains "carol" (the manager's name —
+    only present if read_file actually retrieved data.csv content;
+    this string is NOT in the prompt or any tool schemas).
+  - parent stop_reason != max_turns.
+  - cost <= $0.50.
+
+Module docstring + assertion logic unchanged from iter-2 (already approved).
+
+PRE-FLIGHT VERDICT REQUEST: confirm full closure of iter-1 + iter-2
+findings, AWS call #1 may proceed.

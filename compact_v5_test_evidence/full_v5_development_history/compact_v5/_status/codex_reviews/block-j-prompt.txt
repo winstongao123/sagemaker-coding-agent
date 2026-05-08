@@ -1,0 +1,87 @@
+You are reviewing Block J of v5.0.1 — the real-AWS SHIP GATE.
+
+Diff range: 1cda54a..HEAD (Block T DONE → Block J commit 4ddcc00).
+
+TEST_DESIGN §Block J specifies 7 tests; we shipped 8 (the 7 + 1 meta
+count lock). 4 T4 tests run on every pytest invocation; 3 T5 real-Bedrock
+tests env-gate on RUN_REAL_BEDROCK=1 (~$0.02 total).
+
+Files changed:
+- NEW tests/integration/test_block_j_ship_gate.py (~270 LOC, 8 tests).
+- NEW MAIN/agent/agent.py (~213 LOC, Agent class + _load_agent_status_text
+  moved from __init__.py).
+- REWRITTEN MAIN/agent/__init__.py (~30 LOC, thin re-export via
+  relative `from .agent import Agent`).
+- DOCS: PORT_LOG row #104 + ADR-039 + V5_BUILD_STATUS Block J entry.
+
+CAUGHT REAL BUG:
+- The flat ship-zip layout could not import. entry.py does
+  `from agent import Agent`. Agent class lived in MAIN/agent/__init__.py.
+  In flat-zip cwd, __init__.py is at root but no module named `agent`
+  exists, so import fails with "No module named 'agent'".
+- Source layout was also subtly broken: running `python -c "import entry"`
+  directly (not via pytest with auto-injected sys.path) failed with the
+  same error. Tests only worked because pytest's sys.path-insert
+  behavior compensated.
+
+FIX:
+- Agent class moved to MAIN/agent/agent.py (real module).
+- __init__.py now does `from .agent import Agent` — relative import
+  resolves to the submodule, NOT the package itself. No circular.
+- Works in BOTH:
+  - Source layout: tests put MAIN/agent on sys.path → finds agent.py
+    directly; package __init__ not involved.
+  - Flat-zip layout: extracted dir has agent.py + __init__.py
+    side-by-side → `from agent import Agent` finds agent.py first
+    (Python module-vs-package precedence).
+
+Tests: 775 pass + 17 skip (was 770 + 14; +5 net pass for Block J T4
+T4 tests + 3 net skip for T5 env-gated tests).
+verify_ship_zip.py: PASS (134 files / 376.9 KB / 36%).
+
+Apply 3-axis review.
+
+AXIS A — Errors / bugs / regressions
+- Is the Agent split correct? Verify:
+  - Source-layout tests still pass (existing 770 + new 5 = 775).
+  - `python -c "import entry"` succeeds in extracted ship.
+  - `python -c "from sagemaker_agent import CONFIG, BEDROCK_MODELS,
+    create_chat_ui"` succeeds in extracted ship.
+- Does the relative import in __init__.py have any edge case
+  (e.g., when Python is run with `-m`, or when the package is
+  imported from a frozen environment)?
+- Does the test for tool_use round-trip handle the `response.text`
+  vs `response.tool_calls` shape correctly? (Look at how
+  BedrockClient.chat returns its Response namedtuple.)
+- Are the path computations in the test file correct for both
+  Windows + POSIX? (uses pathlib, should be OK.)
+- The test_real_bedrock_compact_then_continue test sends ~5K tokens,
+  not 80K as TEST_DESIGN specifies. ADR-039 documents this as a
+  cost-cap decision (Block H lock tests cover full 80K via mock).
+  Acceptable trade-off, or should Block J spend the extra cents to
+  hit the actual 80K threshold?
+
+AXIS B — v5 architecture + goals fit
+- Constraint #1 (v4.10.10 baseline): does the Agent split break
+  any v4 import contract? v4 chat.ipynb calls
+  `from sagemaker_agent import CONFIG, BEDROCK_MODELS, create_chat_ui`
+  — confirmed still works (test_zip_python_c_import_sagemaker_agent
+  asserts this).
+- The agent.py + __init__.py split adds 1 file to the ship zip
+  (134 vs 133). Constraint #5 minimum-files: justified by the
+  ship-gate import requirement, not optional cleanup.
+- Should `_load_agent_status_text` also be moved out of agent.py?
+  Currently both Agent and _load_agent_status_text live in agent.py
+  + are re-exported by __init__.py. This is fine; flagging in case
+  reviewer prefers a cleaner split.
+
+AXIS C — Reference-repo coverage
+- Were any v4 entry.py / sagemaker_agent.py behaviors silently dropped
+  in the Agent split? The class body is byte-identical (we copied the
+  file then deleted from __init__), so behavior is preserved.
+
+GOAL: APPROVE so we can tag v5.0.1-block-j and move to Block K.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding.

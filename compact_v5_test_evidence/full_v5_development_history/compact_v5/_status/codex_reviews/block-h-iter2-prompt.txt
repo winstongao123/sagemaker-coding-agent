@@ -1,0 +1,85 @@
+You are reviewing Block H of v5.0.1 — ITER 2 (re-review after fixes).
+
+Iter-1 verdict was REJECT with 4 findings:
+  1. BLOCKER — H-11 single-pass loop could leave earlier pairs split
+     after a later pair pulled the cut backward.
+  2. BLOCKER — drain_pending_extraction was a no-op (the lock it acquired
+     was released the moment extract_memories set _in_flight=True).
+  3. LOW — dedup used .lower() instead of .casefold().
+  4. DOC — H-13/H-15/H-16/H-17 deferral target was vague.
+
+Verify each fix lands correctly. Focus on iter-2 commit 9759c11.
+
+Diff range: <prev>..HEAD (iter-2 commit 9759c11).
+
+Iter-2 file changes:
+- MODIFIED compact_v5/MAIN/agent/memory/compact.py
+  - adjust_index_to_preserve_api_invariants: replaced single-pass
+    loop with fixed-point loop. Iterates until no further pulls.
+- MODIFIED compact_v5/MAIN/agent/memory/extract.py
+  - Added _idle_event: threading.Event (starts SET).
+  - Added _make_set_event() helper.
+  - extract_memories now clears the Event under _in_flight_lock at entry,
+    sets it in the finally block under the same lock.
+  - drain_pending_extraction now uses _idle_event.wait(timeout) instead
+    of acquiring the (already-released) _in_flight_lock.
+- MODIFIED compact_v5/MAIN/agent/memory/session_memory.py
+  - deduplicate_memory_entries: entry.lower() → entry.casefold().
+- MODIFIED compact_v5/_status/V5_DESIGN_DECISIONS.md (ADR-034 §4)
+  - H-13/H-15/H-16/H-17 target named: "Block A SM-compact integration
+    follow-up" (post-Block-N, pre-R-tier; ~120 LOC extending
+    core/compactor.py).
+- MODIFIED compact_v5/_status/V5_RUNNABLE_PORT_LOG.md
+  - Row #098 mirrors the named target.
+- MODIFIED compact_v5/MAIN/agent/tests/integration/test_block_h.py
+  - 3 new lock tests:
+    + test_h11_fixed_point_loop_handles_cascading_pair_pulls
+    + test_drain_pending_extraction_actually_blocks_until_complete
+    + test_dedup_uses_casefold_for_unicode
+
+Tests: 706 pass + 8 skip (was 703 + 8 at iter-1; +3 finding-locks).
+
+Apply the 3-axis review template focused on iter-2 fixes.
+
+AXIS A — Errors / bugs / regressions
+- Verify finding #1 fix:
+  - compact.py uses `while True: next_adjusted = adjusted; for ...; if
+    next_adjusted == adjusted: break; adjusted = next_adjusted`.
+  - Lock test test_h11_fixed_point_loop_handles_cascading_pair_pulls
+    builds buffer with pairs (1,3) + (2,5), candidate=4, asserts final
+    adjusted ≤ 1.
+- Verify finding #2 fix:
+  - _idle_event starts SET (idle).
+  - extract_memories clears the Event under _in_flight_lock at entry.
+  - finally block sets the Event under _in_flight_lock.
+  - drain_pending_extraction calls _idle_event.wait(timeout=...).
+  - Lock test spawns thread with 50ms slow_extract, then drain blocks
+    for >20ms.
+  - EDGE: when timeout < extraction duration, drain returns False.
+    (Not asserted but the wait() return value carries the right
+    semantic.)
+- Verify finding #3 fix:
+  - .casefold() used. Lock test exercises German ß↔ss.
+- Verify finding #4 fix:
+  - ADR-034 §4 names "Block A SM-compact integration follow-up
+    (post-Block-N, pre-R-tier; ~120 LOC extending core/compactor.py)".
+  - PORT_LOG #098 mirrors the named target.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Iter-2 changes are scoped fixes; no new architecture surface.
+- threading.Event semantics align with v5's existing concurrency primitives.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+PORT_LOG #095-#098 unchanged structurally; only #098's target label
+was tightened.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if all 4 iter-1 findings are cleanly fixed AND no new
+findings emerge. Be specific. Cite file:line.

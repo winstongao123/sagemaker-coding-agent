@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "test": "R4",
+  "call": 1,
+  "audit_log_path": "compact_v5\\_status\\r_tier_runtime\\R4-call1-audit",
+  "audit_log_paths": [
+    "compact_v5\\_status\\r_tier_runtime\\R4-call1-audit\\2026-05-06_0511f93f74ad.jsonl"
+  ],
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R4-aws-call1.log",
+  "side_channel_path": "compact_v5\\_status\\r-tier-R4-aws-call1-side-metrics.json",
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [],
+      "wallclock_s": 1.392,
+      "tokens_in": 3,
+      "tokens_out": 14,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 16668,
+      "cache_hit_pct": 0.0,
+      "agent_text_chars": 33,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 0,
+    "REPEATED_calls": 0,
+    "per_tool": {},
+    "unique_calls": 0
+  },
+  "compaction_events": [
+    {
+      "timestamp": "2026-05-06T11:35:51.309973",
+      "action": "compact_micro_start",
+      "typed": true,
+      "parameters": {
+        "trigger": "cold_cache",
+        "gap_seconds": 5.414,
+        "threshold_seconds": 1.0,
+        "keep_n": 1
+      },
+      "result_summary": "microcompact started"
+    },
+    {
+      "timestamp": "2026-05-06T11:35:51.311803",
+      "action": "compact_micro_end",
+      "typed": true,
+      "parameters": {
+        "trigger": "cold_cache",
+        "saved_count": 50360,
+        "applied": true
+      },
+      "result_summary": "microcompact freed 50360 tokens"
+    }
+  ],
+  "subagent_dispatches": [],
+  "model_switch_events": [],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": 0.0,
+    "last_5_turns_avg_hit_pct": 0.0,
+    "session_avg_hit_pct": 0.0
+  },
+  "agent_attribution": {
+    "parent": {
+      "input_tokens": 3,
+      "output_tokens": 14,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 16668,
+      "cost_usd": 0.022996
+    },
+    "subagents": {},
+    "reviewers": {}
+  },
+  "failure_loop_events": [],
+  "outcome": {
+    "completed": true,
+    "stop_reason": "end_turn",
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 3,
+    "tokens_out_total": 14,
+    "cost_usd": 0.023,
+    "wallclock_s_total": 1.81,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 3,
+  "turns_seen": 1
+}

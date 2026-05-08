@@ -1,0 +1,6 @@
+﻿HANDOFF_FAILED_COMMAND_SHAPE
+
+PowerShell error observed in terminal:
+`File C:\Users\winst\AppData\Roaming\npm\claude.ps1 cannot be loaded because running scripts is disabled on this system.`
+
+No Claude reviewer verdict was produced.

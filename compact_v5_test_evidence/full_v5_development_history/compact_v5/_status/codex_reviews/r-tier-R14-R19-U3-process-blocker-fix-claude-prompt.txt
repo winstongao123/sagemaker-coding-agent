@@ -1,0 +1,76 @@
+Claude independent review request: R14/R19-U3 process blocker local fix.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Read these files from disk:
+
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U3+U6+U7+R18-E7-phaseB-call1-failure-review.md
+- compact_v5/_status/r-tier-R14-aws-call1-quality.md
+- compact_v5/_status/codex_reviews/r-tier-R14-phaseC-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-R14-R19-U3-process-blocker-fix-summary.md
+- compact_v5/MAIN/agent/tools/read_file.py
+- compact_v5/MAIN/agent/tools/_file_read_tracking.py
+- compact_v5/MAIN/agent/core/query_engine.py
+- compact_v5/MAIN/agent/tests/integration/test_software_compact_telemetry.py
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u3_u6_u7_r18_e7_recovery_bundle.py
+- compact_v5/_status/r_tier_review_log.md
+
+Context from files:
+
+- R14 was a genuine artifact pass but exposed a serious process-quality issue:
+  blocked cd, repeated edit/write guard failures, 30 tool calls, 35 failure-loop
+  events.
+- Stage 5 call1 stopped correctly:
+  - R19-U3 reproduced the same class: max_turns, 29 tool calls, 9 edit/write
+    calls, 6 exec calls, 12 failure-loop events.
+  - R18-E7 exceeded its $0.10 cap at $0.1022 and failed to create the report.
+  - R19-U6 and R19-U7 functionally passed inside the blocked bundle.
+- Prior failed/non-ready costs must remain recorded as diagnostic spend. Do not
+  approve any plan that deletes, hides, resets, or globally reclassifies them.
+
+Fix to review:
+
+- `read_file.py` now marks successful reads in `_file_read_tracking` for empty,
+  normal, and large-file preview returns.
+- `_file_read_tracking.py` canonicalizes paths and stores read snapshots.
+- `query_engine.py` now:
+  - emits typed `tool_failure_loop_blocked` for exact repeated calls;
+  - classifies failures as `read_before_edit`, `read_before_write`,
+    `bash_cd_blocked`, or `python_exec_error`;
+  - blocks repeated guard-class failures after two actual failures even if
+    arguments differ;
+  - treats nonzero `[exit code: N]` tool output as a failure.
+- Stage 5 harness now:
+  - asks R19-U3 to write ASCII-only summary content;
+  - redesigns R18-E7 to use a deterministic replay offset near 2600 while
+    preserving `sageagent-result://` + `result_replay` proof and the original
+    $0.10 cap.
+
+Local validation already run:
+
+- py_compile passed for modified Python files.
+- `py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py compact_v5/MAIN/agent/tests/integration/test_software_compact_telemetry.py compact_v5/MAIN/agent/tests/tools/test_phase4_mutating_tools.py compact_v5/MAIN/agent/tests/r_tier/test_r19_u3_u6_u7_r18_e7_recovery_bundle.py -q`
+- Result: `54 passed, 1 skipped`.
+- `git diff --check` had no whitespace errors, only CRLF warnings.
+
+Review task:
+
+Return `APPROVE_FIX_AND_RETRY_PATH` only if all are true:
+
+1. The shared R14/R19-U3 process blocker root cause is plausibly fixed at the
+   right architectural layer.
+2. The zero-cost lock tests cover the model/agent path enough to justify a new
+   Stage 5 Phase A retry review.
+3. Prior failed/non-ready spend and evidence remain preserved.
+4. R18-E7 retry stays under the original $0.10 cap by design; no silent cap
+   increase is introduced.
+5. The next AWS step may be a Stage 5 retry with `R_TIER_CALL=2` only after a
+   fresh Phase A approval/budget check.
+
+Return `REJECT_FIX_OR_RETRY_PATH` if any blocker remains. Include HIGH/MEDIUM/LOW
+findings and explicitly state whether AWS may proceed to a fresh Stage 5 Phase A
+review. Do not perform any AWS call.

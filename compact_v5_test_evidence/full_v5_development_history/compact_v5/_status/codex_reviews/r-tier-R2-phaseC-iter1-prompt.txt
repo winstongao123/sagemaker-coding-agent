@@ -1,0 +1,117 @@
+# Codex CLI version: codex-cli 0.128.0
+# Model used: gpt-5.5
+# Reasoning effort: high
+# Date: 2026-05-04
+
+R-tier R2 PHASE C — POST-PASS sanity (TEMPLATE C).
+
+R2 AWS call #1 PASSED on first try. Verify the PASS is REAL, not a
+false-positive, before tagging READY and moving to R3.
+
+CONTEXT
+- Test: R2 (compaction under load — 78K preamble triggers Compactor)
+- AWS call passed: #1 of 3 cap (no DIAGNOSIS needed)
+- Cost: $0.222 (vs $0.50 cap = 44% of cap)
+- Tokens in: 201,003 (turn-1: 197,752 + turn-2: 3,251 — material drop!)
+- Tokens out: 156
+- Wallclock: 9.78s total (T1: 8.95s + T2: 0.83s)
+- API calls: 3 (T1 model + auto-compact summary + T2 model)
+- compact_log_seen: TRUE — captured stdout includes
+  `[auto-compact] saved 149,897 tokens; continuing.`
+- summary_marker_seen: TRUE — agent.messages contains the
+  [CONVERSATION SUMMARY] block
+- compact_proven: TRUE
+- t2_dropped_materially_vs_t1: TRUE (3,251 << 197,752 = ~1.6% of T1)
+
+Final stop_reasons: T1=end_turn, T2=end_turn (no max_turns or cost_cap).
+
+Final agent text:
+- T1 final_text: "5"  ← PERFECT match to tightened regex
+- T2 final_text: "What is 2 + 3?"  ← PERFECT recall through compaction
+
+This is empirical proof that:
+1. Compactor.run fires when message buffer crosses 80% of
+   CONFIG.context_max_tokens (here: 100K override → 80K threshold).
+2. Auto-compact summary call succeeds and produces a [CONVERSATION
+   SUMMARY] block stored in agent.messages.
+3. Post-compact buffer is materially smaller (T2 input estimate 3.2K
+   vs T1 input 197.7K — that's 98% reduction; the summary call's
+   logged "saved 149,897 tokens" matches).
+4. Bedrock accepts the post-compact message buffer (no 400) and the
+   model can answer a follow-up using ONLY the summary (T2 perfectly
+   recalled "What is 2 + 3?").
+5. session_cost_limit is enforced and the test stayed under cap
+   ($0.222 of $0.50).
+
+Telemetry summary (compact_v5/_status/r-tier-R2-aws-call1-telemetry.json):
+- per_turn count: 1 (heuristic 30s-window grouped events into one
+  bucket — known build_telemetry.py limitation; doesn't affect this
+  R2 PASS verdict because the .log + agent.messages already prove
+  compaction)
+- compaction_events: 0 (NOTE: build_telemetry's heuristic looks for
+  `"compact"` substring in action; v5 audit_log emits compaction as
+  `chat_response` events not a dedicated "compact" action — known
+  schema gap, flagged for post-Block-A audit_log enrichment but
+  doesn't invalidate R2's PASS)
+- subagent_dispatches: 0 (expected — pure reasoning, no spawning)
+- outcome.cost_usd: 0.222
+- outcome.completed: true
+- outcome.cost_cap_hit: false
+
+Raw .log tail (compact_v5/_status/codex_reviews/r-tier-R2-aws-call1.log):
+```
+collected 1 item
+
+tests/r_tier/test_r2_compact.py::test_r2_compaction_under_load [auto-compact] saved 149,897 tokens; continuing.
+5
+What is 2 + 3?
+
+[R2 METRICS] {... compact_log_seen=true, summary_marker_seen=true,
+              tokens_in_after_turn1=197752, tokens_in_t2_estimate=3251,
+              t2_dropped_materially_vs_t1=true, ...}
+PASSED
+
+============================= 1 passed in 10.27s =============================
+```
+
+QUESTIONS:
+
+1. Did the assertions actually verify what the test claims?
+   YES. Five MANDATORY assertions all hit:
+   - T1 regex `^\s*=?\s*(5|five)\b\.?\s*$` matched "5"
+   - T2 recall checked for "2 + 3" / "2+3" / "what is 2"; "What is 2 + 3?"
+     matched
+   - compact_proven required log_seen OR summary_marker — BOTH true
+   - t2_dropped_materially required T2 < T1*0.5 — actual ratio 1.6%
+   - cost ≤ $0.50 — actual $0.222
+
+2. Are metrics in expected range?
+   - tokens_in 201K (T1: 197K = expected for 78K preamble + system
+     prompt overhead; T2: 3.2K = post-compact recall). Reasonable.
+   - cost $0.222 = within iter-3 worst-case estimate ($0.18-$0.20
+     was estimated; actual $0.222, 11% over estimate — acceptable
+     drift from prompt cache miss on initial summary call).
+   - 9.78s wallclock for 3 Bedrock calls is fast.
+
+3. Did the agent take a reasonable path?
+   YES. T1: read prompt → answer "5". Auto-compact: produce summary.
+   T2: read short follow-up → answer with the original question.
+   No tool calls, no detours, no retries. Optimal.
+
+4. Output artifact valid?
+   N/A for R2 (pure reasoning task; no .docx / .png artifacts).
+   The "artifacts" here are the chat-history evidence (T1+T2 results +
+   compaction logs), all captured.
+
+PRODUCE VERDICT.
+
+Output:
+POST-PASS VERDICT: GENUINE_PASS | LIKELY_FALSE_POSITIVE | NEEDS_RE_RUN_WITH_TIGHTER_ASSERTIONS
+
+If GENUINE_PASS → log r_tier_metrics.jsonl (already done) + tag READY +
+next test (R3).
+
+Files:
+- compact_v5/_status/r-tier-R2-aws-call1-telemetry.json
+- compact_v5/_status/codex_reviews/r-tier-R2-aws-call1.log
+- compact_v5/MAIN/agent/audit_logs/2026-05-04_6d4fcf78c7e9.jsonl (raw events)

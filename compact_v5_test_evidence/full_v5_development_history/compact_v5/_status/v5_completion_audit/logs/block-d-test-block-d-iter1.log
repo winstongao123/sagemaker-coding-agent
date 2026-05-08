@@ -1,0 +1,10 @@
+...............................                                          [100%]
+31 passed in 0.72s
+py : WARNING:root:session-final cost: $0.0020 (2 API calls, in=1,100 out=250)
+At line:2 char:31
++ ... S='ignore'; py -3.11 -m pytest tests/integration/test_block_d.py -q > ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING:root:se...=1,100 out=250):Strin 
+   g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

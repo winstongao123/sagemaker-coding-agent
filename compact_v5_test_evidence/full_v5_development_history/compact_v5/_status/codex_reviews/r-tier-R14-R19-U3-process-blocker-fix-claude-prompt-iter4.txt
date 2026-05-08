@@ -1,0 +1,49 @@
+Claude independent review request: R14/R19-U3 process blocker local fix, iter4 evidence-ledger update.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Read these files from disk:
+
+- compact_v5/_status/codex_reviews/r-tier-R14-R19-U3-process-blocker-fix-claude-review-iter3.md
+- compact_v5/_status/codex_reviews/r-tier-R14-R19-U3-process-blocker-fix-summary.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/R_TIER_PROCESS_QUALITY_FOLLOWUPS.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/scripts/r_tier_gate.py
+- compact_v5/MAIN/agent/tests/integration/test_r_tier_gate.py
+- compact_v5/MAIN/agent/tests/r_tier/test_r14_multifile_refactor.py
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u3_u6_u7_r18_e7_recovery_bundle.py
+
+Context:
+
+- Iter3 returned `APPROVE_FIX_AND_HAIKU_RETRY_PATH`.
+- After iter3, the evidence ledger was updated so Stage 5 call1 diagnostic
+  spend is preserved in `r_tier_metrics.jsonl`:
+  - R19-U3 $0.1090 diagnostic/non-ready process blocker;
+  - R19-U6 $0.0175 functional pass inside blocked bundle, not READY;
+  - R19-U7 $0.0221 functional pass inside blocked bundle, not READY;
+  - R18-E7 $0.1022 diagnostic/non-ready cap exceed.
+- `r_tier_gate.py` was updated so historical diagnostic/non-ready rows remain
+  counted in cost accounting but do not block a later completed
+  `GENUINE_PASS`/`READY` row for the same test.
+- A gate lock test was added:
+  `test_r_tier_gate_preserves_diagnostic_rows_before_later_pass`.
+- Local validation:
+  `$env:PYTHONPATH=(Resolve-Path compact_v5/MAIN/agent).Path; py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_r_tier_gate.py compact_v5/MAIN/agent/tests/integration/test_software_compact_telemetry.py compact_v5/MAIN/agent/tests/r_tier/test_r14_multifile_refactor.py compact_v5/MAIN/agent/tests/r_tier/test_r19_u3_u6_u7_r18_e7_recovery_bundle.py -q`
+  Result: `16 passed, 2 skipped`.
+
+Review task:
+
+Return `APPROVE_FIX_AND_HAIKU_RETRY_PATH` only if:
+
+1. The diagnostic metrics rows preserve prior spend without hiding/resetting it.
+2. The gate change is safe: it still counts diagnostic spend and still requires
+   completed pass/ready evidence before a test can be READY.
+3. The Haiku-only process-quality retry path approved in iter3 remains valid.
+4. The next AWS action remains only a fresh Phase A review; no direct spend is
+   allowed without Phase A approval and budget/headroom check.
+
+Return `REJECT_FIX_OR_RETRY_PATH` if this evidence-ledger change creates a
+readiness or accounting blocker. Include HIGH/MEDIUM/LOW findings. Do not run
+AWS.

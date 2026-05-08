@@ -1,0 +1,85 @@
+You are reviewing Block T iter-4 of v5.0.1 — fixes for Codex iter-3
+APPROVE_WITH_FIXES verdict (1 HIGH + 2 MEDIUM + 1 LOW).
+
+Diff range: 43315a6..HEAD (Block T iter-3 → Block T iter-4 commit 36cad4f).
+
+iter-3 findings being closed:
+
+1. HIGH — create_chart v4 schema/behavior gap.
+   v4 advertised: bar, grouped_bar, stacked_bar, line, pie, scatter,
+   horizontal_bar, combo + xlabel, ylabel, colors, dpi, width, height,
+   style; required=[data].
+   Fix at compact_v5/MAIN/agent/tools/v4_documents.py:
+   - _CHART_TYPES_V4 tuple lists all 8 v4 chart types.
+   - Executor now branches on chart_type for grouped_bar, stacked_bar,
+     scatter, horizontal_bar, combo (in addition to bar/line/pie).
+   - data shape now handles: {label:value}, {labels,values}, {x,y},
+     {labels,series:[{name,values}]}.
+   - All v4 advertised fields are read + applied: xlabel/ylabel via
+     ax.set_xlabel/ylabel; colors as per-series color list; dpi via
+     savefig dpi kwarg; width/height via figsize; style via plt.style.use.
+   - Schema enum lists all 8 types; required=["data"] (was [filepath]).
+   - Lock test: test_tool_create_chart_v4_advertised_types_and_fields
+     renders grouped_bar (with series) + scatter ({x,y}) + horizontal_bar.
+
+2. MEDIUM — create_excel silently wrote empty workbook on no payload.
+   Fix at v4_documents.py: executor now explicitly checks if both
+   `data` and `rows` are absent and returns:
+   "Error: data or rows is required (list of rows or list of dicts)".
+   Lock test: test_tool_create_excel_rejects_empty_payload.
+
+3. MEDIUM — create_pdf silently wrote blank PDF on no payload.
+   Fix at v4_documents.py: executor now explicitly checks if both
+   `data` and `content` are absent and returns:
+   "Error: data or content is required (list of blocks)".
+   Lock test: test_tool_create_pdf_rejects_empty_payload.
+
+4. LOW — Status docs claimed `+1 SSRF block` lock that no longer exists
+   (replaced when web_fetch was disabled).
+   Fix at compact_v5/_status/V5_BUILD_STATUS.md and
+   compact_v5/_status/V5_RUNNABLE_PORT_LOG.md row 103-A: now explicitly
+   note "Active SSRF test removed when web_fetch was disabled — SSRF
+   logic retained as unreachable code in tools/web_fetch.py for forward
+   re-enable."
+
+Tests: 768 pass + 14 skip (was 764 + 14; +4 net iter-3 lock tests).
+verify_ship_zip.py: PASS (133 files / 375.5 KB / 36%).
+
+Apply 3-axis review.
+
+AXIS A — Errors / bugs / regressions
+- Are the 4 iter-3 findings closed correctly without introducing new bugs?
+- Does create_chart correctly handle the grouped_bar / stacked_bar /
+  combo branches when `series` is missing from data? (Should fall back
+  to plain bar with the dict-shape values.)
+- Is the empty-payload check at the START of the executor (before path
+  validation), so we don't validate then reject?
+- The horizontal_bar branch passes color-list to ax.barh but ax.barh
+  only accepts a single color or an array — does it tolerate both?
+  (matplotlib generally does, but flag if it's risky.)
+
+AXIS B — v5 architecture + goals fit
+- Constraint #1 (v4.10.10 baseline): create_chart now matches v4
+  advertised contract. Are there any v4 advertised fields/behaviors
+  STILL missing? (Spot-check v4 sagemaker_agent.py:7287-7297 + any
+  tool_create_chart impl.)
+- Schema dual-form (data OR rows for excel; data OR content for pdf)
+  remains. This is intentional dual-aliasing for v4-advertised + v5
+  callers; is this acceptable?
+- The numpy import inside the grouped_bar branch is lazy/conditional.
+  Acceptable (numpy ships with matplotlib; the wrapping try/except
+  catches ImportError) — flag if you disagree.
+
+AXIS C — Reference-repo coverage
+- Spot-check v4 tool_create_chart implementation (find at
+  compact_v4/MAIN/agent/sagemaker_agent.py — search for
+  `def tool_create_chart` or `create_chart` near line 7287). Are there
+  v4 behaviors (e.g., legend placement, grid, axis ticks) v5 still misses?
+- create_excel / create_pdf empty-payload error wording — does v4 itself
+  produce a similar error, or is v5's wording inventing new text? (If
+  v4 has its own error string, prefer v4's wording for client compat.)
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Goal is APPROVE so we can
+tag v5.0.1-block-t and move to Block J.

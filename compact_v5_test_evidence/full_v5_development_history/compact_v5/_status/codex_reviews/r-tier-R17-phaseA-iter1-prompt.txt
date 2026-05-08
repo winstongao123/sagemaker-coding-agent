@@ -1,0 +1,95 @@
+Repo root: D:\Github\sagemaker-coding-agent
+
+You are the independent Claude Phase A reviewer for R-tier test R17.
+Read files from disk yourself using read-only tools. Do not rely on this prompt
+as evidence, and do not modify files.
+
+Return text only. Include the exact token APPROVE_FOR_AWS_CALL if and only if
+R17 is safe and useful to run on real AWS now. Otherwise return blocking
+findings.
+
+Reviewer command boundary:
+- subscription-auth Claude reviewer path only;
+- no writes;
+- no git mutations;
+- no AWS calls from the reviewer.
+
+Files to read:
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/MAIN/agent/tests/r_tier/test_r17_thinking_visibility.py
+- compact_v5/MAIN/agent/tests/r_tier/test_r6_to_r19_readiness_specs.py
+- compact_v5/_status/scripts/build_telemetry.py
+- compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py
+- compact_v5/MAIN/agent/runtime/bedrock_client.py
+- compact_v5/MAIN/agent/core/query_engine.py
+
+R17 worker Phase A summary:
+- Test id: R17.
+- Purpose: prove PS#4 thinking visibility on real Bedrock by enabling extended
+  thinking, capturing thinking blocks in agent history, and leaving
+  chat_response audit evidence that build_telemetry.py can convert into
+  per_turn[].thinking_text.
+- Matrix row: R17 "Thinking visibility", kind real, model Sonnet 4.5 AU,
+  planned cap $0.30.
+- Hard ceiling: $0.36, using the user-approved +20% retry buffer. Planned cap
+  remains the budget target.
+- Runner: compact_v5/MAIN/agent/tests/r_tier/test_r17_thinking_visibility.py.
+- Prompt: a bounded two-train reasoning prompt, no tools, max_turns 8.
+- Model: au.anthropic.claude-sonnet-4-5-20250929-v1:0.
+- Region: AWS_REGION default ap-southeast-2.
+
+Overlap/optimization:
+- R17 is not redundant with R2/R4/R16/R19-U10. Those prove compaction, cache,
+  app-build, and coherence; they do not require extended thinking or validate
+  that thinking text is preserved in both chat history and telemetry source.
+- Local unit/integration tests prove thinking config and telemetry parsing with
+  mocks only. R17 is the real-model confirmation that a Sonnet Bedrock response
+  actually yields thinking text through the full Agent/QueryEngine/AUDIT path.
+- The runner uses tools=[] and a single bounded prompt to minimize spend and
+  isolate thinking visibility from edit/tool quality risks.
+
+Required evidence files after run:
+- compact_v5/_status/codex_reviews/r-tier-R17-phaseA-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R17-phaseA-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-R17-aws-call1.log
+- compact_v5/_status/r-tier-R17-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R17-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R17-aws-call1-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/codex_reviews/r-tier-R17-phaseC-iter1-prompt.txt
+- compact_v5/_status/codex_reviews/r-tier-R17-phaseC-iter1.md
+- compact_v5/_status/r-tier-R17-gate.txt
+
+Stop conditions:
+- Claude Phase A does not return APPROVE_FOR_AWS_CALL.
+- AWS Budget/headroom is unhealthy before spend.
+- R17 needs more than the $0.36 hard ceiling.
+- The run hits max_turns.
+- No thinking block appears in assistant history.
+- No thinking text appears in chat_response audit evidence.
+- build_telemetry.py fails to produce non-empty per_turn thinking_text.
+- Raw log, side metrics, telemetry, quality review, metrics row, review-log row,
+  Phase C, or gate output cannot be produced.
+- Any unexpected repeated failed tool/exec loop appears, though the runner uses
+  no tools and should have tool_calls=0.
+
+Local zero-cost checks already run before this Phase A prompt:
+- py -3.11 -m py_compile compact_v5/MAIN/agent/tests/r_tier/test_r17_thinking_visibility.py compact_v5/_status/scripts/build_telemetry.py compact_v5/_status/scripts/r_tier_gate.py
+- PYTHONPATH=compact_v5/MAIN/agent py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r17_thinking_visibility.py -q
+  Result: 1 skipped, because RUN_REAL_BEDROCK was not set.
+- PYTHONPATH=compact_v5/MAIN/agent py -3.11 -m pytest compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py::test_build_telemetry_captures_thinking_when_audit_emits_chat_response compact_v5/MAIN/agent/tests/integration/test_build_telemetry.py::test_build_telemetry_reads_query_engine_nested_chat_response compact_v5/MAIN/agent/tests/unit/test_bedrock.py::test_thinking_config_sent_on_every_call_when_enabled -q
+  Result: 3 passed.
+
+Review questions:
+1. Is R17 still needed as a real AWS/Sonnet row, rather than local-only mock
+   evidence?
+2. Does the runner exercise the intended production path for thinking
+   visibility?
+3. Are the cost cap, stop rules, and required evidence adequate?
+4. Is the run sufficiently isolated and non-overlapping to justify the small
+   Sonnet spend?
+5. If approved, include APPROVE_FOR_AWS_CALL exactly.

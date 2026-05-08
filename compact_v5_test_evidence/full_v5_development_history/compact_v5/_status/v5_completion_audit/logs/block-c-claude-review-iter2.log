@@ -1,0 +1,5 @@
+COMMAND: claude.cmd -p --model opus --effort xhigh --permission-mode dontAsk --setting-sources user --settings compact_v5/_status/v5_completion_audit/claude-reviewer-settings.json --tools Read,Grep,Glob,Bash --disallowedTools <write/git/codex/aws denied> --output-format text < prompts/block-c-claude-review-iter2.md
+EXIT_CODE: 124
+STDERR:
+
+TIMEOUT: Claude review exceeded 900000 ms and was killed.

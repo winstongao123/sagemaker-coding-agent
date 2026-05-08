@@ -1,0 +1,17 @@
+﻿py : C:\Users\winst\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n
+2kfra8p0\LocalCache\local-packages\Python311\site-packages\requests\__init__.py:113:
+RequestsDependencyWarning: urllib3 (2.3.0) or chardet
+(7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!
+At line:2 char:75
++ ... AIN\agent'; py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/tes ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\winst\...ported version!:Strin
+   g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+  warnings.warn(
+........................................................................ [ 62%]
+...........................................                              [100%]
+115 passed in 0.16s
+WARNING:root:session-final cost: $0.0087 (cache 8% | saved ~$0.0003) (1 API calls,
+in=1,200 out=300)

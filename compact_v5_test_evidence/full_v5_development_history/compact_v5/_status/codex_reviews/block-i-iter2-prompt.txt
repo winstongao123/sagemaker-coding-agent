@@ -1,0 +1,124 @@
+You are reviewing Block I of v5.0.1 — ITER 2 (re-review after fixes).
+
+Iter-1 verdict was APPROVE_WITH_FIXES with 4 code findings + 1 doc:
+  1. activate_for_path didn't match descendants of stripped directory
+     patterns (`src/**` → `src` lost child matches).
+  2. disable_model_invocation NOT enforced in discover_relevant /
+     tools/skill.py read+activate.
+  3. I-6 substitute_skill_vars implemented but NOT called from
+     get_active_skill_prompt.
+  4. activate_for_path contradicted ADR-029 §1 first-match-wins.
+  AXIS C: PORT_LOG #082 didn't mention I-12 deferral, verify-skill
+  remap, or Wave 6 gap #8.
+
+Verify each fix lands correctly + new lock tests are sound. Focus the
+diff on iter-2 commit abfaf7c.
+
+Diff range: 1e30f49..HEAD (iter-2 commit abfaf7c).
+Full Block diff for context: v5.0.1-block-f2..HEAD.
+
+Iter-2 file changes:
+- MODIFIED compact_v5/MAIN/agent/skills/manager.py
+  - activate_for_path:
+    + matched check now also returns True when candidate equals the
+      stripped pattern OR starts with `pattern + "/"` — handles the
+      `src/**` → `src` case (test descendants).
+    + returns activated list immediately after first match (was: kept
+      iterating outer skill loop, letting last match overwrite
+      active_skill).
+  - discover_relevant: skips skills with disable_model_invocation:true
+    even when triggers fire.
+  - get_active_skill_prompt(session_id="") signature: now takes a
+    session_id param and applies substitute_skill_vars() to the body
+    before returning.
+- MODIFIED compact_v5/MAIN/agent/tools/skill.py
+  - subcommand "list" → uses list_model_invocable() instead of
+    list_skills() so disable_model_invocation skills are hidden.
+  - subcommand "read" → looks up SkillInfo first; if
+    disable_model_invocation true, returns clear "user-invocable only"
+    error pointing the user to /skill use.
+  - subcommand "activate" → same reject-with-clear-error path.
+- MODIFIED compact_v5/MAIN/agent/core/query_engine.py
+  - get_active_skill_prompt() call now passes self.session_id.
+- MODIFIED compact_v5/_status/V5_RUNNABLE_PORT_LOG.md
+  - NEW row #083: AXIS C closure (I-12 deferred / verify remap to
+    PORT_LOG #029 / Wave 6 gap #8 tool-vs-skill precedence).
+- MODIFIED compact_v5/MAIN/agent/tests/integration/test_block_i.py
+  - 5 new lock tests:
+    + test_paths_directory_root_pattern_activates_descendants
+    + test_paths_first_match_wins_per_adr029
+    + test_disable_model_invocation_filters_discover_relevant
+    + test_disable_model_invocation_blocks_skill_tool_read_and_activate
+    + test_get_active_skill_prompt_substitutes_skill_dir_and_session
+
+Tests: 631 pass + 6 skip (was 626 + 6 at iter-1; +5 finding-locks).
+verify_ship_zip.py: PASS (115 files / 321.2 KB / 36%).
+
+Apply the 3-axis review template focused on the iter-2 fixes.
+
+AXIS A — Errors / bugs / regressions
+- Verify finding #1 fix:
+  - activate_for_path matched check now combines fnmatch + equality +
+    `startswith(root + "/")`. The variable `root = pat_norm.rstrip("/")`
+    handles both `src/**`→`src` and `src/`. Verify.
+  - Lock test asserts edit of `src/foo/bar.py` activates the skill.
+- Verify finding #2 fix:
+  - discover_relevant skip clause:
+    `if skill.disable_model_invocation: continue` — placed BEFORE the
+    triggers check so it short-circuits even for trigger-bearing skills.
+  - tools/skill.py list/read/activate all gate on the same flag. Verify
+    the message text includes "user-invocable only" so the lock test's
+    assert holds.
+- Verify finding #3 fix:
+  - get_active_skill_prompt(session_id="") signature change: callers
+    that didn't supply session_id (existing tests, defensive code) now
+    fall through with empty session_id which leaves
+    ${CLAUDE_SESSION_ID} in place. Confirm this doesn't break Phase 10
+    skill-loading tests.
+  - query_engine call now passes self.session_id — the engine's
+    session_id is set in __init__ via uuid4 default. Verify the caller
+    has it available at the prompt-injection point (it should: skill
+    injection happens after __init__).
+- Verify finding #4 fix:
+  - activate_for_path returns activated immediately after first match.
+    Lock test creates 2 skills both matching *.py and asserts only one
+    is activated, with active_skill matching that one entry.
+- New lock tests:
+  - 5 tests added under "Codex iter-1 finding-lock tests" section.
+  - test_disable_model_invocation_blocks_skill_tool_read_and_activate
+    uses bootstrap_built_ins; verify that triggers tool registration
+    correctly in the test fixture.
+- Regression check: 631 pass + 6 skip means none of the 626 prior tests
+  broke + 5 new finding-locks all green.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+The iter-2 changes are scoped fixes:
+- 4 surgical edits to manager.py + skill.py + query_engine.py.
+- No new modules, no new public surface (signature change is opt-in
+  param with default).
+- Net behavior change matches the documented contracts in ADR-029.
+- Constraint #5 (minimum file structures) honored.
+- disable_model_invocation enforcement hardens the user-vs-model split
+  that I-2 was always meant to provide.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+PORT_LOG #083 closes the doc gap:
+- I-12 DEFERRED to Block N (cross-references ADR-029 §6).
+- Wave 6 row #93 verify-skill closure remapped to PORT_LOG #029.
+- Wave 6 gap #8 tool-vs-skill precedence: documented disposition.
+
+Verify the precedence note is concrete enough — does it tell a future
+agent how to choose? (Block T tools win; skills are auxiliary; the
+3-step resolution: tool → active skill → /skill use suggestion.)
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if all 4 iter-1 code findings + 1 doc finding have clean
+fixes with covering lock tests AND no new findings emerge. Be specific.
+Cite file:line for any finding.

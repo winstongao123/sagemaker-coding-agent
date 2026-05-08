@@ -1,0 +1,106 @@
+You are reviewing Block G2 of v5.0.1 — forkSubagent cache-prefix replay.
+
+Block G2 deliverable: helpers that build a fork-child message buffer
+with a BYTE-identical cache prefix across all fork children. Only the
+trailing per-child directive text differs.
+
+Diff range: v5.0.1-block-g3..HEAD (Block G2 commit).
+
+Files changed:
+- NEW compact_v5/MAIN/agent/subagent/fork.py (~210 LOC)
+  - FORK_BOILERPLATE_TAG = "fork-boilerplate" (verbatim Runnable)
+  - FORK_PLACEHOLDER_RESULT = "Fork started — processing in background"
+    (verbatim Runnable; identical text across children for cache match)
+  - FORK_DIRECTIVE_PREFIX = "Your directive: " (verbatim)
+  - is_in_fork_child(messages) — recursive-fork guard
+  - build_child_message(directive) — verbatim Runnable boilerplate
+  - build_forked_messages(parent_messages, parent_assistant_message, directive)
+    — the cache-prefix builder
+  - serialize_for_cache_prefix(messages) + cache_prefix_match_length —
+    test helpers
+- EXTENDED compact_v5/MAIN/agent/subagent/__init__.py (re-exports)
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_g2.py
+  (8 tests + 1 T5 skip):
+  + test_forkSubagent_byte_identical_prefix
+  + test_forkSubagent_placeholder_result_text_constant
+  + test_forkSubagent_cache_aware_serialization
+  + test_g2_cache_prefix_real_bedrock (T5, skipped)
+  + test_is_in_fork_child_detects_boilerplate_tag
+  + test_build_forked_messages_no_tool_use_falls_back_to_directive_only
+  + test_build_forked_messages_directive_appears_only_in_last_block
+  + test_build_forked_messages_preserves_parent_history_byte_identical
+  + test_build_forked_messages_rejects_non_assistant_parent_message
+
+Reference paths:
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/tools/AgentTool/forkSubagent.ts
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block G2)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block G2)
+- ADR-033: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 687 pass + 8 skip (was 679 + 7 at end of Block G3; +8 pass + 1 skip).
+verify_ship_zip.py: PASS (121 files / 338.9 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line.
+
+AXIS A — Errors / bugs / regressions
+- Cache-prefix verbatim:
+  - FORK_PLACEHOLDER_RESULT must equal "Fork started — processing in
+    background" (em-dash). Lock test pins exact string.
+  - FORK_BOILERPLATE_TAG = "fork-boilerplate".
+  - FORK_DIRECTIVE_PREFIX = "Your directive: ".
+- build_forked_messages contract:
+  - Returns parent_messages (unchanged) + replayed assistant + 1 user.
+  - The replayed assistant is a deep-copy of the parent assistant — verify
+    parent's content list is not mutated.
+  - For each tool_use in the parent assistant, ONE tool_result block in
+    the user message with FORK_PLACEHOLDER_RESULT text.
+  - The trailing text block in the user message contains the per-child
+    directive.
+  - When parent assistant has 0 tool_use blocks: returns parent_messages
+    + 1 user with the directive only.
+  - parent_assistant_message with role != "assistant" raises ValueError.
+- is_in_fork_child:
+  - Returns True for user list-content with text block containing tag.
+  - Returns True for user string-content containing tag (defensive).
+  - Returns False for assistant text containing tag (boilerplate is
+    user-only).
+- serialize_for_cache_prefix:
+  - Deterministic across key insertion order (sort_keys=True).
+  - separators tight (",", ":") — no whitespace variation.
+- cache_prefix_match_length:
+  - Returns the count of leading byte-identical messages.
+  - Stops at the first divergence.
+- T5 deferral: pytest.skipif on RUN_REAL_BEDROCK env. Lock test
+  inside is also pytest.skip with the deferral note.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Constraint #5 (minimum file structures): 1 new module under
+  subagent/ + tests. Defensible.
+- Constraint #6 (architecture-first): forkSubagent is the canonical
+  Runnable pattern; v5 adapts it sync-only and intentionally defers the
+  spawn-time wiring to Block L (cache-hit verification fits there).
+- Constraint #15 (quality, no rush): default behavior is unchanged
+  (Block G2 ships only helpers + tests; no spawn integration yet).
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+SYNTHESIS_MASTER §Block G / G-8 mapped to "already in Block G2 plan".
+Block G2 covers G-8.
+
+Adaptations declared in PORT_LOG #094:
+- Sync-only (no Promise/streaming).
+- Wiring deferred to Block L per ADR-033 §4.
+
+Verify the deferral is properly declared (not silent scope narrowing).
+ADR-033 §4 + PORT_LOG #094 both say the spawn-time wiring lands in
+Block L.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.

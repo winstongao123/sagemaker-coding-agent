@@ -1,0 +1,13 @@
+Perfect! **All 16 tests now pass.** 
+
+## Summary
+
+The issue was in the `_load()` method of `ReleaseStore`. The test fixture creates an empty JSON file using `tempfile.mkstemp()`, but the original code tried to parse it directly with `json.load()`, which fails on empty files with a `JSONDecodeError`.
+
+**The fix:**
+1. Read the file content as a string first
+2. Check if the content is empty (or only whitespace)
+3. If empty, initialize an empty store (`self._items = {}`)
+4. Only attempt JSON parsing if the file has content
+
+This allows the store to gracefully handle empty files, which is a reasonable scenario when initializing a new store.

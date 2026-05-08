@@ -1,0 +1,62 @@
+{
+  "acceptance_pass": false,
+  "agent": "v4",
+  "cap_usd": 5.0,
+  "error": false,
+  "error_log": "",
+  "log_files": [],
+  "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "pytest": {
+    "returncode": null,
+    "summary": "NO_TESTS_DIR"
+  },
+  "region": "ap-southeast-2",
+  "required_present": {
+    "AGENT_STATUS.md": false,
+    "README.md": false,
+    "docs/DESIGN.md": false,
+    "docs/RESEARCH.md": false,
+    "docs/REVIEW.md": false,
+    "docs/TEST_REPORT.md": false,
+    "docs/logs": false,
+    "docs/reviews": false,
+    "mini_research_worklog/__init__.py": false,
+    "mini_research_worklog/cli.py": false,
+    "mini_research_worklog/models.py": false,
+    "mini_research_worklog/report.py": false,
+    "mini_research_worklog/search.py": false,
+    "mini_research_worklog/store.py": false,
+    "pyproject.toml": false,
+    "tests/test_cli.py": false,
+    "tests/test_models.py": false,
+    "tests/test_search.py": false,
+    "tests/test_store.py": false
+  },
+  "required_present_count": 0,
+  "required_total": 19,
+  "review_files": [],
+  "run": {
+    "agent": "v4",
+    "elapsed_seconds": 504.8061420917511,
+    "stats": {
+      "api_calls": 93,
+      "session_cost_usd": 0.779577755,
+      "session_input": 1092762,
+      "session_output": 35718
+    }
+  },
+  "stats": {
+    "api_calls": 93,
+    "session_cost_usd": 0.779577755,
+    "session_input": 1092762,
+    "session_output": 35718
+  },
+  "subagent_cost_usd": {},
+  "subagent_used": false,
+  "workspace": "D:\\Github\\sageagent_psps_v4_fresh_workspaces\\v4",
+  "zip": {
+    "error": "no zip found",
+    "valid": false,
+    "zip": ""
+  }
+}

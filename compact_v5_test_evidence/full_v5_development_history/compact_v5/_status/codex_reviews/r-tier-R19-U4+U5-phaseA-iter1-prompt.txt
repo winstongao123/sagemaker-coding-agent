@@ -1,0 +1,106 @@
+Claude Phase A preflight review request for Stage 6 R19-U4/R19-U5.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Read these files from disk:
+
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/MAIN/agent/tests/r_tier/test_r3_three_subagents.py
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py
+- compact_v5/_status/r-tier-R3-aws-call2-telemetry.json
+- compact_v5/_status/r-tier-R3-aws-call2-quality.md
+- compact_v5/_status/codex_reviews/r-tier-R3-phaseC-iter1.md
+- compact_v5/_status/scripts/build_telemetry.py
+- compact_v5/_status/scripts/r_tier_gate.py
+
+Task:
+
+Review the proposed AWS call for Stage 6 pending members R19-U4 + R19-U5.
+Return `APPROVE_FOR_AWS_CALL` only if this is ready for one real Bedrock pytest
+invocation. Otherwise return `REJECT_FOR_AWS_CALL`.
+
+Stage 6 context:
+
+- The optimized plan names Stage 6 as R3 + R19-U4 + R19-U5.
+- R3 already has prior READY real-AWS evidence in the ledger:
+  - Phase C `GENUINE_PASS`;
+  - gate pass;
+  - $0.0810 recorded spend;
+  - evidence files `r-tier-R3-aws-call2-*`.
+- To avoid unnecessary R3 duplicate spend, this Phase A proposes using the
+  existing R3 READY evidence plus one new R19-U4/R19-U5 bundle call. Reject if
+  R3 must be rerun in the same Stage 6 AWS invocation.
+
+Test IDs, purpose, fixtures, prompts, runner, expected model, caps:
+
+1. R19-U4 conflicting sub-agent findings
+- Purpose: prove the parent reconciles conflicting child findings using
+  source-of-truth evidence rather than trusting one subagent blindly.
+- Fixture:
+  - `reviews/alpha.md`: Alpha says SHIP/payment API healthy.
+  - `reviews/beta.md`: Beta says ROLLBACK/payment API error rate too high.
+  - `source_of_truth.json`: error_rate_pct 12.0, healthy_threshold_pct 2.0,
+    supported_decision ROLLBACK.
+- Prompt:
+  - dispatch exactly two explore subagents, one per review file;
+  - after both return, parent reads `source_of_truth.json`;
+  - write `reconciliation.md` identifying conflict and choosing ROLLBACK
+    because 12.0 > 2.0.
+- Runner:
+  `py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py -v -s`
+- Expected model: `au.anthropic.claude-haiku-4-5-20251001-v1:0`.
+- Planned cap: $0.40. Hard retry ceiling: $0.48.
+- Required evidence: raw AWS log, audit JSONL, side metrics, telemetry JSON,
+  quality review, metrics JSONL row, review-log row, Phase C review, gate.
+- Stop conditions: fewer than two task dispatches, no conflict identified, no
+  source-backed ROLLBACK conclusion, repeated guard/exec loop, max_turns, cap
+  exceeded, missing telemetry/evidence.
+
+2. R19-U5 sub-agent fails mid-task
+- Purpose: prove the parent records one failed child and completes using
+  remaining evidence.
+- Fixture:
+  - `evidence/checkout.md`: checkout probe PASS.
+  - `evidence/inventory.md`: inventory probe PASS.
+  - `evidence/missing_probe.md`: intentionally absent.
+- Prompt:
+  - dispatch exactly three explore subagents;
+  - the missing file child is expected to fail/report missing evidence;
+  - write `recovery_summary.md` recording the failure, using the two successful
+    child findings, and concluding `CONTINUE_WITH_PARTIAL_EVIDENCE`.
+- Runner/model: same bundle pytest/model.
+- Planned cap: $0.30. Hard retry ceiling: $0.36.
+- Required evidence: failed-child recorded, two successful findings used,
+  recovery report artifact, raw/audit/telemetry/quality/metrics/review-log/Phase
+  C/gate.
+- Stop conditions: no failed-child evidence, parent crashes/stalls, no final
+  partial-evidence conclusion, repeated guard/exec loop, max_turns, cap
+  exceeded, missing telemetry/evidence.
+
+Overlap and optimization:
+
+- R3 already proved basic three-subagent dispatch and parent synthesis on real
+  Bedrock.
+- R19-U4 adds conflict reconciliation.
+- R19-U5 adds failed-child recovery.
+- The proposed call avoids reburning R3 while completing the missing Stage 6
+  orchestration risks. If you judge this violates the optimized plan, reject
+  and say R3 must be bundled/rerun.
+
+Local preflight:
+
+- `py -3.11 -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py -q`
+- Result: skipped without `RUN_REAL_BEDROCK`, as expected.
+
+Required response:
+
+- Start with exactly one verdict line: `APPROVE_FOR_AWS_CALL` or
+  `REJECT_FOR_AWS_CALL`.
+- List HIGH/MEDIUM/LOW findings.
+- Explicitly state whether existing R3 READY evidence is sufficient for Stage 6
+  or whether R3 must be rerun before/with R19-U4/R19-U5.

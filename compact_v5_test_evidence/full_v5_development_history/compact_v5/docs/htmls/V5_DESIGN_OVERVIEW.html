@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SageAgent v5 Final Design Overview</title>
+<style>
+:root {
+  --bg: #f7f9fc;
+  --ink: #172033;
+  --muted: #5b687a;
+  --panel: #ffffff;
+  --line: #d7e0ec;
+  --blue: #2358c2;
+  --green: #0f7b55;
+  --amber: #986300;
+  --red: #a33a2a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.55;
+}
+header {
+  background: #10213f;
+  color: #fff;
+  padding: 30px 28px;
+}
+header h1 { margin: 0; font-size: 30px; letter-spacing: 0; }
+header p { max-width: 980px; margin: 10px 0 0; color: #d9e7ff; }
+nav {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+nav a {
+  color: var(--blue);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 13px;
+  padding: 7px 9px;
+}
+main { max-width: 1240px; margin: 0 auto; padding: 22px; }
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 22px;
+  margin: 0 0 20px;
+}
+h2 { margin: 0 0 8px; font-size: 22px; }
+h3 { margin: 18px 0 8px; font-size: 17px; }
+.lede { color: var(--muted); font-size: 17px; margin: 0 0 14px; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 14px;
+}
+th, td {
+  border: 1px solid var(--line);
+  padding: 10px;
+  vertical-align: top;
+  text-align: left;
+}
+th { background: #eef4fb; }
+code {
+  background: #f2f5f9;
+  border: 1px solid #dce5ef;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.note {
+  border-left: 5px solid var(--blue);
+  background: #f3f7ff;
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+.ok { border-left-color: var(--green); background: #f2fbf6; }
+.warn { border-left-color: var(--amber); background: #fff8e8; }
+.flow {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+.flow-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+.box {
+  border: 2px solid #c8d7f0;
+  background: #f8fbff;
+  padding: 12px;
+  min-height: 92px;
+}
+.box b { display: block; color: var(--blue); margin-bottom: 5px; }
+.arrow {
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+.two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+footer {
+  max-width: 1240px;
+  margin: 0 auto;
+  color: var(--muted);
+  padding: 10px 22px 34px;
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .flow-row { grid-template-columns: 1fr; }
+  header h1 { font-size: 24px; }
+  main { padding: 14px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>SageAgent v5 Final Design Overview</h1>
+  <p>A simple final map of v5: what it is, how it works, what we learned from Runnable, v4, Hermes, and Learning Factory, what was implemented, what was not copied, and how the AWS tests proved readiness.</p>
+</header>
+
+<nav>
+  <a href="#simple">Simple</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#references">Reference Lessons</a>
+  <a href="#software-builder">Software Builder</a>
+  <a href="#review">Review System</a>
+  <a href="#tests">Tests</a>
+  <a href="#implemented">Implemented</a>
+  <a href="#not-implemented">Not Implemented</a>
+  <a href="#files">Files</a>
+</nav>
+
+<main>
+  <section id="simple">
+    <h2>Explain It Like You Are 9</h2>
+    <p class="lede">v5 is a robot programmer for SageMaker. It has a brain, a notebook, a toolbox, helper workers, a money meter, and inspectors.</p>
+    <table>
+      <tr><th>Part</th><th>Kid Version</th><th>Real Version</th></tr>
+      <tr><td>Brain</td><td>Decides the next step.</td><td>Bedrock Claude models through the query engine.</td></tr>
+      <tr><td>Notebook</td><td>The steering wheel and dashboard.</td><td>v4-style dark chat UI, model picker, session buttons, Plan Mode, Auto-Compact, Compact/Clean, thinking/budget controls, status, todos, memory, sessions, checkpoints, and audit logs.</td></tr>
+      <tr><td>Toolbox</td><td>Reads files, edits files, and runs tests.</td><td>Read/edit/shell/notebook/task/result/memory tools.</td></tr>
+      <tr><td>Helpers</td><td>Small robot helpers do side jobs.</td><td>Subagents with structured result envelopes.</td></tr>
+      <tr><td>Money meter</td><td>Counts how much model work costs.</td><td>Token, cache, model, tool, subagent, and cost telemetry.</td></tr>
+      <tr><td>Inspectors</td><td>Do not let it say done too early.</td><td>Scope audit, local tests, Claude reviews, R-tier gates, and git checkpoints.</td></tr>
+    </table>
+    <div class="note ok">
+      Final state: Claude approved v5.0.1 production readiness after the AWS/R-tier loop. The matrix ended with 28 `READY` rows and 14 `DISPOSITION_OK` rows. Local Bedrock spend recorded by the test ledger was `$1.6757 / $14.25`.
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>Architecture Flow</h2>
+    <p class="lede">No Mermaid is used here, so the diagram cannot fail from Mermaid syntax. Read left to right.</p>
+
+    <h3>Main Agent Loop</h3>
+    <div class="flow">
+      <div class="flow-row">
+        <div class="box"><b>1. User task</b>Notebook, chat, or command asks for software work.</div>
+        <div class="box"><b>2. Load state</b>Prompt, memory, status, todos, skills, and saved session state.</div>
+        <div class="box"><b>3. Model turn</b>Bedrock Claude decides whether to answer or use tools.</div>
+        <div class="box"><b>4. Tool work</b>Read, edit, shell, notebook, todo, task, result replay, or checkpoint.</div>
+        <div class="box"><b>5. Evidence</b>Logs, telemetry, costs, status, and tests are saved.</div>
+      </div>
+      <div class="arrow">If the task is not done, v5 loops. If context is large, v5 compacts and resumes from saved state.</div>
+    </div>
+
+    <h3>Long Software Task Loop</h3>
+    <div class="flow-row">
+      <div class="box"><b>Plan</b>Break task into clear work items.</div>
+      <div class="box"><b>Build</b>Make a focused code change.</div>
+      <div class="box"><b>Test</b>Run local or AWS tests only when allowed.</div>
+      <div class="box"><b>Review</b>Self-review and Claude review check evidence.</div>
+      <div class="box"><b>Checkpoint</b>Commit and push specific files.</div>
+    </div>
+
+    <h3>Subagent And Reviewer Loop</h3>
+    <div class="flow-row">
+      <div class="box"><b>Parent</b>Owns the full user goal.</div>
+      <div class="box"><b>Subagent</b>Gets a bounded helper task and budget.</div>
+      <div class="box"><b>Envelope</b>Returns files, findings, costs, errors, and next steps.</div>
+      <div class="box"><b>Claude reviewer</b>Reads repo files itself, row by row.</div>
+      <div class="box"><b>Close gate</b>Blocks done if evidence is missing.</div>
+    </div>
+  </section>
+
+  <section id="references">
+    <h2>What We Learned From Other Systems</h2>
+    <table>
+      <tr><th>Reference</th><th>Lesson Used In v5</th><th>What We Did Not Copy</th></tr>
+      <tr><td>Runnable Claude Code</td><td>Context compaction, cache thinking, skill discovery, model switch, tool-loop controls, subagent/reviewer discipline, and long-task status handling.</td><td>We did not copy the exact UI, streaming assumptions, or every Claude Code internal behavior because v5 runs in SageMaker/Bedrock.</td></tr>
+      <tr><td>v4</td><td>SageMaker notebook shape, dark chat UI, model picker, session controls, Compact/Clean, practical local tools, Bedrock constraints, and earlier working UX were kept as anchors.</td><td>We did not keep v4's weaker long-run memory/status discipline or monolithic internals. v5 adds stronger gates, telemetry, modular code, and subagent envelopes.</td></tr>
+      <tr><td>Hermes agent</td><td>Non-streaming concurrency ideas, robust tool orchestration, and production-agent failure handling informed the no-streaming adaptation.</td><td>We did not adopt incompatible streaming-first assumptions.</td></tr>
+      <tr><td>Learning Factory</td><td>No-drift process: save prompts, reviews, ledgers, status, lessons, and proof before claiming done.</td><td>We did not make the human sit at every step. v5 uses persisted gates and checkpoint evidence so it can run longer safely.</td></tr>
+    </table>
+  </section>
+
+  <section id="software-builder">
+    <h2>Software Builder Enhancements</h2>
+    <table>
+      <tr><th>Enhancement</th><th>Why It Exists</th><th>Production Meaning</th></tr>
+      <tr><td>Durable state and memory</td><td>Long coding tasks cannot depend on terminal scrollback.</td><td>v5 can resume from files after compaction or restart.</td></tr>
+      <tr><td>Todos and status</td><td>The agent must know what remains.</td><td>Progress is visible and auditable.</td></tr>
+      <tr><td>Checkpoints</td><td>Software work needs rollback points.</td><td>Specific-file checkpointing supports safer long tasks.</td></tr>
+      <tr><td>Managed shell jobs</td><td>Long commands need logs and cleanup.</td><td>Tests and build commands are less likely to disappear.</td></tr>
+      <tr><td>Result replay</td><td>Huge outputs should not blow up context.</td><td>Large logs can be stored and replayed.</td></tr>
+      <tr><td>Subagent envelopes</td><td>Helper agents need traceable output.</td><td>Parent can inspect changed files, costs, failures, and next steps.</td></tr>
+      <tr><td>Verify/done gates</td><td>"Done" must mean evidence-clean.</td><td>v5 must prove tests, logs, and review are ready.</td></tr>
+      <tr><td>Token/cache/cost telemetry</td><td>Production needs spend visibility.</td><td>Parent, subagent, model, cache, and tool behavior are measurable.</td></tr>
+    </table>
+  </section>
+
+  <section id="review">
+    <h2>No-Drift Review System</h2>
+    <p class="lede">This is the big lesson from the completion incident: a worker can sound confident while scope is missing. v5.0.1 fixed the process by making evidence row-by-row.</p>
+    <table>
+      <tr><th>Gate</th><th>What It Prevents</th></tr>
+      <tr><td>Scope audit</td><td>Stops silent narrowing of planned scope.</td></tr>
+      <tr><td>Worker self-review</td><td>Stops the worker from claiming done without checking itself.</td></tr>
+      <tr><td>Claude independent review</td><td>Stops trusting the worker prompt alone. Claude must read files from disk.</td></tr>
+      <tr><td>R-tier gate</td><td>Stops AWS test rows from being marked ready without required evidence.</td></tr>
+      <tr><td>Git checkpoint</td><td>Stops untraceable progress and gives rollback points.</td></tr>
+    </table>
+  </section>
+
+  <section id="tests">
+    <h2>What The Tests Proved</h2>
+    <table>
+      <tr><th>Test Group</th><th>What It Proved</th></tr>
+      <tr><td>R1-R5</td><td>Basic coding, compaction recall, subagents, cold-cache microcompact, and exec recovery.</td></tr>
+      <tr><td>R6-R12</td><td>Dream memory, model switch, mock edge handling, approvals/dispositions, save/restart/load, and Sonnet end-to-end artifacts.</td></tr>
+      <tr><td>R13-R17</td><td>Real software-building ability: coding accuracy, refactor, debugging, long app build, and thinking visibility.</td></tr>
+      <tr><td>R18 edge cases</td><td>429/5xx handling, corrupt session files, large output replay, disk-full safety, audit retention, Unicode memory, and command safety.</td></tr>
+      <tr><td>R19 UX/recovery</td><td>Ambiguity, contradictions, hidden dependencies, subagent conflict/failure, repeated-call circuit breaker, memory conflict, and long coherence.</td></tr>
+    </table>
+    <div class="note warn">
+      Important: some tests intentionally use mock or reviewed disposition evidence because they are safer and more precise than wasting AWS calls. The final gate accepts those only when the matrix says that evidence type is allowed.
+    </div>
+  </section>
+
+  <section id="implemented">
+    <h2>Implemented In v5.0.1</h2>
+    <table>
+      <tr><th>Area</th><th>Status</th></tr>
+      <tr><td>Bedrock API payload cleaning</td><td>Implemented after R13 found leaked internal metadata.</td></tr>
+      <tr><td>Time-based cold-cache microcompact A-16</td><td>Implemented before production and validated by R4.</td></tr>
+      <tr><td>Compaction and resume</td><td>Implemented with tests and AWS evidence.</td></tr>
+      <tr><td>Subagents and review-style helper work</td><td>Implemented with structured result envelopes and telemetry.</td></tr>
+      <tr><td>Software-builder state/checkpoint/shell/results/gate features</td><td>Implemented in added software-builder blocks.</td></tr>
+      <tr><td>Tool-loop quality controls</td><td>Improved after R14/R19-U3 exposed inefficient repeated-tool behavior.</td></tr>
+      <tr><td>v4-style notebook UI</td><td>Restored and wired to v5 runtime: Plan Mode, Auto-Compact, Compact, Clean, model/session controls, v4-style sub-agent model dropdowns backed by <code>CONFIG.agent_overrides</code>, always-visible cache/reasoning metrics, fresh widget models on rerender, and SageMaker-safe child-by-child display when one large root widget fails.</td></tr>
+      <tr><td>R-tier final gate</td><td>Strengthened so all matrix rows are checked by default.</td></tr>
+      <tr><td>Final docs and evidence trail</td><td>Final review, metrics, status, test review, and HTML overview are preserved.</td></tr>
+    </table>
+  </section>
+
+  <section id="not-implemented">
+    <h2>Not Implemented Or Accepted As Future Polish</h2>
+    <table>
+      <tr><th>Item</th><th>Reason</th></tr>
+      <tr><td>Exact Runnable/Claude Code UI</td><td>v5 is a SageMaker/Bedrock notebook agent, not a Claude Code clone. It keeps the useful v4 notebook UI instead.</td></tr>
+      <tr><td>Streaming-first behavior</td><td>Current environment and design are non-streaming where needed.</td></tr>
+      <tr><td>Literal 30-minute R4 idle wait</td><td>R4 validated the same A-16 code path with an injectable threshold to avoid waste.</td></tr>
+      <tr><td>150 live Bedrock calls for R19-U10</td><td>Approved prebuilt 150-logical-turn substitution gave the intended evidence without waste.</td></tr>
+      <tr><td>Perfect clarification UX</td><td>Accepted as nonblocking v5.0.2 polish.</td></tr>
+      <tr><td>Even richer subagent side metrics</td><td>Accepted as nonblocking v5.0.2 polish; core cost/token/cache telemetry exists.</td></tr>
+      <tr><td>Perfect `/dream` output shape</td><td>Accepted as nonblocking v5.0.2 polish after evidence passed.</td></tr>
+    </table>
+  </section>
+
+  <section id="files">
+    <h2>Where The Proof Lives</h2>
+    <table>
+      <tr><th>Need</th><th>File</th></tr>
+      <tr><td>Final production decision</td><td><code>compact_v5/_status/v5_completion_audit/FINAL_POST_AWS_PRODUCTION_READY.md</code></td></tr>
+      <tr><td>Final Claude review</td><td><code>compact_v5/_status/v5_completion_audit/reviews/final-claude-post-aws-production-readiness-review.md</code></td></tr>
+      <tr><td>Final test review</td><td><code>compact_v5/_status/PS_TEST_REVIEW_FINAL.md</code></td></tr>
+      <tr><td>R-tier matrix</td><td><code>compact_v5/_status/r_tier_test_matrix.json</code></td></tr>
+      <tr><td>R-tier metrics</td><td><code>compact_v5/_status/r_tier_metrics.jsonl</code></td></tr>
+      <tr><td>Production code</td><td><code>compact_v5/MAIN/agent</code></td></tr>
+      <tr><td>Production zip</td><td><code>compact_v5.zip</code></td></tr>
+    </table>
+  </section>
+</main>
+
+<footer>
+This page is a simple guide. The source of truth is still the code, tests, status files, metrics, review artifacts, and git history.
+</footer>
+</body>
+</html>

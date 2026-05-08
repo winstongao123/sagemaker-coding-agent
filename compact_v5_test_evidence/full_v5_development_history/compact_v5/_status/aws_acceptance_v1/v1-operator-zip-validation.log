@@ -1,0 +1,8 @@
+V1 OPERATOR ZIP VALIDATION
+zip_path: D:\Github\sagemaker-coding-agent\compact_v5\_status\aws_acceptance_v1\v5_final_acceptance_results.zip
+zip_size: 39408
+entries: 23
+bad_member: None
+missing_required: []
+
+NOTE: This valid zip was rebuilt by Codex/operator after the v5 AWS run repeatedly failed to create a valid zip before max_turns.

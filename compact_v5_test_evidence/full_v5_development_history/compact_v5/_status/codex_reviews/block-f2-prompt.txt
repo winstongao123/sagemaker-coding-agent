@@ -1,0 +1,140 @@
+You are reviewing Block F2 of v5.0.1.
+
+Block F2 deliverable: NEW block — auto-continuation under iteration
+budget. Adapted from Runnable's tokenBudget feature (which counts
+output tokens) to v5's existing IterationBudget surface (which counts
+turns). Cost-cap halt has priority over the under-90% check. Default
+OFF via CONFIG.enable_token_budget_continuation (Wave 6 NLT row #21
+opt-in contract). Sub-agents always halt.
+
+Diff range: v5.0.1-block-e-f..HEAD (commit e75a862).
+
+Files changed:
+- NEW compact_v5/MAIN/agent/core/budget_continuation.py (~140 LOC)
+  BudgetTracker dataclass + create_budget_tracker + ContinueDecision +
+  StopDecision + check_iteration_budget + get_budget_continuation_message
+  + COMPLETION_THRESHOLD=0.9 + DIMINISHING_THRESHOLD=2 (iteration-adapted
+  from Runnable's 500 tokens).
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_f2.py (14 tests:
+  7 pure-function + 3 TEST_DESIGN-named + 4 behavioral locks).
+- MODIFIED compact_v5/MAIN/agent/runtime/config.py:
+  + enable_token_budget_continuation: bool = False (default OFF).
+  + _SCALAR_FIELDS row added.
+- MODIFIED compact_v5/MAIN/agent/core/query_engine.py:
+  + self._budget_tracker = None reset at run() entry.
+  + F2 check at the no-tool_calls (end_turn) branch BEFORE
+    `stop_reason = "end_turn"; break`. Best-effort try/except so F2
+    never blocks normal end_turn. Sub-agent check via
+    `is_subagent = self.agent_kind != "parent"`. Reads TOKENS.session_cost
+    + CONFIG.session_cost_limit best-effort. Lazy-creates BudgetTracker
+    on first end_turn. On ContinueDecision: surfaces assistant text,
+    appends nudge as user message, `continue`s the for-loop.
+- UPDATED _status/V5_BUILD_STATUS.md (Block F2 entry, IN_PROGRESS pending Codex).
+- UPDATED _status/V5_RUNNABLE_PORT_LOG.md (row #072).
+- UPDATED _status/V5_DESIGN_DECISIONS.md (ADR-028).
+- TOUCHED SESSION_STATE.md.
+
+Reference paths (READ for cross-check):
+- Runnable source: _archive/compare_code/gg-claude-code-runnable/src/query/tokenBudget.ts
+- Runnable source: _archive/compare_code/gg-claude-code-runnable/src/utils/tokenBudget.ts
+- Runnable wiring: _archive/compare_code/gg-claude-code-runnable/src/query.ts (lines 1308-1355)
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block F2 around line 392)
+- Tests catalogue: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block F2 around line 206)
+- Edge cases: compact_v5/_phase_2/wave_6/PS_Plan_Edge_Cases_Thinking.md (scenario #21 line 60, NLT row line 204)
+
+Tests: 604 pass + 5 skip (was 590 + 5 at end of Block E+F; +14 net new).
+verify_ship_zip.py: PASS (113 files / 313.8 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line for any finding.
+
+AXIS A — Errors / bugs / regressions
+- Threshold semantics: `iter_used < iter_total * COMPLETION_THRESHOLD` uses
+  float comparison (no `int()` truncation). Verify this matches Runnable's
+  `turnTokens < budget * COMPLETION_THRESHOLD` and that boundary cases
+  (iter_used == iter_total*0.9 exactly) behave correctly (NOT continue).
+- Diminishing-returns: `is_diminishing = count >= 3 AND delta < 2 AND
+  last_delta < 2`. The DIMINISHING_THRESHOLD=2 (iteration-adapted from
+  Runnable's 500 tokens) means delta=1 trips diminishing after 3 nudges.
+  Is iteration-delta-as-stand-in-for-token-delta sound, given each
+  end_turn turn always advances iter_used by exactly 1? (Edge: a turn
+  with tool_use doesn't reach the end_turn branch, so consecutive
+  nudges always have delta=1 unless the model emits tool_use between
+  nudges — in which case the iteration_used would increase by >1
+  between checks, breaking the diminishing trip. Is that intended?)
+- Cost-cap precedence: cost-cap returns BEFORE the
+  is_diminishing/under-90% computation. Verify this means a near-budget
+  cost can never be bypassed by a low iteration count.
+- BudgetTracker mutation: tracker.continuation_count and
+  last_iter_used / last_delta_iters are mutated only on the
+  continue-branch. Verify cost-cap and above-threshold paths leave
+  the tracker untouched (they should, so a re-invoke doesn't double-count).
+- Engine wiring: F2 is wrapped in `try/except: pass`. Is silent
+  swallowing acceptable here, or should there be a logging.warning at
+  minimum (matches the cost-runtime warning pattern)?
+- Sub-agent gate: `is_subagent = self.agent_kind != "parent"`. agent_kind
+  is set in __init__ default "parent", overridden by subagent.spawn._new_child_engine
+  to the subagent type-string. Verify no codepath constructs a child
+  engine with agent_kind="parent" by mistake.
+- Tracker reset position: `self._budget_tracker = None` is set both in
+  __init__ AND at run() entry (next to _exec_call_count, _recent_tool_calls
+  resets). Verify the run() reset is unconditional (not gated by the
+  CONFIG flag) so toggling the flag mid-session doesn't leak state.
+- Test isolation: `reset_tokens` fixture resets TOKENS.session_cost
+  before each test. The CONFIG flag is set/unset via try/finally in
+  each test. Verify no test mutates a global without restore (especially
+  `budget._max = N` mutation in test_f2_tracker_resets_between_runs:
+  is `budget._max` writeable for tests? Check IterationBudget class).
+- Lock test coverage:
+  * test_f2_default_off_no_continuation_when_disabled: default-OFF.
+  * test_f2_subagent_does_not_auto_continue: parent-only.
+  * test_f2_diminishing_returns_halts_after_3_continuations: end-to-end.
+  * test_f2_tracker_resets_between_runs: state isolation.
+  Are there gaps?
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+Does this advance v5's BETTER axes (long-complex-coding, focus, agent
+coordination)? Honor 15 hard constraints?
+- Constraint #5 (minimum file structures): one new module
+  (budget_continuation.py) + one config flag + one engine-wiring block.
+  Reuses IterationBudget rather than introducing a parallel
+  token-counted budget. Defensible.
+- Constraint #6 (architecture-first): Wave 5-DEEP §Block F2 says
+  "v5 IterationBudgetWidget shows budget but doesn't auto-continue.
+  <90% AND not diminishing-returns → inject nudge + continue." The
+  implementation does exactly that.
+- Constraint #12 (no deferrals): all of Wave 6 NLT row #21's
+  contract requirements (cost-cap + opt-in) implemented in this
+  Block, not deferred.
+- Constraint #15 (quality, no rush): default-OFF reduces blast radius
+  if a bug surfaces in production; v5 ships unchanged behavior unless
+  user explicitly enables the flag.
+- Q3 axis 7 (long/complex coding): 70% of a reserved budget being
+  silently abandoned was a real LongSess complaint — F2 directly
+  addresses it. Verifiable.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+Did this Block port everything tagged for it in SYNTHESIS_MASTER §Block
+F2? PS_Plan_Edge_Cases_Thinking.md scenario #21 NLT requirements
+("respects cost cap + opt-in") covered?
+- SYNTHESIS_MASTER §Block F2 has 1 PORT_LOG row (F2-1, ~100 LOC).
+  Implementation lands at ~140 LOC — within the +25% budget allowance.
+- PORT_LOG #072 cites Runnable file:line for createBudgetTracker /
+  checkTokenBudget / getBudgetContinuationMessage. Verify each cited
+  function lands as a Python equivalent.
+- Wave 6 row #21 NLT contract: cost-cap (test_f2_respects_cost_cap +
+  test_check_respects_cost_cap_even_under_90pct) + opt-in
+  (test_f2_default_off_no_continuation_when_disabled). Both green.
+- TEST_DESIGN §Block F2 lists 3 tests; all 3 are present with the
+  exact names. Plus 4 behavioral lock tests + 7 pure-function tests
+  beyond the catalogue.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.

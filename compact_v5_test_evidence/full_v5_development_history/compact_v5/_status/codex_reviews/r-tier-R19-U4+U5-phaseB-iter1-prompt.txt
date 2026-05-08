@@ -1,0 +1,40 @@
+You are Claude CLI performing an independent Phase B review from disk.
+
+Do not rely on chat memory. Read the files listed below from the repository.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Context:
+- Stage 6 optimized plan is R3 + R19-U4 + R19-U5.
+- R3 already has READY evidence and must not be rerun in this retry.
+- Stage 6 Phase A approved one Haiku 4.5 AU invocation for R19-U4+R19-U5 only.
+- Call1 ran and failed pytest because R19-U5's readiness predicate required the exact substring `failure`.
+- Call1 spend must remain diagnostic/non-ready spend. Do not suggest deleting, hiding, or resetting it.
+
+Read:
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseA-iter2.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseB-call1-fix-summary.md
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-aws-call1.log
+- compact_v5/_status/r-tier-R19-U4-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R19-U5-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R19-U4-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R19-U5-aws-call1-telemetry.json
+
+Review question:
+Did the worker correctly classify call1 as a test-design predicate failure rather than a model/process failure, and is the local fix plus zero-cost test sufficient to approve exactly one retry of the same R19-U4+R19-U5 Haiku bundle?
+
+Required response:
+- Return `APPROVE_RETRY` if the retry path is approved.
+- Otherwise return `BLOCK_RETRY` with blocking findings.
+
+Please inspect:
+- whether U5's generated artifact genuinely recorded the missing child failure;
+- whether the new predicate is still strict enough;
+- whether process-quality telemetry from call1 is acceptable for a retry;
+- whether call1 spend is preserved as diagnostic/non-ready spend;
+- whether the retry cap remains `$0.70` planned / `$0.84` hard ceiling excluding R3;
+- whether the same Haiku model is retained.

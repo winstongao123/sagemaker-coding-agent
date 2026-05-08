@@ -1,0 +1,145 @@
+{
+  "acceptance_pass": false,
+  "agent": "v5",
+  "cap_usd": 5.0,
+  "error": false,
+  "error_log": "",
+  "log_files": [
+    "docs\\logs\\subagent_artifacts.log",
+    "docs\\logs\\test_results.txt"
+  ],
+  "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "pytest": {
+    "returncode": 0,
+    "summary": "============================= 97 passed in 0.51s =============================="
+  },
+  "region": "ap-southeast-2",
+  "required_present": {
+    "AGENT_STATUS.md": true,
+    "README.md": true,
+    "docs/DESIGN.md": true,
+    "docs/RESEARCH.md": true,
+    "docs/REVIEW.md": true,
+    "docs/TEST_REPORT.md": true,
+    "docs/logs": true,
+    "docs/reviews": true,
+    "mini_research_worklog/__init__.py": true,
+    "mini_research_worklog/cli.py": true,
+    "mini_research_worklog/models.py": true,
+    "mini_research_worklog/report.py": true,
+    "mini_research_worklog/search.py": true,
+    "mini_research_worklog/store.py": true,
+    "pyproject.toml": true,
+    "tests/test_cli.py": true,
+    "tests/test_models.py": true,
+    "tests/test_search.py": true,
+    "tests/test_store.py": true
+  },
+  "required_present_count": 19,
+  "required_total": 19,
+  "review_files": [
+    "docs\\reviews\\20260507T171428Z-plan-2d70a9e16452.md"
+  ],
+  "run": {
+    "agent": "v5",
+    "elapsed_seconds": 708.1264290809631,
+    "stats": {
+      "api_calls": 98,
+      "context_window_tokens": 58362,
+      "last_cost_usd": 0.029399,
+      "last_input": 3,
+      "last_output": 4096,
+      "model_usage": {
+        "anthropic.claude-haiku-4-5-20251001-v1:0": {
+          "api_calls": 98,
+          "cache_creation_input_tokens": 358085,
+          "cache_read_input_tokens": 2948415,
+          "cost_usd": 1.365125,
+          "input_tokens": 292,
+          "output_tokens": 99715
+        }
+      },
+      "parent_cache_read_tokens": 2910849,
+      "parent_cache_write_tokens": 331198,
+      "parent_cost_usd": 1.294604,
+      "parent_input_tokens": 271,
+      "parent_output_tokens": 94366,
+      "session_cache_read": 2948415,
+      "session_cache_write": 358085,
+      "session_cost_usd": 1.365125,
+      "session_input": 292,
+      "session_output": 99715,
+      "session_total": 100007,
+      "subagent_cache_read_tokens": {
+        "plan": 37566
+      },
+      "subagent_cache_write_tokens": {
+        "plan": 26887
+      },
+      "subagent_cost_usd": {
+        "plan": 0.070521
+      },
+      "subagent_input_tokens": {
+        "plan": 21
+      },
+      "subagent_output_tokens": {
+        "plan": 5349
+      }
+    },
+    "stop_reason": "max_turns",
+    "turns_used": 90
+  },
+  "stats": {
+    "api_calls": 98,
+    "context_window_tokens": 58362,
+    "last_cost_usd": 0.029399,
+    "last_input": 3,
+    "last_output": 4096,
+    "model_usage": {
+      "anthropic.claude-haiku-4-5-20251001-v1:0": {
+        "api_calls": 98,
+        "cache_creation_input_tokens": 358085,
+        "cache_read_input_tokens": 2948415,
+        "cost_usd": 1.365125,
+        "input_tokens": 292,
+        "output_tokens": 99715
+      }
+    },
+    "parent_cache_read_tokens": 2910849,
+    "parent_cache_write_tokens": 331198,
+    "parent_cost_usd": 1.294604,
+    "parent_input_tokens": 271,
+    "parent_output_tokens": 94366,
+    "session_cache_read": 2948415,
+    "session_cache_write": 358085,
+    "session_cost_usd": 1.365125,
+    "session_input": 292,
+    "session_output": 99715,
+    "session_total": 100007,
+    "subagent_cache_read_tokens": {
+      "plan": 37566
+    },
+    "subagent_cache_write_tokens": {
+      "plan": 26887
+    },
+    "subagent_cost_usd": {
+      "plan": 0.070521
+    },
+    "subagent_input_tokens": {
+      "plan": 21
+    },
+    "subagent_output_tokens": {
+      "plan": 5349
+    }
+  },
+  "subagent_cost_usd": {
+    "plan": 0.070521
+  },
+  "subagent_used": true,
+  "workspace": "D:\\Github\\sageagent_psps_v4_fresh_workspaces\\v5",
+  "zip": {
+    "error": "BadZipFile: File is not a zip file",
+    "valid": false,
+    "zip": "D:\\Github\\sageagent_psps_v4_fresh_workspaces\\v5\\mini_research_worklog_result.zip"
+  }
+}

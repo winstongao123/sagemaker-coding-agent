@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SageAgent V4 — AI Coding Agent Architecture (v4.10.10)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===== Design System (matches Demo Tech docs) ===== */
+:root {
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --radius: 8px; --radius-lg: 14px; --transition: 0.2s ease;
+    --navy: #0f172a; --navy-light: #1e293b;
+    --blue: #3b82f6; --blue-hover: #2563eb; --blue-light: #dbeafe; --blue-bg: #eff6ff;
+    --sky: #0ea5e9;
+    --green: #10b981; --green-light: #d1fae5; --green-bg: #ecfdf5;
+    --amber: #f59e0b; --amber-light: #fef3c7; --amber-bg: #fffbeb;
+    --purple: #8b5cf6; --purple-light: #ede9fe; --purple-bg: #f5f3ff;
+    --red: #ef4444; --red-light: #fef2f2;
+    --teal: #0d9488; --teal-light: #ccfbf1;
+}
+[data-theme="light"] {
+    --bg: #f8fafc; --bg-card: #ffffff; --text: #0f172a; --text-secondary: #475569;
+    --text-muted: #94a3b8; --border: #e2e8f0; --border-strong: #cbd5e1;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08); --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+}
+[data-theme="dark"] {
+    --bg: #0f172a; --bg-card: #1e293b; --text: #f1f5f9; --text-secondary: #94a3b8;
+    --text-muted: #64748b; --border: #334155; --border-strong: #475569;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3); --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
+    --shadow-lg: 0 10px 15px rgba(0,0,0,0.4);
+    --blue-light: #1e3a5f; --blue-bg: #172554; --green-light: #134e3a; --green-bg: #052e16;
+    --purple-light: #3b1f7a; --purple-bg: #2e1065; --amber-light: #78350f; --amber-bg: #451a03; --red-light: #7f1d1d;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background var(--transition), color var(--transition); }
+
+/* Nav */
+.topnav { position: sticky; top: 0; z-index: 100; background: var(--navy); border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; height: 56px; }
+.topnav-brand { color: white; font-weight: 700; font-size: 15px; }
+.topnav-links { display: flex; gap: 4px; }
+.topnav-links a { color: rgba(255,255,255,0.6); text-decoration: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.topnav-links a:hover, .topnav-links a.active { color: white; background: rgba(255,255,255,0.1); }
+.nav-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.topnav-actions a { color: rgba(255,255,255,0.5); font-size: 13px; text-decoration: none; }
+
+/* Layout */
+.main { max-width: 1600px; margin: 0 auto; padding: 32px 40px 64px; }
+.hero { text-align: center; padding: 48px 0 32px; }
+.hero h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; }
+.hero .subtitle { font-size: 16px; color: var(--text-secondary); max-width: 700px; margin: 12px auto 0; }
+.badges { display: flex; justify-content: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); }
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Sections */
+.section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); margin-bottom: 32px; overflow: hidden; }
+.section-header { padding: 24px 28px 16px; border-bottom: 1px solid var(--border); }
+.section-header h2 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.section-header p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.section-body { padding: 24px 28px; }
+
+/* Stats Row */
+.stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; text-align: center; }
+.stat-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+.stat-value.blue { color: var(--blue); } .stat-value.green { color: var(--green); }
+.stat-value.amber { color: var(--amber); } .stat-value.purple { color: var(--purple); }
+.stat-value.teal { color: var(--teal); }
+.stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-top: 4px; }
+
+/* Cards */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.card-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.card-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: all 0.2s; cursor: pointer; }
+.card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.card-icon { font-size: 28px; margin-bottom: 8px; }
+.card-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.card-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.card-tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.tag-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue); }
+.tag-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+.tag-amber { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+.tag-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple); }
+.tag-red { background: var(--red-light); color: var(--red); border: 1px solid var(--red); }
+
+/* Insight boxes */
+.insight { display: flex; gap: 12px; padding: 16px 20px; border-radius: var(--radius); margin-top: 20px; font-size: 13px; line-height: 1.6; }
+.insight-icon { font-size: 20px; flex-shrink: 0; }
+.insight.blue { background: var(--blue-bg); border: 1px solid var(--blue); color: var(--text); }
+.insight.green { background: var(--green-bg); border: 1px solid var(--green); color: var(--text); }
+.insight.amber { background: var(--amber-bg); border: 1px solid var(--amber); color: var(--text); }
+.insight.purple { background: var(--purple-bg); border: 1px solid var(--purple); color: var(--text); }
+
+/* Architecture diagram */
+.arch-diagram { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 20px 0; }
+.arch-tier { text-align: center; width: 100%; margin-bottom: 4px; }
+.tier-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px; }
+.tier-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; padding: 0 20px; }
+.svc-box { background: var(--bg-card); border: 2px solid var(--border); border-radius: var(--radius); padding: 14px 12px; text-align: center; min-width: 110px; box-shadow: var(--shadow); transition: all var(--transition); }
+.svc-box:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.svc-box.blue { border-color: var(--blue); border-top: 4px solid var(--blue); }
+.svc-box.green { border-color: var(--green); border-top: 4px solid var(--green); }
+.svc-box.amber { border-color: var(--amber); border-top: 4px solid var(--amber); }
+.svc-box.purple { border-color: var(--purple); border-top: 4px solid var(--purple); }
+.svc-box.navy { background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%); border-color: var(--blue); border-top: 4px solid var(--blue); color: white; }
+.svc-box.navy .svc-desc { color: #93c5fd; }
+.svc-box.red { border-color: var(--red); border-top: 4px solid var(--red); }
+.svc-title { font-size: 12px; font-weight: 700; }
+.svc-desc { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.connector { color: var(--text-muted); font-size: 20px; margin: 4px 0; }
+
+/* Tables */
+.comparison-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.comparison-table th { padding: 14px 16px; text-align: left; font-weight: 700; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--border); }
+.comparison-table td { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.comparison-table tr:hover { background: var(--bg); }
+.check { color: var(--green); font-weight: 700; }
+.cross { color: var(--red); font-weight: 700; }
+.partial { color: var(--amber); font-weight: 600; }
+
+/* Verdict */
+.verdict { background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); color: white; border-radius: var(--radius-lg); padding: 32px; margin-top: 32px; text-align: center; }
+.verdict h2 { font-size: 22px; font-weight: 800; margin-bottom: 16px; }
+.verdict-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; }
+.verdict-item { background: rgba(255,255,255,0.08); border-radius: var(--radius); padding: 20px; }
+.verdict-item h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: rgba(255,255,255,0.7); }
+.verdict-score { font-size: 36px; font-weight: 800; }
+.verdict-score.blue { color: #93c5fd; } .verdict-score.amber { color: #fcd34d; } .verdict-score.green { color: #6ee7b7; }
+
+/* Modals */
+dialog.modal { border: none; border-radius: 16px; padding: 28px; max-width: 800px; max-height: 90vh; background: var(--bg-card); box-shadow: 0 20px 60px rgba(0,0,0,0.3); margin: auto; overflow-y: auto; width: 90vw; }
+dialog.modal::backdrop { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+dialog.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.modal-close { position: absolute; top: 12px; right: 12px; border: none; background: var(--bg); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: var(--border); }
+
+/* Beginner explanation */
+.explain { background: var(--bg); border: 1px solid var(--border-strong); border-left: 3px solid var(--blue); border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.explain strong { color: var(--text); }
+.explain::before { content: ""; }
+
+/* Interactive Flowchart */
+.flow-container { display: flex; flex-direction: column; align-items: center; max-width: 900px; margin: 0 auto; }
+.flow-row { display: flex; justify-content: center; gap: 16px; width: 100%; }
+.flow-row-wide { gap: 12px; flex-wrap: wrap; }
+.flow-box { background: var(--bg-card); border: 2px solid var(--border); border-radius: 16px; padding: 20px 24px; text-align: center; cursor: pointer; transition: all 0.3s; min-width: 180px; max-width: 560px; width: 100%; position: relative; }
+.flow-row-wide .flow-box { min-width: 140px; max-width: 200px; flex: 1; padding: 16px 12px; }
+.flow-box:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.flow-box::after { content: "click for details"; position: absolute; bottom: 6px; right: 12px; font-size: 9px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s; }
+.flow-box:hover::after { opacity: 1; }
+.flow-emoji { font-size: 32px; margin-bottom: 6px; }
+.flow-row-wide .flow-emoji { font-size: 24px; }
+.flow-name { font-size: 16px; font-weight: 700; }
+.flow-row-wide .flow-name { font-size: 13px; }
+.flow-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+.flow-stat { font-size: 11px; color: var(--text-muted); margin-top: 8px; font-weight: 600; }
+.flow-user { border-color: var(--blue); border-top: 4px solid var(--blue); }
+.flow-user:hover { border-color: var(--blue-hover); }
+.flow-loop { border-color: var(--amber); border-top: 4px solid var(--amber); }
+.flow-loop:hover { border-color: #d97706; }
+.flow-context { border-color: var(--teal); border-top: 4px solid var(--teal); }
+.flow-context:hover { border-color: #0f766e; }
+.flow-tool { border-color: var(--purple); border-top: 4px solid var(--purple); }
+.flow-tool:hover { border-color: #7c3aed; }
+.flow-security { border-color: var(--red); border-top: 4px solid var(--red); }
+.flow-security:hover { border-color: #dc2626; }
+.flow-bedrock { border-color: var(--navy); border-top: 4px solid var(--navy); background: linear-gradient(135deg, var(--bg-card) 0%, var(--blue-bg) 100%); }
+.flow-response { border-color: var(--green); border-top: 4px solid var(--green); }
+.flow-response:hover { border-color: #059669; }
+.flow-arrow { display: flex; flex-direction: column; align-items: center; padding: 4px 0; }
+.flow-arrow-line { width: 3px; height: 24px; background: linear-gradient(to bottom, var(--border-strong), var(--text-muted)); border-radius: 2px; position: relative; }
+.flow-arrow-line::after { content: "▼"; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); color: var(--text-muted); font-size: 10px; }
+.flow-arrow-label { font-size: 10px; color: var(--text-muted); font-weight: 500; margin-top: 6px; }
+
+/* Responsive */
+@media (max-width: 1024px) { .card-grid-3, .verdict-grid { grid-template-columns: 1fr; } .stats-row { grid-template-columns: repeat(3, 1fr); } .main { padding: 20px; } }
+@media (max-width: 768px) { .topnav { padding: 0 16px; } .stats-row { grid-template-columns: repeat(2, 1fr); } .card-grid-2 { grid-template-columns: 1fr; } .tier-row { gap: 8px; } .svc-box { min-width: 80px; padding: 10px 8px; } }
+@media (max-width: 640px) { .topnav-links a { font-size: 11px; padding: 4px 8px; } .stats-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="topnav">
+    <div class="topnav-brand">SageAgent V4 — Architecture Guide (v4.10.10)</div>
+    <div class="topnav-links">
+        <a href="#v410" class="active"><span class="nav-dot" style="background:#10b981"></span> What's New</a>
+        <a href="#what"><span class="nav-dot" style="background:var(--blue)"></span> What Is It</a>
+        <a href="#flowchart"><span class="nav-dot" style="background:var(--sky)"></span> How It Works</a>
+        <a href="#architecture"><span class="nav-dot" style="background:var(--amber)"></span> Layers</a>
+        <a href="#tools"><span class="nav-dot" style="background:var(--green)"></span> 23 Tools</a>
+        <a href="#security"><span class="nav-dot" style="background:var(--red)"></span> Security</a>
+        <a href="#comparison"><span class="nav-dot" style="background:var(--purple)"></span> Comparison</a>
+        <a href="#results"><span class="nav-dot" style="background:var(--teal)"></span> Results</a>
+    </div>
+    <div class="topnav-actions"><a href="#" onclick="toggleTheme()">Theme</a></div>
+</nav>
+
+<div class="main">
+
+<!-- Hero -->
+<div class="hero">
+    <div class="badges">
+        <span class="badge"><span class="dot" style="background:var(--green)"></span> v4.10.10</span>
+        <span class="badge"><span class="dot" style="background:var(--blue)"></span> Bedrock-only</span>
+        <span class="badge"><span class="dot" style="background:var(--amber)"></span> 91/91 V4.10 Tests</span>
+        <span class="badge"><span class="dot" style="background:var(--purple)"></span> 5/5 Codex Review PASS</span>
+    </div>
+    <h1>SageAgent V4 &mdash; v4.10.10</h1>
+    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.5 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check. v4.10.6 added the html skill: presentation / design / flowchart / architecture HTML deliverables, with screenshot-iteration loop. v4.10.7 hardened destructive-command coverage: ~50 new bash patterns + ~12 python patterns spanning cloud / IaC / orchestration / storage / DB CLI / persistence / system-overwrite, HIGH_RISK_TOOLS excluded from Always-Approve UI, cross-surface mirrored into Claude Code + Learning_Factory hooks. v4.10.8 closed the residual obfuscation escape route (base64/xxd/eval pipe-to-shell now blocked across more interpreters) and hard-blocked recursive folder removal from the agent (`rm -r/-rf/-fr/-R/--recursive`, `rmdir`, `Remove-Item -Recurse`, `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()`) — single-file cleanup still allowed; the 🧹 Clean button still works in-process. v4.10.9 closed Codex's third local-hook finding by adding a narrow backtick eval+downloader pattern (defense-in-depth only — eval was already excluded from the bash allowlist; zero new false-positive risk). v4.10.10 surfaced the previously-hardcoded `aws_bedrock_only` setting as a UI checkbox in cell 2 of `chat.ipynb` (default ticked = strict). Codex review on v4.10.10: PASS. 134/134 destructive-coverage tests + 122 v4 unit tests + 16/16 hook obfuscation self-test all green.</p>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+    <div class="stat-card"><div class="stat-value blue">23</div><div class="stat-label">Built-in Tools</div></div>
+    <div class="stat-card"><div class="stat-value green">11,553</div><div class="stat-label">Lines of Code</div></div>
+    <div class="stat-card"><div class="stat-value amber">16</div><div class="stat-label">Security Layers</div></div>
+    <div class="stat-card"><div class="stat-value purple">5/5</div><div class="stat-label">Codex PASS (v4.10.10)</div></div>
+    <div class="stat-card"><div class="stat-value teal">200K</div><div class="stat-label">Default Context (auto-derived)</div></div>
+</div>
+
+<!-- ========== V4.10.0 What's New ========== -->
+<div class="section" id="v410">
+    <div class="section-header" style="background:linear-gradient(135deg, #ecfdf5 0%, #f0f9ff 100%);">
+        <h2><span style="color:#10b981">★</span> v4.10.x &mdash; Runnable Parity Upgrade (2026-04-28, 6 same-day releases)</h2>
+        <p>Five additions from a deep rescan against <code>gg-claude-code-runnable</code>. Each phase had its own Codex review (gpt-5.3-codex, read-only). Codex caught 9 real correctness issues across the five phases; all fixed and re-verified before merging.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-3">
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-icon">📓</div>
+                <div class="card-title">notebook_edit (#10)</div>
+                <div class="card-desc">Surgical insert/replace/delete of a single .ipynb cell. Atomic write (tmp + rename), preserves cell <code>id</code> on replace, resets <code>execution_count</code> and <code>outputs</code> on code cells. Use this — not <code>create_notebook</code> — when modifying an existing notebook so you don't blow away cells you didn't touch. Mirrors Runnable's NotebookEditTool. <strong>13/13 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">📏</div>
+                <div class="card-title">Skill listing budget (#24)</div>
+                <div class="card-desc"><code>SkillManager.list_for_prompt</code> caps the listing at 1% of context window, hard-clamped at 2000 tokens. When over budget, trailing entries collapse to <code>...(+N more)</code>. Hint cost reserved up-front so the cap is strict. Auto-trigger surfacing also caps each description at 250 chars. Mirrors Runnable's SKILL_BUDGET_CONTEXT_PERCENT. <strong>9/9 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-icon">🛰️</div>
+                <div class="card-title">Sub-agent env-details (#47)</div>
+                <div class="card-desc">Every sub-agent gets a 4–6 line "Sub-agent Environment" block injected after the cached SYSTEM_PROMPT boundary: agent type, depth/max, workspace cwd, git HEAD, working-tree status. 5s timeout per git probe; never raises. Means a fresh <code>verify</code> agent picks up parent's worktree swap automatically. Mirrors Runnable's enhanceSystemPromptWithEnvDetails. <strong>6/6 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--purple)">
+                <div class="card-icon">📐</div>
+                <div class="card-title">Model-aware context window (#44)</div>
+                <div class="card-desc"><code>BEDROCK_MODEL_CONTEXT_WINDOWS</code> maps each model to its window. <code>CONFIG.context_max_tokens</code> auto-derives from <code>model_id</code> at startup unless overridden in <code>agent_config.json</code>. Override is validated (positive int, not bool-as-int). When AWS exposes a 1M-context Bedrock variant, the only change is one entry in the map. <strong>10/10 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">🔄</div>
+                <div class="card-title">Reactive Compact (#41a)</div>
+                <div class="card-desc">When Bedrock rejects with "prompt is too long" / "too many tokens", the agent runs microcompact (or placeholder-summary fallback if microcompact didn't free enough), clears file-read state, sets <code>_cache_broken_by_compact</code>, and retries the request once. NO additional LLM call (calling the same model with the same overflowing context to summarise would just fail again). Cap: 1 reactive recovery per <code>run()</code> call. Mirrors the spirit of Runnable's reactiveCompact feature gate. <strong>5/5 tests.</strong></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--teal)">
+                <div class="card-icon">✅</div>
+                <div class="card-title">Skill auto-load STILL OFF</div>
+                <div class="card-desc">The v4.9.6 fix is intact: <code>CONFIG.enable_skill_auto_trigger=False</code> by default AND per-skill <code>auto_trigger=false</code> by default. Both gates must be explicitly turned on. <code>test_v49_auto_trigger.py</code> regression: <strong>12/12 still green</strong>. The "skill caused coding issue" bug from earlier sessions cannot recur.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">🛡️</div>
+                <div class="card-title">v4.10.7 — Destructive-command hardening</div>
+                <div class="card-desc">~50 new bash <code>DANGEROUS_PATTERNS</code> covering cloud destructive subcommands (AWS/GCP/Azure/PaaS/IaC/orchestration), git destructive (remote-branch del, <code>branch -D</code>, <code>tag -d</code>, <code>reflog expire</code>, <code>restore .</code>), storage tools (<code>lvremove</code>, <code>mkfs</code>, <code>dd of=/dev/</code>, <code>zfs destroy</code>, <code>cryptsetup luksClose</code>), persistence (<code>crontab -r</code>, <code>systemctl disable/stop</code>, <code>pm2 delete</code>), DB CLI inline (<code>DROP/TRUNCATE/DELETE FROM/FLUSHALL/SHUTDOWN</code>), system-path overwrite, perm lockout, <code>curl|sh</code>. ~12 new <code>DANGEROUS_PYTHON</code> patterns (<code>cursor.execute DROP</code>, SQLAlchemy <code>drop_all</code>, Mongo <code>dropDatabase/deleteMany</code>, Redis <code>flushall</code>, <code>os.unlink</code>/<code>shutil.rmtree</code> on system paths). <strong>HIGH_RISK_TOOLS = {bash, python_exec, task, web_fetch}</strong> excluded from Always-Approve UI shortcut — even with auto-approve on, these still prompt; the "Always Approve" button is hidden for them, so there's no UI path to a permanent bypass. Cross-surface: same denylist mirrored into <code>~/.claude/hooks/pre-bash-safety.sh</code> + Learning_Factory source-of-truth.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">🔐</div>
+                <div class="card-title">v4.10.8 — Obfuscation + folder-removal lockdown</div>
+                <div class="card-desc">Closes the residual escape route after v4.10.7. <strong>Obfuscation hardening:</strong> blocks <code>base64 -d ... | zsh/python/perl/node/...</code> (v4.10.7 only matched <code>sh/bash</code>), <code>xxd -r/-p ... | &lt;shell&gt;</code> hex-decode pipe-to-shell, and <code>od/hexdump | tr | sh</code> chains. <strong>Recursive folder removal hard-block:</strong> <code>rm -r/-rf/-fr/-R/--recursive</code>, <code>rmdir</code>, PowerShell <code>Remove-Item -Recurse</code> all blocked at any path. Python: <code>shutil.rmtree</code>, <code>os.rmdir</code>, <code>os.removedirs</code>, <code>Path(...).rmdir()</code> blocked from <code>python_exec</code>. The 🧹 Clean button still works because it runs in-process (not via <code>python_exec</code>) with hardcoded paths. Single-file cleanup via <code>os.unlink('temp.py')</code> still allowed. Cross-surface: obfuscation patterns mirrored to <code>~/.claude/hooks/pre-bash-safety.sh</code> + LF; folder-removal block is v4-only (local hook keeps <code>rm -rf node_modules/</code> etc. for routine npm/build cleanup). 129-case test coverage.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--purple)">
+                <div class="card-icon">🎯</div>
+                <div class="card-title">v4.10.9 — Backtick eval+downloader parity</div>
+                <div class="card-desc">Closes Codex's third local-hook finding from the v4.10.8 round in v4 itself: bare backtick command-substitution (<code>eval `curl ...`</code>, <code>eval `wget ...`</code>, <code>eval `base64 -d ...`</code>) was caught in the local hook but not v4. <strong>Defense-in-depth only</strong> — <code>eval</code> is already excluded from v4's bash allowlist, so all <code>eval</code> forms fail at allowlist before regex runs. The new pattern provides clear attack-specific messaging for the obfuscation case and parity with the local hook. <strong>Narrow-by-design</strong>: requires backtick AND a remote-fetcher (<code>curl</code>/<code>wget</code>/<code>fetch</code>) OR decoder (<code>base64</code>/<code>xxd</code>/<code>hexdump</code>). Legitimate uses like <code>eval `date`</code>, <code>eval `git ...`</code>, <code>eval `pwd`</code> would NOT trip even if <code>eval</code> were allowlisted. <strong>Zero new false-positive risk.</strong> 134-case test coverage (up from v4.10.8's 129) + 122 v4 unit tests still green.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">🎚️</div>
+                <div class="card-title">v4.10.10 — `aws_bedrock_only` UI toggle</div>
+                <div class="card-desc">User asked: <em>"when bedrock only, then just it only — where to set it, in UI to control?"</em>. The previously-hardcoded <code>aws_bedrock_only</code> setting is now surfaced as a checkbox in cell 2 of <code>chat.ipynb</code>. <strong>Default ticked (strict, Bedrock-only).</strong> Untick before running cell 3 to allow S3 read/write, Textract, Lambda invoke, DynamoDB writes — all gated by the approval prompt; destructive AWS operations (delete bucket / object / table / function, terminate instances, etc.) remain hard-blocked at the per-method denylist and admin services blocked at boto3.client level. Cell 3 banner now displays AWS scope at startup. In-place refinements after comprehensive Codex re-review: inline <code>(?i)</code> flag on PowerShell <code>Remove-Item</code> regex (belt-and-suspenders — <code>re.IGNORECASE</code> already applied at matching layer line 1884) + clearer cell-by-cell setup text in cell 0. <strong>Codex re-review: PASS</strong> ("no findings, Remove-Item bypass closed, cell 0 setup text unambiguous, no additional bugs"). 134 destructive-coverage + 122 unit tests still green.</div>
+            </div>
+        </div>
+        <div style="margin-top:24px; padding:16px; background:var(--bg-card); border-left:4px solid var(--green); border-radius:4px;">
+            <strong>Codex review per phase</strong> — 5 reviews, 9 real bugs caught and fixed before any phase advanced. Issues found: first-entry-over-budget overshoot, unbudgeted truncation hint, degenerate-budget overshoot, freeze-on-invalid-JSON, bool-as-int JSON trap, narrow OSError catch on notebook write, file-read state cleared only on one reactive branch, <code>_cache_broken_by_compact</code> set only on one reactive branch, retry stop-check missing token-billing parity. <strong>All resolved.</strong>
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 1: What Is a Coding Agent? ========== -->
+<div class="section" id="what">
+    <div class="section-header">
+        <h2><span style="color:var(--blue)">01</span> What Is a Coding Agent?</h2>
+        <p>Before diving into architecture, let's understand what a "coding agent" actually is</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-3">
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">💬</div>
+                <div class="card-title">Chat Interface</div>
+                <div class="card-desc">You type what you want in plain English. "Read this file and fix the bug." The agent understands your request and figures out what to do.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-icon">🔧</div>
+                <div class="card-title">Tools</div>
+                <div class="card-desc">The agent has tools &mdash; like read_file, write_file, bash, python_exec. It decides which tools to use to complete your request. You don't have to tell it how.</div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-icon">🔄</div>
+                <div class="card-title">Loop (Think &rarr; Act &rarr; Observe)</div>
+                <div class="card-desc">The agent works in a loop: it thinks about what to do, uses a tool, observes the result, then decides if it needs to do more. This is called the <strong>ReAct pattern</strong>.</div>
+            </div>
+        </div>
+
+        <div class="explain">
+            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 24 tools covering file operations, code execution, document generation, and codebase intelligence.
+        </div>
+
+        <div class="insight blue" style="margin-top:20px">
+            <div class="insight-icon">💡</div>
+            <div><strong>Why does this matter?</strong> Without a coding agent, you write code yourself. With one, you describe what you want and the agent writes it. V3 can read files, edit code, run commands, create Word/Excel/PDF documents, generate charts, analyze images, search your codebase, and manage tasks &mdash; all through conversation.</div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== INTERACTIVE FLOWCHART ========== -->
+<div class="section" id="flowchart">
+    <div class="section-header">
+        <h2><span style="color:var(--sky)">&#9654;</span> How It Works &mdash; Interactive Flow</h2>
+        <p>Click any box to learn WHY it exists, WHAT it does, and HOW it works. Follow the arrows top to bottom.</p>
+    </div>
+    <div class="section-body" style="padding:32px 20px">
+
+        <div class="flow-container">
+            <!-- Row 1: User Input -->
+            <div class="flow-row">
+                <div class="flow-box flow-user" onclick="document.getElementById('fd-input').showModal()">
+                    <div class="flow-emoji">&#128172;</div>
+                    <div class="flow-name">You Type a Message</div>
+                    <div class="flow-hint">"Read app.py and fix the login bug"</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Your message enters the agent</div></div>
+
+            <!-- Row 2: Agent Loop -->
+            <div class="flow-row">
+                <div class="flow-box flow-loop" onclick="document.getElementById('fd-loop').showModal()">
+                    <div class="flow-emoji">&#128260;</div>
+                    <div class="flow-name">Agent Loop (ReAct)</div>
+                    <div class="flow-hint">Think &rarr; Pick Tool &rarr; Run &rarr; Observe &rarr; Repeat</div>
+                    <div class="flow-stat">Max 60 turns per message</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Agent decides which tool to use</div></div>
+
+            <!-- Row 3: Context Check -->
+            <div class="flow-row">
+                <div class="flow-box flow-context" onclick="document.getElementById('fd-context').showModal()">
+                    <div class="flow-emoji">&#128202;</div>
+                    <div class="flow-name">Context Manager</div>
+                    <div class="flow-hint">Tracks token usage, compacts when conversation gets long</div>
+                    <div class="flow-stat">200K token window &bull; Auto-compact at 80%</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Selects and calls tools</div></div>
+
+            <!-- Row 4: Tools (branching) -->
+            <div class="flow-row flow-row-wide">
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-files').showModal()">
+                    <div class="flow-emoji">&#128193;</div>
+                    <div class="flow-name">File Tools</div>
+                    <div class="flow-stat">6 tools</div>
+                </div>
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-exec2').showModal()">
+                    <div class="flow-emoji">&#9881;</div>
+                    <div class="flow-name">Execution</div>
+                    <div class="flow-stat">2 tools</div>
+                </div>
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-docs2').showModal()">
+                    <div class="flow-emoji">&#128196;</div>
+                    <div class="flow-name">Documents</div>
+                    <div class="flow-stat">6 tools</div>
+                </div>
+                <div class="flow-box flow-tool" onclick="document.getElementById('fd-intel2').showModal()">
+                    <div class="flow-emoji">&#129504;</div>
+                    <div class="flow-name">Intelligence</div>
+                    <div class="flow-stat">8 tools</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Every tool call passes through security</div></div>
+
+            <!-- Row 5: Security Gate -->
+            <div class="flow-row">
+                <div class="flow-box flow-security" onclick="document.getElementById('fd-security').showModal()">
+                    <div class="flow-emoji">&#128274;</div>
+                    <div class="flow-name">Security Gate (16 Layers)</div>
+                    <div class="flow-hint">Bash: 70 allowlist + 75 denylist &bull; Python: 63 regex + AST + runtime sandbox</div>
+                    <div class="flow-stat">Approval dialog shown before execution</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">If approved, calls the LLM</div></div>
+
+            <!-- Row 6: Bedrock -->
+            <div class="flow-row">
+                <div class="flow-box flow-bedrock" onclick="document.getElementById('fd-bedrock').showModal()">
+                    <div class="flow-emoji">&#9729;&#65039;</div>
+                    <div class="flow-name">AWS Bedrock &mdash; Claude</div>
+                    <div class="flow-hint">Claude processes, decides next action or gives final answer</div>
+                    <div class="flow-stat">10 model pricing tiers &bull; Cost tracked per call</div>
+                </div>
+            </div>
+            <div class="flow-arrow"><div class="flow-arrow-line"></div><div class="flow-arrow-label">Result flows back to you</div></div>
+
+            <!-- Row 7: Response -->
+            <div class="flow-row">
+                <div class="flow-box flow-response" onclick="document.getElementById('fd-response').showModal()">
+                    <div class="flow-emoji">&#9989;</div>
+                    <div class="flow-name">Response Displayed</div>
+                    <div class="flow-hint">Answer shown in chat &bull; Session auto-saved &bull; Cost updated</div>
+                </div>
+            </div>
+
+            <!-- Loop-back arrow -->
+            <div style="text-align:center;margin-top:12px">
+                <div style="display:inline-block;background:var(--amber-light);color:var(--amber);padding:6px 16px;border-radius:20px;font-size:12px;font-weight:600">
+                    &#8635; If more work needed, loops back to Agent Loop (up to 60 turns)
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Flowchart Detail Modals -->
+<dialog id="fd-input" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128172; User Input</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> The agent needs instructions from you. Unlike a script that runs automatically, V3 waits for you to describe what you want done.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> You type in plain English: "Read app.py and fix the login bug" or "Create an Excel report from sales.csv". The agent interprets your request and breaks it into steps.<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Your message is added to the conversation history, sent to the Agent Loop, and then to Claude (the AI). Claude reads your message plus all previous messages to understand context. The input box supports multi-line text and the Send button (or Enter) submits it.
+    </p>
+</dialog>
+
+<dialog id="fd-loop" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128260; Agent Loop (ReAct Pattern)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Complex tasks need multiple steps. "Fix the login bug" requires: read the file, understand the code, find the bug, write a fix, test it. The agent loop handles this automatically.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> ReAct = <strong>Re</strong>ason + <strong>Act</strong>. Each turn: (1) Claude thinks about what to do next, (2) picks a tool and calls it, (3) observes the result, (4) decides if done or needs another step. This repeats up to <strong>60 turns</strong> per message.<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> The <code>Agent.run()</code> method (515 lines) orchestrates this. It includes:<br>
+        &bull; <strong>Retry handler</strong> &mdash; 5 retries with exponential backoff if Bedrock fails<br>
+        &bull; <strong>Doom loop detection</strong> &mdash; stops after 3 identical tool calls (prevents infinite loops)<br>
+        &bull; <strong>5-layer error recovery</strong> &mdash; auto-fixes tool name typos, wrong argument types, missing parameters<br>
+        &bull; <strong>Cost budget check</strong> &mdash; stops if session cost exceeds your configured limit<br>
+        &bull; <strong>Parallel sub-agents</strong> &mdash; can run multiple task tools simultaneously via ThreadPoolExecutor
+    </p>
+    <div class="explain">The ReAct pattern (Reason + Act) is the standard approach used by Claude Code, OpenCode, and SWE-agent. V3's implementation adds doom loop detection (stops after 3 identical calls), 5-layer error recovery, cost budget enforcement, and parallel sub-agent support via ThreadPoolExecutor.</div>
+</dialog>
+
+<dialog id="fd-context" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128202; Context Manager</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Claude has a limited memory window (200,000 tokens ~= 150,000 words). Long conversations eventually fill it up. Without management, the agent would crash or lose old context.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> The Context Manager tracks how much of the window is used and automatically compresses old conversation when it gets too full. It also caches files to avoid re-reading them.<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Three-stage system:<br>
+        &bull; <strong>Warning at 80%</strong> &mdash; tells you context is getting high<br>
+        &bull; <strong>Prune first</strong> &mdash; removes old tool outputs (keeps last 3 messages untouched, protects 40,000 tokens). Saves min 10,000 tokens to be worth it.<br>
+        &bull; <strong>LLM summarize</strong> &mdash; if pruning isn't enough, asks Claude to compress the entire conversation into a summary<br>
+        &bull; <strong>File Cache</strong> &mdash; LRU cache (100 entries) with mtime validation. Skips re-reading files already in context.<br>
+        &bull; <strong>Token estimation</strong> &mdash; uses tiktoken (95% accurate) when available, falls back to chars/4.
+    </p>
+    <div class="explain">The Compactor implements a two-stage strategy borrowed from OpenCode: first prune old tool outputs (cheap, no API call), then if still over threshold, generate an LLM summary (costs one API call). Protected tools (todo, semantic_search) are never pruned. The File Cache uses LRU eviction with mtime validation to prevent stale reads.</div>
+</dialog>
+
+<dialog id="fd-files" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128193; File Tools (6)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> A coding agent needs to read and modify files — that's its primary job. These 6 tools let it navigate your codebase like a human developer would.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>read_file</strong> &mdash; reads file contents (supports offset/limit for large files, max 500 lines default)<br>
+        &bull; <strong>write_file</strong> &mdash; creates new files (must read first if file exists — safety check)<br>
+        &bull; <strong>edit_file</strong> &mdash; find-and-replace in files (shows diff of what changed)<br>
+        &bull; <strong>glob</strong> &mdash; find files by pattern (e.g., **/*.py finds all Python files)<br>
+        &bull; <strong>grep</strong> &mdash; search inside files by regex (like Ctrl+F across entire codebase, max 50 results)<br>
+        &bull; <strong>list_dir</strong> &mdash; list directory contents with sizes<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> All file operations are restricted to your workspace directory. The Security Gate validates every path before any file is touched. File reads are cached (LRU, 100 entries) so repeated reads don't waste tokens. Edits create snapshots for undo support.
+    </p>
+</dialog>
+
+<dialog id="fd-exec2" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#9881; Execution Tools (2)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Reading and writing files isn't enough — the agent needs to run code, install packages, run tests, and execute commands. These are the most powerful (and most guarded) tools.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>bash</strong> &mdash; runs shell commands (ls, git, pip, make, grep, etc.). 70 allowed base commands. 75 dangerous patterns blocked. Workspace path boundary enforced.<br>
+        &bull; <strong>python_exec</strong> &mdash; runs Python code in a fresh subprocess. 63 regex denylist patterns + AST import validation (67 allowed modules) + runtime sandbox (wraps open, os.open, os.remove at the interpreter level).<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Both tools require your approval before executing. You see the exact command/code in an Approve/Deny dialog. Execution has a timeout (600s for bash, 300s for Python) and a global budget (40 calls, 900 seconds per session). Auto-lint checks Python files after writing for syntax errors.
+    </p>
+    <div class="explain">Execution tools are the highest-privilege operations. V3 enforces: command allowlist (70 safe binaries) &rarr; denylist (75 dangerous patterns) &rarr; workspace path boundary &rarr; approval dialog &rarr; global budget (40 calls / 900s). Python additionally gets: 63 regex patterns &rarr; AST import validation (67 allowed modules) &rarr; runtime sandbox (closure-based builtins wrapping).</div>
+</dialog>
+
+<dialog id="fd-docs2" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128196; Document Creation Tools (6)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> Data scientists and analysts don't just write code — they create reports, charts, and spreadsheets. V3 is the only coding agent that can create these natively. Claude Code, Codex, and Aider cannot.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>create_word</strong> &mdash; .docx with headings, tables, embedded images (python-docx)<br>
+        &bull; <strong>create_excel</strong> &mdash; .xlsx with formatted data, multiple sheets, charts (openpyxl)<br>
+        &bull; <strong>create_chart</strong> &mdash; 8 chart types: bar, grouped_bar, stacked_bar, line, pie, scatter, horizontal_bar, combo. Configurable DPI/size/style (matplotlib)<br>
+        &bull; <strong>create_pdf</strong> &mdash; reports with styled tables and images (reportlab)<br>
+        &bull; <strong>create_markdown</strong> &mdash; .md files with full formatting<br>
+        &bull; <strong>create_notebook</strong> &mdash; .ipynb Jupyter notebooks with code + markdown cells<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> The agent decides what content to put in each document based on your request. For charts, it analyzes data and picks the appropriate chart type. Charts are rendered at 300 DPI by default and displayed inline in the chat.
+    </p>
+</dialog>
+
+<dialog id="fd-intel2" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#129504; Intelligence Tools (8)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> A smart agent needs more than file access — it needs to see images, search semantically, fetch web content, delegate to specialists, ask the human questions, and track its own work.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; <strong>view_image</strong> &mdash; sends images to Claude's vision API for understanding (photos, charts, screenshots)<br>
+        &bull; <strong>semantic_search</strong> &mdash; searches codebase by meaning using Titan embeddings. Python files chunked by function/class (AST-aware).<br>
+        &bull; <strong>web_fetch</strong> &mdash; fetches URLs, converts HTML to text. SSRF-hardened (blocks private IPs, blocks redirects, 2MB limit).<br>
+        &bull; <strong>skill</strong> &mdash; loads instruction files that teach the agent new behaviors (4 skills: review, verify, coding-standards, report)<br>
+        &bull; <strong>task</strong> &mdash; spawns sub-agents (5 types: build, plan, explore, general, review) for parallel work<br>
+        &bull; <strong>ask_user</strong> &mdash; pauses and asks you a question mid-task (5-minute timeout)<br>
+        &bull; <strong>todo_write / todo_read</strong> &mdash; task list management for multi-step work<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Sub-agents run in separate threads with their own context and tool access. Skills are Markdown files in the <code>skills/</code> folder. Semantic search uses AWS Titan Embed v2 for vector embeddings.
+    </p>
+</dialog>
+
+<dialog id="fd-security" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#128274; Security Gate (16 Layers)</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> The AI can make mistakes or be tricked by malicious prompts. Without security, it could delete files, read secrets, call AWS services, or exfiltrate data. The Security Gate prevents all of this.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> 16 layers of defense-in-depth:<br>
+        1-2. AWS IAM + Bedrock model access (platform level)<br>
+        3. Workspace boundary with os.sep fix (blocks sibling dirs)<br>
+        4. Bash: 70 allowed commands allowlist<br>
+        5. Bash: 75 dangerous pattern denylist<br>
+        6. Bash: workspace path boundary check<br>
+        7. Python: 63 regex denylist patterns<br>
+        8. Python: AST import validation (67 allowed modules)<br>
+        9. Python: runtime sandbox (wraps builtins.open, os.open, io.open, os.remove, os.posix_spawn)<br>
+        10. AWS Bedrock-only mode (blocks all boto3 except bedrock-runtime — regex + AST + getattr)<br>
+        11. SSRF protection (private IP blocking + redirect blocking)<br>
+        12. Secret scanning (13 patterns for API keys, passwords)<br>
+        13. Audit trail (JSONL with integrity hash per entry)<br>
+        14. Tool approval dialog (shows exact payload, Approve/Deny)<br>
+        15. Global execution budget (40 calls / 900 seconds)<br>
+        16. Prompt injection trust boundary (never follows instructions in tool output)<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Every tool call passes through the relevant security layers before executing. Bash goes through layers 4-6. Python goes through layers 7-9. Both go through layers 10-16. The agent cannot bypass these — they're enforced at the code level, not just by prompting.
+    </p>
+    <div class="explain">This is defense-in-depth: static analysis (regex + AST) catches known patterns, runtime sandboxing (closure-based wrappers on builtins.open, os.open, os.remove) catches what static analysis misses, and the approval dialog provides human-in-the-loop verification. Realistic risk: ~0.02% per session for material harm (Codex estimate).</div>
+</dialog>
+
+<dialog id="fd-bedrock" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#9729;&#65039; AWS Bedrock &mdash; The AI Brain</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> The agent needs an AI model to understand your requests and generate responses. V3 uses AWS Bedrock, which hosts Claude models from Anthropic. This means your data stays within AWS — it doesn't go to external APIs.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong> Bedrock provides:<br>
+        &bull; <strong>Claude models</strong> &mdash; 10 models supported (Haiku 3/4.5, Sonnet 3.5/4.5, Opus 4.5/4.6). Default: Haiku 4.5 AU region.<br>
+        &bull; <strong>Titan Embeddings</strong> &mdash; used for semantic search (converts text to vectors for similarity matching)<br>
+        &bull; <strong>200K token context window</strong> &mdash; ~150,000 words of conversation history<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> V3 calls <code>bedrock-runtime:InvokeModel</code> with the conversation history + system prompt + tool definitions. Each call costs money based on input/output tokens. V3 tracks costs with 6-decimal precision and shows them in the UI. A configurable session cost limit (default: $1.00) prevents runaway spending. Model pricing is configurable in <code>agent_config.json</code>.
+    </p>
+    <div class="explain">V3 calls <code>bedrock-runtime:InvokeModel</code> with the Messages API format: system prompt + tool definitions + conversation history. Each call is billed by Bedrock based on input/output token counts. V3's TokenTracker intercepts every response, extracts usage metrics, and applies the correct pricing tier including cache read/write adjustments.</div>
+</dialog>
+
+<dialog id="fd-response" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>&#9989; Response &amp; Session Management</h3>
+    <p style="font-size:14px;line-height:1.8;color:var(--text-secondary)">
+        <strong style="color:var(--blue)">WHY:</strong> After the agent finishes, you need to see the result, and the system needs to save state so you can continue later.<br><br>
+        <strong style="color:var(--green)">WHAT:</strong><br>
+        &bull; Response displayed in the chat with Markdown formatting (code blocks, tables, headers)<br>
+        &bull; Token usage updated (input/output/cost per call + session total)<br>
+        &bull; Session auto-saved (messages, todos, metadata) to JSON file<br>
+        &bull; Audit entry written (tool name, parameters, result, timestamp, integrity hash)<br>
+        &bull; Context window % updated in the UI<br><br>
+        <strong style="color:var(--amber)">HOW:</strong> Session saves use atomic writes (temp file + os.replace) with thread locking to prevent corruption. If the agent used tools, their results are truncated to max 1,500 lines / 30KB to fit in context. A cleanup button (&#129529; Clean) removes audit logs, snapshots, and index files while keeping sessions.
+    </p>
+</dialog>
+
+<!-- ========== SECTION 2: Architecture ========== -->
+<div class="section" id="architecture">
+    <div class="section-header">
+        <h2><span style="color:var(--amber)">02</span> How V3 Is Built</h2>
+        <p>A single Python file (7,450 lines) with 6 major layers, designed to run inside SageMaker Jupyter notebooks</p>
+    </div>
+    <div class="section-body">
+
+        <!-- Architecture Diagram -->
+        <div class="arch-diagram">
+            <div class="arch-tier">
+                <div class="tier-label">Layer 1 &mdash; User Interface (Jupyter Widgets)</div>
+                <div class="tier-row">
+                    <div class="svc-box blue"><div class="svc-title">Chat UI</div><div class="svc-desc">HTML widget with dark mode</div></div>
+                    <div class="svc-box blue"><div class="svc-title">Send / Stop</div><div class="svc-desc">Input + cancel buttons</div></div>
+                    <div class="svc-box blue"><div class="svc-title">Session Mgr</div><div class="svc-desc">Save / Load / New</div></div>
+                    <div class="svc-box blue"><div class="svc-title">Token Display</div><div class="svc-desc">Cost + context %</div></div>
+                </div>
+            </div>
+            <div class="connector">&darr;</div>
+            <div class="arch-tier">
+                <div class="tier-label">Layer 2 &mdash; Agent Loop (ReAct Pattern)</div>
+                <div class="tier-row">
+                    <div class="svc-box amber"><div class="svc-title">Agent.run()</div><div class="svc-desc">Main loop: think &rarr; act &rarr; observe</div></div>
+                    <div class="svc-box amber"><div class="svc-title">Retry Handler</div><div class="svc-desc">5 retries + backoff</div></div>
+                    <div class="svc-box amber"><div class="svc-title">Doom Loop</div><div class="svc-desc">Stops after 3 repeats</div></div>
+                    <div class="svc-box amber"><div class="svc-title">Error Recovery</div><div class="svc-desc">5-layer auto-fix</div></div>
+                </div>
+            </div>
+            <div class="connector">&darr;</div>
+            <div class="arch-tier">
+                <div class="tier-label">Layer 3 &mdash; Context Management</div>
+                <div class="tier-row">
+                    <div class="svc-box green"><div class="svc-title">Compactor</div><div class="svc-desc">Prune + LLM summarize</div></div>
+                    <div class="svc-box green"><div class="svc-title">File Cache</div><div class="svc-desc">LRU with mtime check</div></div>
+                    <div class="svc-box green"><div class="svc-title">Token Tracker</div><div class="svc-desc">Cost + budget alerts</div></div>
+                    <div class="svc-box green"><div class="svc-title">Truncation</div><div class="svc-desc">Smart head+tail split</div></div>
+                </div>
+            </div>
+            <div class="connector">&darr;</div>
+            <div class="arch-tier">
+                <div class="tier-label">Layer 4 &mdash; 22 Tools</div>
+                <div class="tier-row">
+                    <div class="svc-box purple"><div class="svc-title">File Ops (6)</div><div class="svc-desc">read, write, edit, glob, grep, ls</div></div>
+                    <div class="svc-box purple"><div class="svc-title">Execution (2)</div><div class="svc-desc">bash, python_exec</div></div>
+                    <div class="svc-box purple"><div class="svc-title">Documents (6)</div><div class="svc-desc">Word, Excel, Chart, PDF, MD, Notebook</div></div>
+                    <div class="svc-box purple"><div class="svc-title">Intelligence (8)</div><div class="svc-desc">vision, code search, URL fetch, skills, agents, todos</div></div>
+                </div>
+            </div>
+            <div class="connector">&darr;</div>
+            <div class="arch-tier">
+                <div class="tier-label">Layer 5 &mdash; Security (16 Layers)</div>
+                <div class="tier-row">
+                    <div class="svc-box red"><div class="svc-title">Bash Guard</div><div class="svc-desc">Allowlist + denylist + path</div></div>
+                    <div class="svc-box red"><div class="svc-title">Python Guard</div><div class="svc-desc">Regex + AST + runtime</div></div>
+                    <div class="svc-box red"><div class="svc-title">AWS Isolation</div><div class="svc-desc">Bedrock-only mode</div></div>
+                    <div class="svc-box red"><div class="svc-title">Audit Trail</div><div class="svc-desc">JSONL + integrity hash</div></div>
+                </div>
+            </div>
+            <div class="connector">&darr;</div>
+            <div class="arch-tier">
+                <div class="tier-label">Layer 6 &mdash; AWS Bedrock (LLM Provider)</div>
+                <div class="tier-row">
+                    <div class="svc-box navy"><div class="svc-title">Claude Haiku 4.5</div><div class="svc-desc">200K context, AU region</div></div>
+                    <div class="svc-box navy"><div class="svc-title">Titan Embeddings</div><div class="svc-desc">Semantic search vectors</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="explain">
+            <strong>Data flow (top &rarr; bottom):</strong> User message enters the Agent Loop, which selects tools based on intent. Context Manager tracks token usage and compacts when needed. Tool calls pass through the Security Gate before execution. Bedrock (Claude) handles reasoning and tool selection. Results flow back through the loop until the task is complete.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 3: 22 Tools ========== -->
+<div class="section" id="tools">
+    <div class="section-header">
+        <h2><span style="color:var(--green)">03</span> The 22 Tools</h2>
+        <p>Every tool the agent can use, organized by category. Click any card for details.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid">
+            <!-- File Tools -->
+            <div class="card" onclick="document.getElementById('modal-file').showModal()">
+                <div class="card-title">read_file</div>
+                <div class="card-desc">Read a file's contents. Supports offset/limit for large files (only read what you need).</div>
+                <div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div>
+            </div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()">
+                <div class="card-title">write_file</div>
+                <div class="card-desc">Create a new file or overwrite an existing one. Must read first if file exists (safety check).</div>
+                <div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-amber">Approval</span></div>
+            </div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()">
+                <div class="card-title">edit_file</div>
+                <div class="card-desc">Find-and-replace inside a file. Shows a diff of what changed. Supports replace_all for bulk renames.</div>
+                <div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-amber">Approval</span></div>
+            </div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">glob</div><div class="card-desc">Find files by pattern. Example: **/*.py finds all Python files in all subdirectories.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">grep</div><div class="card-desc">Search inside files by text or regex pattern. Like Ctrl+F but across your entire codebase.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">list_dir</div><div class="card-desc">List files and folders in a directory. Shows sizes and types.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+
+            <!-- Execution -->
+            <div class="card" onclick="document.getElementById('modal-exec').showModal()">
+                <div class="card-title">bash</div>
+                <div class="card-desc">Run shell commands (ls, git, pip, make). 3-layer security: allowlist + denylist + path boundary.</div>
+                <div class="card-tags"><span class="tag tag-purple">Exec</span><span class="tag tag-red">Approval</span></div>
+            </div>
+            <div class="card" onclick="document.getElementById('modal-exec').showModal()">
+                <div class="card-title">python_exec</div>
+                <div class="card-desc">Run Python code in a sandboxed subprocess. 3-layer validation: regex + AST + runtime sandbox.</div>
+                <div class="card-tags"><span class="tag tag-purple">Exec</span><span class="tag tag-red">Approval</span></div>
+            </div>
+
+            <!-- Document Creation -->
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()">
+                <div class="card-title">create_word</div>
+                <div class="card-desc">Generate Word documents (.docx) with headings, tables, and embedded images.</div>
+                <div class="card-tags"><span class="tag tag-amber">Docs</span></div>
+            </div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_excel</div><div class="card-desc">Generate Excel spreadsheets (.xlsx) with formatted data and optional charts.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_chart</div><div class="card-desc">Generate charts (bar, line, pie, scatter + 4 more). Displayed inline in the chat.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_pdf</div><div class="card-desc">Generate PDF reports with text, tables, and images. Professional formatting.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_markdown</div><div class="card-desc">Generate Markdown (.md) files with full formatting support.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-docs').showModal()"><div class="card-title">create_notebook</div><div class="card-desc">Generate Jupyter notebooks (.ipynb) with code and markdown cells.</div><div class="card-tags"><span class="tag tag-amber">Docs</span></div></div>
+
+            <!-- Intelligence -->
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">view_image</div><div class="card-desc">Load an image and send to Claude's vision API. The agent actually sees and understands photos, charts, screenshots.</div><div class="card-tags"><span class="tag tag-green">Vision</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">semantic_search</div><div class="card-desc">Search your codebase by meaning (not just keywords). Uses Titan embeddings + AST-aware chunking for Python.</div><div class="card-tags"><span class="tag tag-green">Search</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-intel').showModal()"><div class="card-title">web_fetch</div><div class="card-desc">Fetch a specific URL you provide and convert HTML to readable text. NOT web search &mdash; you must give the URL. SSRF-hardened.</div><div class="card-tags"><span class="tag tag-green">URL Fetch</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">skill</div><div class="card-desc">Load skill files (review checklists, coding standards) into the system prompt. Extends agent behavior.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">task</div><div class="card-desc">Spawn a sub-agent (build, plan, explore, general, review) for complex multi-step work.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-agents').showModal()"><div class="card-title">ask_user</div><div class="card-desc">Ask the human a question mid-task. Pauses and waits for your response before continuing.</div><div class="card-tags"><span class="tag tag-purple">Agent</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-state').showModal()"><div class="card-title">todo_write</div><div class="card-desc">Create and manage a task list. Helps the agent track multi-step work.</div><div class="card-tags"><span class="tag tag-blue">State</span></div></div>
+            <div class="card" onclick="document.getElementById('modal-state').showModal()"><div class="card-title">todo_read</div><div class="card-desc">Read the current task list to check progress on multi-step work.</div><div class="card-tags"><span class="tag tag-blue">State</span></div></div>
+        </div>
+
+        <div class="explain">
+            <strong>Why 24 tools?</strong> Each tool is a specific action the agent can take. More tools = more capabilities. For comparison, Claude Code has ~12 tools, Aider has ~8, Codex has ~8. V3 has the most tools of any coding agent we tested, including unique ones like create_word, create_chart, and view_image.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 4: Security ========== -->
+<div class="section" id="security">
+    <div class="section-header">
+        <h2><span style="color:var(--red)">04</span> 16 Security Layers</h2>
+        <p>How V3 prevents the AI from doing harmful things, even when running on your machine</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-2">
+            <div class="card" style="border-left:4px solid var(--blue)">
+                <div class="card-title">Bash Protection (3 layers)</div>
+                <div class="card-desc">
+                    <strong>Layer 1 &mdash; Allowlist:</strong> Only 57 safe commands allowed (ls, git, pip...). Everything else blocked.<br>
+                    <strong>Layer 2 &mdash; Denylist:</strong> 70+ dangerous patterns blocked even in allowed commands (rm -rf, sudo, curl to external URLs).<br>
+                    <strong>Layer 3 &mdash; Path boundary:</strong> Can only access files inside your workspace. /etc/passwd? Blocked.
+                </div>
+            </div>
+            <div class="card" style="border-left:4px solid var(--green)">
+                <div class="card-title">Python Protection (3 layers)</div>
+                <div class="card-desc">
+                    <strong>Layer 1 &mdash; Regex scan:</strong> 48 patterns catch dangerous code (os.system, subprocess, eval).<br>
+                    <strong>Layer 2 &mdash; AST analysis:</strong> Parses code as a tree, validates every import against an allowlist.<br>
+                    <strong>Layer 3 &mdash; Runtime sandbox:</strong> Wraps builtins.open, os.open, os.remove at runtime so even if code passes static checks, it can't escape.
+                </div>
+            </div>
+            <div class="card" style="border-left:4px solid var(--amber)">
+                <div class="card-title">AWS Isolation</div>
+                <div class="card-desc">
+                    <strong>aws_bedrock_only mode:</strong> Blocks ALL AWS services except Bedrock at the code level (regex + AST + getattr detection). Even if the Python sandbox is bypassed, the attacker can only call the LLM &mdash; not S3, not IAM, not anything else.
+                </div>
+            </div>
+            <div class="card" style="border-left:4px solid var(--purple)">
+                <div class="card-title">Additional Protections</div>
+                <div class="card-desc">
+                    <strong>SSRF blocking:</strong> Can't fetch private IPs (10.x, 192.168.x).<br>
+                    <strong>Secret scanning:</strong> 13 patterns detect API keys, passwords in output.<br>
+                    <strong>Approval dialog:</strong> You see exactly what the agent wants to run and approve/deny.<br>
+                    <strong>Audit trail:</strong> Every action logged with integrity hash.
+                </div>
+            </div>
+        </div>
+
+        <div class="explain">
+            V3's security follows the principle of least privilege: the agent has access to tools within your workspace only. System files, AWS resources beyond Bedrock, network access, and credentials are all blocked by separate enforcement layers. Each tool call is validated before execution, and destructive operations require explicit user approval.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 5: Comparison with Peers ========== -->
+<div class="section" id="comparison">
+    <div class="section-header">
+        <h2><span style="color:var(--purple)">05</span> How V3 Compares to Other Coding Agents</h2>
+        <p>V3 was built by studying OpenCode (open-source, TypeScript) and tested against Claude Code and Codex</p>
+    </div>
+    <div class="section-body">
+        <div style="overflow-x:auto">
+        <table class="comparison-table">
+            <thead>
+                <tr><th>Feature</th><th>SageAgent V3</th><th>OpenCode</th><th>Claude Code</th><th>Codex</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Language</strong></td><td>Python (single file)</td><td>TypeScript (monorepo, 195 files)</td><td>TypeScript</td><td>Rust + TypeScript</td></tr>
+                <tr><td><strong>Runs on</strong></td><td>SageMaker / Jupyter</td><td>Terminal CLI</td><td>Terminal CLI</td><td>Terminal CLI</td></tr>
+                <tr><td><strong>LLM Providers</strong></td><td>AWS Bedrock only</td><td>20+ (Anthropic, OpenAI, Google, Azure...)</td><td>Anthropic only</td><td>OpenAI only</td></tr>
+                <tr><td><strong>Tools</strong></td><td class="check">22 built-in</td><td>20 built-in + plugins</td><td>~12</td><td>~8</td></tr>
+                <tr><td><strong>Doc Creation (Word/Excel/PDF)</strong></td><td class="check">Yes (6 doc tools)</td><td class="cross">No</td><td class="cross">No</td><td class="cross">No</td></tr>
+                <tr><td><strong>Image Understanding</strong></td><td class="check">Yes (vision API)</td><td class="partial">Partial</td><td class="check">Yes</td><td class="partial">Limited</td></tr>
+                <tr><td><strong>Cost Tracking</strong></td><td class="check">Yes (6-decimal + budget)</td><td class="partial">Basic</td><td class="cross">No</td><td class="cross">No</td></tr>
+                <tr><td><strong>Security Layers</strong></td><td class="check">16 layers + AWS isolation</td><td class="cross">Permission UX only (no sandbox)</td><td>OS sandbox</td><td>Docker</td></tr>
+                <tr><td><strong>Sub-Agents</strong></td><td class="check">5 types</td><td class="check">Yes (task tool)</td><td class="check">Yes</td><td class="cross">No</td></tr>
+                <tr><td><strong>MCP Protocol</strong></td><td class="check">Yes (stdio + HTTP)</td><td class="check">Yes (stdio + SSE + HTTP)</td><td class="check">Yes</td><td class="cross">No</td></tr>
+                <tr><td><strong>Skills System</strong></td><td class="check">Yes (SKILL.md)</td><td class="check">Yes (SKILL.md)</td><td class="check">Yes</td><td class="cross">No</td></tr>
+                <tr><td><strong>Context Compaction</strong></td><td class="check">Prune + LLM summarize</td><td class="check">Token-based pruning</td><td class="check">Yes</td><td class="cross">No</td></tr>
+                <tr><td><strong>Session Persistence</strong></td><td class="check">JSON files</td><td class="check">SQLite</td><td>Memory file</td><td class="cross">No</td></tr>
+                <tr><td><strong>Config System</strong></td><td>agent_config.json</td><td>opencode.jsonc</td><td>CLAUDE.md</td><td>None</td></tr>
+                <tr><td><strong>Streaming</strong></td><td class="cross">No (Jupyter limitation)</td><td class="check">SSE</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+                <tr><td><strong>Semantic Search</strong></td><td class="check">AST-aware (Python)</td><td class="cross">No</td><td>Grep only</td><td>Grep only</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="insight purple" style="margin-top:20px">
+            <div class="insight-icon">📚</div>
+            <div><strong>V3 learned from OpenCode.</strong> The architecture patterns &mdash; ReAct loop, context compaction, skill system, sub-agents, MCP support, config files &mdash; all originated in OpenCode's TypeScript codebase. V3 reimplemented them in Python for SageMaker, added document creation (6 tools), image understanding, cost tracking with budgets, and 16 security layers that OpenCode doesn't have.</div>
+        </div>
+
+        <div class="explain">
+            <strong>Why is this comparison important?</strong> There are many coding agents available (Claude Code, Cursor, Aider, Cline, OpenHands, Codex). V3 is the only one designed specifically for <strong>AWS SageMaker notebooks</strong>. The others run in terminal/IDE. V3 also uniquely creates documents (Word, Excel, PDF) and tracks costs &mdash; features none of the others have.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 6: How The Agent Decides ========== -->
+<div class="section" id="decides">
+    <div class="section-header">
+        <h2><span style="color:var(--sky)">06</span> How The Agent Decides Which Tool To Use</h2>
+        <p>The most common question: "How does it know what to do?" Here's the actual mechanism.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-2">
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-title">Step 1: Tool Definitions Sent to Claude</div>
+                <div class="card-desc">
+                    Every API call sends the full list of tool names + descriptions + parameter schemas to Claude. Claude reads these like a menu and picks the right tool for the job.<br><br>
+                    <strong>Example:</strong> You say "read app.py". Claude sees <code>read_file: "Read file contents with line numbers"</code> in the tool list and calls it with <code>{"file_path": "app.py"}</code>.
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-title">Step 2: Lazy Loading (Smart Optimization)</div>
+                <div class="card-desc">
+                    V3 doesn't always send all 24 tools. Document creation tools (Word, Excel, Chart, PDF, Markdown, Notebook) are <strong>excluded</strong> unless your recent messages mention doc-related keywords.<br><br>
+                    <strong>Why:</strong> 23 tool definitions = ~2,400 tokens. Without doc tools = ~1,627 tokens. This saves 30% on every API call for coding tasks.
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-title">Step 3: Approval Gate</div>
+                <div class="card-desc">
+                    12 tools are "safe" (read-only) &mdash; they run without asking you.<br>
+                    10 tools need your approval &mdash; you see the exact parameters in an Approve/Deny dialog.<br><br>
+                    <strong>Safe (auto):</strong> read_file, glob, grep, list_dir, view_image, semantic_search, skill, ask_user, todo_write, todo_read<br>
+                    <strong>Needs approval:</strong> bash, python_exec, write_file, edit_file, task, web_fetch, create_word/excel/chart/pdf/markdown/notebook
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--purple)">
+                <div class="card-title">Step 4: Error Recovery (5 Layers)</div>
+                <div class="card-desc">
+                    If Claude calls a tool wrong, V3 auto-fixes before failing:<br><br>
+                    1. <strong>Name repair</strong> &mdash; "readfile" &rarr; "read_file" (fuzzy match)<br>
+                    2. <strong>Arg fix</strong> &mdash; "path" &rarr; "file_path" (common mistakes)<br>
+                    3. <strong>Type convert</strong> &mdash; string "5" &rarr; int 5<br>
+                    4. <strong>Permission check</strong> &mdash; explains what went wrong<br>
+                    5. <strong>Exception handling</strong> &mdash; returns error message, agent retries
+                </div>
+            </div>
+        </div>
+
+        <div class="explain">
+            Tool selection happens entirely within Claude's reasoning. V3 sends all tool definitions (name + description + JSON schema) with each API call. Claude maps your intent to the appropriate tool and constructs valid arguments. The 5-layer error recovery handles common LLM mistakes (wrong tool name, mismatched types, missing required params) without re-prompting. Lazy loading of doc tools saves ~700 tokens per non-document API call.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 7: Sub-Agents ========== -->
+<div class="section" id="subagents">
+    <div class="section-header">
+        <h2><span style="color:var(--purple)">07</span> Sub-Agents &mdash; Delegation System</h2>
+        <p>V3 can spawn specialist agents for complex work. Each has its own tools, turn limit, and focus.</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid">
+            <div class="card" style="border-top:4px solid var(--blue)">
+                <div class="card-icon">&#128296;</div>
+                <div class="card-title">build</div>
+                <div class="card-desc">Full access to ALL tools. For building, compiling, fixing errors, running tests. The most powerful sub-agent.</div>
+                <div class="card-tags"><span class="tag tag-blue">All tools</span><span class="tag tag-amber">25 turns max</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--green)">
+                <div class="card-icon">&#128203;</div>
+                <div class="card-title">plan</div>
+                <div class="card-desc">Read-only + web_fetch + ask_user. For architecture analysis, planning, and research. Cannot modify files.</div>
+                <div class="card-tags"><span class="tag tag-green">11 tools</span><span class="tag tag-amber">15 turns</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--teal)">
+                <div class="card-icon">&#128269;</div>
+                <div class="card-title">explore</div>
+                <div class="card-desc">Fast file search only. For quickly finding files, reading code, grepping patterns. Minimal and fast.</div>
+                <div class="card-tags"><span class="tag tag-green">5 tools</span><span class="tag tag-amber">10 turns</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-icon">&#9881;</div>
+                <div class="card-title">general</div>
+                <div class="card-desc">All tools except doc creation. For general-purpose coding tasks that don't need Word/Excel/PDF output.</div>
+                <div class="card-tags"><span class="tag tag-blue">11 tools</span><span class="tag tag-amber">15 turns</span></div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--red)">
+                <div class="card-icon">&#128270;</div>
+                <div class="card-title">review</div>
+                <div class="card-desc">Read-only + view_image. Runs security, quality, performance, architecture, and testing checklists on your code.</div>
+                <div class="card-tags"><span class="tag tag-green">6 tools</span><span class="tag tag-amber">10 turns</span></div>
+            </div>
+        </div>
+
+        <div class="explain">
+            Sub-agents run as child Agent instances in separate threads via ThreadPoolExecutor (max 4 workers). Each gets its own message history, tool access scoped by agent type, and thread-local FILE_CACHE isolation. The parent agent receives the sub-agent's final output as a tool result. Parallel execution: multiple <code>task</code> calls in one response run concurrently.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 8: Context & Cost ========== -->
+<div class="section" id="context-cost">
+    <div class="section-header">
+        <h2><span style="color:var(--teal)">08</span> Context Management &amp; Cost Tracking</h2>
+        <p>How V3 handles long conversations and tracks spending</p>
+    </div>
+    <div class="section-body">
+        <div class="card-grid-2">
+            <div class="card" style="border-top:4px solid var(--teal)">
+                <div class="card-title">Context Compaction (2-Stage)</div>
+                <div class="card-desc">
+                    <strong style="color:var(--blue)">WHY:</strong> Claude's memory is 200K tokens. Long conversations fill it up.<br><br>
+                    <strong style="color:var(--green)">WHAT:</strong> When context hits 80%, V3 auto-compacts:<br>
+                    1. <strong>Prune</strong> &mdash; removes old tool outputs (protects last 40K tokens, needs 10K savings minimum)<br>
+                    2. <strong>Summarize</strong> &mdash; if pruning isn't enough, asks Claude to compress the history into a summary<br><br>
+                    <strong style="color:var(--amber)">HOW:</strong> The Compactor class (200 lines) handles this. File Cache (LRU, 100 entries) prevents re-reading files. Smart Truncation caps tool output at 1,500 lines / 30KB with head+tail split.
+                </div>
+            </div>
+            <div class="card" style="border-top:4px solid var(--amber)">
+                <div class="card-title">Cost Tracking (6-Decimal Precision)</div>
+                <div class="card-desc">
+                    <strong style="color:var(--blue)">WHY:</strong> Every API call costs money. Without tracking, you could spend $50 on a long session without knowing.<br><br>
+                    <strong style="color:var(--green)">WHAT:</strong> V3 tracks every call:<br>
+                    &bull; Input/output tokens per call and per session<br>
+                    &bull; Cache read (90% discount) and cache write (25% premium)<br>
+                    &bull; Cost to 6 decimal places ($0.001234)<br>
+                    &bull; 10 model pricing tiers built-in + configurable via agent_config.json<br><br>
+                    <strong style="color:var(--amber)">HOW:</strong> Session cost limit (configurable): warns at 80%, auto-stops at 100%. UI shows cost per call + session total + model rate.
+                </div>
+            </div>
+        </div>
+
+        <div style="overflow-x:auto;margin-top:20px">
+        <table class="comparison-table">
+            <thead><tr><th>Model</th><th>Input (per 1M tokens)</th><th>Output (per 1M tokens)</th><th>Notes</th></tr></thead>
+            <tbody>
+                <tr><td>Claude 3 Haiku</td><td>$0.25</td><td>$1.25</td><td>Cheapest, legacy</td></tr>
+                <tr><td>Claude 3.5 Haiku</td><td>$0.80</td><td>$4.00</td><td>Legacy</td></tr>
+                <tr><td><strong>Claude Haiku 4.5 (AU)</strong></td><td><strong>$1.10</strong></td><td><strong>$5.50</strong></td><td><strong>Default V3 model</strong></td></tr>
+                <tr><td>Claude Sonnet 4.5 (AU)</td><td>$3.30</td><td>$16.50</td><td>Recommended upgrade</td></tr>
+                <tr><td>Claude Opus 4.5</td><td>$5.00</td><td>$25.00</td><td>Strongest reasoning</td></tr>
+                <tr><td>Claude Opus 4.6 (AU)</td><td>$5.50</td><td>$27.50</td><td>Latest, AU premium</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="explain">
+            TokenTracker intercepts every Bedrock response, extracts <code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_input_tokens</code>, and <code>cache_creation_input_tokens</code>, then applies the correct pricing formula: regular input at full rate, cache reads at 10% (90% discount), cache writes at 125% (25% premium). The session_cost_limit config provides a hard stop &mdash; the agent loop checks <code>is_over_budget()</code> every turn.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 9: Configuration ========== -->
+<div class="section" id="config">
+    <div class="section-header">
+        <h2><span style="color:var(--amber)">09</span> Configuration &mdash; What You Can Control</h2>
+        <p>Everything configurable via agent_config.json (no code changes needed)</p>
+    </div>
+    <div class="section-body">
+        <div style="overflow-x:auto">
+        <table class="comparison-table">
+            <thead><tr><th>Setting</th><th>Default</th><th>What It Controls</th></tr></thead>
+            <tbody>
+                <tr><td><strong>model_id</strong></td><td>Haiku 4.5 AU</td><td>Which Claude model to use (affects quality + cost)</td></tr>
+                <tr><td><strong>region</strong></td><td>ap-southeast-2</td><td>AWS region for Bedrock API calls</td></tr>
+                <tr><td><strong>aws_bedrock_only</strong></td><td>false</td><td>Block ALL AWS services except Bedrock (security isolation)</td></tr>
+                <tr><td><strong>session_cost_limit</strong></td><td>0 (no limit)</td><td>Max $ per session. Warns at 80%, stops at 100%.</td></tr>
+                <tr><td><strong>require_tool_approval</strong></td><td>true</td><td>Show Approve/Deny dialog before executing tools</td></tr>
+                <tr><td><strong>max_turns</strong></td><td>60</td><td>Max agent loop iterations per message</td></tr>
+                <tr><td><strong>max_exec_calls_per_session</strong></td><td>40</td><td>Max bash/python_exec calls per session (safety budget)</td></tr>
+                <tr><td><strong>temperature</strong></td><td>0.0</td><td>Creativity (0=deterministic, 1=creative)</td></tr>
+                <tr><td><strong>thinking_enabled</strong></td><td>false</td><td>Extended thinking mode (uses more tokens, better reasoning)</td></tr>
+                <tr><td><strong>model_pricing</strong></td><td>{}</td><td>Add custom model prices (merged into built-in table)</td></tr>
+                <tr><td><strong>commands</strong></td><td>{}</td><td>Custom slash commands (e.g., /review, /test)</td></tr>
+                <tr><td><strong>disable_local_traces</strong></td><td>false</td><td>Stealth mode: no audit/session/snapshot files written</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="explain">
+            All config is loaded at module import from <code>agent_config.json</code> (JSONC with comments supported). Scalar fields are type-validated. Structured fields (commands, agents, permissions, mcp, model_pricing) are deep-merged. Config is applied once at startup &mdash; runtime changes via the UI (model dropdown, temperature slider) modify the CONFIG object directly.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 10: Competition Results ========== -->
+<div class="section" id="results">
+    <div class="section-header">
+        <h2><span style="color:var(--teal)">06</span> Competition Results</h2>
+        <p>V3 was tested against Claude Code (Opus 4.6) and Codex (gpt-5.3) on 15 real coding tasks</p>
+    </div>
+    <div class="section-body">
+        <div style="overflow-x:auto">
+        <table class="comparison-table">
+            <thead><tr><th>Round</th><th>Tasks</th><th>V3 (Haiku 4.5)</th><th>Claude Code (Opus 4.6)</th><th>Codex (gpt-5.3)</th></tr></thead>
+            <tbody>
+                <tr><td><strong>R1: Medium (10 tasks)</strong></td><td>Bug fix, CSV pipeline, security audit, refactoring, API client, image analysis, optimization, test gen, Flask app, CLI scaffold</td><td class="check">10/10</td><td>9/10</td><td>9/10</td></tr>
+                <tr><td><strong>R2: Hard (5 tasks)</strong></td><td>Codebase review, code explanation, flowchart generation, complex code writing (501-line LRU cache), architecture assessment</td><td class="check">5/5</td><td class="check">5/5</td><td class="check">5/5</td></tr>
+                <tr><td><strong>R3: Codebase Audit</strong></td><td>Analyze 7,450 lines &mdash; find all bugs, performance issues, security gaps</td><td>28 findings</td><td>35 findings</td><td class="check">37 findings</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="insight green" style="margin-top:20px">
+            <div class="insight-icon">🏆</div>
+            <div><strong>Key finding:</strong> V3's agent framework (tools, security, doc creation) is the strongest of the three. It won R1 because it can create Word/chart/PDF natively. It tied R2 on hard tasks. It scored lowest on R3 (deep codebase analysis) because the <strong>model underneath</strong> (Haiku = smallest) matters more than the agent framework for pure reasoning tasks. If V3 ran on Opus, it would match or beat Claude Code on R3 too.</div>
+        </div>
+
+        <div class="explain">
+            <strong>What does this mean?</strong> An "agent" has two parts: the <strong>framework</strong> (tools, security, features) and the <strong>model</strong> (the AI brain). V3's framework is the best. Its default model (Haiku) is the cheapest and smallest &mdash; great for most tasks, but weaker on deep analysis. You can switch to Sonnet or Opus for harder work by changing one line in the config.
+        </div>
+    </div>
+</div>
+
+<!-- ========== SECTION 7: What Can't Be Fixed ========== -->
+<div class="section">
+    <div class="section-header">
+        <h2><span style="color:var(--text-muted)">07</span> Platform Limitations (Why Not 10/10)</h2>
+        <p>8 things that can't be fixed &mdash; they're built into the platform, not the agent</p>
+    </div>
+    <div class="section-body">
+        <div style="overflow-x:auto">
+        <table class="comparison-table">
+            <thead><tr><th>#</th><th>Limitation</th><th>Impact</th><th>Plain English</th></tr></thead>
+            <tbody>
+                <tr><td>1</td><td><strong>No Docker</strong></td><td><span class="cross">-0.7</span></td><td>SageMaker doesn't let us run code in a locked container. Our software fence is good but not a physical wall.</td></tr>
+                <tr><td>2</td><td><strong>Python closures readable</strong></td><td><span class="cross">-0.3</span></td><td>Python lets code peek inside functions and find hidden wrappers. Like hiding a key under a doormat &mdash; Python lets you lift it.</td></tr>
+                <tr><td>3</td><td><strong>Shared IAM role</strong></td><td><span class="partial">-0.2</span></td><td>V3 and your notebook share the same AWS identity. aws_bedrock_only blocks abuse at code level, but the identity itself can't be split.</td></tr>
+                <tr><td>4</td><td><strong>No streaming</strong></td><td><span class="partial">-0.3</span></td><td>Responses come all at once instead of word-by-word. Jupyter widgets can't handle live streaming.</td></tr>
+                <tr><td>5</td><td><strong>No prompt caching</strong></td><td><span class="partial">-0.1</span></td><td>Every API call re-sends the full setup. Bedrock AU region doesn't support caching yet.</td></tr>
+                <tr><td>6</td><td><strong>shell=True for pipes</strong></td><td><span class="partial">-0.1</span></td><td>Commands like "git log | head" need the shell. But the shell is harder to control than running programs directly.</td></tr>
+                <tr><td>7</td><td><strong>Daemon auto-save</strong></td><td><span class="partial">-0.2</span></td><td>Saves happen in a background thread. If SageMaker kills the kernel, the thread dies and your last message might not save.</td></tr>
+                <tr><td>8</td><td><strong>No persistent REPL</strong></td><td><span class="partial">-0.3</span></td><td>Every Python execution starts fresh. Variables from the last run are gone. A major rewrite would fix this but isn't worth it.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="explain">
+            These 8 items add up to ~1.0 points. V3 scores 9.0/10 and these limitations prevent it from reaching 10. None can be fixed by changing V3's code &mdash; they require a different platform (Docker), a different language (not CPython), or a different UI framework (not Jupyter). V3 has reached the maximum possible score for its environment.
+        </div>
+    </div>
+</div>
+
+<!-- Verdict -->
+<div class="verdict">
+    <h2>SageAgent V3 &mdash; Final Assessment</h2>
+    <p style="color:rgba(255,255,255,0.7);max-width:600px;margin:0 auto 24px">10 rounds of review by Claude Opus 4.6 + Codex gpt-5.3-codex. 15/15 competition tasks passed. 81/81 tests passing.</p>
+    <div class="verdict-grid">
+        <div class="verdict-item">
+            <h3>Overall Score</h3>
+            <div class="verdict-score blue">9.0/10</div>
+            <p style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px">Maximum achievable on SageMaker</p>
+        </div>
+        <div class="verdict-item">
+            <h3>Competition</h3>
+            <div class="verdict-score green">15/15</div>
+            <p style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px">100% pass rate across 15 tasks</p>
+        </div>
+        <div class="verdict-item">
+            <h3>Production Ready</h3>
+            <div class="verdict-score amber">95%</div>
+            <p style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px">Single user + Sonnet model</p>
+        </div>
+    </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- ========== MODALS ========== -->
+<dialog id="modal-file" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>File Tools &mdash; How They Work</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>read_file</strong> reads a file and returns its contents. You can specify offset (start line) and limit (how many lines) to read just the part you need &mdash; important for large files.<br><br>
+        <strong>write_file</strong> creates a new file or replaces an existing one entirely. If the file already exists, the agent must read it first (safety check to prevent accidental overwrites).<br><br>
+        <strong>edit_file</strong> does find-and-replace. The agent specifies the exact text to find and what to replace it with. This is safer than rewriting the whole file because only the changed part is modified. The agent sees a diff showing exactly what changed.
+    </p>
+    <div class="explain">Think of read_file like opening a document to look at it, write_file like creating a new document, and edit_file like using Find &amp; Replace in your word processor.</div>
+</dialog>
+
+<dialog id="modal-exec" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>Execution Tools &mdash; How They Work</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>bash</strong> runs shell commands like you would in a terminal. "ls -la" to list files, "pip install pandas" to install packages, "git status" to check git. Every command passes through 3 security layers before running.<br><br>
+        <strong>python_exec</strong> runs Python code in a fresh subprocess. The code is validated 3 times: regex scan for dangerous patterns, AST parsing to check all imports, then runtime sandbox wrapping. Your approval is required before any execution.
+    </p>
+    <div class="explain">These are the most powerful tools &mdash; and the most dangerous. That's why they have the most security: every command is checked against an allowlist, scanned for dangerous patterns, validated within your workspace, and shown to you for approval before running.</div>
+</dialog>
+
+<dialog id="modal-docs" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>Document Creation &mdash; What Makes V3 Unique</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        V3 can create professional documents that other coding agents can't:<br><br>
+        <strong>Word (.docx)</strong> &mdash; Full documents with headings, paragraphs, tables, and embedded images/charts. Uses python-docx library.<br>
+        <strong>Excel (.xlsx)</strong> &mdash; Spreadsheets with formatted data, multiple sheets, and optional charts. Uses openpyxl.<br>
+        <strong>Charts (.png)</strong> &mdash; 8 chart types: bar, grouped bar, stacked bar, line, pie, scatter, horizontal bar, combo. Uses matplotlib.<br>
+        <strong>PDF</strong> &mdash; Reports with text, styled tables, and images. Uses reportlab.<br>
+        <strong>Notebooks (.ipynb)</strong> &mdash; Jupyter notebooks with code and markdown cells.<br>
+        <strong>Markdown (.md)</strong> &mdash; Formatted text files.
+    </p>
+    <div class="explain">No other coding agent (Claude Code, Codex, Aider, Cline) can natively create Word docs or Excel spreadsheets. They can only create text files. V3 was built for data scientists and analysts who need to generate reports, not just code.</div>
+</dialog>
+
+<dialog id="modal-intel" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>Intelligence Tools &mdash; Vision, Code Search, URL Fetch</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>view_image</strong> &mdash; Loads an image file (PNG, JPG, GIF, WebP), converts it to base64, and sends it to Claude's vision API. The AI actually <em>sees</em> the image and can describe what's in it, find UI bugs in screenshots, analyze chart data, or read text from photos. Max 20MB per image.<br><br>
+        <strong>semantic_search</strong> &mdash; Searches your codebase by <em>meaning</em>, not just keywords. If you search "authentication logic", it finds code related to login/auth even if those exact words aren't used. Uses AWS Titan embeddings to convert code into vectors, then finds the most similar chunks. Python files are split by function/class (AST-aware), so results are more meaningful than line-based search.<br><br>
+        <strong>web_fetch</strong> &mdash; Fetches a URL and converts the HTML to readable text. Protected against SSRF attacks: blocks requests to private IPs (10.x, 192.168.x, 127.0.0.1), blocks redirects to internal servers, limits response to 2MB. Useful for reading documentation or API specs from the web.
+    </p>
+    <div class="explain"><strong>semantic_search</strong> uses Titan Embed v2 to vectorize code chunks, then cosine similarity to find matches by meaning rather than exact text. Requires an explicit <code>action="index"</code> call first (costs ~$0.01). In practice, <code>grep</code> handles 95% of search needs &mdash; semantic search is for cases where keyword matching fails. <strong>view_image</strong> base64-encodes the image and injects it as a content block into the next Claude API call for multimodal analysis.</div>
+</dialog>
+
+<dialog id="modal-agents" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>Agent Coordination Tools &mdash; Skills, Sub-Agents, Ask User</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>skill</strong> &mdash; Loads a skill file (Markdown with instructions) into the agent's system prompt. Skills teach the agent new behaviors: "review" makes it do code reviews, "verify" makes it run 6-phase verification, "coding-standards" enforces style rules. Skills are stored in the <code>skills/</code> folder as SKILL.md files.<br><br>
+        <strong>task</strong> &mdash; Spawns a sub-agent to handle a specific job. 5 types available:<br>
+        &bull; <strong>build</strong> &mdash; Full access, for building/compiling/testing<br>
+        &bull; <strong>plan</strong> &mdash; Read-only, for architecture analysis<br>
+        &bull; <strong>explore</strong> &mdash; Fast search, for codebase exploration<br>
+        &bull; <strong>general</strong> &mdash; Multi-step coding tasks<br>
+        &bull; <strong>review</strong> &mdash; Security/quality/performance checklists<br><br>
+        Sub-agents run independently with their own context, tool access, and turn limits. Results are returned to the parent agent.<br><br>
+        <strong>ask_user</strong> &mdash; Pauses the agent and asks you a question. Shows a text input with Submit/Skip buttons. The agent waits up to 5 minutes for your response, then continues based on your answer. Used when the agent needs clarification before proceeding.
+    </p>
+    <div class="explain"><strong>Skills</strong> are injected into the system prompt at runtime, extending the agent's behavior without code changes. <strong>Sub-agents</strong> run as child sessions with scoped tool access and independent context, enabling parallel delegation. <strong>ask_user</strong> implements a blocking prompt with a 5-minute timeout, using threading.Event for synchronization between the agent thread and the UI thread.</div>
+</dialog>
+
+<dialog id="modal-state" class="modal" onclick="if(event.target===this)this.close()">
+    <button class="modal-close" onclick="this.parentElement.close()">&times;</button>
+    <h3>State Tools &mdash; Todo List Management</h3>
+    <p style="font-size:14px;line-height:1.7;color:var(--text-secondary)">
+        <strong>todo_write</strong> &mdash; Creates or updates a task list. Each task has a name, status (pending/in_progress/completed), and an active description. The agent uses this to plan multi-step work and track progress. The todo list persists with the session, so it survives across messages.<br><br>
+        <strong>todo_read</strong> &mdash; Reads the current task list to check what's been done and what's remaining. The agent uses this to maintain awareness of its progress on complex tasks.<br><br>
+        Together, these tools give the agent <strong>working memory</strong> across a conversation. Without them, the agent might forget what it was doing after context compaction. With them, it can always check its todo list and continue from where it left off.
+    </p>
+    <div class="explain">Todo tools provide working memory across context compaction. Without them, multi-step plans would be lost when the Compactor prunes old messages. Todos persist with the session JSON, so they survive kernel restarts. The agent uses them proactively for any task requiring 3+ steps.</div>
+</dialog>
+
+<script>
+function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('v3-theme', next);
+}
+const saved = localStorage.getItem('v3-theme');
+if (saved) document.documentElement.setAttribute('data-theme', saved);
+
+// Accessibility
+document.querySelectorAll('[onclick]').forEach(el => {
+    if (el.tagName !== 'BUTTON' && el.tagName !== 'A' && !el.hasAttribute('tabindex')) {
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'button');
+    }
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') document.querySelectorAll('dialog[open]').forEach(d => d.close());
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.hasAttribute('onclick') && e.target.tagName !== 'BUTTON') { e.preventDefault(); e.target.click(); }
+});
+</script>
+</body>
+</html>

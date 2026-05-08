@@ -1,0 +1,18 @@
+# Block B+ Claude Review Iter5 Command Note
+
+Date: 2026-05-05
+
+Prompt:
+
+- `compact_v5/_status/v5_completion_audit/prompts/block-b-plus-claude-review-iter5.md`
+
+Intended outputs:
+
+- stdout/review: `compact_v5/_status/v5_completion_audit/reviews/block-b-plus-claude-review-iter5.md`
+- stderr/log: `compact_v5/_status/v5_completion_audit/logs/block-b-plus-claude-review-iter5.log`
+
+Result:
+
+- `NO_VERDICT / SMOKE_INTERRUPTED_BY_USER`
+- The full review command was not run because the pre-review smoke was
+  interrupted before a complete captured result was available.

@@ -1,0 +1,62 @@
+You are reviewing Block G3 of v5.0.1 — ITER 3 (re-review after iter-2 fixes).
+
+Iter-2 verdict was APPROVE_WITH_FIXES with 3 findings:
+  1. HIGH — Continue row example used cross-type arrow (explore→build)
+     contradicting v5 "Continue = same subagent_type" rule.
+  2. MEDIUM — lock test for v5 semantics was lenient and didn't catch
+     the contradiction.
+  3. LOW — subagent absence test checked only one marker.
+
+Verify each fix lands cleanly. Focus on iter-3 commit 6a49879.
+
+Diff range: 74cb933..HEAD (iter-3 commit 6a49879).
+
+Iter-3 file changes:
+- MODIFIED compact_v5/MAIN/agent/coordinator/system_prompt.py
+  - Continue row 1 example: explore→explore (same role, deeper).
+  - Phase-transition row: explore→build (correctly in Spawn fresh).
+- MODIFIED compact_v5/MAIN/agent/tests/integration/test_block_g3.py
+  - test_coordinator_prompt_v5_continue_semantics_no_persistent_worker:
+    regex-scan every Continue row's third column for cross-type arrows
+    (X→Y where X != Y); rejects them with explicit assertion message.
+  - test_coordinator_user_context_NOT_injected_for_subagent: tightened
+    to check 4 markers (scratchpad-directory / worker-types / create_word
+    / build,review roster) — was only "without permission prompts".
+
+Tests: 679 pass + 7 skip (unchanged).
+
+Apply the 3-axis review template focused on iter-3 fixes.
+
+AXIS A — Errors / bugs / regressions
+- Verify finding #1 fix:
+  - Open coordinator/system_prompt.py around the Continue vs Spawn
+    table. Continue rows must NOT contain X→Y where X != Y arrows.
+  - Spawn-fresh rows MAY contain cross-type arrows (correct usage).
+- Verify finding #2 fix:
+  - Lock test runs `re.findall` for `\| ... \| Continue \| ... \|`
+    pattern. For each match, regex-scans for `X→Y` cross-type pattern.
+    A future regression that re-introduces cross-type Continue would
+    now fail this lock.
+- Verify finding #3 fix:
+  - 4 markers checked: "without permission prompts", "scratchpad
+    directory", "worker types", "create_word", "build, review".
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- The coordinator prompt now consistently reflects v5's same-type
+  Continue / cross-type Spawn-fresh semantics. No anchoring on
+  Runnable's persistent-worker model.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+PORT_LOG #092 + #093 + ADR-032 unchanged. Iter-3 is pure correctness
+work on the prompt + test scope.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if all 3 iter-2 findings are cleanly fixed AND no new
+findings emerge. Be specific. Cite file:line.

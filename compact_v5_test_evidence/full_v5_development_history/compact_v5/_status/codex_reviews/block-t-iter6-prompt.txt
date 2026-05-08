@@ -1,0 +1,58 @@
+You are reviewing Block T iter-6 of v5.0.1 — fix for Codex iter-5
+APPROVE_WITH_FIXES verdict (1 MEDIUM).
+
+Diff range: 1f2211c..HEAD (Block T iter-5 → Block T iter-6 commit a2e54fd).
+
+iter-5 finding being closed:
+
+MEDIUM — create_chart combo shape parser bug. The v4 shape
+{labels, bar_values, line_values, bar_label, line_label, line_ylabel}
+hit none of the explicit parser branches (no `series`, no `values`,
+no `x/y`) and fell into the generic dict.keys() fallback. Result:
+labels became ["labels", "bar_values", "line_values", ...] before
+the combo render branch ran.
+
+Fix at compact_v5/MAIN/agent/tools/v4_documents.py:
+The data parser now has a 4th branch (placed BEFORE the generic
+dict.keys() fallback):
+  elif "labels" in data and ("bar_values" in data or "line_values" in data):
+      labels = list(data.get("labels") or [])
+      values = list(data.get("bar_values") or data.get("line_values") or [])
+
+Lock test strengthened at tests/integration/test_block_t.py:
+test_tool_create_chart_v4_combo_shape now uses monkeypatch to spy
+on matplotlib.axes.Axes.bar AND .plot. The captured x-arg lists are
+asserted equal to the expected ["Q1", "Q2", "Q3", "Q4"] — the bug
+case would have captured ["labels", "bar_values", "line_values", ...].
+
+Tests: 770 pass + 14 skip (same total — combo test was strengthened
+in place, not added). verify_ship_zip.py: PASS.
+
+Apply 3-axis review.
+
+AXIS A — Errors / bugs / regressions
+- Is the parser fix correct + minimal?
+- Does the new monkeypatch test correctly catch the bug case?
+  (The spy captures the FIRST x-arg; the combo branch calls bar then
+  plot, so bar_labels and line_labels should both be the quarter list.
+  Confirm the spy ordering is robust.)
+- Does the strengthened test still pass under the FIX, AND would it
+  fail under the BUG? (Counterfactual reasoning: revert the parser
+  branch mentally; what would the spy capture?)
+
+AXIS B — v5 architecture + goals fit
+- Is the 4-branch parser order still readable / maintainable, or is
+  this approaching needs-extraction-into-helper territory?
+
+AXIS C — Reference-repo coverage
+- Are there any v4 chart shapes still unhandled by the parser?
+  Spot-check tool_create_chart in compact_v4/MAIN/agent/sagemaker_agent.py.
+- Per iter-3 + iter-5 acknowledgement, polish gaps (value labels,
+  tight_layout, dpi=300 default, size clamping, style reset) are
+  explicitly deferred. Should NOT block APPROVE here.
+
+GOAL: APPROVE so we can tag v5.0.1-block-t and move to Block J.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding.

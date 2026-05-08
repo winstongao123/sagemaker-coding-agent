@@ -1,0 +1,121 @@
+You are reviewing Block M of v5.0.1.
+
+Block M deliverable: Phase 8 critical fixes — small (~30 LOC) but
+prevent silent loop / state-leak bugs.
+- M-1: discoveredSkillNames per-run reset (Runnable QueryEngine.ts:197+:238)
+  — v5 analog is SkillManager._pending_activations, cleared at run() entry.
+- M-2: structured-output retry-limit (Runnable QueryEngine.ts:1004-1048)
+  — count_tool_calls helper + 2 ctor params (synthetic_output_tool_name,
+  max_structured_output_retries) + halt at top of for-loop turn when
+  the synthetic-output count exceeds the limit.
+
+Diff range: v5.0.1-block-i..HEAD (Block M commit 09b6114).
+
+Files changed:
+- EXTENDED compact_v5/MAIN/agent/core/query_engine.py (~50 LOC added)
+  - count_tool_calls(messages, tool_name) -> int helper at module level.
+  - QueryEngine ctor: 2 new optional params with defaults
+    (synthetic_output_tool_name=None, max_structured_output_retries=3,
+    clamped to max(1, int(...)).
+  - run() entry: best-effort try/except that clears
+    skill_manager._pending_activations under the manager's _pending_lock
+    (M-1).
+  - run() entry: captures _initial_structured_output_calls baseline
+    via count_tool_calls(self.messages, synthetic_output_tool_name).
+  - Top of for-loop turn (BEFORE budget gate): if
+    synthetic_output_tool_name set, recompute count, compare against
+    baseline + retry limit, halt with stop_reason
+    "error_max_structured_output_retries".
+- EXTENDED compact_v5/MAIN/agent/core/__init__.py — re-exports
+  count_tool_calls.
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_m.py
+  (11 tests: 5 pure + 3 TEST_DESIGN-named + 3 behavior locks).
+
+Reference paths:
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/QueryEngine.ts
+  (lines 197 + 238 + 1004-1048)
+- Plan: compact_v5/_phase_2/synthesis/V5_PHASE_2_PLAN_v3.md (§Block M
+  around line 290-298)
+- Tests catalogue: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block M
+  around line 235-243)
+- ADR-030: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 642 pass + 6 skip (was 631 + 6 at end of Block I; +11 net new).
+verify_ship_zip.py: PASS (115 files / 322.2 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line.
+
+AXIS A — Errors / bugs / regressions
+- count_tool_calls helper:
+  - Iterates only assistant messages (verify the 5 pure-function tests
+    cover empty / no-match / multi-match / user-role-ignored /
+    string-content-not-list).
+  - Returns 0 for empty tool_name (defensive default).
+- QueryEngine ctor params:
+  - max_structured_output_retries clamps to >= 1 via max(1, int(...)).
+    Lock test test_retry_limit_clamps_to_minimum_one covers 0, -5, 10.
+  - synthetic_output_tool_name default None disables the guard
+    entirely. Lock test test_default_synthetic_output_tool_name_is_none.
+- run() entry:
+  - skill_manager._pending_activations.clear() wrapped in try/except.
+    Verify the lock isn't held during the clear (look at the with
+    statement). The reset is unconditional except for missing
+    skill_manager.
+  - _initial_structured_output_calls baseline captured BEFORE the
+    for-loop (so the first turn's count comparison is meaningful).
+- Retry-limit halt:
+  - Position: BEFORE the budget gate (consume()). Why? Because if the
+    retry limit fires, the budget call hasn't been incurred yet —
+    avoids burning a budget slot on a guaranteed-halt turn.
+  - count_now - baseline >= retry_limit triggers halt. Edge: at exactly
+    `retry_limit` calls this run, halts on the NEXT turn's check (so
+    the model has a chance to recover). Verify the lock test
+    test_structured_output_retry_limit_3 checks turns_used == 3 (not
+    2 — the 3 calls land first, then the 4th turn's check halts).
+  - stop_reason="error_max_structured_output_retries" string verbatim
+    from Runnable :1026.
+- Lock test for M-1:
+  - Pre-pollutes _pending_activations with "alpha", calls engine.run(),
+    asserts list cleared. Verify this is the actual run-entry behavior
+    not a fixture artifact.
+- Backwards-compat regression: 642 pass + 6 skip. The default-OFF
+  flag means any prior test that didn't pass synthetic_output_tool_name
+  must still pass — verify by looking at the diff: no existing tests
+  modified.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Constraint #5 (minimum file structures): 0 new files (helper added
+  to existing module + ctor params extended). 1 new test file —
+  unavoidable.
+- Constraint #6 (architecture-first): adapts Runnable's pattern
+  faithfully; the M-1 surface mapping (_pending_activations vs
+  discoveredSkillNames) is documented in PORT_LOG #085.
+- Constraint #15 (quality, no rush): default-OFF retry-limit reduces
+  blast radius; users opt in by passing synthetic_output_tool_name.
+- Q3 axis 7 (long/complex coding): retry-limit guard prevents
+  pathological "model stuck on bad output" loops from burning
+  through max_turns.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+SYNTHESIS_MASTER §Block M says "Plan v3 Block M (30 LOC) covers
+per-turn discoveredSkillNames reset + countToolCalls retry-limit".
+- M-1: PORTED (#085).
+- M-2: PORTED (#084).
+- TEST_DESIGN row "test_discovered_tool_names_reset_per_turn" name
+  preserved verbatim in the test file even though v5 surface is skills
+  (not tools); PORT_LOG #085 explains the terminology mapping.
+- Runnable's MAX_STRUCTURED_OUTPUT_RETRIES env var (process.env.MAX_
+  STRUCTURED_OUTPUT_RETRIES default 5) is replaced by a ctor param
+  with default 3. Different default — check whether that's documented
+  somewhere or is undeclared drift.
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.

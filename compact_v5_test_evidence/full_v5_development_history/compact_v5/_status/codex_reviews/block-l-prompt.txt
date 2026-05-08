@@ -1,0 +1,118 @@
+You are reviewing Block L of v5.0.1 — Error/retry/cache-break +
+Bedrock guardrails.
+
+Block L deliverable: extends Phase 8's 9-category error classifier to
+the Runnable R4 18-category model, adds 5xx HTML humanization, max-
+tokens-overflow detection, Retry-After parsing, per-tool cache-break
+detection with Haiku exclusion (R4 #14 MUST 3LOC).
+
+Diff range: v5.0.1-block-h-plus..HEAD (Block L commit).
+
+Files changed:
+- EXTENDED compact_v5/MAIN/agent/core/errors.py (~150 LOC added)
+  - 9 new BedrockErrorCategory entries:
+    MAX_TOKENS_OVERFLOW / BEDROCK_5XX_HTML / REQUEST_TIMEOUT /
+    PAYLOAD_TOO_LARGE / CONFLICT_409 / GATEWAY_TIMEOUT /
+    MALFORMED_RESPONSE / SIGV4_FAILURE / DEPENDENCY_FAILURE.
+  - _RETRYABLE_CATEGORIES frozenset + categorize_retryable() helper.
+  - extract_nested_error_message: humanizes JSON / HTML title / h1 /
+    body text fallback / strip-tags fallback.
+  - parse_max_tokens_context_overflow_error: predicate for compact+retry.
+  - get_retry_after_ms: parses int seconds OR HTTP-date.
+  - ErrorClassifier.classify extended to recognize all 9 new categories.
+    Most-specific-first ordering preserves Phase 8 behavior.
+- NEW compact_v5/MAIN/agent/core/cache_break_detection.py (~120 LOC)
+  - hash_tool_schema: deterministic SHA256/16chars (sort_keys=True).
+  - PerToolCacheBreakDetector: per-tool baseline + diff. First call
+    establishes baseline; subsequent calls return list of broken names.
+  - is_cache_break_excluded(model_id): R4 #14 MUST. Haiku 4.5 + Haiku
+    4.1 + 3.5 Haiku in EXCLUDED frozenset with cross-region prefix
+    stripping (au./apac./us./eu./global./ap./in.).
+  - notify_cache_deletion(model_id, tool_names): returns False
+    (skip) for excluded models, True for others.
+- EXTENDED compact_v5/MAIN/agent/core/__init__.py: re-exports.
+- NEW compact_v5/MAIN/agent/tests/integration/test_block_l.py
+  - 9 tests: 6 TEST_DESIGN-named + 3 behavior locks.
+  - 2 T2 daemon-thread + 30s-heartbeat tests SKIPPED with deferral
+    note pointing to Block J real-AWS gate per ADR-036 §3.
+
+Reference paths:
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/services/api/errors.ts
+- Runnable: _archive/compare_code/gg-claude-code-runnable/src/services/api/cacheBreakDetection.ts
+- Plan: compact_v5/_phase_2/wave_5_deep/SYNTHESIS_MASTER.md (§Block L)
+- Tests: compact_v5/_phase_2/wave_6/TEST_DESIGN.md (§Block L)
+- ADR-036: compact_v5/_status/V5_DESIGN_DECISIONS.md
+
+Tests: 729 pass + 11 skip (was 720 + 9 at end of Block H+; +9 pass +
+2 skip net new).
+verify_ship_zip.py: PASS (127 files / 357.2 KB / 36%).
+
+Apply the 3-axis review template. Be specific — cite file:line.
+
+AXIS A — Errors / bugs / regressions
+- BedrockErrorCategory has 18 distinct values (lock test asserts via
+  set-len).
+- categorize_retryable maps each to a sensible verdict:
+  - retryable: throttle, service_unavailable, model_not_ready,
+    network, validation_cache, context_overflow, max_tokens_overflow,
+    bedrock_5xx_html, request_timeout, payload_too_large,
+    gateway_timeout, malformed_response, dependency_failure (13).
+  - non-retryable: validation_other, access_denied, conflict_409,
+    sigv4_failure, unknown (5).
+- ErrorClassifier ordering is most-specific-first:
+  - MAX_TOKENS_OVERFLOW pattern checked BEFORE CONTEXT_OVERFLOW
+    (which would otherwise match the same "too long" substring).
+  - HTML-shape check (`<html` / `<body` / `<title`) BEFORE the
+    plain-text patterns.
+  - Phase 8 patterns preserved at the end.
+- extract_nested_error_message:
+  - JSON parse first (most specific shape).
+  - Then HTML title → h1 → body text.
+  - Fallback: strip-all-tags.
+  - Always returns ≤200 chars.
+  - Empty input returns "(empty error)".
+- parse_max_tokens_context_overflow_error:
+  - "max_tokens" / "max output tokens" / "output token limit" → True.
+  - "prompt is too long" / "too many tokens" / "input length" → True.
+  - "context length" / "context_overflow" → True.
+- get_retry_after_ms:
+  - "Retry-After: <N>" → N*1000 (case-insensitive).
+  - HTTP-date format → ms-until-then via parsedate_to_datetime.
+  - No header → 0.
+- PerToolCacheBreakDetector:
+  - First call establishes baseline (returns []).
+  - Schema-changed tools listed by name.
+  - is_cache_break_excluded short-circuits to [].
+  - update_baseline can be called manually.
+- is_cache_break_excluded:
+  - Strips au./apac./us./eu./global./ap./in. prefixes.
+  - 3 model IDs in EXCLUDED set: Haiku 4.5, Haiku 4.1, 3.5 Haiku.
+- T2 deferrals declared in ADR-036 §3 + test docstrings + pytest.mark.skip
+  with reason text mentioning Block J.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- Constraint #5 (minimum file structures): 1 module extension + 1 new
+  module + tests. Matches existing core/ shape.
+- Constraint #6 (architecture-first): the 18-category model is the
+  Runnable contract; v5 ports it directly.
+- Constraint #15 (quality, no rush): T1 tests cover all critical
+  algorithms; T2 wall-clock tests deferred to Block J.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+- 18 categories: PORTED in #100.
+- max-tokens overflow + 5xx HTML humanization + Retry-After: PORTED in #100.
+- Per-tool cache-break: PORTED in #101.
+- Haiku exclusion (R4 #14 MUST 3LOC): PORTED in #101.
+- T2 daemon-thread + heartbeat: DEFERRED to Block J (declared in
+  ADR-036 §3 + test deferral note).
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+Be specific. Cite file:line for any finding. Where you say "fix",
+suggest the minimal patch.

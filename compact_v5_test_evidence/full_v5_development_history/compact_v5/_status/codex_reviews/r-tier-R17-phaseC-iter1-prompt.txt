@@ -1,0 +1,55 @@
+Repo root: D:\Github\sagemaker-coding-agent
+
+You are the independent Claude Phase C reviewer for R-tier test R17.
+Read files from disk yourself using read-only tools. Do not rely on this prompt
+as evidence, and do not modify files.
+
+Return text only. Include the exact token GENUINE_PASS if and only if R17 is a
+genuine pass with acceptable process quality. Otherwise return blocking
+findings.
+
+Files to read:
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/r_tier_test_matrix.json
+- compact_v5/MAIN/agent/tests/r_tier/test_r17_thinking_visibility.py
+- compact_v5/_status/codex_reviews/r-tier-R17-phaseA-iter1.md
+- compact_v5/_status/codex_reviews/r-tier-R17-phaseA-iter2.md
+- compact_v5/_status/codex_reviews/r-tier-R17-aws-call1.log
+- compact_v5/_status/r-tier-R17-aws-call1-side-metrics.json
+- compact_v5/_status/r-tier-R17-aws-call1-telemetry.json
+- compact_v5/_status/r-tier-R17-aws-call1-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/_status/scripts/build_telemetry.py
+- compact_v5/MAIN/agent/runtime/bedrock_client.py
+- compact_v5/MAIN/agent/core/query_engine.py
+
+Worker post-run summary:
+- R17 call1 ran only the approved R17 runner.
+- Model: au.anthropic.claude-sonnet-4-5-20250929-v1:0.
+- Cost: $0.0307, under the $0.30 planned cap and $0.36 hard retry ceiling.
+- One API call, one turn, zero tool calls, zero subagent/reviewer calls, zero
+  failure-loop events.
+- The runner used thinking_budget=4096 and max_tokens=8192.
+- Assistant history thinking evidence: thinking_seen=true,
+  thinking_chars=1611.
+- Audit `chat_response` thinking evidence: audit_thinking_seen=true,
+  audit_thinking_chars=1611.
+- Canonical telemetry includes non-empty `per_turn[0].thinking_text` and
+  `thinking_tokens=310`.
+- Numeric cache evidence exists: cache_read_tokens=0, cache_write_tokens=3228,
+  parent_cache_read_tokens=0, parent_cache_write_tokens=3228.
+- Quality review grades thinking usefulness, not just length, and concludes
+  `NEAR_IDEAL`.
+
+Review requirements:
+1. Verify the raw log, side metrics, telemetry, quality review, metrics row, and
+   review-log row are mutually consistent.
+2. Verify R17 proves the intended real Bedrock/Sonnet PS#4 path: thinking
+   config sent, thinking parsed into response, thinking stored in history, and
+   thinking emitted to audit/telemetry.
+3. Verify process quality is acceptable and no R14/R19-U3-style tool/failure
+   loop recurred.
+4. Verify cost and cap accounting are acceptable.
+5. If and only if R17 is READY pending gate, include GENUINE_PASS exactly.

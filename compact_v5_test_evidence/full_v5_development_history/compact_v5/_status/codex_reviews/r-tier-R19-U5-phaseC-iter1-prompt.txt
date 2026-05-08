@@ -1,0 +1,48 @@
+You are Claude CLI performing an independent Phase C review from disk.
+
+Use read-only tools. Do not rely on chat memory.
+
+Repo root: D:\Github\sagemaker-coding-agent
+
+Context:
+- Stage 6 optimized plan is R3 + R19-U4 + R19-U5.
+- R3 already has READY evidence and was not rerun.
+- Stage 6 call1 diagnostic/non-ready spend is preserved.
+- Claude Phase B returned APPROVE_RETRY for one R19-U4+R19-U5 retry.
+- Stage 6 call2 ran only R19-U4+R19-U5 on Haiku 4.5 AU.
+
+Read:
+- compact_v5/_status/v5_completion_audit/OPTIMIZED_AWS_VALIDATION_PLAN.md
+- compact_v5/_status/v5_completion_audit/PS_AWS_TEST_EXECUTION_LOOP.md
+- compact_v5/_status/R_TIER_EVIDENCE_CONTRACT.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseA-iter2.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-phaseB-iter2-subscription.md
+- compact_v5/_status/codex_reviews/r-tier-R19-U4+U5-aws-call2.log
+- compact_v5/_status/r-tier-R19-U4-aws-call2-side-metrics.json
+- compact_v5/_status/r-tier-R19-U5-aws-call2-side-metrics.json
+- compact_v5/_status/r-tier-R19-U4-aws-call2-telemetry.json
+- compact_v5/_status/r-tier-R19-U5-aws-call2-telemetry.json
+- compact_v5/_status/r-tier-R19-U4-aws-call2-quality.md
+- compact_v5/_status/r-tier-R19-U5-aws-call2-quality.md
+- compact_v5/_status/r_tier_metrics.jsonl
+- compact_v5/_status/r_tier_review_log.md
+- compact_v5/MAIN/agent/tests/r_tier/test_r19_u4_u5_subagent_recovery_bundle.py
+
+Review question:
+Do R19-U4 and R19-U5 call2 constitute genuine passes for Stage 6, with
+artifact quality and process quality both acceptable?
+
+Required response:
+- Return `GENUINE_PASS` if both R19-U4 and R19-U5 are ready for final
+  `r_tier_gate.py --test` checks.
+- Otherwise return a blocking finding.
+
+Please inspect:
+- exact subagent dispatch counts;
+- whether R19-U4 resolved conflicting child findings with source-of-truth data;
+- whether R19-U5 recovered from the missing child without retry loops;
+- model id is Haiku 4.5 AU;
+- costs are under per-test planned caps and buffered ceilings;
+- call1 diagnostic/non-ready spend remains preserved;
+- no R14/R19-U3-style repeated guard/edit/write/exec loop recurred;
+- telemetry and quality reviews are sufficient.

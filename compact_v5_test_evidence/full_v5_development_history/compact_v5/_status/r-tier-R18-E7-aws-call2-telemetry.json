@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "test": "R18-E7",
+  "call": 2,
+  "audit_log_path": "compact_v5\\_status\\r_tier_runtime\\R18-E7-call2-audit\\2026-05-06_bbf1bb103baf.jsonl",
+  "raw_log_path": "compact_v5\\_status\\codex_reviews\\r-tier-R19-U3+U6+U7+R18-E7-aws-call2.log",
+  "side_channel_path": "compact_v5\\_status\\r-tier-R18-E7-aws-call2-side-metrics.json",
+  "per_turn": [
+    {
+      "turn": 1,
+      "tool_calls": [
+        {
+          "name": "large_result",
+          "args_summary": "{}",
+          "args_hash": "44136fa355b3",
+          "user_approved": true,
+          "result_summary": "BUILD LOG START\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nhead-line ok\nh"
+        },
+        {
+          "name": "result_replay",
+          "args_summary": "{'ref': 'sageagent-result://bbf1bb103baf/large_result-toolu_bdrk_01TLkHdYgtPmF8WhYHYmYoLB-d6ed35237ca104ef', 'offset': 2500, 'limit': 300}",
+          "args_hash": "474a4f7f1977",
+          "user_approved": true,
+          "result_summary": "r\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\nmiddle filler\n\nSTA"
+        },
+        {
+          "name": "write_file",
+          "args_summary": "{'file_path': 'C:\\\\Users\\\\winst\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-winst\\\\pytest-433\\\\test_r19_u3_u6_u7_r18_e7_recov0\\\\r18_e7\\\\long_output_report.md', 'content': ",
+          "args_hash": "57a5499134ca",
+          "user_approved": true,
+          "result_summary": "Written 481 chars to C:\\Users\\winst\\AppData\\Local\\Temp\\pytest-of-winst\\pytest-433\\test_r19_u3_u6_u7_r18_e7_recov0\\r18_e7\\long_output_report.md"
+        }
+      ],
+      "wallclock_s": 11.322,
+      "tokens_in": 7,
+      "tokens_out": 557,
+      "cache_read_tokens": 16008,
+      "cache_write_tokens": 12932,
+      "cache_hit_pct": 0.553,
+      "agent_text_chars": 340,
+      "thinking_text": null,
+      "thinking_tokens": 0
+    }
+  ],
+  "tool_call_summary": {
+    "TOTAL_calls": 3,
+    "REPEATED_calls": 0,
+    "per_tool": {
+      "large_result": 1,
+      "result_replay": 1,
+      "write_file": 1
+    },
+    "unique_calls": 3
+  },
+  "compaction_events": [],
+  "subagent_dispatches": [],
+  "cache_efficiency_trend": {
+    "first_5_turns_avg_hit_pct": 0.553,
+    "last_5_turns_avg_hit_pct": 0.553,
+    "session_avg_hit_pct": 0.553
+  },
+  "agent_attribution": {
+    "parent": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.0
+    },
+    "subagents": {},
+    "reviewers": {}
+  },
+  "failure_loop_events": [],
+  "outcome": {
+    "completed": true,
+    "stop_reason": "user_stop",
+    "max_turns_hit": false,
+    "cost_cap_hit": false,
+    "tokens_in_total": 7,
+    "tokens_out_total": 557,
+    "cost_usd": 0.0226,
+    "wallclock_s_total": 12.5,
+    "artifacts_valid": {},
+    "agent_text_chars_total": null
+  },
+  "events_seen": 6,
+  "turns_seen": 1
+}

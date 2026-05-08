@@ -1,0 +1,173 @@
+PRE-FLIGHT review of R-tier R5 — first iteration.
+
+CONTEXT
+- Test: R5 — bash/python_exec session limit + OTHER-TOOLS-STILL-WORK recovery
+- Block(s): Block C (exec gate) + Block N (failure-as-instruction). Validates PS#7 structural fix.
+- Cost cap: $0.50, Model: claude-haiku-4-5 AU ($1.10/$5.50 per MTok in/out)
+- Test file: compact_v5/MAIN/agent/tests/r_tier/test_r5_exec_limit_redirect.py
+
+V5 PRODUCTION CODE PATH BEING TESTED:
+compact_v5/MAIN/agent/core/query_engine.py:800-819:
+```python
+if call.name in {"bash", "python_exec"}:
+    from runtime.config import CONFIG as _CFG
+    cap = getattr(_CFG, "max_exec_calls_per_session", 200)
+    if self._exec_call_count >= cap:
+        tool_results.append({
+            "type": "tool_result",
+            "tool_use_id": call.id,
+            "content": (
+                f"Blocked: bash + python_exec call limit "
+                f"reached ({cap}/session). "
+                "OTHER TOOLS STILL WORK: read_file, grep, "
+                "glob, edit_file, write_file, notebook_edit, "
+                "task, ask_user, view_image, web_fetch are "
+                "NOT counted by this limit."
+            ),
+            "is_error": True,
+        })
+        continue
+```
+
+R-TIER SCOPE NOTE: instead of looping 200 real python_exec calls (the
+playbook's full-budget spec), R5 sets `CONFIG.max_exec_calls_per_session = 2`
+so the limit triggers on the 3rd attempt — same code path, ~10x cheaper.
+Production cap remains 200 (config.py:88).
+
+=== INLINED TEST CODE (key portions, ~280 lines total) ===
+
+# fixture (line 56-62):
+_CSV_CONTENT = (
+    "name,role,salary\n"
+    "alice,engineer,120000\n"
+    "bob,designer,95000\n"
+    "carol,manager,140000\n"
+)
+_RECOVERY_MARKER = "carol"  # only appears in CSV; not in prompt or schemas
+
+# prompt (line 64-80):
+_R5_PROMPT = (
+    "You are working in the current directory. There is a file `data.csv` "
+    "with employee records.\n\n"
+    "TASK (do these in order):\n"
+    "1. Use `python_exec` to print the result of `1 + 1`.\n"
+    "2. Use `python_exec` to print the result of `2 + 2`.\n"
+    "3. Use `python_exec` to print the result of `3 + 3`.\n"
+    "4. After the three computations, read `data.csv` and tell me the "
+    "name of the manager (the row whose role is 'manager').\n\n"
+    "If a tool returns a 'blocked' message, do NOT keep retrying that "
+    "tool — switch to a different tool to make progress. Proceed "
+    "directly; do NOT ask for confirmation."
+)
+
+# config (line 122-135):
+CONFIG.workspace = str(tmp_path)
+CONFIG.audit_dir = str(audit_dir)
+CONFIG.session_cost_limit = _R5_COST_CAP_USD  # 0.50
+CONFIG.model_id = _HAIKU_45_AU
+CONFIG.max_tokens = 2048
+CONFIG.require_tool_approval = False
+CONFIG.disable_local_traces = False
+CONFIG.max_exec_calls_per_session = _TEST_EXEC_CAP  # 2
+sec_mgr.rebuild_singleton_for_tests()
+AUDIT.__init__(audit_dir=str(audit_dir))
+os.chdir(str(tmp_path))
+TOKENS.reset()
+
+# IterationBudget cap (line 144-150):
+shared_budget = IterationBudget(max_iterations=18)
+agent = Agent(client=..., max_turns=15, budget=shared_budget,
+               on_stop_check=_hard_cost_halt)
+parent_session_id = agent._engine.session_id
+
+# Detection logic (line 175-203):
+python_exec_dispatches = [
+    e for e in audit_entries
+    if e.get("tool_name") == "python_exec" and e.get("action") == "tool_dispatch"
+]
+read_file_dispatches = [...]
+# AUDIT only logs SUCCESSFUL python_exec dispatches (per
+# query_engine.py:988 which is AFTER exec finished); the BLOCKED
+# path at line 805-819 returns early without audit. So we look
+# for the blocked message in captured stdout / agent.messages:
+blocked_marker_seen = (
+    "OTHER TOOLS STILL WORK" in full_stdout
+    or any("OTHER TOOLS STILL WORK" in str(msg.get("content", ""))
+           for msg in agent.messages
+           if isinstance(msg.get("content"), str))
+    or any("OTHER TOOLS STILL WORK" in str(blk)
+           for msg in agent.messages
+           for blk in (msg.get("content") if isinstance(msg.get("content"), list) else []))
+)
+read_csv_dispatches = [d for d in read_file_dispatches
+                       if "data.csv" in str(d.get("parameters", {}).get("file_path", ""))]
+final_text = (result.text or "").lower()
+recovery_marker_in_text = _RECOVERY_MARKER.lower() in final_text
+
+# Assertions (line 230-265):
+assert result.stop_reason != "max_turns"
+assert len(python_exec_dispatches) >= _TEST_EXEC_CAP  # >= 2 successful
+assert blocked_marker_seen
+assert len(read_csv_dispatches) >= 1
+assert recovery_marker_in_text  # "carol" appears in final text
+assert cost_used <= _R5_COST_CAP_USD
+
+=== END INLINED CODE ===
+
+PRODUCE THREE INDEPENDENT VERDICTS.
+
+=== AXIS A — Test design soundness ===
+- Does the scenario actually exercise PS#7's structural fix?
+  Specifically: does it prove that `query_engine.py:800-819`'s
+  "OTHER TOOLS STILL WORK" message reached the model AND the model
+  switched to a non-counted tool (read_file)?
+- Are the 5 assertions falsifiable?
+  - python_exec >= 2 (both successful exec under cap)
+  - blocked_marker_seen (the literal "OTHER TOOLS STILL WORK" appears)
+  - read_csv >= 1 (recovery via non-counted tool)
+  - recovery_marker_in_text ("carol" in final text — only via read_file)
+  - stop_reason != max_turns
+- Could a regressed v5 still pass this test? Specifically: if v5 did
+  NOT inject "OTHER TOOLS STILL WORK", could the model still recover
+  via read_file by sheer luck? (Probably no — the test prompt explicitly
+  references "If a tool returns a 'blocked' message, do NOT keep
+  retrying" so a bare exec error without the recovery hint might still
+  cause loops. Tested by `blocked_marker_seen` assertion which is the
+  PRIMARY structural check.)
+- Is the cap=2 lowering acceptable?
+  - Production cap=200 (config.py:88). Cap=2 tests the SAME code path
+    (query_engine.py:800-819 unchanged); only the trigger threshold
+    differs. PS#7 logic is gated by `>= cap`, not `== 200`.
+
+Output:
+AXIS A VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
+Findings: [severity] file:line — issue — fix
+
+=== AXIS B — Cost-control soundness ===
+- Cost estimate at AU-Haiku-4.5 ($1.10/$5.50 per MTok):
+  - 3 python_exec attempts (2 success + 1 blocked) + 1 read_file +
+    final synthesis ≈ 5-7 turns parent.
+  - ~10K input × 1.10 = ~$0.011 in. ~5K output × 5.50 = ~$0.028 out.
+  - Total ≈ $0.04. Cap $0.50. Headroom 90%.
+- Hard halt: TOKENS.is_over_budget via on_stop_check. Confirmed.
+- IterationBudget(18) + max_turns=15 bounds the loop.
+
+Output:
+AXIS B VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
+Findings:
+
+=== AXIS C — Coverage of v5 EMPIRICAL evidence ===
+- Block C exec gate: directly tested via `max_exec_calls_per_session=2`
+  trigger at query_engine.py:805.
+- Block N failure-as-instruction: the "OTHER TOOLS STILL WORK"
+  message body is the failure-as-instruction pattern.
+- PS#7 structural fix: assertion that the model PROPERLY recovers
+  (not just gets the message but uses it).
+- Falsifiability: every assertion can fail individually.
+
+Output:
+AXIS C VERDICT: APPROVE | APPROVE_WITH_FIXES | REJECT
+Coverage gap (if any):
+
+=== FINAL ===
+PRE-FLIGHT VERDICT: APPROVE_FOR_AWS_CALL | REJECT

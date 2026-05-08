@@ -1,0 +1,80 @@
+You are reviewing R1 PHASE A iter-3 — fixes for iter-2 REJECT verdict.
+
+iter-2 REJECT findings being closed:
+
+1. **AXIS B blocking #1** — `CONFIG.max_tokens=2048` not actually used by R1
+   path. Agent.run() didn't pass max_tokens to QueryEngine.run(); engine
+   defaulted to 4096. Effective per-turn cap was wrong.
+   FIX (v5 architectural):
+   - compact_v5/MAIN/agent/agent.py: Agent.run() now reads
+     CONFIG.max_tokens + CONFIG.temperature at call time and passes them
+     into self._engine.run(...).
+   - This is a v5-wide fix, not R1-only — every R-tier test that
+     overrides CONFIG.max_tokens benefits.
+   - Default fallback preserved: getattr(CONFIG, "max_tokens", 4096).
+
+2. **AXIS B medium #2** — on_stop_check is reactive (halts AFTER cap is
+   first hit), not predictive (can't prevent the call that crosses the
+   cap). iter-2 confirmed this is acceptable (the next-call halt prevents
+   continued spending; not the first crossing).
+
+   No code change for this finding — Codex iter-2 already noted "That
+   does prevent spending after the budget is already known to be
+   exceeded." The 2048-cap fix above bounds the per-turn worst case so
+   the FIRST-crossing call is itself bounded.
+
+   Worst-case math after iter-3 fix:
+   - max_tokens=2048 per turn × $5/MTok output = $0.0102/turn output cap
+   - input cap: ~10K tokens (small CSV + prompt) × $1/MTok = $0.01/turn input
+   - per-turn worst case ~$0.02
+   - 50 turns × $0.02 = $1.00 (the cap)
+   The on_stop_check halts AT the cap; if the prior turn pushed cost
+   to $0.99, the next turn could push to $1.01 — $0.01 over the cap.
+   This is acceptable headroom (1% over $1.00 = $0.01 overage).
+
+LOCK TEST added: tests/integration/test_agent_max_tokens_propagation.py
+- test_agent_run_propagates_config_max_tokens — spy mock client confirms
+  CONFIG.max_tokens=2048 is forwarded into BedrockClient.chat.
+- test_agent_run_default_when_config_max_tokens_unset — fallback to 4096.
+- 2 tests, both PASS.
+
+Tests: 783 pass + 18 skip (was 781 + 17; +2 pass for lock tests).
+
+Apply same 3-axis review.
+
+CONTEXT (UPDATED FOR iter-3)
+- Test: R1 — composite "does it work" dashboard build
+- Block(s) being validated: Composite (B + B+ + C+ + D + E+F + I + M + N + T + J + K)
+- What it claims to prove: same as iter-2.
+- Cost cap (session_cost_limit): $1.00
+- Hard halt: Agent.on_stop_check returns True when TOKENS.session_cost >= cap
+  (consulted BEFORE each Bedrock call per query_engine.py:420).
+- Per-turn output cap: CONFIG.max_tokens = 2048 (NOW EFFECTIVE per the
+  Agent.run fix). Worst-case per-turn ~$0.02; 50-turn worst case = $1.00
+  cap with ≤$0.01 headroom on the final crossing turn.
+- Model: au.anthropic.claude-haiku-4-5-20251001-v1:0
+- Test file: compact_v5/MAIN/agent/tests/r_tier/test_r1_dashboard.py
+- Lock tests for the architectural fix:
+  compact_v5/MAIN/agent/tests/integration/test_agent_max_tokens_propagation.py
+
+=== AXIS A — Test design soundness ===
+- Reconfirm that .docx body assertions reject blank/stub. Codex iter-2 already
+  approved: "materially stronger than prompt echo".
+- PNG min size (>=1000 bytes) acceptable smoke per iter-2.
+
+=== AXIS B — Cost-control soundness ===
+- The architectural fix in agent.py is now confirmed effective by the lock
+  tests. Verify the Agent.run change at compact_v5/MAIN/agent/agent.py:163-176
+  actually does the propagation.
+- Verify the lock test at test_agent_max_tokens_propagation.py:35 actually
+  asserts the value the spy captured matches CONFIG.max_tokens.
+- Is the worst-case math correct? Per-turn = max_tokens × $/MTok? Confirm
+  $5/MTok out + $1/MTok in for Haiku 4.5 (per Bedrock pricing).
+
+=== AXIS C — Coverage of v5 vs Runnable vs v4 claim ===
+- Reconfirm.
+
+=== FINAL ===
+PRE-FLIGHT VERDICT: APPROVE_FOR_AWS_CALL | REJECT (do not run AWS)
+
+Goal: APPROVE so we can run R1 AWS call #1.

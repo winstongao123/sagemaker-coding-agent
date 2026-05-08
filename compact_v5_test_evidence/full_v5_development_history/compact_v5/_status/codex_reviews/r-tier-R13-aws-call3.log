@@ -1,0 +1,32 @@
+﻿py : C:\Users\winst\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n
+2kfra8p0\LocalCache\local-packages\Python311\site-packages\requests\__init__.py:113: 
+RequestsDependencyWarning: urllib3 (2.3.0) or chardet 
+(7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!
+At line:6 char:1
++ py -3.11 -u -m pytest compact_v5/MAIN/agent/tests/r_tier/test_r13_cod ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\winst\...ported version!:Strin 
+   g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn(
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\winst\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe
+codspeed: 4.3.0 (disabled, mode: walltime, callgraph: not supported, timer_resolution: 100.0ns)
+cachedir: .pytest_cache
+benchmark: 5.2.3 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: D:\Github\sagemaker-coding-agent
+plugins: anyio-4.12.1, langsmith-0.6.8, asyncio-1.3.0, benchmark-5.2.3, codspeed-4.3.0, recording-0.13.4, socket-0.7.0, syrupy-5.1.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+compact_v5/MAIN/agent/tests/r_tier/test_r13_coding_accuracy.py::test_r13_coding_accuracy [Stopped by user]
+
+[R13_AUDIT_DIR] D:\Github\sagemaker-coding-agent\compact_v5\_status\r_tier_runtime\R13-call3-audit
+[R13_SIDE_METRICS] D:\Github\sagemaker-coding-agent\compact_v5\_status\r-tier-R13-aws-call3-side-metrics.json
+[R13_METRICS] {"api_calls": 5, "audit_dir": "D:\\Github\\sagemaker-coding-agent\\compact_v5\\_status\\r_tier_runtime\\R13-call3-audit", "cache_hit_pct": 0.0, "call": 3, "changed_files_within_fixture": true, "completed": true, "cost_usd": 0.0386, "date": "2026-05-05T14:40:29Z", "model": "au.anthropic.claude-haiku-4-5-20251001-v1:0", "per_case": {"test_is_palindrome_normalizes_text": {"output_tail": ".                                                                        [100%]\n1 passed in 0.03s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\n", "passed": true}, "test_merge_intervals_sorts_and_merges_touching_ranges": {"output_tail": ".                                                                        [100%]\n1 passed in 0.01s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\n", "passed": true}, "test_roman_to_int_handles_subtractive_pairs": {"output_tail": ".                                                                        [100%]\n1 passed in 0.01s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\n", "passed": true}, "test_top_k_frequent_uses_frequency_then_alpha_tiebreak": {"output_tail": ".                                                                        [100%]\n1 passed in 0.01s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\n", "passed": true}, "test_validate_brackets_detects_nesting_and_mismatches": {"output_tail": ".                                                                        [100%]\n1 passed in 0.01s\nC:\\Users\\winst\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\requests\\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.4.0.post2)/charset_normalizer (3.4.1) doesn't match a supported version!\n  warnings.warn(\n", "passed": true}}, "reviewer_calls": 0, "reviewer_cost_usd": 0.0, "reviewer_tokens_in": 0, "reviewer_tokens_out": 0, "score_passed": 5, "score_total": 5, "solutions_exists": true, "stop_reason": "user_stop", "subagent_calls": 0, "subagent_cost_usd": 0.0, "subagent_tokens_in": 0, "subagent_tokens_out": 0, "test": "R13", "tokens_in": 14, "tokens_out": 1408, "tool_calls": 5, "verdict": "GENUINE_PASS", "wallclock_s": 23.1, "workspace_files": [".pytest_cache/.gitignore", ".pytest_cache/CACHEDIR.TAG", ".pytest_cache/README.md", ".pytest_cache/v/cache/nodeids", ".sageagent_state/last_turn.json", ".sageagent_state/turn_journal.jsonl", "__pycache__/solutions.cpython-311.pyc", "__pycache__/test_solutions.cpython-311-pytest-9.0.2.pyc", "solutions.py", "test_solutions.py"]}
+PASSED
+
+============================= 1 passed in 30.15s ==============================
+WARNING:root:session-final cost: $0.04 (cache 100% | saved ~$0.0230) (5 API calls, 
+in=14 out=1,408)

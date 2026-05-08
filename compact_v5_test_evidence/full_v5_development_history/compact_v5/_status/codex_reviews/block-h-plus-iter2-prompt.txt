@@ -1,0 +1,79 @@
+You are reviewing Block H+ of v5.0.1 — ITER 2 (re-review after fixes).
+
+Iter-1 verdict was APPROVE_WITH_FIXES with:
+  - MAIN: /dream side-effect "dream_invoked" had no chat-UI consumer.
+  - SECONDARY: stale-lock reclaim race — release() could clobber
+    a freshly acquired lock.
+
+Verify each fix lands correctly. Focus on iter-2 commit b1bede0.
+
+Diff range: <prev>..HEAD (iter-2 commit b1bede0).
+
+Iter-2 file changes:
+- MODIFIED compact_v5/MAIN/agent/ui/chat_ui.py
+  - NEW module-level _invoke_dream(agent) helper:
+    + builds a real-LLM consolidator from agent.client.chat()
+    + calls runtime.dream.run_dream(workspace=CONFIG.workspace, ...)
+    + returns a one-line status for the chat surface.
+  - ConsoleChatUI.send: when cr.side_effect == "dream_invoked", returns
+    cr.text + "\n" + _invoke_dream(self.agent).
+  - WidgetChatUI._on_send: same pattern, prints _invoke_dream output
+    after cr.text.
+- MODIFIED compact_v5/MAIN/agent/runtime/dream.py
+  - DreamLock now generates a per-acquire uuid nonce stored in the
+    lock-file body alongside pid/ts.
+  - release() reads the lock file, checks nonce matches our stored
+    _nonce, only then unlinks. Mismatch → no-op (no clobber).
+  - acquire() re-checks mtime age immediately before unlink to reduce
+    the reclaim race window.
+- MODIFIED compact_v5/MAIN/agent/tests/integration/test_block_h_plus.py
+  - 2 new lock tests:
+    + test_dream_invoked_via_console_chat_ui — end-to-end: /dream
+      actually mutates memory.md and creates .bak.
+    + test_dream_lock_release_only_unlinks_own_nonce — worker A
+      releases after B reclaimed; A must not unlink B's lock.
+
+Tests: 719 pass + 9 skip (was 717 + 8 at iter-1; +2 finding-locks).
+
+Apply the 3-axis review template focused on iter-2 fixes.
+
+AXIS A — Errors / bugs / regressions
+- Verify finding #1 fix:
+  - chat_ui.py imports runtime.dream and exposes _invoke_dream().
+  - _invoke_dream constructs an LLM consolidator that calls
+    agent.client.chat(messages=[{"role": "user", "content": prompt}], ...).
+  - Both UIs (Console + Widget) check cr.side_effect == "dream_invoked"
+    and call _invoke_dream — verify both paths.
+  - Lock test test_dream_invoked_via_console_chat_ui builds a fake
+    agent + fake client returning canned consolidated text; asserts
+    memory.md was rewritten and .bak created.
+- Verify finding #2 fix:
+  - DreamLock.acquire stores nonce in self._nonce + writes it to file.
+  - DreamLock.release reads file, compares data["nonce"] vs self._nonce,
+    only unlinks on match.
+  - Lock test test_dream_lock_release_only_unlinks_own_nonce simulates
+    B reclaiming A's lock by overwriting the file with B's nonce. A's
+    release() must NOT unlink — verified by asserting file still exists
+    with B's nonce after A.release().
+- Regression check: 719 pass + 9 skip. None of the prior 717 tests broke.
+
+Verdict: PASS | CHANGES_REQUESTED | BLOCKER.
+
+AXIS B — v5 architecture + goals fit
+- The iter-2 changes are pure fixes:
+  - Chat-UI binding closes the doc-vs-code gap.
+  - Nonce-based release tightens the lock contract without changing
+    its semantics.
+
+FAITHFUL | FAITHFUL-WITH-JUSTIFIED-ADAPTATION | DRIFTED.
+
+AXIS C — Reference-repo coverage
+PORT_LOG #099 + ADR-035 still apply. Iter-2 doesn't change the
+declared deferrals (daemon/scheduler/env-auto-enable).
+
+Verdict: ALL_PORTED | SOME_DROPPED | UNDECLARED_PATTERN.
+
+FINAL: APPROVE | APPROVE_WITH_FIXES | REJECT.
+
+APPROVE only if both iter-1 findings are cleanly fixed AND no new
+findings emerge. Be specific. Cite file:line.

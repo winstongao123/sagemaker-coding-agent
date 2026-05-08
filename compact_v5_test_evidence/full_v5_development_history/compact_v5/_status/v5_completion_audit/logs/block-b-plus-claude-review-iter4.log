@@ -1,0 +1,10 @@
+Full Claude review iter4 was not executed.
+
+Reason:
+
+The pre-review smoke used `claude-reviewer-settings.json` so hooks were
+disabled, but it returned:
+
+API Error: Unable to connect to API (ConnectionRefused)
+
+No review stdout with REVIEWED ROWS, VERDICT, or SHIP DECISION was produced.

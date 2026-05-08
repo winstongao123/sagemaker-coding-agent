@@ -1,0 +1,54 @@
+Repo root: D:\Github\sagemaker-coding-agent
+
+You are the independent Claude reviewer for R-tier Phase C. Read files from
+disk using read-only tools. Do not rely on this prompt as the source of truth.
+
+Review target:
+
+- Test id: R11
+- Scenario: Sonnet 4.5 AU end-to-end dashboard/report workflow.
+- Runner:
+  compact_v5/MAIN/agent/tests/r_tier/test_r11_sonnet_e2e.py
+- Phase A prompt/review:
+  compact_v5/_status/codex_reviews/r-tier-R11-phaseA-iter1-prompt.txt
+  compact_v5/_status/codex_reviews/r-tier-R11-phaseA-iter1.md
+- Raw AWS log:
+  compact_v5/_status/codex_reviews/r-tier-R11-aws-call1.log
+- Audit directory:
+  compact_v5/_status/r_tier_runtime/R11-call1-audit
+- Side metrics:
+  compact_v5/_status/r-tier-R11-aws-call1-side-metrics.json
+- Telemetry:
+  compact_v5/_status/r-tier-R11-aws-call1-telemetry.json
+- Worker quality review:
+  compact_v5/_status/r-tier-R11-aws-call1-quality.md
+- Ledgers:
+  compact_v5/_status/r_tier_metrics.jsonl
+  compact_v5/_status/r_tier_review_log.md
+
+What the worker believes happened:
+
+- Claude Phase A returned APPROVE_FOR_AWS_CALL.
+- AWS budget/headroom check passed before spend.
+- R11 call1 executed only the approved R11 pytest.
+- Pytest passed.
+- Sonnet 4.5 AU produced a valid `chart.png` and `report.docx`.
+- Telemetry tool path was `tool_search`, `read_file`, `create_chart`,
+  `create_word`, with zero repeated calls and zero failure-loop events.
+- Cost was `$0.0995`, under the `$1.50` planned cap and `$1.80` hard ceiling.
+- Cache evidence is numeric; side metrics cache hit ratio was corrected to match
+  canonical telemetry (`0.3073`) before Phase C.
+
+Phase C decision required:
+
+- Return GENUINE_PASS only if R11 is a genuine pass and acceptable
+  production-readiness evidence for full Sonnet model compatibility.
+- If artifact checks, process quality, telemetry, or cost evidence are weak,
+  return a blocking verdict and exact required fixes.
+- If the run is a pass but has a non-blocking follow-up, say so explicitly.
+
+Expected reviewer output:
+
+- POST-PASS VERDICT: GENUINE_PASS or blocking verdict
+- Evidence reviewed
+- Any required fixes before `r_tier_gate.py --test R11`

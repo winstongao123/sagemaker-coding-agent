@@ -1,0 +1,5 @@
+﻿2026-05-05 SOFTWARE-SUBAGENT Claude review handoff command failure before Claude review execution.
+
+Cause: the first review retry attempted to read `compact_v5/_status/v5_completion_audit/prompts/software-subagent-claude-review-iter1-prompt.md` before the prompt artifact had been moved from the session default workspace into the target repo. Claude did not receive the prompt and produced no review verdict.
+
+Resolution: moved/recreated the prompt and block artifacts in `D:\Github\sagemaker-coding-agent`, reran the same iter1 Claude review successfully, and saved stdout/stderr to the normal iter1 review paths.

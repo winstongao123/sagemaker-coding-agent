@@ -1,0 +1,4 @@
+COMMAND: python -m pytest tests/unit/test_security_manager.py -q
+EXIT_CODE: 0
+..........................................sss........................... [100%]
+69 passed, 3 skipped in 3.20s
