@@ -80,6 +80,27 @@ The structural smoke verifies the actual runtime widget tree: one root `VBox`,
 dropdowns/buttons/textarea present, `Cache R/W`, `Saved`, and `Sub-Agents`
 status present.
 
+Claude Opus reviewed the UI fix after the clear-before-construct patch:
+
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_UI_FIX_REVIEW_PROMPT.md`
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_UI_FIX_REVIEW.md`
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_UI_FIX_REVIEW.err.log`
+
+Result: `VERDICT: APPROVE_WITH_FIXES`, `SHIP DECISION:
+READY_FOR_USER_VISUAL_RETEST`. Claude found only low/non-blocking nits:
+remove the unused Cell 3 display import and make the assignment-form launch
+requirement explicit. Those nits were applied before the final zip rebuild.
+
+Claude Opus re-reviewed the final nit fixes:
+
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_UI_FIX_REREVIEW_PROMPT.md`
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_UI_FIX_REREVIEW.md`
+- `compact_v5_test_evidence/final_results/CLAUDE_OPUS_UI_FIX_REREVIEW.err.log`
+
+Final result: `VERDICT: APPROVE`, `SHIP DECISION:
+READY_FOR_USER_VISUAL_RETEST`. Claude verified the zip members match the
+working-tree files and that Cell 3 contains only assignment-form launch.
+
 ## Honest Trust Verdict
 
 The audit increases confidence that several previously scary findings are fixed
