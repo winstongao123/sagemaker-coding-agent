@@ -89,6 +89,7 @@ Use slash commands in the chat box.
 | Model dropdown | Changes `CONFIG.model_id` and the live Bedrock client model. |
 | Plan Mode | Turns on the read-only planning gate in the v5 query engine. |
 | Require Approval | Toggles approval prompts for mutating/high-risk tools. |
+| Bedrock-only | When on, v5 blocks S3/Textract/Lambda/general AWS CLI and only allows Bedrock Runtime. Turn it off only when you intentionally want approved read-only S3/Textract access. S3 delete/admin stays blocked either way. |
 | Extended Thinking / Think Budget | Changes the thinking config sent to Bedrock models that support it. |
 | Budget $ | Updates the local session cost limit shown in the UI. |
 | Auto-Compact | Enables or disables automatic compaction and cold-cache microcompact for future turns. |
@@ -146,11 +147,15 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 - The notebook default is real Bedrock mode (`CONFIG.mock_mode = False`), matching v4 production use.
 - Tick Mock Mode only for a no-AWS smoke test.
 - Bedrock-only is the safest mode: it allows `bedrock-runtime` and blocks
-  S3/Lambda/Textract/etc.
-- If you need S3 reads, untick Bedrock-only before launching. v5 then allows
-  Python `boto3` S3 read calls through the approval gate, but still blocks S3
-  destructive calls by regex: `delete_object`, `delete_objects`, and
-  `delete_bucket`.
+  S3/Lambda/Textract/etc. The main chat UI now shows this mode in the footer
+  and exposes a live `Bedrock-only` checkbox.
+- If you need S3 reads, untick Bedrock-only before asking. v5 then allows
+  Python `boto3` S3 list/get/head calls through the approval gate, but still
+  blocks S3 destructive calls by regex: `delete_object`, `delete_objects`,
+  and `delete_bucket`.
+- For simple AWS inventory questions, keep Extended Thinking off unless you
+  specifically want deeper reasoning. Thinking tokens are visible in the
+  footer, but they still count toward context/cost.
 - The notebook default region is `ap-southeast-2` (Sydney), matching v4.
 - The notebook default model is the first `BEDROCK_MODELS` entry: `Claude 4.5 Sonnet (AU) - default`.
 - The model dropdown includes the v4-style choices: Sonnet 4.5 AU, Haiku 4.5 AU, Sonnet 4.6 AU, Opus 4.6 AU, Opus 4.5 Global, and Claude 3 fallback models.

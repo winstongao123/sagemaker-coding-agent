@@ -1,0 +1,3 @@
+﻿ui_zero_cost_smoke=PASS
+security_zero_cost_smoke=PASS
+PS_PS_PS_Check_v5_vs_v4 zero-cost UI/security lock: PASS

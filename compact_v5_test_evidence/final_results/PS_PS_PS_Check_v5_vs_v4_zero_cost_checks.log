@@ -1,0 +1,9 @@
+has_bold_html=True
+has_code_block=True
+has_list=True
+has_table=True
+no_raw_fence=True
+footer_prompt_cache=True
+footer_bedrock_scope=True
+turn_prompt_cache=True
+RESULT=PASS

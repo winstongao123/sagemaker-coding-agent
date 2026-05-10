@@ -21,6 +21,7 @@ PORT_LOG: #030.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -323,6 +324,14 @@ class V4WidgetChatUI(WidgetChatUI):
         self._subagent_toggle = widgets.ToggleButton(value=False, description="Sub-Agent Models ▶", icon="cogs", layout=widgets.Layout(width="210px", height="28px"))
         self._plan_mode = widgets.Checkbox(value=False, description="Plan Mode", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
         self._approval_toggle = widgets.Checkbox(value=bool(getattr(CONFIG, "require_tool_approval", True)), description="Require Approval", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
+        self._bedrock_only_toggle = widgets.Checkbox(
+            value=bool(getattr(CONFIG, "aws_bedrock_only", False)),
+            description="Bedrock-only",
+            indent=False,
+            tooltip="ON blocks S3/Textract/Lambda/etc.; OFF allows approved read-only AWS tools while destructive calls stay blocked.",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="auto"),
+        )
         self._subagent_types = ["explore", "review", "general", "build", "plan"]
         self._subagent_model_dropdowns = {}
         model_options = [("Same as main", "")] + list(BEDROCK_MODELS)
@@ -385,6 +394,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._dark_toggle.observe(self._on_dark_mode_change, names="value")
         self._plan_mode.observe(self._on_plan_mode_change, names="value")
         self._approval_toggle.observe(self._on_approval_change, names="value")
+        self._bedrock_only_toggle.observe(self._on_bedrock_only_change, names="value")
         self._auto_compact.observe(self._on_auto_compact_change, names="value")
         self._subagent_toggle.observe(self._on_subagent_preferences_change, names="value")
         for agent_type, dropdown in self._subagent_model_dropdowns.items():
@@ -436,7 +446,7 @@ class V4WidgetChatUI(WidgetChatUI):
         sep4 = widgets.HTML("<hr style='margin:2px 0;border:none;border-top:1px solid #333;'/>")
         session_row = widgets.HBox([self._session_name, self._save_btn, self._session_dropdown, self._load_btn, self._new_btn])
         session_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
-        model_row = widgets.HBox([self._model_dropdown, self._subagent_toggle, self._plan_mode, self._approval_toggle])
+        model_row = widgets.HBox([self._model_dropdown, self._subagent_toggle, self._plan_mode, self._approval_toggle, self._bedrock_only_toggle])
         model_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
         thinking_row = widgets.HBox([self._thinking_checkbox, self._thinking_budget_slider, self._temperature_slider, self._budget_input, self._auto_compact, self._dark_toggle, self._chat_height_slider])
         thinking_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
@@ -501,11 +511,164 @@ class V4WidgetChatUI(WidgetChatUI):
                     meta = {}
                 color = "#26c6da" if role == "user" else ("#42a5f5" if role == "assistant" else "#ef5350")
                 label = "You" if role == "user" else ("Agent" if role == "assistant" else "System")
-                body = self._escape(text).replace("\n", "<br>")
+                if role == "assistant":
+                    body = self._render_assistant_markdown(text, c["fg"], self._dark_mode)
+                else:
+                    body = self._escape(text).replace("\n", "<br>")
                 meta_html = self._render_turn_meta(meta, c) if role == "assistant" else ""
                 rows.append(f"<div style='margin:8px 0;border-left:3px solid {color};padding-left:10px;'><b style='color:{color};'>[{ts}] {label}:</b><div style='color:{c['fg']};margin-top:4px;line-height:1.5;'>{body}</div>{meta_html}</div>")
             content = "".join(rows)
         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
+
+    def _format_inline_md(self, text: str, dark: bool) -> str:
+        """Render the same safe inline markdown subset as compact_v4."""
+        safe = self._escape(text)
+        code_bg = "#2b2b2b" if dark else "#f3f4f6"
+        code_fg = "#e06c75" if dark else "#c7254e"
+        bold_fg = "#ffffff" if dark else "#000000"
+        safe = re.sub(
+            r"`([^`]+)`",
+            rf'<code style="background:{code_bg};color:{code_fg};padding:1px 5px;border-radius:3px;font-size:0.9em;">\1</code>',
+            safe,
+        )
+        safe = re.sub(r"\*\*\*([^*]+)\*\*\*", rf'<b style="color:{bold_fg};"><i>\1</i></b>', safe)
+        safe = re.sub(r"\*\*([^*]+)\*\*", rf'<b style="color:{bold_fg};">\1</b>', safe)
+        safe = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<i>\1</i>", safe)
+        return safe
+
+    def _render_assistant_markdown(self, text: str, fg: str, dark: bool) -> str:
+        """Render common assistant markdown blocks with v4-compatible HTML."""
+        lines = str(text).splitlines()
+        code_bg = "#171717" if dark else "#f6f8fa"
+        code_fg = "#abb2bf" if dark else "#383a42"
+        code_border = "#333" if dark else "#d0d7de"
+        table_border = "#444" if dark else "#d0d7de"
+        accent = "#4a9eff" if dark else "#1a56db"
+
+        def _has_markdown_table(ls: list[str]) -> bool:
+            return any(
+                ls[j].strip().startswith("|")
+                and re.match(r"^\s*\|?[\s:-]+\|[\s|:-]*$", ls[j + 1])
+                for j in range(len(ls) - 1)
+            )
+
+        def _looks_ascii_art(ls: list[str]) -> bool:
+            non_empty = [ln for ln in ls if ln.strip()]
+            if len(non_empty) < 3:
+                return False
+            score = 0
+            for ln in non_empty:
+                s = ln.rstrip()
+                if len(s) - len(s.lstrip()) >= 2:
+                    score += 1
+                if re.search(r"\+\-[-+]+", s):
+                    score += 2
+                if re.search(r"^\s*[\d.]+\s*\|", s):
+                    score += 2
+                if "|" in s:
+                    score += 1
+            return score >= 6
+
+        if _looks_ascii_art(lines) and not _has_markdown_table(lines) and not any(re.search(r"\*\*|##", l) for l in lines):
+            return (
+                f'<pre style="background:{code_bg};color:{fg};padding:8px;border-radius:6px;overflow:auto;'
+                f'white-space:pre;line-height:1.3;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">'
+                f"{self._escape(text)}</pre>"
+            )
+
+        out: list[str] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if stripped.startswith("```"):
+                i += 1
+                code_lines = []
+                while i < len(lines) and not lines[i].strip().startswith("```"):
+                    code_lines.append(lines[i])
+                    i += 1
+                out.append(
+                    f'<pre style="background:{code_bg};color:{code_fg};padding:12px;border-radius:6px;'
+                    f'border:1px solid {code_border};overflow:auto;font-size:12px;line-height:1.5;'
+                    f'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:8px 0;">'
+                    f"{self._escape(chr(10).join(code_lines))}</pre>"
+                )
+                i += 1
+                continue
+
+            if stripped.startswith("|") and (i + 1) < len(lines) and re.match(r"^\s*\|?[\s:-]+\|[\s|:-]*$", lines[i + 1]):
+                headers = [self._escape(c.strip()) for c in stripped.strip("|").split("|")]
+                i += 2
+                rows = []
+                while i < len(lines) and lines[i].strip().startswith("|"):
+                    rows.append([self._escape(c.strip()) for c in lines[i].strip().strip("|").split("|")])
+                    i += 1
+                head_html = "".join(f'<th style="text-align:left;padding:6px;border:1px solid {table_border};">{h}</th>' for h in headers)
+                body_html = "".join(
+                    "<tr>" + "".join(f'<td style="padding:6px;border:1px solid {table_border};">{c}</td>' for c in row) + "</tr>"
+                    for row in rows
+                )
+                out.append(
+                    f'<table style="border-collapse:collapse;margin:8px 0;color:{fg};">'
+                    f"<thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+                )
+                continue
+
+            if stripped.startswith("- ") or stripped.startswith("* "):
+                items = []
+                while i < len(lines):
+                    s = lines[i].strip()
+                    if s.startswith("- ") or s.startswith("* "):
+                        items.append(self._format_inline_md(s[2:].strip(), dark))
+                        i += 1
+                    else:
+                        break
+                out.append(
+                    '<ul style="margin:8px 0 8px 20px;line-height:1.6;">'
+                    + "".join(f'<li style="margin:2px 0;">{x}</li>' for x in items)
+                    + "</ul>"
+                )
+                continue
+
+            number_match = re.match(r"^(\d+)\.\s+(.*)$", stripped)
+            if number_match:
+                items = []
+                while i < len(lines):
+                    s = lines[i].strip()
+                    item_match = re.match(r"^(\d+)\.\s+(.*)$", s)
+                    if item_match:
+                        items.append(self._format_inline_md(item_match.group(2).strip(), dark))
+                        i += 1
+                    else:
+                        break
+                out.append(
+                    '<ol style="margin:8px 0 8px 20px;line-height:1.6;">'
+                    + "".join(f'<li style="margin:2px 0;">{x}</li>' for x in items)
+                    + "</ol>"
+                )
+                continue
+
+            header_match = re.match(r"^(#{1,3})\s+(.*)$", stripped)
+            if header_match:
+                level = len(header_match.group(1))
+                text_part = self._format_inline_md(header_match.group(2), dark)
+                if level == 1:
+                    out.append(f'<div style="font-weight:800;font-size:20px;margin:16px 0 8px 0;color:{accent};border-bottom:1px solid {"#333" if dark else "#ddd"};padding-bottom:4px;">{text_part}</div>')
+                elif level == 2:
+                    out.append(f'<div style="font-weight:700;font-size:16px;margin:14px 0 6px 0;color:{accent};">{text_part}</div>')
+                else:
+                    out.append(f'<div style="font-weight:600;font-size:14px;margin:10px 0 4px 0;color:{fg};">{text_part}</div>')
+                i += 1
+                continue
+
+            if stripped:
+                out.append(f'<div style="margin:3px 0;color:{fg};line-height:1.5;">{self._format_inline_md(line, dark)}</div>')
+            else:
+                out.append('<div style="height:8px;"></div>')
+            i += 1
+
+        return "".join(out)
 
     def _render_todos(self) -> None:
         c = self._colors()
@@ -583,6 +746,7 @@ class V4WidgetChatUI(WidgetChatUI):
             context_max = int(getattr(CONFIG, "context_max_tokens", 200000) or 200000)
             mock = bool(getattr(CONFIG, "mock_mode", False))
             auth = bool(getattr(CONFIG, "require_auth", False))
+            bedrock_only = bool(getattr(CONFIG, "aws_bedrock_only", False))
             exec_mode = self._escape(getattr(CONFIG, "execution_mode", "local"))
         except Exception:
             model = ""
@@ -591,6 +755,7 @@ class V4WidgetChatUI(WidgetChatUI):
             context_max = 200000
             mock = False
             auth = False
+            bedrock_only = False
             exec_mode = "local"
             stats = {
                 "session_input": 0,
@@ -653,15 +818,21 @@ class V4WidgetChatUI(WidgetChatUI):
             f"Reasoning: Thinking {thinking_state} "
             f"(budget {int(self._thinking_budget_slider.value)})"
         )
+        aws_scope_text = (
+            "AWS scope: Bedrock-only; S3/Textract/Lambda blocked"
+            if bedrock_only
+            else "AWS scope: read-capable; S3 list/get allowed with approval; delete/admin blocked"
+        )
         subagent_count = len(stats.get("subagent_cost_usd", {}) or {})
         self._render_todos()
         self._status_html.value = "<span style='color:#4caf50'><b>* Ready</b></span>"
         self._tokens_html.value = (
             "<div style='font-size:11px;color:gray;line-height:1.7;'>"
-            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Cache R/W {cache_read:,}/{cache_write:,} | Saved ${cache_savings:.4f} | Calls {int(stats.get('api_calls', 0)):,}</div>"
-            f"<div>Cost: ${cost:.4f} | Last: ${last_cost:.4f} | Without cache: ${original_cost:.4f} | Saved: <b style='color:#4caf50'>${cache_savings:.4f}</b> ({cache_pct:.0f}% cached) | {pricing}</div>"
+            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Prompt Cache R/W {cache_read:,}/{cache_write:,} | Saved ${cache_savings:.4f} | Calls {int(stats.get('api_calls', 0)):,}</div>"
+            f"<div>Cost: ${cost:.4f} | Last: ${last_cost:.4f} | Without cache: ${original_cost:.4f} | Cache saved: <b style='color:#4caf50'>${cache_savings:.4f}</b> ({cache_pct:.0f}% cached) | {pricing}</div>"
             f"<div style='color:#8aa0b8;'>{reasoning_text}</div>"
             f"<div style='color:#8aa0b8;'>Agents: {self._agent_attribution_line(stats)}</div>"
+            f"<div style='color:#8aa0b8;'>{aws_scope_text}</div>"
             f"<div style='color:#2ca02c;'>Context: {context_pct:.1f}% ({context_tokens:,} / {context_max:,})</div>"
             f"<div style='height:4px;background:#333;width:100%;'><div style='height:4px;background:#2ca02c;width:{context_pct:.1f}%;'></div></div>"
             f"<div style='color:#2ca02c;'>Budget: {budget_pct:.0f}% ({budget_text})</div>"
@@ -675,6 +846,7 @@ class V4WidgetChatUI(WidgetChatUI):
             f"| {reasoning_text} "
             f"| Auth: {'ON' if auth else 'OFF'} "
             f"| Approval: {'ON' if self._approval_toggle.value else 'OFF'} "
+            f"| Bedrock-only: {'ON' if bedrock_only else 'OFF'} "
             f"| Auto-Compact: {'ON' if self._auto_compact.value else 'OFF'} "
             f"| Sub-Agents: {'ON' if self._subagent_toggle.value else 'OFF'} ({subagent_count} used; Stop applies to parent + child) "
             f"| Skills: {skills_count} | Exec: {exec_mode} "
@@ -697,9 +869,9 @@ class V4WidgetChatUI(WidgetChatUI):
         reasoning_state = self._escape(meta.get("reasoning_state", "Thinking OFF"))
         summary = (
             f"In {input_tokens:,} | Out {output_tokens:,} | "
-            f"Cache R/W {cache_read:,}/{cache_write:,} | "
+            f"Prompt Cache R/W {cache_read:,}/{cache_write:,} | "
             f"Cost ${cost:.4f} | Without cache ${without_cache:.4f} | "
-            f"Saved <b style='color:#4caf50'>${saved:.4f}</b> | "
+            f"Cache saved <b style='color:#4caf50'>${saved:.4f}</b> | "
             f"Calls {calls:,} | {reasoning_state}"
         )
         thinking_html = ""
@@ -982,6 +1154,18 @@ class V4WidgetChatUI(WidgetChatUI):
             CONFIG.require_tool_approval = bool(change["new"])
         except Exception:
             pass
+        self._render_status()
+
+    def _on_bedrock_only_change(self, change) -> None:
+        try:
+            from runtime.config import CONFIG
+            CONFIG.aws_bedrock_only = bool(change["new"])
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("[chat-ui] Bedrock-only toggle update failed: %s", exc)
+            self._append_message(
+                "system",
+                f"Bedrock-only toggle update failed: {type(exc).__name__}: {exc}",
+            )
         self._render_status()
 
     def _on_plan_mode_change(self, change) -> None:

@@ -428,3 +428,44 @@ Evidence:
 
 Honest status: this fix is lock-tested locally. A fresh acceptance run after this
 patch is still required before final production-ready confidence.
+
+# 2026-05-10 Live SageMaker Operator-UX Addendum
+
+The user's live SageMaker check found one more important operator-facing gap:
+v5's engine/security behavior was mostly correct, but the UI did not make the
+mode and rendering obvious enough.
+
+Problems found:
+
+- Asking "search my S3 buckets" while `Bedrock-only` was enabled correctly
+  blocked S3, but the main UI did not clearly show that S3 was intentionally
+  blocked by the active mode.
+- Assistant markdown could render too literally compared with compact_v4's
+  readable markdown renderer.
+- The footer showed cache data, but the wording `Cache R/W` was too compact for
+  prompt-caching visibility.
+- Thinking was on for a simple AWS inventory question, increasing token/cost
+  pressure; this was visible, but the docs did not explain the tradeoff plainly.
+
+Fixes added:
+
+- `ui/chat_ui.py` now includes a live `Bedrock-only` checkbox in the main UI.
+- The footer now states the active AWS scope:
+  - `Bedrock-only; S3/Textract/Lambda blocked`, or
+  - `S3 list/get allowed with approval; delete/admin blocked`.
+- Assistant messages now use a compact_v4-style safe markdown renderer for
+  code blocks, tables, bullets, numbered lists, headers, inline code, and bold.
+- Per-turn and footer metrics now say `Prompt Cache R/W` and `Cache saved`.
+- `prompt/security.md`, `chat.md`, and `docs/README.md` now explain when S3
+  reads are allowed and when Bedrock-only blocks them.
+
+Zero-cost checks run:
+
+- `ui_zero_cost_smoke=PASS`
+- `security_zero_cost_smoke=PASS`
+
+Explain it like you are 9:
+
+The lock worked, but the sign was bad. Now the screen says which door is locked,
+why S3 is blocked, how much cache saved, and it makes the agent's answer look
+like normal markdown again.
