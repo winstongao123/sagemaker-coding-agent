@@ -458,3 +458,50 @@ Current status:
 - Local regression checks passed.
 - Claude Opus reviewed both fixes and approved them as no-drift.
 - `compact_v5.zip` was rebuilt after the fixes.
+
+# 2026-05-10 UI Live Supervisor Addendum
+
+The v5.0.2 UI live-supervisor pass addresses the human real-use notebook gap
+found after the v3 acceptance run: the engine was working, but the UI looked
+stuck because live output was buffered and observability was too compressed.
+
+Shipped changes:
+
+- live `output_fn` routing during `agent.run()`;
+- v4-style tool, thinking/system, and subagent cards;
+- `QueryEngine.tool_gen_callback` wired to the UI for tool call/result cards;
+- subagent start, child output, finish, selected output, stop reason,
+  cost/cache, and artifact paths visible in the main supervisor chat;
+- footer metrics changed from a tall stack to wrapping rows and paired gauges;
+- Stop UI now says it is cooperative and will finish the current
+  Bedrock/tool/subagent call;
+- cost-driver display added so output tokens, calls, Thinking ON/OFF, cache,
+  and subagent attribution are measured before any optimization.
+- follow-up fix: bracket-leading assistant sections such as `[SPEC vs SHIPPED]`
+  stay assistant-rendered instead of becoming system cards.
+- follow-up fix: parsed subagent/task result envelopes are shown as subagent
+  cards without also duplicating the raw JSON envelope as a tool card.
+
+Scope statement: this was a UI observability upgrade. No real AWS run was
+performed, and no model, prompt, cache policy, compaction policy, Bedrock
+request shape, security gate, final-claim guard, or subagent receipt semantics
+were intentionally changed.
+
+Claude CLI review prompts and outputs were saved under
+`compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/`, but the
+CLI returned `Credit balance is too low` for every block, so no Claude verdict
+was available. Local drift checks, py_compile, and zero-cost smoke checks were
+used as the continuation gate.
+
+Codex follow-up on 2026-05-11 corrected the Claude CLI invocation to use the
+documented subscription-auth path. The first usable final Claude review caught a
+stale `compact_v5.zip`; after rebuilding the zip from the active tree, zip
+verification now includes required-member hash parity. Fresh visual evidence is:
+
+- `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_FINAL_VISUAL_20260511.html`
+- `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_FINAL_VISUAL_20260511.png`
+
+Post-zip Claude re-review:
+
+- `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/UI-LIVE-SUPERVISOR-FINAL-20260511-post-zip_claude_review.md`
+- Result: `SHIP DECISION: APPROVE`, no findings, no drift.
