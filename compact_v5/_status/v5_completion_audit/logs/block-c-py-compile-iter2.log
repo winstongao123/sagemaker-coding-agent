@@ -1,3 +1,0 @@
-COMMAND: python -m py_compile <Block C touched files>
-EXIT_CODE: 0
-RESULT: PASS py_compile Block C touched files

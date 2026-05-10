@@ -1,2 +1,0 @@
-﻿CLAUDE_REVIEWER_READY aws_test_design_review
-

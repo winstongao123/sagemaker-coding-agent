@@ -1531,6 +1531,7 @@ class QueryEngine:
                 "output_fn": output_fn,
             })
             text = _coerce_tool_result_to_text(raw)
+            self._notify_tool_result(call, text, is_error=False)
             try:
                 from runtime.audit import AUDIT as _AUDIT
                 _AUDIT.log(
@@ -1580,6 +1581,11 @@ class QueryEngine:
                 call.name,
                 _failure_key,
                 f"{type(exc).__name__}: {exc}",
+            )
+            self._notify_tool_result(
+                call,
+                f"error_during_execution: {type(exc).__name__}: {exc}",
+                is_error=True,
             )
             return {
                 "type": "tool_result",
@@ -1899,6 +1905,24 @@ class QueryEngine:
                     "[tool-gen-callback] %s: %s",
                     type(exc).__name__, exc,
                 )
+
+    def _notify_tool_result(self, call: Any, text: str, *, is_error: bool) -> None:
+        if self.tool_gen_callback is None:
+            return
+        event = {
+            "type": "tool_result",
+            "tool_use_id": getattr(call, "id", ""),
+            "name": getattr(call, "name", ""),
+            "content": text,
+            "is_error": bool(is_error),
+        }
+        try:
+            self.tool_gen_callback(event)
+        except Exception as exc:  # noqa: BLE001 - callbacks are best-effort UI hooks
+            logging.warning(
+                "[tool-result-callback] %s: %s",
+                type(exc).__name__, exc,
+            )
 
     # ------------------------------------------------------------
     # Internal: A-33 prompt-cache invariant policy

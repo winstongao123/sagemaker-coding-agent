@@ -1,1 +1,0 @@
-CLAUDE_REVIEWER_READY software_compact_telemetry

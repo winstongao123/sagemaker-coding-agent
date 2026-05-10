@@ -1,2 +1,0 @@
-Command: py -3.11 -m py_compile subagent/spawn.py tools/task.py tests/integration/test_software_subagent.py
-Result: PASS

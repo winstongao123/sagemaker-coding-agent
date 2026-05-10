@@ -1,9 +1,0 @@
-Full Claude review iter5 was not executed.
-
-Reason:
-
-The user intentionally interrupted the turn during the pre-review smoke. A
-later process check found no remaining worker-started Claude smoke process, but
-the worker did not capture a complete smoke stdout/stderr result.
-
-No review stdout with REVIEWED ROWS, VERDICT, or SHIP DECISION was produced.

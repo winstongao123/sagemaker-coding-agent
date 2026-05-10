@@ -1,6 +1,0 @@
-Final tiny continuation for PS_PS_FINAL_TEST v1.
-Workspace: D:/Github/sagemaker-coding-agent/compact_v5/_status/aws_acceptance_v1/workspace
-All code/docs/final metrics already exist and pytest passes. Do not redesign. Do not review again.
-Only create the final zip at: D:/Github/sagemaker-coding-agent/compact_v5/_status/aws_acceptance_v1/v5_final_acceptance_results.zip
-Use Python zipfile or shell. Include the project files, docs, AGENT_STATUS.md, FINAL_FILE_TREE.txt, and FINAL_METRICS.md. Exclude __pycache__, .pytest_cache, .sageagent_state, audit_logs, and snapshots.
-After creating the zip, report the zip path and size. Stop.

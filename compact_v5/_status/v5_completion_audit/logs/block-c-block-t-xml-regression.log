@@ -1,4 +1,0 @@
-COMMAND: python -m pytest tests/integration/test_block_t.py -q
-EXIT_CODE: 0
-ssss..sssssssss...s............                                          [100%]
-17 passed, 14 skipped in 1.09s

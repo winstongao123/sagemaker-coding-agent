@@ -21,6 +21,7 @@ PORT_LOG: #030.
 from __future__ import annotations
 
 import logging
+import json
 import re
 import threading
 from datetime import datetime
@@ -282,6 +283,8 @@ class V4WidgetChatUI(WidgetChatUI):
         self._run_thread = None
         self._run_lock = threading.Lock()
         self._render_generation = 0
+        self._live_assistant_index = None
+        self._ui_running = False
         self._build()
 
     @staticmethod
@@ -363,7 +366,13 @@ class V4WidgetChatUI(WidgetChatUI):
 
         self._input = widgets.Textarea(placeholder="Type your message...", layout=widgets.Layout(width="100%", height="80px"))
         self._send_btn = widgets.Button(description="Send", button_style="primary", icon="paper-plane")
-        self._stop_btn = widgets.Button(description="Stop", button_style="danger", icon="stop", layout=widgets.Layout(display="none"))
+        self._stop_btn = widgets.Button(
+            description="Stop",
+            button_style="danger",
+            icon="stop",
+            tooltip="Cooperative stop: request halt, then finish the current Bedrock/tool/subagent call.",
+            layout=widgets.Layout(display="none"),
+        )
         self._clear_btn = widgets.Button(description="Clear", button_style="warning", icon="trash")
         self._compact_btn = widgets.Button(description="Compact", button_style="", icon="compress")
         self._clean_btn = widgets.Button(
@@ -509,14 +518,63 @@ class V4WidgetChatUI(WidgetChatUI):
                 else:
                     role, text, ts = message
                     meta = {}
-                color = "#26c6da" if role == "user" else ("#42a5f5" if role == "assistant" else "#ef5350")
-                label = "You" if role == "user" else ("Agent" if role == "assistant" else "System")
                 if role == "assistant":
+                    color = "#42a5f5"
+                    label = "Agent"
                     body = self._render_assistant_markdown(text, c["fg"], self._dark_mode)
+                elif role == "tool":
+                    color = "#ffb74d"
+                    label = f"Tool: {self._escape((meta or {}).get('tool_name', 'tool'))}"
+                    phase = self._escape((meta or {}).get("phase", "result"))
+                    body = (
+                        f"<div style='color:{c['muted']};font-size:11px;margin-bottom:4px;'>"
+                        f"{phase}</div>"
+                        f"<pre style='white-space:pre-wrap;max-height:260px;overflow:auto;"
+                        f"background:{'#151515' if self._dark_mode else '#f7f7f7'};"
+                        f"border:1px solid {c['border']};border-radius:6px;padding:8px;"
+                        "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
+                        f"font-size:12px;color:{c['fg']};'>{self._escape(text)}</pre>"
+                    )
+                elif role == "thinking":
+                    color = "#ab47bc"
+                    label = "Thinking"
+                    body = (
+                        f"<details open><summary style='cursor:pointer;color:{color};'>"
+                        "Reasoning / thinking</summary>"
+                        f"<div style='color:{c['muted']};font-size:12px;line-height:1.45;"
+                        f"margin-top:4px;'>{self._escape(text).replace(chr(10), '<br>')}</div></details>"
+                    )
+                elif role == "subagent":
+                    color = "#66bb6a"
+                    kind = self._escape((meta or {}).get("subagent_type", "subagent"))
+                    phase = self._escape((meta or {}).get("phase", "update"))
+                    label = f"Subagent: {kind}"
+                    stop = self._escape((meta or {}).get("stop_reason", ""))
+                    cost = self._escape((meta or {}).get("cost_usd", ""))
+                    cache = self._escape((meta or {}).get("cache", ""))
+                    paths = meta.get("artifact_paths", []) if isinstance(meta, dict) else []
+                    details = []
+                    if stop:
+                        details.append(f"stop {stop}")
+                    if cost:
+                        details.append(f"cost {cost}")
+                    if cache:
+                        details.append(f"cache {cache}")
+                    if isinstance(paths, list) and paths:
+                        safe_paths = "<br>".join(self._escape(p) for p in paths[:8])
+                        details.append(f"artifacts<br>{safe_paths}")
+                    detail_html = (
+                        f"<div style='color:{c['muted']};font-size:11px;margin-bottom:4px;'>"
+                        f"{phase}" + ((" | " + " | ".join(details)) if details else "") + "</div>"
+                    )
+                    body = detail_html + self._render_assistant_markdown(text, c["fg"], self._dark_mode)
                 else:
+                    color = "#ffd166" if role == "system" else "#ef5350"
+                    label = "System" if role == "system" else self._escape(role.title())
                     body = self._escape(text).replace("\n", "<br>")
                 meta_html = self._render_turn_meta(meta, c) if role == "assistant" else ""
-                rows.append(f"<div style='margin:8px 0;border-left:3px solid {color};padding-left:10px;'><b style='color:{color};'>[{ts}] {label}:</b><div style='color:{c['fg']};margin-top:4px;line-height:1.5;'>{body}</div>{meta_html}</div>")
+                bg = "rgba(255,255,255,0.025)" if self._dark_mode else "rgba(0,0,0,0.025)"
+                rows.append(f"<div style='margin:8px 0;border-left:3px solid {color};background:{bg};padding:8px 10px;border-radius:6px;'><b style='color:{color};'>[{ts}] {label}:</b><div style='color:{c['fg']};margin-top:4px;line-height:1.5;'>{body}</div>{meta_html}</div>")
             content = "".join(rows)
         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
 
@@ -825,18 +883,38 @@ class V4WidgetChatUI(WidgetChatUI):
         )
         subagent_count = len(stats.get("subagent_cost_usd", {}) or {})
         self._render_todos()
-        self._status_html.value = "<span style='color:#4caf50'><b>* Ready</b></span>"
+        if self._ui_running and bool(getattr(self.agent, "_stop_requested", False)):
+            self._status_html.value = (
+                "<span style='color:#ff9800'><b>* Stop requested</b> "
+                "finishing current Bedrock/tool/subagent call</span>"
+            )
+        elif self._ui_running:
+            self._status_html.value = (
+                "<span style='color:#ff9800'><b>* Running</b> "
+                "(Stop is cooperative: current Bedrock/tool/subagent call will finish)</span>"
+            )
+        else:
+            self._status_html.value = "<span style='color:#4caf50'><b>* Ready</b></span>"
         self._tokens_html.value = (
-            "<div style='font-size:11px;color:gray;line-height:1.7;'>"
-            f"<div>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Prompt Cache R/W {cache_read:,}/{cache_write:,} | Saved ${cache_savings:.4f} | Calls {int(stats.get('api_calls', 0)):,}</div>"
-            f"<div>Cost: ${cost:.4f} | Last: ${last_cost:.4f} | Without cache: ${original_cost:.4f} | Cache saved: <b style='color:#4caf50'>${cache_savings:.4f}</b> ({cache_pct:.0f}% cached) | {pricing}</div>"
-            f"<div style='color:#8aa0b8;'>{reasoning_text}</div>"
-            f"<div style='color:#8aa0b8;'>Agents: {self._agent_attribution_line(stats)}</div>"
-            f"<div style='color:#8aa0b8;'>{aws_scope_text}</div>"
+            "<div style='font-size:11px;color:gray;line-height:1.5;'>"
+            "<div style='display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center;'>"
+            f"<span>In {int(stats.get('session_input', 0)):,} | Out {int(stats.get('session_output', 0)):,} | Calls {int(stats.get('api_calls', 0)):,}</span>"
+            f"<span>Prompt Cache R/W {cache_read:,}/{cache_write:,} | Saved <b style='color:#4caf50'>${cache_savings:.4f}</b></span>"
+            f"<span>Cost ${cost:.4f} | Last ${last_cost:.4f} | Without cache ${original_cost:.4f}</span>"
+            f"<span>{pricing} | {cache_pct:.0f}% cached</span>"
+            "</div>"
+            f"<div style='color:#8aa0b8;margin-top:4px;'>{self._escape(self._cost_driver_line(stats, cache_pct))}</div>"
+            f"<div style='color:#8aa0b8;margin-top:4px;'>{self._escape(self._prompt_metric_line())}</div>"
+            "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px 14px;margin-top:6px;'>"
+            "<div>"
             f"<div style='color:#2ca02c;'>Context: {context_pct:.1f}% ({context_tokens:,} / {context_max:,})</div>"
             f"<div style='height:4px;background:#333;width:100%;'><div style='height:4px;background:#2ca02c;width:{context_pct:.1f}%;'></div></div>"
+            "</div>"
+            "<div>"
             f"<div style='color:#2ca02c;'>Budget: {budget_pct:.0f}% ({budget_text})</div>"
             f"<div style='height:4px;background:#333;width:100%;'><div style='height:4px;background:#2ca02c;width:{budget_pct:.1f}%;'></div></div>"
+            "</div>"
+            "</div>"
             "</div>"
         )
         self._mode_html.value = (
@@ -850,7 +928,9 @@ class V4WidgetChatUI(WidgetChatUI):
             f"| Auto-Compact: {'ON' if self._auto_compact.value else 'OFF'} "
             f"| Sub-Agents: {'ON' if self._subagent_toggle.value else 'OFF'} ({subagent_count} used; Stop applies to parent + child) "
             f"| Skills: {skills_count} | Exec: {exec_mode} "
-            f"| Iter: {iter_used}/{iter_total}"
+            f"| Iter: {iter_used}/{iter_total} "
+            f"| Agents: {self._agent_attribution_line(stats)} "
+            f"| {aws_scope_text}"
             "</span>"
         )
 
@@ -899,6 +979,50 @@ class V4WidgetChatUI(WidgetChatUI):
         except Exception:
             return {"_cache_savings_usd": 0.0}
 
+    def _cost_driver_line(self, stats: Dict[str, Any], cache_pct: float) -> str:
+        """Display-only measurement hints; never changes model/cache/compaction."""
+        input_tokens = int(stats.get("session_input", 0) or 0)
+        output_tokens = int(stats.get("session_output", 0) or 0)
+        calls = int(stats.get("api_calls", 0) or 0)
+        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
+        if calls <= 0:
+            return (
+                "Cost drivers: no calls yet; measure calls, output tokens, thinking state, "
+                "cache R/W, subagent attribution, and compaction before optimizing."
+            )
+        dominant = "output" if output_tokens >= input_tokens else "input"
+        avg_out = output_tokens / max(1, calls)
+        return (
+            f"Cost drivers to measure first: {dominant} tokens dominate "
+            f"({input_tokens:,} in / {output_tokens:,} out), {calls:,} calls, "
+            f"avg {avg_out:,.0f} out/call, Thinking {thinking_state}, "
+            f"{cache_pct:.0f}% cached, subagent attribution below."
+        )
+
+    def _prompt_metric_line(self) -> str:
+        """Display-only prompt/cache shape; never changes model/cache behavior."""
+        metrics = getattr(self.agent, "last_prompt_metrics", {}) or {}
+        if not metrics:
+            return "Prompt metrics: waiting for first turn."
+        thinking = (
+            f"ON/{int(metrics.get('thinking_budget', 0) or 0):,}"
+            if metrics.get("thinking_enabled")
+            else "OFF"
+        )
+        return (
+            "Prompt metrics: "
+            f"system {int(metrics.get('system_prompt_chars', 0) or 0):,} chars "
+            f"(static {int(metrics.get('static_prompt_chars', 0) or 0):,}, "
+            f"dynamic {int(metrics.get('dynamic_prompt_chars', 0) or 0):,}, "
+            f"status/memory {int(metrics.get('status_memory_chars', 0) or 0):,}); "
+            f"schemas visible {int(metrics.get('visible_schema_chars', 0) or 0):,}/"
+            f"{int(metrics.get('visible_tool_count', 0) or 0)} tools, "
+            f"deferred {int(metrics.get('deferred_schema_chars', 0) or 0):,}/"
+            f"{int(metrics.get('deferred_tool_count', 0) or 0)} tools; "
+            f"cache boundaries {int(metrics.get('cache_boundary_count', 0) or 0)}, "
+            f"Thinking {thinking}."
+        )
+
     def _turn_meta_from_stats(self, before: Dict[str, Any], after: Dict[str, Any], result: Any) -> Dict[str, Any]:
         def _num(key: str) -> float:
             return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
@@ -921,9 +1045,157 @@ class V4WidgetChatUI(WidgetChatUI):
             "reasoning_state": f"Thinking {thinking_state} (budget {thinking_budget})",
         }
 
-    def _append_message(self, role: str, content: str, meta: Optional[Dict[str, Any]] = None) -> None:
-        self._messages.append((role, content, datetime.now().strftime("%H:%M:%S"), meta or {}))
+    def _append_message(
+        self,
+        role: str,
+        content: str,
+        meta: Optional[Dict[str, Any]] = None,
+        tool_name: str = "",
+    ) -> int:
+        msg_meta = dict(meta or {})
+        if tool_name:
+            msg_meta["tool_name"] = tool_name
+        self._messages.append((role, content, datetime.now().strftime("%H:%M:%S"), msg_meta))
         self._render_chat()
+        return len(self._messages) - 1
+
+    def _set_message_meta(self, index: Optional[int], meta: Dict[str, Any]) -> None:
+        if index is None or index < 0 or index >= len(self._messages):
+            return
+        message = self._messages[index]
+        if len(message) == 4:
+            role, text, ts, old_meta = message
+        else:
+            role, text, ts = message
+            old_meta = {}
+        merged = dict(old_meta or {})
+        merged.update(meta or {})
+        self._messages[index] = (role, text, ts, merged)
+        self._render_chat()
+
+    def _live_output_router(self, text: Any, streamed: list[str]) -> Optional[int]:
+        """Render engine output immediately while preserving final turn metadata."""
+        chunk = str(text)
+        streamed.append(chunk)
+        stripped = chunk.strip()
+        if not stripped:
+            return None
+        sub_match = re.match(r"^\[subagent:([^:\]]+)(?::child)?\]\s*(.*)$", stripped, re.DOTALL)
+        if sub_match:
+            kind = sub_match.group(1)
+            body = sub_match.group(2).strip()
+            phase = "child output" if ":child]" in stripped.split(" ", 1)[0] else "lifecycle"
+            meta = {"subagent_type": kind, "phase": phase}
+            finished = re.search(
+                r"finished:\s*stop=([^\s]+)\s+turns=(\d+)\s+cost=\$([0-9.]+)\s+cache=([0-9,]+/[0-9,]+)",
+                body,
+            )
+            if finished:
+                meta.update({
+                    "phase": "finished",
+                    "stop_reason": finished.group(1),
+                    "turns": finished.group(2),
+                    "cost_usd": f"${finished.group(3)}",
+                    "cache": finished.group(4),
+                })
+            elif body.startswith("started:"):
+                meta["phase"] = "started"
+            self._append_message("subagent", body, meta)
+            self._render_status()
+            return None
+        tool_match = re.match(r"^\[([A-Za-z_][\w.-]*)\s+result\]:\s*(.*)$", stripped, re.DOTALL)
+        if tool_match:
+            tool = tool_match.group(1)
+            body = tool_match.group(2).strip()
+            self._append_message("tool", body, {"phase": "result from output stream"}, tool_name=tool)
+            self._render_status()
+            return None
+        if self._is_status_output(stripped):
+            self._append_message("system", stripped)
+            self._render_status()
+            return None
+        index = self._append_message("assistant", chunk)
+        self._live_assistant_index = index
+        self._render_status()
+        return index
+
+    @staticmethod
+    def _is_status_output(text: str) -> bool:
+        """Return True for engine/control bracket lines, not ordinary markdown."""
+        prefixes = (
+            "[prompt-cache invariant]",
+            "[Stopped by user]",
+            "[Budget exhausted:",
+            "[context_overflow:",
+            "[error_",
+            "[error_during_execution]",
+            "[Cost $",
+            "[auto-compact",
+            "[final-claim guard:",
+            "[Max turns reached:",
+            "[warning]",
+            "[Warning",
+            "[i]",
+            "[!]",
+            "[Turn budget warning:",
+            "[AGENT_STATUS.md",
+            "[mid-call-recovery]",
+            "[Reactive:",
+            "[Microcompact:",
+            "[Reached ",
+            "[stop requested]",
+        )
+        return text.startswith(prefixes)
+
+    def _parse_subagent_result(self, body: str) -> Optional[Dict[str, Any]]:
+        marker = "[subagent_result_envelope]"
+        if marker not in body:
+            return None
+        before, after = body.split(marker, 1)
+        try:
+            envelope, _end = json.JSONDecoder().raw_decode(after.strip())
+        except Exception:
+            return None
+        if not isinstance(envelope, dict):
+            return None
+        artifacts = envelope.get("artifact_paths", [])
+        if not artifacts and "[subagent_artifacts]" in body:
+            artifact_text = body.split("[subagent_artifacts]", 1)[1]
+            artifacts = [line.strip() for line in artifact_text.splitlines() if line.strip()]
+        cache = envelope.get("cache", {}) if isinstance(envelope.get("cache"), dict) else {}
+        meta = {
+            "phase": "result envelope",
+            "subagent_type": envelope.get("agent_type") or envelope.get("role") or "subagent",
+            "stop_reason": envelope.get("stop_reason", ""),
+            "cost_usd": f"${float(envelope.get('cost_usd', 0.0) or 0.0):.4f}",
+            "cache": f"{int(cache.get('read_tokens', 0) or 0):,}/{int(cache.get('write_tokens', 0) or 0):,}",
+            "artifact_paths": list(artifacts or []),
+        }
+        selected = before.strip() or str(envelope.get("summary", "") or "(no child output)")
+        return {"text": selected, "meta": meta}
+
+    def _on_tool_generation(self, event: Dict[str, Any]) -> None:
+        event_type = str(event.get("type", "tool_generation"))
+        name = str(event.get("name", "tool") or "tool")
+        if event_type == "tool_generation":
+            try:
+                body = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
+            except Exception:
+                body = str(event.get("input", {}) or {})
+            self._append_message("tool", body, {"phase": "call requested"}, tool_name=name)
+        elif event_type == "tool_result":
+            body = str(event.get("content", "") or "")
+            if name == "task":
+                parsed = self._parse_subagent_result(body)
+                if parsed:
+                    self._append_message("subagent", parsed["text"], parsed["meta"])
+                    self._render_status()
+                    return
+            if len(body) > 12000:
+                body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
+            phase = "error result" if event.get("is_error") else "result"
+            self._append_message("tool", body, {"phase": phase}, tool_name=name)
+        self._render_status()
 
     def _dispatch_ui_command(self, command: str) -> None:
         try:
@@ -947,7 +1219,11 @@ class V4WidgetChatUI(WidgetChatUI):
         self._append_message("user", msg)
         self._stop_btn.layout.display = ""
         self._send_btn.disabled = True
-        self._status_html.value = "<span style='color:#ff9800'><b>* Running</b></span>"
+        self._ui_running = True
+        self._status_html.value = (
+            "<span style='color:#ff9800'><b>* Running</b> "
+            "(Stop is cooperative: current Bedrock/tool/subagent call will finish)</span>"
+        )
 
         def _run() -> None:
             with self._run_lock:
@@ -972,31 +1248,44 @@ class V4WidgetChatUI(WidgetChatUI):
                 except Exception as cmd_exc:
                     logging.warning(f"[chat-ui] slash-command dispatch error: {cmd_exc}")
             streamed = []
+            self._live_assistant_index = None
             before_stats = self._stats_snapshot()
-            result = self.agent.run(msg, output_fn=lambda s: streamed.append(str(s)))
+            result = self.agent.run(
+                msg,
+                output_fn=lambda s: self._live_output_router(s, streamed),
+                tool_gen_callback=self._on_tool_generation,
+            )
             after_stats = self._stats_snapshot()
             turn_meta = self._turn_meta_from_stats(before_stats, after_stats, result)
-            ops = [s.strip() for s in streamed if str(s).strip().startswith("[")]
-            if ops:
-                self._append_message("system", "\n".join(ops[-30:]))
-            self._append_message(
-                "assistant",
-                result.text or "\n".join(streamed) or f"stop_reason: {result.stop_reason}",
-                meta=turn_meta,
-            )
+            if self._live_assistant_index is not None and result.text:
+                self._set_message_meta(self._live_assistant_index, turn_meta)
+            else:
+                self._append_message(
+                    "assistant",
+                    result.text or "\n".join(streamed) or f"stop_reason: {result.stop_reason}",
+                    meta=turn_meta,
+                )
         except Exception as exc:  # noqa: BLE001
             logging.exception("[chat-ui] agent.run() raised")
             self._append_message("system", f"[chat-ui] error: {type(exc).__name__}: {exc}")
         finally:
             self._stop_btn.layout.display = "none"
             self._send_btn.disabled = False
+            self._ui_running = False
             self.budget_widget.update()
             self.thinking_widget.refresh()
             self._render_status()
 
     def _on_stop(self, _btn) -> None:
         self.agent.stop()
-        self._append_message("system", "[stop requested]")
+        self._status_html.value = (
+            "<span style='color:#ff9800'><b>* Stop requested</b> "
+            "finishing current Bedrock/tool/subagent call</span>"
+        )
+        self._append_message(
+            "system",
+            "[stop requested] Finishing the current Bedrock/tool/subagent call; the agent will halt at the next cooperative checkpoint.",
+        )
         self._render_status()
 
     def _on_clear(self, _btn) -> None:

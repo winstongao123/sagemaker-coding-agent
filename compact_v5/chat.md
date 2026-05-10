@@ -203,3 +203,27 @@ The company ship zip is intentionally small. It does not include:
 - bulky optional skill reference examples.
 
 Those files stay in the repository for traceability. The zip contains only the runtime package and the user-facing notebook guide.
+
+## Live Supervisor UI
+
+The notebook chat is now a live supervisor surface:
+
+- Agent output appears during `agent.run()` as soon as the runtime emits it.
+- Tool calls and results render as separate bounded cards instead of being
+  merged into the final assistant answer.
+- Markdown tables, lists, and code blocks render in assistant messages.
+- Assistant messages that begin with bracketed headings, such as
+  `[SPEC vs SHIPPED]`, remain assistant messages. Only known engine/status
+  bracket prefixes are routed to system cards.
+- Subagents show start, child updates, finish, selected child output, stop
+  reason, token/cache/cost summary, and saved artifact paths. Parsed task
+  envelopes are summarized as subagent cards instead of also showing raw JSON
+  as a duplicate tool result.
+- Footer metrics use wrapping rows and paired Context/Budget gauges. Each
+  assistant turn still shows turn-level `Cache R/W`, `Without cache`, `Saved`,
+  and `Calls` metadata when available.
+- Stop is cooperative: clicking Stop requests a halt, then v5 finishes the
+  current Bedrock, tool, or subagent call and stops at the next checkpoint.
+- The footer includes display-only cost-driver measurement. Use it to compare
+  output tokens, calls, Thinking ON/OFF, cache hit rate, and subagent
+  attribution before changing model, prompt, cache, or compaction settings.

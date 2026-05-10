@@ -1,0 +1,107 @@
+# Agent Status (long-running task handoff)
+
+This file is loaded into the dynamic tail of the system prompt and
+serves as a long-running context handoff between sessions.
+
+Use it to record:
+- Current task goal
+- Sub-tasks already completed
+- Sub-tasks still pending
+- Key file paths edited so far
+- Anything the next session would otherwise have to re-discover
+
+The agent will read this file at the start of each session.
+
+---
+
+## 2026-05-11 UI Live Supervisor Upgrade
+
+Current active tree: flattened runtime under `compact_v5/`. The older
+`compact_v5/MAIN/agent/` development layout and any `compact_v5/compact_v5/`
+references are historical, not the active ship tree.
+
+Current task: v5.0.2 UI live-supervisor observability upgrade for active ship
+tree `compact_v5/`.
+
+Completed:
+- live chat output during `agent.run()`;
+- v4-style tool and system/thinking cards;
+- bracket-leading assistant markdown such as `[SPEC vs SHIPPED]` now remains
+  an assistant card unless it matches a known engine/status prefix;
+- subagent lifecycle, child output, stop reason, cost/cache, selected output,
+  and artifact path visibility, without duplicating parsed task envelopes as
+  raw tool cards;
+- responsive footer metrics layout;
+- cooperative Stop wording;
+- display-only cost-driver measurement before optimization;
+- zero-cost smoke checks and py_compile checks;
+- fresh current HTML/PNG visual evidence saved under
+  `compact_v5_test_evidence/final_results/`;
+- `compact_v5.zip` rebuilt from active tree and verified with required-member
+  hash parity.
+
+Notes:
+- Real AWS was not run for this UI pass.
+- Earlier worker Claude CLI attempts inherited the API-token route and returned
+  `Credit balance is too low`; final review used the documented subscription
+  auth command path.
+- Final Claude post-zip re-review:
+  `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/UI-LIVE-SUPERVISOR-FINAL-20260511-post-zip_claude_review.md`
+  returned `SHIP DECISION: APPROVE` with no findings.
+
+---
+
+## 2026-05-11 Solve-All Architecture Cleanup
+
+Current task: close the remaining v5 gaps from the deep scan while preventing
+architecture drift and requiring independent Claude CLI review per block.
+
+Completed:
+- corrected active-tree and subagent prompt truth drift;
+- removed `todo_write` from read-only subagent scopes while keeping `todo_read`;
+- exposed public `Agent(..., tool_gen_callback=...)` and
+  `Agent.run(..., tool_gen_callback=...)` progress callback surfaces;
+- changed notebook UI to use the public callback instead of patching
+  `agent._engine`;
+- forwarded parent progress callbacks into child subagent engines;
+- added durable structured request tracking tools:
+  `task_create`, `task_update`, `task_list`;
+- added `.sageagent_state/tasks.json` persistence via `DurableStateManager`;
+- added prompt/cache/token shape measurement through
+  `Agent.last_prompt_metrics` and the UI Prompt metrics footer line;
+- added smoke tests for read-only subagent scope, public progress callbacks,
+  task-state persistence, and prompt metrics;
+- rebuilt `compact_v5.zip` from the flattened active tree and verified required
+  members.
+
+Claude review evidence:
+- Block 1 path/prompt truth: APPROVE.
+- Block 2 read-only subagent scope: APPROVE.
+- Block 3 public progress callback: APPROVE_WITH_FIXES, only non-blocking
+  display-scope drift from cumulative UI diff.
+- Block 4 request tracking v2: APPROVE.
+- Block 5 prompt metrics: APPROVE.
+- Final solve-all review: APPROVE; all eight expected items marked Solved.
+
+Verification:
+- py_compile passed for all changed production and smoke files;
+- all four smoke tests passed;
+- drift grep found no stale "general only", "result must be incrementally
+  visible", or "CANNOT see your intermediate" text in active task/subagent
+  prompt files;
+- UI no longer contains private `_engine.tool_gen_callback` patching;
+- required tools present, tool count 28, `todo_write_readonly False`,
+  prompt metric boundary count 1.
+
+Follow-up review repair:
+- restored the editable active tree at `compact_v5/` from the verified ship zip
+  after finding the source files had drifted into a literal temp-like directory
+  named ` + $tmp + r/compact_v5`;
+- restored the four focused source smoke tests under `compact_v5/tests/`;
+- re-ran py_compile and all four source smoke tests against `compact_v5/`;
+- rebuilt `compact_v5.zip` again from the restored active tree.
+- removed the stray ` + $tmp + r/` duplicate tree after an independent Claude
+  recheck flagged it as a future drift hazard;
+- final independent Claude recheck after cleanup returned `APPROVE`, with no
+  HIGH or MEDIUM runtime regressions remaining. The only remaining note is SCM
+  durability: the flattened-tree transition is not committed in git history.
