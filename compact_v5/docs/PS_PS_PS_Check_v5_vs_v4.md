@@ -36,6 +36,11 @@ security_zero_cost_smoke=PASS
 PS_PS_PS_Check_v5_vs_v4 zero-cost UI/security lock: PASS
 ```
 
+Rendered evidence:
+
+- `compact_v5_test_evidence/final_results/PS_PS_PS_Check_v5_vs_v4_rendered_sample.html`
+- `compact_v5_test_evidence/final_results/PS_PS_PS_Check_v5_vs_v4_rendered_sample.png`
+
 What they verify:
 
 - v5 can instantiate the production chat UI in mock mode.
