@@ -1,0 +1,566 @@
+﻿diff --git a/compact_v5/agent.py b/compact_v5/agent.py
+index c857c9a..bc8917a 100644
+--- a/compact_v5/agent.py
++++ b/compact_v5/agent.py
+@@ -20,6 +20,7 @@ PORT_LOG: #031.
+ from __future__ import annotations
+ 
+ from typing import Any, Callable, Dict, Iterable, List, Optional
++import re
+ 
+ from core import IterationBudget, QueryEngine
+ from core.query_engine import QueryResult
+@@ -140,6 +141,42 @@ def _build_prompt_metrics(
+     }
+ 
+ 
++def _is_simple_s3_inventory_request(message: str) -> bool:
++    """Detect a narrow S3 list/inventory request suitable for lower-cost mode."""
++    lowered = (message or "").lower()
++    if "s3" not in lowered:
++        return False
++    if any(term in lowered for term in ("delete", "remove", "upload", "put object", "write")):
++        return False
++    inventory_terms = (
++        "list",
++        "inventory",
++        "structure",
++        "bucket",
++        "buckets",
++        "prefix",
++        "prefixes",
++        "files",
++        "objects",
++    )
++    if not any(term in lowered for term in inventory_terms):
++        return False
++    coding_terms = (
++        "fix",
++        "implement",
++        "refactor",
++        "debug",
++        "test",
++        "modify",
++        "code",
++        "repo",
++        "repository",
++    )
++    if any(re.search(rf"\b{term}\b", lowered) for term in coding_terms):
++        return False
++    return True
++
++
+ class Agent:
+     """Minimal public Agent wrapping the Phase 8-10 surfaces."""
+ 
+@@ -204,6 +241,7 @@ class Agent:
+         self._auto_compact_enabled = bool(auto_compact_enabled)
+         self._thinking_enabled = bool(thinking_enabled)
+         self._thinking_budget = int(thinking_budget)
++        self.last_effective_thinking_enabled = bool(thinking_enabled)
+         self._ui_subagent_preferences: Dict[str, Any] = {}
+         self.last_prompt_metrics: Dict[str, Any] = {}
+         # Historical B+ state retained for compatibility with tests that
+@@ -272,6 +310,23 @@ class Agent:
+         from runtime.config import CONFIG as _CFG
+         _max_tokens = getattr(_CFG, "max_tokens", 4096)
+         _temperature = getattr(_CFG, "temperature", 0.0)
++        _thinking_enabled = self._thinking_enabled
++        if (
++            _thinking_enabled
++            and bool(getattr(_CFG, "disable_thinking_for_simple_s3_inventory", True))
++            and _is_simple_s3_inventory_request(message)
++        ):
++            _thinking_enabled = False
++            try:
++                output_fn(
++                    "[cost control] Extended Thinking disabled for this simple S3 "
++                    "inventory turn; model, cache, and compaction settings unchanged."
++                )
++            except Exception:
++                pass
++        self.last_effective_thinking_enabled = bool(_thinking_enabled)
++        if isinstance(self.last_prompt_metrics, dict):
++            self.last_prompt_metrics["thinking_enabled"] = bool(_thinking_enabled)
+         status_memory: Dict[str, Any] = {}
+         try:
+             from runtime.state import STATE
+@@ -300,7 +355,7 @@ class Agent:
+                 plan_mode=self._plan_mode,
+                 auto_compact_enabled=self._auto_compact_enabled,
+                 output_fn=output_fn,
+-                thinking_enabled=self._thinking_enabled,
++                thinking_enabled=_thinking_enabled,
+                 thinking_budget=self._thinking_budget,
+                 max_tokens=_max_tokens,
+                 temperature=_temperature,
+diff --git a/compact_v5/core/query_engine.py b/compact_v5/core/query_engine.py
+index 233fcc8..6a77271 100644
+--- a/compact_v5/core/query_engine.py
++++ b/compact_v5/core/query_engine.py
+@@ -420,6 +420,7 @@ class QueryEngine:
+         # hard max_turns cap, otherwise the last state file can stay stale.
+         self._turn_budget_warning_sent = False
+         self._final_claim_guard_sent = False
++        self._intent_drift_guard_sent = False
+         # Preserve the original user request outside `self.messages` so exact
+         # deliverables survive compaction/truncation and remain available to
+         # max-turn/final-claim guards.
+@@ -1115,6 +1116,15 @@ class QueryEngine:
+                     })
+                     continue
+                 if response.text:
++                    guard = self._intent_drift_guard_message(response.text)
++                    if guard:
++                        output_fn("[intent-drift guard: S3 inventory evidence is not ready; continuing]")
++                        self.messages.append({
++                            "role": "user",
++                            "content": [{"type": "text", "text": guard}],
++                            "is_meta": True,
++                        })
++                        continue
+                     output_fn(response.text)
+                 break
+ 
+@@ -1402,6 +1412,8 @@ class QueryEngine:
+             _class_key = (call.name, _predicted_failure_class)
+             _class_count = self._tool_failure_class_counts.get(_class_key, 0)
+             _should_block_class = _class_count >= 2
++            if _predicted_failure_class == "bash_aws_s3_cli_blocked":
++                _should_block_class = _class_count >= 1
+             if _predicted_failure_class == "python_exec_error":
+                 _should_block_class = (
+                     _should_block_class
+@@ -1680,6 +1692,8 @@ class QueryEngine:
+             return "read_before_write"
+         if tool_name == "bash" and "command not allowed: 'cd'" in t:
+             return "bash_cd_blocked"
++        if tool_name == "bash" and "aws s3 cli is blocked by the bash allowlist" in t:
++            return "bash_aws_s3_cli_blocked"
+         if tool_name == "python_exec" and (
+             "syntaxerror" in t
+             or "unicodeencodeerror" in t
+@@ -1712,6 +1726,11 @@ class QueryEngine:
+                 "allowed command directly from the current workspace or use the "
+                 "dedicated file tools."
+             ),
++            "bash_aws_s3_cli_blocked": (
++                "aws s3/aws s3api is blocked in bash. Stop retrying the CLI; "
++                "use the read-only aws_s3_list tool for S3 bucket/prefix "
++                "inventory, or report the exact AWS credential/permission blocker."
++            ),
+             "python_exec_error": (
+                 "python_exec has failed repeatedly. Stop retrying near-identical "
+                 "scripts; simplify the script, remove non-ASCII/path escaping "
+@@ -1731,6 +1750,8 @@ class QueryEngine:
+             return "python_exec_error"
+         if tool_name == "bash":
+             command = str(args.get("command", "")).strip().lower()
++            if re.search(r"\baws\s+s3(?:api)?\b", command):
++                return "bash_aws_s3_cli_blocked"
+             if command == "cd" or command.startswith("cd ") or "&& cd " in command or command.startswith("cd\t"):
+                 return "bash_cd_blocked"
+             return None
+@@ -2269,6 +2290,93 @@ class QueryEngine:
+         )
+         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+ 
++    def _intent_drift_guard_message(self, text: str) -> str:
++        """Keep S3 inventory answers from drifting into local workspace inventory."""
++        if self._intent_drift_guard_sent:
++            return ""
++        requested = self._requested_user_text()
++        if not self._is_s3_inventory_request(requested):
++            return ""
++
++        final_lower = (text or "").lower()
++        if not final_lower:
++            return ""
++        if self._final_text_has_s3_answer_or_blocker(final_lower):
++            return ""
++
++        local_signals = (
++            "compact_v5",
++            "agent.py",
++            "core/",
++            "tools/",
++            "ui/",
++            "repository",
++            "source tree",
++            "workspace",
++            "local file",
++        )
++        if not any(signal in final_lower for signal in local_signals):
++            return ""
++
++        self._intent_drift_guard_sent = True
++        body = (
++            "Intent-drift guard: the user asked for S3 bucket/file structure, "
++            "but the draft answer appears to describe the local workspace or "
++            "compact_v5 source tree instead. Do not substitute repository "
++            "inventory for S3 inventory. Use the read-only `aws_s3_list` tool "
++            "for bucket/prefix inventory when allowed, or clearly report the "
++            "actual blocker (for example Bedrock-only, bash allowlist, approval, "
++            "AWS credentials, or AWS permissions) and stop."
++        )
++        return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
++
++    @staticmethod
++    def _is_s3_inventory_request(text: str) -> bool:
++        lowered = (text or "").lower()
++        if "s3" not in lowered:
++            return False
++        inventory_terms = (
++            "list",
++            "inventory",
++            "structure",
++            "bucket",
++            "buckets",
++            "prefix",
++            "prefixes",
++            "files",
++            "objects",
++        )
++        return any(term in lowered for term in inventory_terms)
++
++    @staticmethod
++    def _final_text_has_s3_answer_or_blocker(final_lower: str) -> bool:
++        s3_answer_terms = (
++            "s3 bucket",
++            "s3 buckets",
++            "bucket:",
++            "buckets:",
++            "prefixes:",
++            "objects:",
++            "s3://",
++            "aws_s3_list",
++        )
++        if any(term in final_lower for term in s3_answer_terms):
++            return True
++        blocker_terms = (
++            "aws_bedrock_only=true",
++            "bedrock-only",
++            "bash allowlist",
++            "python sandbox",
++            "approval",
++            "credentials",
++            "access denied",
++            "permission",
++            "not authorized",
++            "unable to list s3",
++            "could not list s3",
++        )
++        return "s3" in final_lower and any(term in final_lower for term in blocker_terms)
++
+     def _current_workspace(self) -> str:
+         try:
+             from runtime.config import CONFIG
+diff --git a/compact_v5/prompt/tool_classes.md b/compact_v5/prompt/tool_classes.md
+index 810b549..3a413b8 100644
+--- a/compact_v5/prompt/tool_classes.md
++++ b/compact_v5/prompt/tool_classes.md
+@@ -15,6 +15,11 @@ Two classes of tools. Block messages name only `bash`/`python_exec` because thos
+ 
+ **Repetition guard**: identical calls auto-blocked at 3 (or 2 for `read_file`). On `[Warning: Repetitive ... stopping]`, switch tactic.
+ 
++For simple S3 bucket/file structure inventory, use the always-loaded
++`aws_s3_list` tool directly. Do not spend a turn on `tool_search`, and do not
++retry blocked `aws s3`/`aws s3api` bash commands; the next CLI retry is
++intentionally blocked so cost stays bounded.
++
+ ## When `bash`/`python_exec` is BLOCKED
+ 
+ DO NOT default to "ask user to start a new session". MOST diagnostics finish with read-only tools.
+diff --git a/compact_v5/runtime/config.py b/compact_v5/runtime/config.py
+index d36dbf8..8fc0ff1 100644
+--- a/compact_v5/runtime/config.py
++++ b/compact_v5/runtime/config.py
+@@ -57,6 +57,7 @@ class Config:
+     temperature: float = 0.0
+     thinking_enabled: bool = False  # Extended thinking OFF by default
+     thinking_budget: int = 8192  # Tokens for thinking (1024-16000)
++    disable_thinking_for_simple_s3_inventory: bool = True
+ 
+     # Testing
+     mock_mode: bool = False  # Set True to test without Bedrock API
+@@ -229,7 +230,7 @@ def _apply_config_file(config: Config) -> None:
+     _SCALAR_FIELDS: Dict[str, type] = {
+         "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
+         "max_history": int, "temperature": float, "thinking_enabled": bool,
+-        "thinking_budget": int, "mock_mode": bool,
++        "thinking_budget": int, "disable_thinking_for_simple_s3_inventory": bool, "mock_mode": bool,
+         "bash_allow_interpreters": bool, "bash_allow_docker": bool,
+         "execution_mode": str, "exec_docker_image": str,
+         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
+diff --git a/compact_v5/ui/chat_ui.py b/compact_v5/ui/chat_ui.py
+index 6e0e858..abb4ae7 100644
+--- a/compact_v5/ui/chat_ui.py
++++ b/compact_v5/ui/chat_ui.py
+@@ -284,6 +284,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         self._run_lock = threading.Lock()
+         self._render_generation = 0
+         self._live_assistant_index = None
++        self._tool_card_indices: Dict[str, int] = {}
+         self._ui_running = False
+         self._build()
+ 
+@@ -525,21 +526,12 @@ class V4WidgetChatUI(WidgetChatUI):
+                 elif role == "tool":
+                     color = "#ffb74d"
+                     label = f"Tool: {self._escape((meta or {}).get('tool_name', 'tool'))}"
+-                    phase = self._escape((meta or {}).get("phase", "result"))
+-                    body = (
+-                        f"<div style='color:{c['muted']};font-size:11px;margin-bottom:4px;'>"
+-                        f"{phase}</div>"
+-                        f"<pre style='white-space:pre-wrap;max-height:260px;overflow:auto;"
+-                        f"background:{'#151515' if self._dark_mode else '#f7f7f7'};"
+-                        f"border:1px solid {c['border']};border-radius:6px;padding:8px;"
+-                        "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
+-                        f"font-size:12px;color:{c['fg']};'>{self._escape(text)}</pre>"
+-                    )
++                    body = self._render_tool_card(text, meta or {}, c)
+                 elif role == "thinking":
+                     color = "#ab47bc"
+                     label = "Thinking"
+                     body = (
+-                        f"<details open><summary style='cursor:pointer;color:{color};'>"
++                        f"<details><summary style='cursor:pointer;color:{color};'>"
+                         "Reasoning / thinking</summary>"
+                         f"<div style='color:{c['muted']};font-size:12px;line-height:1.45;"
+                         f"margin-top:4px;'>{self._escape(text).replace(chr(10), '<br>')}</div></details>"
+@@ -578,6 +570,45 @@ class V4WidgetChatUI(WidgetChatUI):
+             content = "".join(rows)
+         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
+ 
++    def _render_tool_card(self, text: str, meta: Dict[str, Any], colors: Dict[str, str]) -> str:
++        """Render one collapsed v4-style tool card, grouping call + result."""
++        tool_name = self._escape(meta.get("tool_name", "tool"))
++        phase = self._escape(meta.get("phase", "result"))
++        tool_use_id = self._escape(meta.get("tool_use_id", ""))
++        input_text = str(meta.get("input_text", text) or "")
++        result_text = str(meta.get("result_text", "") or "")
++        is_error = bool(meta.get("is_error", False))
++        status_color = "#ef5350" if is_error else "#66bb6a"
++        status = "error" if is_error else ("done" if result_text else "running")
++        bg = "#151515" if self._dark_mode else "#f7f7f7"
++        border = colors["border"]
++        muted = colors["muted"]
++
++        def _pre(value: str) -> str:
++            if not value:
++                return f"<span style='color:{muted};font-size:12px;'>(waiting)</span>"
++            return (
++                f"<pre style='white-space:pre-wrap;max-height:220px;overflow:auto;"
++                f"background:{bg};border:1px solid {border};border-radius:6px;"
++                "padding:8px;margin:4px 0 0 0;"
++                "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
++                f"font-size:12px;color:{colors['fg']};'>{self._escape(value)}</pre>"
++            )
++
++        id_part = f" · id {tool_use_id}" if tool_use_id else ""
++        return (
++            f"<details class='sageagent-tool-card' style='border:1px solid {border};"
++            "border-radius:6px;padding:6px 8px;'>"
++            f"<summary style='cursor:pointer;color:#ffb74d;font-size:12px;'>"
++            f"<b>{tool_name}</b> · <span style='color:{status_color}'>{status}</span>"
++            f" · {phase}{id_part}</summary>"
++            f"<div style='margin-top:6px;color:{muted};font-size:11px;'>Tool input</div>"
++            f"{_pre(input_text)}"
++            f"<div style='margin-top:8px;color:{muted};font-size:11px;'>Tool result</div>"
++            f"{_pre(result_text)}"
++            "</details>"
++        )
++
+     def _format_inline_md(self, text: str, dark: bool) -> str:
+         """Render the same safe inline markdown subset as compact_v4."""
+         safe = self._escape(text)
+@@ -967,7 +998,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         return (
+             f"<div style='color:{colors['muted']};font-size:11px;margin-top:6px;"
+             f"border-top:1px solid {colors['border']};padding-top:4px;'>"
+-            f"{summary}{thinking_html}</div>"
++            f"{thinking_html}<div class='sageagent-turn-metrics'>{summary}</div></div>"
+         )
+ 
+     def _stats_snapshot(self) -> Dict[str, Any]:
+@@ -984,7 +1015,12 @@ class V4WidgetChatUI(WidgetChatUI):
+         input_tokens = int(stats.get("session_input", 0) or 0)
+         output_tokens = int(stats.get("session_output", 0) or 0)
+         calls = int(stats.get("api_calls", 0) or 0)
+-        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
++        effective_thinking = getattr(
++            self.agent,
++            "last_effective_thinking_enabled",
++            getattr(self.agent, "thinking_enabled", False),
++        )
++        thinking_state = "ON" if bool(effective_thinking) else "OFF"
+         if calls <= 0:
+             return (
+                 "Cost drivers: no calls yet; measure calls, output tokens, thinking state, "
+@@ -1027,7 +1063,12 @@ class V4WidgetChatUI(WidgetChatUI):
+         def _num(key: str) -> float:
+             return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
+ 
+-        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
++        effective_thinking = getattr(
++            self.agent,
++            "last_effective_thinking_enabled",
++            getattr(self.agent, "thinking_enabled", False),
++        )
++        thinking_state = "ON" if bool(effective_thinking) else "OFF"
+         thinking_budget = int(getattr(self.agent, "thinking_budget", 4096) or 4096)
+         return {
+             "input_tokens": int(_num("session_input")),
+@@ -1059,6 +1100,84 @@ class V4WidgetChatUI(WidgetChatUI):
+         self._render_chat()
+         return len(self._messages) - 1
+ 
++    def _append_tool_call_card(self, event: Dict[str, Any]) -> int:
++        name = str(event.get("name", "tool") or "tool")
++        tool_use_id = str(event.get("tool_use_id", "") or "")
++        try:
++            input_text = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
++        except Exception:
++            input_text = str(event.get("input", {}) or {})
++        idx = self._append_message(
++            "tool",
++            input_text,
++            {
++                "phase": "call requested",
++                "tool_use_id": tool_use_id,
++                "input_text": input_text,
++                "result_text": "",
++                "is_error": False,
++            },
++            tool_name=name,
++        )
++        if tool_use_id:
++            self._tool_card_indices[tool_use_id] = idx
++        return idx
++
++    def _append_or_update_tool_result_card(self, event: Dict[str, Any]) -> int:
++        name = str(event.get("name", "tool") or "tool")
++        tool_use_id = str(event.get("tool_use_id", "") or "")
++        body = str(event.get("content", "") or "")
++        if len(body) > 12000:
++            body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
++        phase = "error result" if event.get("is_error") else "result"
++        idx = self._tool_card_indices.get(tool_use_id) if tool_use_id else None
++        if idx is None or idx < 0 or idx >= len(self._messages):
++            return self._append_message(
++                "tool",
++                body,
++                {
++                    "phase": phase,
++                    "tool_use_id": tool_use_id,
++                    "input_text": "",
++                    "result_text": body,
++                    "is_error": bool(event.get("is_error")),
++                },
++                tool_name=name,
++            )
++
++        message = self._messages[idx]
++        if len(message) == 4:
++            role, text, ts, old_meta = message
++        else:
++            role, text, ts = message
++            old_meta = {}
++        if role != "tool" or str((old_meta or {}).get("tool_use_id", "") or "") != tool_use_id:
++            return self._append_message(
++                "tool",
++                body,
++                {
++                    "phase": phase,
++                    "tool_use_id": tool_use_id,
++                    "input_text": "",
++                    "result_text": body,
++                    "is_error": bool(event.get("is_error")),
++                },
++                tool_name=name,
++            )
++        meta = dict(old_meta or {})
++        meta.update({
++            "phase": phase,
++            "tool_use_id": tool_use_id,
++            "result_text": body,
++            "is_error": bool(event.get("is_error")),
++            "tool_name": name,
++        })
++        if "input_text" not in meta:
++            meta["input_text"] = text
++        self._messages[idx] = (role, text, ts, meta)
++        self._render_chat()
++        return idx
++
+     def _set_message_meta(self, index: Optional[int], meta: Dict[str, Any]) -> None:
+         if index is None or index < 0 or index >= len(self._messages):
+             return
+@@ -1107,7 +1226,17 @@ class V4WidgetChatUI(WidgetChatUI):
+         if tool_match:
+             tool = tool_match.group(1)
+             body = tool_match.group(2).strip()
+-            self._append_message("tool", body, {"phase": "result from output stream"}, tool_name=tool)
++            self._append_message(
++                "tool",
++                body,
++                {
++                    "phase": "result from output stream",
++                    "input_text": "(stream-only; input not captured)",
++                    "result_text": body,
++                    "is_error": False,
++                },
++                tool_name=tool,
++            )
+             self._render_status()
+             return None
+         if self._is_status_output(stripped):
+@@ -1178,11 +1307,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         event_type = str(event.get("type", "tool_generation"))
+         name = str(event.get("name", "tool") or "tool")
+         if event_type == "tool_generation":
+-            try:
+-                body = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
+-            except Exception:
+-                body = str(event.get("input", {}) or {})
+-            self._append_message("tool", body, {"phase": "call requested"}, tool_name=name)
++            self._append_tool_call_card(event)
+         elif event_type == "tool_result":
+             body = str(event.get("content", "") or "")
+             if name == "task":
+@@ -1191,10 +1316,7 @@ class V4WidgetChatUI(WidgetChatUI):
+                     self._append_message("subagent", parsed["text"], parsed["meta"])
+                     self._render_status()
+                     return
+-            if len(body) > 12000:
+-                body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
+-            phase = "error result" if event.get("is_error") else "result"
+-            self._append_message("tool", body, {"phase": phase}, tool_name=name)
++            self._append_or_update_tool_result_card(event)
+         self._render_status()
+ 
+     def _dispatch_ui_command(self, command: str) -> None:
+@@ -1291,6 +1413,7 @@ class V4WidgetChatUI(WidgetChatUI):
+     def _on_clear(self, _btn) -> None:
+         self.agent.clear()
+         self._messages.clear()
++        self._tool_card_indices.clear()
+         self._render_chat()
+         self.budget_widget.update()
+         self._render_status()
+@@ -1298,6 +1421,7 @@ class V4WidgetChatUI(WidgetChatUI):
+     def _on_new(self, _btn) -> None:
+         self.agent.clear(reset_budget=True)
+         self._messages.clear()
++        self._tool_card_indices.clear()
+         self._render_chat()
+         self._render_status()
+ 
+@@ -1306,6 +1430,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         if not messages:
+             self._append_message("system", "No conversation to compact.")
+             return
++        self._tool_card_indices.clear()
+         self._status_html.value = "<span style='color:#ff9800'><b>* Compacting</b></span>"
+         try:
+             from core.compactor import Compactor

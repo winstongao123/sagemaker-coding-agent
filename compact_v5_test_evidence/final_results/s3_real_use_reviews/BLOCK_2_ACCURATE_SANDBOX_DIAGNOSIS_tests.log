@@ -1,0 +1,13 @@
+﻿Commands:
+- python -m py_compile compact_v5/security/diagnostics.py compact_v5/tools/python_exec.py compact_v5/tests/test_restriction_diagnostics.py
+- python compact_v5/tests/test_restriction_diagnostics.py
+
+Result:
+- py_compile: PASS
+- restriction diagnostics smoke: OK
+
+Assertions covered:
+- bash aws s3 block names bash allowlist and aws_s3_list, not aws_bedrock_only=true when CONFIG.aws_bedrock_only=False
+- python static import block names Python sandbox import allowlist
+- python runtime import-hook block names Python sandbox import allowlist and module name
+- python_exec result includes [diagnosis] for static import allowlist block

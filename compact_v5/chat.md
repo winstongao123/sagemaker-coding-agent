@@ -227,3 +227,24 @@ The notebook chat is now a live supervisor surface:
 - The footer includes display-only cost-driver measurement. Use it to compare
   output tokens, calls, Thinking ON/OFF, cache hit rate, and subagent
   attribution before changing model, prompt, cache, or compaction settings.
+
+## S3 Read-Only Inventory
+
+For S3 bucket/file structure questions, use read-only inventory behavior:
+
+- Keep `Bedrock-only` off when you intentionally want S3 reads. When it is on,
+  S3 is blocked and only Bedrock Runtime is allowed.
+- v5 uses the dedicated `aws_s3_list` tool for S3 bucket/prefix inventory.
+  Do not use `aws s3` or `aws s3api` through bash; those CLI paths are blocked
+  by the bash allowlist and the UI/agent will direct the turn back to
+  `aws_s3_list`.
+- `aws_s3_list` is always visible, so simple S3 inventory should not spend an
+  extra turn on `tool_search`.
+- If Extended Thinking is on and the request is a simple read-only S3
+  inventory, v5 disables thinking for that turn only and displays a
+  `[cost control]` notice. Your persistent Thinking toggle is not changed.
+- Tool calls/results render as one collapsed card per `tool_use_id`. Expand the
+  card only when you need the full input/result body.
+- If S3 cannot be listed, the answer should name the actual blocker: Bedrock-only
+  mode, bash allowlist, Python sandbox import allowlist, approval, credentials,
+  or AWS permissions.

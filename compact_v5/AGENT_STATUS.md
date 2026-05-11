@@ -153,3 +153,40 @@ Learning doc ready:
 - It was expanded after an evidence sweep across changelogs, phase plans,
   implementation/status docs, final tests, result summaries, and review logs.
   A companion HTML summary exists at the same basename with `.html`.
+
+---
+
+## 2026-05-11 S3 Real-Use Fix - Implemented
+
+Current task state: runtime fixes implemented for the hand-run prompt
+`list file and bucket structure of my s3`.
+
+Implemented:
+- read-only `aws_s3_list` tool for S3 bucket and first-level prefix/object
+  inventory, always visible and never deferred behind `tool_search`;
+- bash `aws s3` / `aws s3api` blocks now name the bash allowlist and point to
+  `aws_s3_list` instead of being misdiagnosed as Bedrock-only when
+  Bedrock-only is off;
+- python_exec sandbox import failures now include a `[diagnosis]` block naming
+  the Python sandbox import allowlist;
+- S3 intent-drift guard prevents a final S3 inventory answer from drifting into
+  compact_v5/local source-tree inventory;
+- tool call/result cards are collapsed and grouped by `tool_use_id`;
+- thinking details are collapsed by default and render before per-turn metrics;
+- simple S3 inventory turns disable Extended Thinking for that turn only when
+  `disable_thinking_for_simple_s3_inventory=True`, with a visible cost-control
+  notice and no model/cache/compaction changes;
+- repeated blocked `aws s3` CLI retries are one-strike blocked after the first
+  recorded bash allowlist failure.
+
+Evidence:
+- per-block worker prompts, diffs, tests, and Claude reviews:
+  `compact_v5_test_evidence/final_results/s3_real_use_reviews/`;
+- source smoke tests under `compact_v5/tests/`;
+- final zip verification report:
+  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
+
+Real AWS note:
+- a read-only real S3 smoke is attempted during final integration only if
+  credentials are available in the environment; failures are recorded as
+  environment/permission evidence, not hidden.

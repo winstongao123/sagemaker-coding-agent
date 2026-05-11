@@ -399,3 +399,28 @@ The S3-access policy needs a call:
 
 This is a config/policy decision, not a code question. Worker should
 not pick one unilaterally.
+
+## Implementation Status - 2026-05-11
+
+Active tree: flattened `compact_v5/`. The older nested
+`compact_v5/compact_v5/` paths above are historical source references.
+
+| Problem | Status | Implementation / evidence |
+|---|---|---|
+| P0 S3 safe-read path | Fixed in code; real AWS smoke recorded during final integration | Added read-only `tools/aws_s3_list.py`, registered as always-loaded and plan-mode allowed. It lists buckets or first-level prefixes/objects with pagination token support and blocks when `CONFIG.aws_bedrock_only=True`. Evidence: `BLOCK_1_S3_SAFE_READ_*` under `compact_v5_test_evidence/final_results/s3_real_use_reviews/`. |
+| P0 wrong self-diagnosis | Fixed | `security/manager.py` now names the bash allowlist for `aws s3` / `aws s3api` when Bedrock-only is off, and `security/diagnostics.py` plus `tools/python_exec.py` add Python sandbox import-allowlist diagnosis. Evidence: `BLOCK_2_ACCURATE_SANDBOX_DIAGNOSIS_*`. |
+| P0 drift from S3 inventory to source tree | Fixed with targeted guard | `core/query_engine.py` now injects an intent-drift guard when an S3 inventory request is about to be answered with local workspace/source-tree content instead of an S3 answer or explicit S3 blocker. Evidence: `BLOCK_3_INTENT_DRIFT_GUARD_*`. |
+| P1 tool cards collapsed/grouped | Fixed | `ui/chat_ui.py` groups tool call/result events by `tool_use_id` into one collapsed card with input and result sections. Evidence: `BLOCK_4_TOOL_CARDS_COLLAPSE_GROUPING_*`. |
+| P1 thinking placement/collapse | Fixed | Standalone and turn-level thinking render in closed `<details>` by default; turn-level thinking now appears before `sageagent-turn-metrics`. Evidence: `BLOCK_5_THINKING_PLACEMENT_COLLAPSE_*`. |
+| P1 cost control for simple inventory | Fixed with bounded controls | `agent.py` disables Extended Thinking only for simple read-only S3 inventory turns when `disable_thinking_for_simple_s3_inventory=True`; `aws_s3_list` is always visible to avoid tool_search tax; `core/query_engine.py` one-strike blocks repeated bash `aws s3` retries after the first allowlist failure. Evidence: `BLOCK_6_COST_CONTROLS_SIMPLE_S3_INVENTORY_*`. |
+| P2 deferred-tool tax for common tools | Partially addressed for S3 only | The S3 inventory path is not deferred. Broader tool deferral changes were not made because this block measured the concrete S3 cause and avoided broad prompt/toolset churn. |
+
+Verification:
+- `python -m py_compile` passed for changed production modules and smoke tests.
+- Focused zero-cost smoke tests passed:
+  `test_aws_s3_list_tool.py`, `test_restriction_diagnostics.py`,
+  `test_s3_intent_drift_guard.py`, `test_ui_tool_cards_smoke.py`,
+  `test_ui_thinking_smoke.py`, and `test_s3_cost_controls.py`.
+- Per-block Claude CLI reviews used the subscription command with
+  `ANTHROPIC_API_KEY` and `CLAUDE_CODE_USE_BEDROCK` cleared. Blocks 0-6 were
+  approved after required fixes.

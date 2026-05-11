@@ -1,0 +1,56 @@
+diff --git a/compact_v5/prompt/security.md b/compact_v5/prompt/security.md
+index 335aeb0..327c333 100644
+--- a/compact_v5/prompt/security.md
++++ b/compact_v5/prompt/security.md
+@@ -10,5 +10,12 @@
+     used with the normal approval gate.
+   - S3 destructive/admin operations remain blocked in both modes, including
+     `delete_object`, `delete_objects`, and `delete_bucket`.
++  - For S3 bucket or prefix inventory, use the `aws_s3_list` tool. Do not use
++    or retry `aws s3` / `aws s3api` through bash; the bash allowlist blocks
++    those CLI paths even when Bedrock-only is off.
+   - Bedrock calls are allowed subject to the configured budget and model settings.
++- When a tool is blocked, name the actual enforcement layer: bash allowlist,
++  python_exec import allowlist, `aws_bedrock_only=true`, approval denial, or AWS
++  permissions. Do not infer Bedrock-only from a sandbox/import failure when
++  Bedrock-only is off or when the block text does not say `aws_bedrock_only=true`.
+ - No independent goals. Comply with stop immediately.
+diff --git a/compact_v5/tools/python_exec.py b/compact_v5/tools/python_exec.py
+index 8ef6180..fa07c8f 100644
+--- a/compact_v5/tools/python_exec.py
++++ b/compact_v5/tools/python_exec.py
+@@ -34,6 +34,10 @@ from security.manager import (
+     run_subprocess,
+     safe_exec_env,
+ )
++from security.diagnostics import (
++    python_exec_runtime_diagnosis,
++    python_exec_security_block_diagnosis,
++)
+ 
+ 
+ _DESCRIPTION = """Execute Python code in a sandboxed subprocess.
+@@ -232,6 +236,11 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
+ 
+     ok, msg = _security_manager.SECURITY.validate_python(code)
+     if not ok:
++        diagnosis = python_exec_security_block_diagnosis(
++            msg, aws_bedrock_only=CONFIG.aws_bedrock_only
++        )
++        if diagnosis:
++            return f"Security blocked: {msg}\n[diagnosis]\n{diagnosis}"
+         return f"Security blocked: {msg}"
+ 
+     # Build preamble at call time (captures current CONFIG state).
+@@ -266,6 +275,11 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
+             output += f"\n[stderr]\n{result.stderr}"
+         if result.returncode != 0:
+             output += f"\n[exit code: {result.returncode}]"
++        diagnosis = python_exec_runtime_diagnosis(
++            output, aws_bedrock_only=CONFIG.aws_bedrock_only
++        )
++        if diagnosis:
++            output += f"\n[diagnosis]\n{diagnosis}"
+         return _security_manager.SECURITY.truncate_output(output) if output else "(no output)"
+     except _subprocess.TimeoutExpired:
+         return f"Error: code timed out after {timeout} seconds"

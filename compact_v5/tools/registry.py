@@ -46,7 +46,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set,
 PLAN_MODE_ALLOWED_TOOLS: frozenset = frozenset({
     "read_file", "glob", "grep", "list_dir", "semantic_search",
     "todo_write", "todo_read", "view_image", "skill", "web_fetch", "ask_user",
-    "result_replay",
+    "result_replay", "aws_s3_list",
 })
 
 

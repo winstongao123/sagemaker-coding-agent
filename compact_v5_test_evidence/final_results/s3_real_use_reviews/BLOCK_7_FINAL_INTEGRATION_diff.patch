@@ -1,0 +1,912 @@
+﻿diff --git a/compact_v5.zip b/compact_v5.zip
+index ae1390c..b585db7 100644
+Binary files a/compact_v5.zip and b/compact_v5.zip differ
+diff --git a/compact_v5/AGENT_STATUS.md b/compact_v5/AGENT_STATUS.md
+index 0d25e9f..03f3dbd 100644
+--- a/compact_v5/AGENT_STATUS.md
++++ b/compact_v5/AGENT_STATUS.md
+@@ -153,3 +153,40 @@ Learning doc ready:
+ - It was expanded after an evidence sweep across changelogs, phase plans,
+   implementation/status docs, final tests, result summaries, and review logs.
+   A companion HTML summary exists at the same basename with `.html`.
++
++---
++
++## 2026-05-11 S3 Real-Use Fix - Implemented
++
++Current task state: runtime fixes implemented for the hand-run prompt
++`list file and bucket structure of my s3`.
++
++Implemented:
++- read-only `aws_s3_list` tool for S3 bucket and first-level prefix/object
++  inventory, always visible and never deferred behind `tool_search`;
++- bash `aws s3` / `aws s3api` blocks now name the bash allowlist and point to
++  `aws_s3_list` instead of being misdiagnosed as Bedrock-only when
++  Bedrock-only is off;
++- python_exec sandbox import failures now include a `[diagnosis]` block naming
++  the Python sandbox import allowlist;
++- S3 intent-drift guard prevents a final S3 inventory answer from drifting into
++  compact_v5/local source-tree inventory;
++- tool call/result cards are collapsed and grouped by `tool_use_id`;
++- thinking details are collapsed by default and render before per-turn metrics;
++- simple S3 inventory turns disable Extended Thinking for that turn only when
++  `disable_thinking_for_simple_s3_inventory=True`, with a visible cost-control
++  notice and no model/cache/compaction changes;
++- repeated blocked `aws s3` CLI retries are one-strike blocked after the first
++  recorded bash allowlist failure.
++
++Evidence:
++- per-block worker prompts, diffs, tests, and Claude reviews:
++  `compact_v5_test_evidence/final_results/s3_real_use_reviews/`;
++- source smoke tests under `compact_v5/tests/`;
++- final zip verification report:
++  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
++
++Real AWS note:
++- a read-only real S3 smoke is attempted during final integration only if
++  credentials are available in the environment; failures are recorded as
++  environment/permission evidence, not hidden.
+diff --git a/compact_v5/agent.py b/compact_v5/agent.py
+index c857c9a..bc8917a 100644
+--- a/compact_v5/agent.py
++++ b/compact_v5/agent.py
+@@ -20,6 +20,7 @@ PORT_LOG: #031.
+ from __future__ import annotations
+ 
+ from typing import Any, Callable, Dict, Iterable, List, Optional
++import re
+ 
+ from core import IterationBudget, QueryEngine
+ from core.query_engine import QueryResult
+@@ -140,6 +141,42 @@ def _build_prompt_metrics(
+     }
+ 
+ 
++def _is_simple_s3_inventory_request(message: str) -> bool:
++    """Detect a narrow S3 list/inventory request suitable for lower-cost mode."""
++    lowered = (message or "").lower()
++    if "s3" not in lowered:
++        return False
++    if any(term in lowered for term in ("delete", "remove", "upload", "put object", "write")):
++        return False
++    inventory_terms = (
++        "list",
++        "inventory",
++        "structure",
++        "bucket",
++        "buckets",
++        "prefix",
++        "prefixes",
++        "files",
++        "objects",
++    )
++    if not any(term in lowered for term in inventory_terms):
++        return False
++    coding_terms = (
++        "fix",
++        "implement",
++        "refactor",
++        "debug",
++        "test",
++        "modify",
++        "code",
++        "repo",
++        "repository",
++    )
++    if any(re.search(rf"\b{term}\b", lowered) for term in coding_terms):
++        return False
++    return True
++
++
+ class Agent:
+     """Minimal public Agent wrapping the Phase 8-10 surfaces."""
+ 
+@@ -204,6 +241,7 @@ class Agent:
+         self._auto_compact_enabled = bool(auto_compact_enabled)
+         self._thinking_enabled = bool(thinking_enabled)
+         self._thinking_budget = int(thinking_budget)
++        self.last_effective_thinking_enabled = bool(thinking_enabled)
+         self._ui_subagent_preferences: Dict[str, Any] = {}
+         self.last_prompt_metrics: Dict[str, Any] = {}
+         # Historical B+ state retained for compatibility with tests that
+@@ -272,6 +310,23 @@ class Agent:
+         from runtime.config import CONFIG as _CFG
+         _max_tokens = getattr(_CFG, "max_tokens", 4096)
+         _temperature = getattr(_CFG, "temperature", 0.0)
++        _thinking_enabled = self._thinking_enabled
++        if (
++            _thinking_enabled
++            and bool(getattr(_CFG, "disable_thinking_for_simple_s3_inventory", True))
++            and _is_simple_s3_inventory_request(message)
++        ):
++            _thinking_enabled = False
++            try:
++                output_fn(
++                    "[cost control] Extended Thinking disabled for this simple S3 "
++                    "inventory turn; model, cache, and compaction settings unchanged."
++                )
++            except Exception:
++                pass
++        self.last_effective_thinking_enabled = bool(_thinking_enabled)
++        if isinstance(self.last_prompt_metrics, dict):
++            self.last_prompt_metrics["thinking_enabled"] = bool(_thinking_enabled)
+         status_memory: Dict[str, Any] = {}
+         try:
+             from runtime.state import STATE
+@@ -300,7 +355,7 @@ class Agent:
+                 plan_mode=self._plan_mode,
+                 auto_compact_enabled=self._auto_compact_enabled,
+                 output_fn=output_fn,
+-                thinking_enabled=self._thinking_enabled,
++                thinking_enabled=_thinking_enabled,
+                 thinking_budget=self._thinking_budget,
+                 max_tokens=_max_tokens,
+                 temperature=_temperature,
+diff --git a/compact_v5/chat.md b/compact_v5/chat.md
+index 6addef2..3bfcd7a 100644
+--- a/compact_v5/chat.md
++++ b/compact_v5/chat.md
+@@ -227,3 +227,24 @@ The notebook chat is now a live supervisor surface:
+ - The footer includes display-only cost-driver measurement. Use it to compare
+   output tokens, calls, Thinking ON/OFF, cache hit rate, and subagent
+   attribution before changing model, prompt, cache, or compaction settings.
++
++## S3 Read-Only Inventory
++
++For S3 bucket/file structure questions, use read-only inventory behavior:
++
++- Keep `Bedrock-only` off when you intentionally want S3 reads. When it is on,
++  S3 is blocked and only Bedrock Runtime is allowed.
++- v5 uses the dedicated `aws_s3_list` tool for S3 bucket/prefix inventory.
++  Do not use `aws s3` or `aws s3api` through bash; those CLI paths are blocked
++  by the bash allowlist and the UI/agent will direct the turn back to
++  `aws_s3_list`.
++- `aws_s3_list` is always visible, so simple S3 inventory should not spend an
++  extra turn on `tool_search`.
++- If Extended Thinking is on and the request is a simple read-only S3
++  inventory, v5 disables thinking for that turn only and displays a
++  `[cost control]` notice. Your persistent Thinking toggle is not changed.
++- Tool calls/results render as one collapsed card per `tool_use_id`. Expand the
++  card only when you need the full input/result body.
++- If S3 cannot be listed, the answer should name the actual blocker: Bedrock-only
++  mode, bash allowlist, Python sandbox import allowlist, approval, credentials,
++  or AWS permissions.
+diff --git a/compact_v5/core/query_engine.py b/compact_v5/core/query_engine.py
+index 233fcc8..6a77271 100644
+--- a/compact_v5/core/query_engine.py
++++ b/compact_v5/core/query_engine.py
+@@ -420,6 +420,7 @@ class QueryEngine:
+         # hard max_turns cap, otherwise the last state file can stay stale.
+         self._turn_budget_warning_sent = False
+         self._final_claim_guard_sent = False
++        self._intent_drift_guard_sent = False
+         # Preserve the original user request outside `self.messages` so exact
+         # deliverables survive compaction/truncation and remain available to
+         # max-turn/final-claim guards.
+@@ -1115,6 +1116,15 @@ class QueryEngine:
+                     })
+                     continue
+                 if response.text:
++                    guard = self._intent_drift_guard_message(response.text)
++                    if guard:
++                        output_fn("[intent-drift guard: S3 inventory evidence is not ready; continuing]")
++                        self.messages.append({
++                            "role": "user",
++                            "content": [{"type": "text", "text": guard}],
++                            "is_meta": True,
++                        })
++                        continue
+                     output_fn(response.text)
+                 break
+ 
+@@ -1402,6 +1412,8 @@ class QueryEngine:
+             _class_key = (call.name, _predicted_failure_class)
+             _class_count = self._tool_failure_class_counts.get(_class_key, 0)
+             _should_block_class = _class_count >= 2
++            if _predicted_failure_class == "bash_aws_s3_cli_blocked":
++                _should_block_class = _class_count >= 1
+             if _predicted_failure_class == "python_exec_error":
+                 _should_block_class = (
+                     _should_block_class
+@@ -1680,6 +1692,8 @@ class QueryEngine:
+             return "read_before_write"
+         if tool_name == "bash" and "command not allowed: 'cd'" in t:
+             return "bash_cd_blocked"
++        if tool_name == "bash" and "aws s3 cli is blocked by the bash allowlist" in t:
++            return "bash_aws_s3_cli_blocked"
+         if tool_name == "python_exec" and (
+             "syntaxerror" in t
+             or "unicodeencodeerror" in t
+@@ -1712,6 +1726,11 @@ class QueryEngine:
+                 "allowed command directly from the current workspace or use the "
+                 "dedicated file tools."
+             ),
++            "bash_aws_s3_cli_blocked": (
++                "aws s3/aws s3api is blocked in bash. Stop retrying the CLI; "
++                "use the read-only aws_s3_list tool for S3 bucket/prefix "
++                "inventory, or report the exact AWS credential/permission blocker."
++            ),
+             "python_exec_error": (
+                 "python_exec has failed repeatedly. Stop retrying near-identical "
+                 "scripts; simplify the script, remove non-ASCII/path escaping "
+@@ -1731,6 +1750,8 @@ class QueryEngine:
+             return "python_exec_error"
+         if tool_name == "bash":
+             command = str(args.get("command", "")).strip().lower()
++            if re.search(r"\baws\s+s3(?:api)?\b", command):
++                return "bash_aws_s3_cli_blocked"
+             if command == "cd" or command.startswith("cd ") or "&& cd " in command or command.startswith("cd\t"):
+                 return "bash_cd_blocked"
+             return None
+@@ -2269,6 +2290,93 @@ class QueryEngine:
+         )
+         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+ 
++    def _intent_drift_guard_message(self, text: str) -> str:
++        """Keep S3 inventory answers from drifting into local workspace inventory."""
++        if self._intent_drift_guard_sent:
++            return ""
++        requested = self._requested_user_text()
++        if not self._is_s3_inventory_request(requested):
++            return ""
++
++        final_lower = (text or "").lower()
++        if not final_lower:
++            return ""
++        if self._final_text_has_s3_answer_or_blocker(final_lower):
++            return ""
++
++        local_signals = (
++            "compact_v5",
++            "agent.py",
++            "core/",
++            "tools/",
++            "ui/",
++            "repository",
++            "source tree",
++            "workspace",
++            "local file",
++        )
++        if not any(signal in final_lower for signal in local_signals):
++            return ""
++
++        self._intent_drift_guard_sent = True
++        body = (
++            "Intent-drift guard: the user asked for S3 bucket/file structure, "
++            "but the draft answer appears to describe the local workspace or "
++            "compact_v5 source tree instead. Do not substitute repository "
++            "inventory for S3 inventory. Use the read-only `aws_s3_list` tool "
++            "for bucket/prefix inventory when allowed, or clearly report the "
++            "actual blocker (for example Bedrock-only, bash allowlist, approval, "
++            "AWS credentials, or AWS permissions) and stop."
++        )
++        return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
++
++    @staticmethod
++    def _is_s3_inventory_request(text: str) -> bool:
++        lowered = (text or "").lower()
++        if "s3" not in lowered:
++            return False
++        inventory_terms = (
++            "list",
++            "inventory",
++            "structure",
++            "bucket",
++            "buckets",
++            "prefix",
++            "prefixes",
++            "files",
++            "objects",
++        )
++        return any(term in lowered for term in inventory_terms)
++
++    @staticmethod
++    def _final_text_has_s3_answer_or_blocker(final_lower: str) -> bool:
++        s3_answer_terms = (
++            "s3 bucket",
++            "s3 buckets",
++            "bucket:",
++            "buckets:",
++            "prefixes:",
++            "objects:",
++            "s3://",
++            "aws_s3_list",
++        )
++        if any(term in final_lower for term in s3_answer_terms):
++            return True
++        blocker_terms = (
++            "aws_bedrock_only=true",
++            "bedrock-only",
++            "bash allowlist",
++            "python sandbox",
++            "approval",
++            "credentials",
++            "access denied",
++            "permission",
++            "not authorized",
++            "unable to list s3",
++            "could not list s3",
++        )
++        return "s3" in final_lower and any(term in final_lower for term in blocker_terms)
++
+     def _current_workspace(self) -> str:
+         try:
+             from runtime.config import CONFIG
+diff --git a/compact_v5/prompt/security.md b/compact_v5/prompt/security.md
+index 335aeb0..327c333 100644
+--- a/compact_v5/prompt/security.md
++++ b/compact_v5/prompt/security.md
+@@ -10,5 +10,12 @@
+     used with the normal approval gate.
+   - S3 destructive/admin operations remain blocked in both modes, including
+     `delete_object`, `delete_objects`, and `delete_bucket`.
++  - For S3 bucket or prefix inventory, use the `aws_s3_list` tool. Do not use
++    or retry `aws s3` / `aws s3api` through bash; the bash allowlist blocks
++    those CLI paths even when Bedrock-only is off.
+   - Bedrock calls are allowed subject to the configured budget and model settings.
++- When a tool is blocked, name the actual enforcement layer: bash allowlist,
++  python_exec import allowlist, `aws_bedrock_only=true`, approval denial, or AWS
++  permissions. Do not infer Bedrock-only from a sandbox/import failure when
++  Bedrock-only is off or when the block text does not say `aws_bedrock_only=true`.
+ - No independent goals. Comply with stop immediately.
+diff --git a/compact_v5/prompt/tool_classes.md b/compact_v5/prompt/tool_classes.md
+index 810b549..3a413b8 100644
+--- a/compact_v5/prompt/tool_classes.md
++++ b/compact_v5/prompt/tool_classes.md
+@@ -15,6 +15,11 @@ Two classes of tools. Block messages name only `bash`/`python_exec` because thos
+ 
+ **Repetition guard**: identical calls auto-blocked at 3 (or 2 for `read_file`). On `[Warning: Repetitive ... stopping]`, switch tactic.
+ 
++For simple S3 bucket/file structure inventory, use the always-loaded
++`aws_s3_list` tool directly. Do not spend a turn on `tool_search`, and do not
++retry blocked `aws s3`/`aws s3api` bash commands; the next CLI retry is
++intentionally blocked so cost stays bounded.
++
+ ## When `bash`/`python_exec` is BLOCKED
+ 
+ DO NOT default to "ask user to start a new session". MOST diagnostics finish with read-only tools.
+diff --git a/compact_v5/runtime/config.py b/compact_v5/runtime/config.py
+index d36dbf8..8fc0ff1 100644
+--- a/compact_v5/runtime/config.py
++++ b/compact_v5/runtime/config.py
+@@ -57,6 +57,7 @@ class Config:
+     temperature: float = 0.0
+     thinking_enabled: bool = False  # Extended thinking OFF by default
+     thinking_budget: int = 8192  # Tokens for thinking (1024-16000)
++    disable_thinking_for_simple_s3_inventory: bool = True
+ 
+     # Testing
+     mock_mode: bool = False  # Set True to test without Bedrock API
+@@ -229,7 +230,7 @@ def _apply_config_file(config: Config) -> None:
+     _SCALAR_FIELDS: Dict[str, type] = {
+         "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
+         "max_history": int, "temperature": float, "thinking_enabled": bool,
+-        "thinking_budget": int, "mock_mode": bool,
++        "thinking_budget": int, "disable_thinking_for_simple_s3_inventory": bool, "mock_mode": bool,
+         "bash_allow_interpreters": bool, "bash_allow_docker": bool,
+         "execution_mode": str, "exec_docker_image": str,
+         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,
+diff --git a/compact_v5/security/manager.py b/compact_v5/security/manager.py
+index f9a9287..5051553 100644
+--- a/compact_v5/security/manager.py
++++ b/compact_v5/security/manager.py
+@@ -297,6 +297,13 @@ class SecurityManager:
+         if getattr(CONFIG, "aws_bedrock_only", False) and re.search(r'\baws\s', command):
+             return False, "AWS CLI blocked (aws_bedrock_only=true). v5 only uses Bedrock via Python SDK."
+ 
++        if re.search(r"\baws\s+s3(?:api)?\b", command):
++            return False, (
++                "AWS S3 CLI is blocked by the bash allowlist. Use the "
++                "`aws_s3_list` tool for read-only S3 bucket/prefix inventory. "
++                "Do not retry the same `aws s3` bash command."
++            )
++
+         # Layer 1: Allowlist
+         bases = self._extract_base_command(command)
+         if not bases:
+diff --git a/compact_v5/tools/__init__.py b/compact_v5/tools/__init__.py
+index d4c54e9..e560463 100644
+--- a/compact_v5/tools/__init__.py
++++ b/compact_v5/tools/__init__.py
+@@ -44,6 +44,7 @@ from . import read_file as _read_file   # noqa: F401  defines _register()
+ from . import grep as _grep             # noqa: F401  defines _register()
+ from . import glob as _glob             # noqa: F401  defines _register()
+ from . import list_dir as _list_dir     # noqa: F401  defines _register()
++from . import aws_s3_list as _aws_s3_list  # noqa: F401  defines _register()
+ #
+ # Phase 4 — core mutating tools + view_image (per ADR-010):
+ from . import write_file as _write_file       # noqa: F401  defines _register()
+@@ -95,6 +96,7 @@ def bootstrap_built_ins():
+     _grep._register()
+     _glob._register()
+     _list_dir._register()
++    _aws_s3_list._register()
+     # Phase 4 — mutating tools + view_image
+     _write_file._register()
+     _edit_file._register()
+diff --git a/compact_v5/tools/python_exec.py b/compact_v5/tools/python_exec.py
+index 8ef6180..fa07c8f 100644
+--- a/compact_v5/tools/python_exec.py
++++ b/compact_v5/tools/python_exec.py
+@@ -34,6 +34,10 @@ from security.manager import (
+     run_subprocess,
+     safe_exec_env,
+ )
++from security.diagnostics import (
++    python_exec_runtime_diagnosis,
++    python_exec_security_block_diagnosis,
++)
+ 
+ 
+ _DESCRIPTION = """Execute Python code in a sandboxed subprocess.
+@@ -232,6 +236,11 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
+ 
+     ok, msg = _security_manager.SECURITY.validate_python(code)
+     if not ok:
++        diagnosis = python_exec_security_block_diagnosis(
++            msg, aws_bedrock_only=CONFIG.aws_bedrock_only
++        )
++        if diagnosis:
++            return f"Security blocked: {msg}\n[diagnosis]\n{diagnosis}"
+         return f"Security blocked: {msg}"
+ 
+     # Build preamble at call time (captures current CONFIG state).
+@@ -266,6 +275,11 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
+             output += f"\n[stderr]\n{result.stderr}"
+         if result.returncode != 0:
+             output += f"\n[exit code: {result.returncode}]"
++        diagnosis = python_exec_runtime_diagnosis(
++            output, aws_bedrock_only=CONFIG.aws_bedrock_only
++        )
++        if diagnosis:
++            output += f"\n[diagnosis]\n{diagnosis}"
+         return _security_manager.SECURITY.truncate_output(output) if output else "(no output)"
+     except _subprocess.TimeoutExpired:
+         return f"Error: code timed out after {timeout} seconds"
+diff --git a/compact_v5/tools/registry.py b/compact_v5/tools/registry.py
+index 1b6600a..07c0fc7 100644
+--- a/compact_v5/tools/registry.py
++++ b/compact_v5/tools/registry.py
+@@ -46,7 +46,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set,
+ PLAN_MODE_ALLOWED_TOOLS: frozenset = frozenset({
+     "read_file", "glob", "grep", "list_dir", "semantic_search",
+     "todo_write", "todo_read", "view_image", "skill", "web_fetch", "ask_user",
+-    "result_replay",
++    "result_replay", "aws_s3_list",
+ })
+ 
+ 
+diff --git a/compact_v5/ui/chat_ui.py b/compact_v5/ui/chat_ui.py
+index 6e0e858..abb4ae7 100644
+--- a/compact_v5/ui/chat_ui.py
++++ b/compact_v5/ui/chat_ui.py
+@@ -284,6 +284,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         self._run_lock = threading.Lock()
+         self._render_generation = 0
+         self._live_assistant_index = None
++        self._tool_card_indices: Dict[str, int] = {}
+         self._ui_running = False
+         self._build()
+ 
+@@ -525,21 +526,12 @@ class V4WidgetChatUI(WidgetChatUI):
+                 elif role == "tool":
+                     color = "#ffb74d"
+                     label = f"Tool: {self._escape((meta or {}).get('tool_name', 'tool'))}"
+-                    phase = self._escape((meta or {}).get("phase", "result"))
+-                    body = (
+-                        f"<div style='color:{c['muted']};font-size:11px;margin-bottom:4px;'>"
+-                        f"{phase}</div>"
+-                        f"<pre style='white-space:pre-wrap;max-height:260px;overflow:auto;"
+-                        f"background:{'#151515' if self._dark_mode else '#f7f7f7'};"
+-                        f"border:1px solid {c['border']};border-radius:6px;padding:8px;"
+-                        "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
+-                        f"font-size:12px;color:{c['fg']};'>{self._escape(text)}</pre>"
+-                    )
++                    body = self._render_tool_card(text, meta or {}, c)
+                 elif role == "thinking":
+                     color = "#ab47bc"
+                     label = "Thinking"
+                     body = (
+-                        f"<details open><summary style='cursor:pointer;color:{color};'>"
++                        f"<details><summary style='cursor:pointer;color:{color};'>"
+                         "Reasoning / thinking</summary>"
+                         f"<div style='color:{c['muted']};font-size:12px;line-height:1.45;"
+                         f"margin-top:4px;'>{self._escape(text).replace(chr(10), '<br>')}</div></details>"
+@@ -578,6 +570,45 @@ class V4WidgetChatUI(WidgetChatUI):
+             content = "".join(rows)
+         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
+ 
++    def _render_tool_card(self, text: str, meta: Dict[str, Any], colors: Dict[str, str]) -> str:
++        """Render one collapsed v4-style tool card, grouping call + result."""
++        tool_name = self._escape(meta.get("tool_name", "tool"))
++        phase = self._escape(meta.get("phase", "result"))
++        tool_use_id = self._escape(meta.get("tool_use_id", ""))
++        input_text = str(meta.get("input_text", text) or "")
++        result_text = str(meta.get("result_text", "") or "")
++        is_error = bool(meta.get("is_error", False))
++        status_color = "#ef5350" if is_error else "#66bb6a"
++        status = "error" if is_error else ("done" if result_text else "running")
++        bg = "#151515" if self._dark_mode else "#f7f7f7"
++        border = colors["border"]
++        muted = colors["muted"]
++
++        def _pre(value: str) -> str:
++            if not value:
++                return f"<span style='color:{muted};font-size:12px;'>(waiting)</span>"
++            return (
++                f"<pre style='white-space:pre-wrap;max-height:220px;overflow:auto;"
++                f"background:{bg};border:1px solid {border};border-radius:6px;"
++                "padding:8px;margin:4px 0 0 0;"
++                "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
++                f"font-size:12px;color:{colors['fg']};'>{self._escape(value)}</pre>"
++            )
++
++        id_part = f" · id {tool_use_id}" if tool_use_id else ""
++        return (
++            f"<details class='sageagent-tool-card' style='border:1px solid {border};"
++            "border-radius:6px;padding:6px 8px;'>"
++            f"<summary style='cursor:pointer;color:#ffb74d;font-size:12px;'>"
++            f"<b>{tool_name}</b> · <span style='color:{status_color}'>{status}</span>"
++            f" · {phase}{id_part}</summary>"
++            f"<div style='margin-top:6px;color:{muted};font-size:11px;'>Tool input</div>"
++            f"{_pre(input_text)}"
++            f"<div style='margin-top:8px;color:{muted};font-size:11px;'>Tool result</div>"
++            f"{_pre(result_text)}"
++            "</details>"
++        )
++
+     def _format_inline_md(self, text: str, dark: bool) -> str:
+         """Render the same safe inline markdown subset as compact_v4."""
+         safe = self._escape(text)
+@@ -967,7 +998,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         return (
+             f"<div style='color:{colors['muted']};font-size:11px;margin-top:6px;"
+             f"border-top:1px solid {colors['border']};padding-top:4px;'>"
+-            f"{summary}{thinking_html}</div>"
++            f"{thinking_html}<div class='sageagent-turn-metrics'>{summary}</div></div>"
+         )
+ 
+     def _stats_snapshot(self) -> Dict[str, Any]:
+@@ -984,7 +1015,12 @@ class V4WidgetChatUI(WidgetChatUI):
+         input_tokens = int(stats.get("session_input", 0) or 0)
+         output_tokens = int(stats.get("session_output", 0) or 0)
+         calls = int(stats.get("api_calls", 0) or 0)
+-        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
++        effective_thinking = getattr(
++            self.agent,
++            "last_effective_thinking_enabled",
++            getattr(self.agent, "thinking_enabled", False),
++        )
++        thinking_state = "ON" if bool(effective_thinking) else "OFF"
+         if calls <= 0:
+             return (
+                 "Cost drivers: no calls yet; measure calls, output tokens, thinking state, "
+@@ -1027,7 +1063,12 @@ class V4WidgetChatUI(WidgetChatUI):
+         def _num(key: str) -> float:
+             return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
+ 
+-        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
++        effective_thinking = getattr(
++            self.agent,
++            "last_effective_thinking_enabled",
++            getattr(self.agent, "thinking_enabled", False),
++        )
++        thinking_state = "ON" if bool(effective_thinking) else "OFF"
+         thinking_budget = int(getattr(self.agent, "thinking_budget", 4096) or 4096)
+         return {
+             "input_tokens": int(_num("session_input")),
+@@ -1059,6 +1100,84 @@ class V4WidgetChatUI(WidgetChatUI):
+         self._render_chat()
+         return len(self._messages) - 1
+ 
++    def _append_tool_call_card(self, event: Dict[str, Any]) -> int:
++        name = str(event.get("name", "tool") or "tool")
++        tool_use_id = str(event.get("tool_use_id", "") or "")
++        try:
++            input_text = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
++        except Exception:
++            input_text = str(event.get("input", {}) or {})
++        idx = self._append_message(
++            "tool",
++            input_text,
++            {
++                "phase": "call requested",
++                "tool_use_id": tool_use_id,
++                "input_text": input_text,
++                "result_text": "",
++                "is_error": False,
++            },
++            tool_name=name,
++        )
++        if tool_use_id:
++            self._tool_card_indices[tool_use_id] = idx
++        return idx
++
++    def _append_or_update_tool_result_card(self, event: Dict[str, Any]) -> int:
++        name = str(event.get("name", "tool") or "tool")
++        tool_use_id = str(event.get("tool_use_id", "") or "")
++        body = str(event.get("content", "") or "")
++        if len(body) > 12000:
++            body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
++        phase = "error result" if event.get("is_error") else "result"
++        idx = self._tool_card_indices.get(tool_use_id) if tool_use_id else None
++        if idx is None or idx < 0 or idx >= len(self._messages):
++            return self._append_message(
++                "tool",
++                body,
++                {
++                    "phase": phase,
++                    "tool_use_id": tool_use_id,
++                    "input_text": "",
++                    "result_text": body,
++                    "is_error": bool(event.get("is_error")),
++                },
++                tool_name=name,
++            )
++
++        message = self._messages[idx]
++        if len(message) == 4:
++            role, text, ts, old_meta = message
++        else:
++            role, text, ts = message
++            old_meta = {}
++        if role != "tool" or str((old_meta or {}).get("tool_use_id", "") or "") != tool_use_id:
++            return self._append_message(
++                "tool",
++                body,
++                {
++                    "phase": phase,
++                    "tool_use_id": tool_use_id,
++                    "input_text": "",
++                    "result_text": body,
++                    "is_error": bool(event.get("is_error")),
++                },
++                tool_name=name,
++            )
++        meta = dict(old_meta or {})
++        meta.update({
++            "phase": phase,
++            "tool_use_id": tool_use_id,
++            "result_text": body,
++            "is_error": bool(event.get("is_error")),
++            "tool_name": name,
++        })
++        if "input_text" not in meta:
++            meta["input_text"] = text
++        self._messages[idx] = (role, text, ts, meta)
++        self._render_chat()
++        return idx
++
+     def _set_message_meta(self, index: Optional[int], meta: Dict[str, Any]) -> None:
+         if index is None or index < 0 or index >= len(self._messages):
+             return
+@@ -1107,7 +1226,17 @@ class V4WidgetChatUI(WidgetChatUI):
+         if tool_match:
+             tool = tool_match.group(1)
+             body = tool_match.group(2).strip()
+-            self._append_message("tool", body, {"phase": "result from output stream"}, tool_name=tool)
++            self._append_message(
++                "tool",
++                body,
++                {
++                    "phase": "result from output stream",
++                    "input_text": "(stream-only; input not captured)",
++                    "result_text": body,
++                    "is_error": False,
++                },
++                tool_name=tool,
++            )
+             self._render_status()
+             return None
+         if self._is_status_output(stripped):
+@@ -1178,11 +1307,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         event_type = str(event.get("type", "tool_generation"))
+         name = str(event.get("name", "tool") or "tool")
+         if event_type == "tool_generation":
+-            try:
+-                body = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
+-            except Exception:
+-                body = str(event.get("input", {}) or {})
+-            self._append_message("tool", body, {"phase": "call requested"}, tool_name=name)
++            self._append_tool_call_card(event)
+         elif event_type == "tool_result":
+             body = str(event.get("content", "") or "")
+             if name == "task":
+@@ -1191,10 +1316,7 @@ class V4WidgetChatUI(WidgetChatUI):
+                     self._append_message("subagent", parsed["text"], parsed["meta"])
+                     self._render_status()
+                     return
+-            if len(body) > 12000:
+-                body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
+-            phase = "error result" if event.get("is_error") else "result"
+-            self._append_message("tool", body, {"phase": phase}, tool_name=name)
++            self._append_or_update_tool_result_card(event)
+         self._render_status()
+ 
+     def _dispatch_ui_command(self, command: str) -> None:
+@@ -1291,6 +1413,7 @@ class V4WidgetChatUI(WidgetChatUI):
+     def _on_clear(self, _btn) -> None:
+         self.agent.clear()
+         self._messages.clear()
++        self._tool_card_indices.clear()
+         self._render_chat()
+         self.budget_widget.update()
+         self._render_status()
+@@ -1298,6 +1421,7 @@ class V4WidgetChatUI(WidgetChatUI):
+     def _on_new(self, _btn) -> None:
+         self.agent.clear(reset_budget=True)
+         self._messages.clear()
++        self._tool_card_indices.clear()
+         self._render_chat()
+         self._render_status()
+ 
+@@ -1306,6 +1430,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         if not messages:
+             self._append_message("system", "No conversation to compact.")
+             return
++        self._tool_card_indices.clear()
+         self._status_html.value = "<span style='color:#ff9800'><b>* Compacting</b></span>"
+         try:
+             from core.compactor import Compactor
+diff --git a/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md b/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md
+index 3a47196..38fd80e 100644
+--- a/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md
++++ b/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md
+@@ -399,3 +399,28 @@ The S3-access policy needs a call:
+ 
+ This is a config/policy decision, not a code question. Worker should
+ not pick one unilaterally.
++
++## Implementation Status - 2026-05-11
++
++Active tree: flattened `compact_v5/`. The older nested
++`compact_v5/compact_v5/` paths above are historical source references.
++
++| Problem | Status | Implementation / evidence |
++|---|---|---|
++| P0 S3 safe-read path | Fixed in code; real AWS smoke recorded during final integration | Added read-only `tools/aws_s3_list.py`, registered as always-loaded and plan-mode allowed. It lists buckets or first-level prefixes/objects with pagination token support and blocks when `CONFIG.aws_bedrock_only=True`. Evidence: `BLOCK_1_S3_SAFE_READ_*` under `compact_v5_test_evidence/final_results/s3_real_use_reviews/`. |
++| P0 wrong self-diagnosis | Fixed | `security/manager.py` now names the bash allowlist for `aws s3` / `aws s3api` when Bedrock-only is off, and `security/diagnostics.py` plus `tools/python_exec.py` add Python sandbox import-allowlist diagnosis. Evidence: `BLOCK_2_ACCURATE_SANDBOX_DIAGNOSIS_*`. |
++| P0 drift from S3 inventory to source tree | Fixed with targeted guard | `core/query_engine.py` now injects an intent-drift guard when an S3 inventory request is about to be answered with local workspace/source-tree content instead of an S3 answer or explicit S3 blocker. Evidence: `BLOCK_3_INTENT_DRIFT_GUARD_*`. |
++| P1 tool cards collapsed/grouped | Fixed | `ui/chat_ui.py` groups tool call/result events by `tool_use_id` into one collapsed card with input and result sections. Evidence: `BLOCK_4_TOOL_CARDS_COLLAPSE_GROUPING_*`. |
++| P1 thinking placement/collapse | Fixed | Standalone and turn-level thinking render in closed `<details>` by default; turn-level thinking now appears before `sageagent-turn-metrics`. Evidence: `BLOCK_5_THINKING_PLACEMENT_COLLAPSE_*`. |
++| P1 cost control for simple inventory | Fixed with bounded controls | `agent.py` disables Extended Thinking only for simple read-only S3 inventory turns when `disable_thinking_for_simple_s3_inventory=True`; `aws_s3_list` is always visible to avoid tool_search tax; `core/query_engine.py` one-strike blocks repeated bash `aws s3` retries after the first allowlist failure. Evidence: `BLOCK_6_COST_CONTROLS_SIMPLE_S3_INVENTORY_*`. |
++| P2 deferred-tool tax for common tools | Partially addressed for S3 only | The S3 inventory path is not deferred. Broader tool deferral changes were not made because this block measured the concrete S3 cause and avoided broad prompt/toolset churn. |
++
++Verification:
++- `python -m py_compile` passed for changed production modules and smoke tests.
++- Focused zero-cost smoke tests passed:
++  `test_aws_s3_list_tool.py`, `test_restriction_diagnostics.py`,
++  `test_s3_intent_drift_guard.py`, `test_ui_tool_cards_smoke.py`,
++  `test_ui_thinking_smoke.py`, and `test_s3_cost_controls.py`.
++- Per-block Claude CLI reviews used the subscription command with
++  `ANTHROPIC_API_KEY` and `CLAUDE_CODE_USE_BEDROCK` cleared. Blocks 0-6 were
++  approved after required fixes.
+diff --git a/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_UI_ISSUES.md b/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_UI_ISSUES.md
+index 3394ecc..86502ab 100644
+--- a/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_UI_ISSUES.md
++++ b/compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_UI_ISSUES.md
+@@ -436,3 +436,15 @@ Current distinction:
+ Do not treat the UI live-supervisor Claude approval as proof that the S3
+ workflow is production-ready. It only approved the earlier UI streaming/card
+ patch set.
++
++## S3 Real-Use UI Follow-Up - 2026-05-11
++
++The S3 real-use worker closed the UI portions that remained open in the later
++`list file and bucket structure of my s3` transcript:
++
++| UI issue | Status | Evidence |
++|---|---|---|
++| Tool cards visible but expanded/not grouped | Fixed | `ui/chat_ui.py` groups call/result events by `tool_use_id` into one closed `sageagent-tool-card`. Review artifacts: `s3_real_use_reviews/BLOCK_4_TOOL_CARDS_COLLAPSE_GROUPING_*`. |
++| Thinking rendered after metrics and could appear expanded | Fixed | Turn thinking renders before `sageagent-turn-metrics`; standalone and turn-level thinking `<details>` do not use `open`. Review artifacts: `s3_real_use_reviews/BLOCK_5_THINKING_PLACEMENT_COLLAPSE_*`. |
++| Stop wording must explain cooperative behavior | Already fixed in live-supervisor pass and preserved | UI says stop requested, finishing current Bedrock/tool/subagent call. |
++| Cost-driver telemetry measured but not acted on for simple S3 | Fixed for S3-specific drivers | Simple S3 inventory turns disable thinking for the turn, avoid `tool_search` by keeping `aws_s3_list` always visible, and block repeated `aws s3` CLI retry loops. Review artifacts: `s3_real_use_reviews/BLOCK_6_COST_CONTROLS_SIMPLE_S3_INVENTORY_*`. |
+diff --git a/compact_v5_test_evidence/final_results/PS_TEST_REVIEW_FINAL.md b/compact_v5_test_evidence/final_results/PS_TEST_REVIEW_FINAL.md
+index da89a59..e4a9b18 100644
+--- a/compact_v5_test_evidence/final_results/PS_TEST_REVIEW_FINAL.md
++++ b/compact_v5_test_evidence/final_results/PS_TEST_REVIEW_FINAL.md
+@@ -505,3 +505,33 @@ Post-zip Claude re-review:
+ 
+ - `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/UI-LIVE-SUPERVISOR-FINAL-20260511-post-zip_claude_review.md`
+ - Result: `SHIP DECISION: APPROVE`, no findings, no drift.
++
++# 2026-05-11 S3 Real-Use Fix Addendum
++
++The later hand-run prompt `list file and bucket structure of my s3` is now
++handled as a separate runtime/UI fix set, not as part of the earlier
++live-supervisor approval.
++
++Shipped changes:
++
++- read-only `aws_s3_list` tool for S3 bucket/prefix/object inventory;
++- accurate bash/Python sandbox diagnosis instead of Bedrock-only guessing;
++- S3 intent-drift guard before final answers;
++- collapsed/grouped tool cards and collapsed thinking placement before metrics;
++- per-turn cost control for simple S3 inventory: no `tool_search` tax for the
++  S3 tool, no repeated blocked `aws s3` retry loop, and Extended Thinking
++  disabled for the simple inventory turn only;
++- focused smoke tests plus independent Claude CLI review per block.
++
++Evidence:
++
++- per-block review artifacts:
++  `compact_v5_test_evidence/final_results/s3_real_use_reviews/`;
++- implementation status:
++  `compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`;
++- zip verification report:
++  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
++
++Real AWS smoke is recorded in the final integration artifacts. If credentials
++are unavailable, the result is documented as an environment/permission blocker
++rather than hidden.
+diff --git a/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md b/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md
+index 25bb222..ddf10f3 100644
+--- a/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md
++++ b/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md
+@@ -1,35 +1,31 @@
+-# UI Live Supervisor Zip Verify 20260510
+-
+-Date verified: `2026-05-11`
+-
+-Zip path: `D:/Github/sagemaker-coding-agent/compact_v5.zip`
+-
+-Zip size bytes: `639054`
+-
+-Member count: `155`
+-
+-testzip result: `None`
+-
+-Missing required members: `[]`
+-
+-Forbidden-member violation count: `0`
+-
+-Required-member hash mismatches: `[]`
+-
+-Required member check:
+-
+-- `chat.ipynb`: present; sha256 parity `True`; live `a486e8b522ce` zip `a486e8b522ce`
+-- `chat.md`: present; sha256 parity `True`; live `fa1a4d10f980` zip `fa1a4d10f980`
+-- `ui/chat_ui.py`: present; sha256 parity `True`; live `cefccb58486c` zip `cefccb58486c`
+-- `agent.py`: present; sha256 parity `True`; live `4e08d4b84228` zip `4e08d4b84228`
+-- `core/query_engine.py`: present; sha256 parity `True`; live `3fe9be955ea2` zip `3fe9be955ea2`
+-- `tools/task.py`: present; sha256 parity `True`; live `93fee00f4881` zip `93fee00f4881`
+-- `runtime/config.py`: present; sha256 parity `True`; live `1fe1b2f96446` zip `1fe1b2f96446`
+-- `sagemaker_agent.py`: present; sha256 parity `True`; live `eb20e51869fe` zip `eb20e51869fe`
+-- `AGENT_STATUS.md`: present; sha256 parity `True`; live `22d1916bd3da` zip `22d1916bd3da`
+-
+-Excluded by policy: `__pycache__`, `.pytest_cache`, `tests`, `_status`, `compact_v5_test_evidence`, `.git`.
+-
+-Additional smoke: extracted zip to a temporary directory and `import entry` passed.
+-
+-Post-zip Claude re-review returned `SHIP DECISION: APPROVE` with no findings.
++# UI Live Supervisor / S3 Real-Use Zip Verify - 2026-05-11
++
++- zip_path: `D:\Github\sagemaker-coding-agent\compact_v5.zip`
++- source_tree: `D:\Github\sagemaker-coding-agent\compact_v5`
++- zip_size_bytes: `651929`
++- member_count: `158`
++- zip_sha256: `9a79daedb7e8d5f43660e6bc9e51009bf6bcf88b9870c22c4e02ecd55a37528f`
++- testzip_result: `None`
++- required_missing: `[]`
++- forbidden_members: `[]`
++- required_hash_parity_ok: `True`
++
++## Required Member Hash Parity
++
++| member | status | source_sha256 | zip_sha256 |
++|---|---|---|---|
++| `chat.ipynb` | `match` | `a486e8b522cea88e222774df35eb27ceb3ab13a3d04441bfc6c883380e6d1854` | `a486e8b522cea88e222774df35eb27ceb3ab13a3d04441bfc6c883380e6d1854` |
++| `chat.md` | `match` | `b20f1edaeaae0c4b3fd833924a2a60129db8aabbf4eeb438b81b44c0527ad604` | `b20f1edaeaae0c4b3fd833924a2a60129db8aabbf4eeb438b81b44c0527ad604` |
++| `ui/chat_ui.py` | `match` | `ccbe72966858d47df1f42ef812c91d29afdffc1e511fd0cd9da599aa084467f4` | `ccbe72966858d47df1f42ef812c91d29afdffc1e511fd0cd9da599aa084467f4` |
++| `agent.py` | `match` | `7bb7218bdeb2e8022fb495c404ac9ede788aef024fef7874736764ae650504f1` | `7bb7218bdeb2e8022fb495c404ac9ede788aef024fef7874736764ae650504f1` |
++| `core/query_engine.py` | `match` | `fd14f0e69689607e9811308871621ad90e917ec31a945b7427233a91ce50b7e5` | `fd14f0e69689607e9811308871621ad90e917ec31a945b7427233a91ce50b7e5` |
++| `tools/task.py` | `match` | `f36debe7cfaf25978c42a99289bb373a3612bb1e490e178fbbbb6c1a17bb17ed` | `f36debe7cfaf25978c42a99289bb373a3612bb1e490e178fbbbb6c1a17bb17ed` |
++| `runtime/config.py` | `match` | `82fed69c8e676df15b79d054439268232ad5f93609313c3304dff7ec6672d68c` | `82fed69c8e676df15b79d054439268232ad5f93609313c3304dff7ec6672d68c` |
++| `sagemaker_agent.py` | `match` | `eb20e51869fe5db635c88259662ab54c9dff9d63e3ed1415073362233ee43fa2` | `eb20e51869fe5db635c88259662ab54c9dff9d63e3ed1415073362233ee43fa2` |
++| `AGENT_STATUS.md` | `match` | `6a8b97e0590790ad8a539e18536812177129b5440f7130ef240ce7dc4ffa07da` | `6a8b97e0590790ad8a539e18536812177129b5440f7130ef240ce7dc4ffa07da` |
++| `tools/aws_s3_list.py` | `match` | `15922ff1035972ee5d4eb2ebae53c01eb88895572dac04f04ea48ec18b665430` | `15922ff1035972ee5d4eb2ebae53c01eb88895572dac04f04ea48ec18b665430` |
++| `security/diagnostics.py` | `match` | `c18ce0e105f0e2fd5a45dd56484c5110be9e0afafab9c8edeb73bc472a0f04d0` | `c18ce0e105f0e2fd5a45dd56484c5110be9e0afafab9c8edeb73bc472a0f04d0` |
++
++## Exclude Policy
++
++Excluded directories: `__pycache__`, `.pytest_cache`, `tests`, `_status`, `compact_v5_test_evidence`, `.git`.

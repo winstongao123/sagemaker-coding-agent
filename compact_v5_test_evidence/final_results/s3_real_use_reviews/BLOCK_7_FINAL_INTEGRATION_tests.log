@@ -1,0 +1,52 @@
+﻿# BLOCK_7_FINAL_INTEGRATION Tests
+
+> python -m py_compile compact_v5/ui/chat_ui.py
+exit_code=0
+
+> python -m py_compile compact_v5/agent.py
+exit_code=0
+
+> python -m py_compile compact_v5/core/query_engine.py
+exit_code=0
+
+> python -m py_compile compact_v5/tools/task.py
+exit_code=0
+
+> python -m py_compile compact_v5/subagent/spawn.py
+exit_code=0
+
+> python -m py_compile compact_v5/tools/aws_s3_list.py compact_v5/security/diagnostics.py compact_v5/tools/python_exec.py compact_v5/runtime/config.py
+exit_code=0
+
+> python compact_v5/tests/test_aws_s3_list_tool.py
+test_aws_s3_list_lists_buckets_with_fake_client: PASS
+test_aws_s3_list_lists_prefixes_and_objects_with_fake_client: PASS
+test_aws_s3_list_truncated_output_returns_continuation_token: PASS
+test_bedrock_only_blocks_s3_tool: PASS
+test_missing_boto3_reports_actionable_error: PASS
+test_aws_s3_tool_registered_read_only_and_no_destructive_schema: PASS
+test_blocked_aws_s3_cli_guidance_points_to_safe_tool: PASS
+exit_code=0
+
+> python compact_v5/tests/test_restriction_diagnostics.py
+restriction diagnostics smoke: OK
+exit_code=0
+
+> python compact_v5/tests/test_s3_intent_drift_guard.py
+s3 intent drift guard smoke: OK
+exit_code=0
+
+> python compact_v5/tests/test_ui_tool_cards_smoke.py
+ui tool cards smoke: OK
+exit_code=0
+
+> python compact_v5/tests/test_ui_thinking_smoke.py
+ui thinking smoke: OK
+exit_code=0
+
+> python compact_v5/tests/test_s3_cost_controls.py
+s3 cost controls smoke: OK
+exit_code=0
+
+Real AWS smoke log: compact_v5_test_evidence/final_results/s3_real_use_reviews/BLOCK_7_REAL_AWS_S3_SMOKE.log
+Zip verification: compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md

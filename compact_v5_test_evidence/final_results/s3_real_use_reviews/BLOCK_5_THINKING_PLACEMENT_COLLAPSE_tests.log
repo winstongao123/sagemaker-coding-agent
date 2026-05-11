@@ -1,0 +1,16 @@
+﻿Commands:
+- python -m py_compile compact_v5/ui/chat_ui.py compact_v5/tests/test_ui_thinking_smoke.py compact_v5/tests/test_ui_tool_cards_smoke.py
+- python compact_v5/tests/test_ui_thinking_smoke.py
+- python compact_v5/tests/test_ui_tool_cards_smoke.py
+
+Result:
+- py_compile: PASS
+- ui thinking smoke: OK
+- ui tool cards smoke: OK
+
+Assertions covered:
+- Turn-level thinking details are present but do not include <details open>
+- Turn-level thinking appears before sageagent-turn-metrics
+- Metrics line still includes Prompt Cache R/W
+- Standalone thinking role card is collapsed by default
+- Defensive tool-card index checks from Claude's cumulative Block 5 review are covered by the tool-card smoke test

@@ -57,6 +57,7 @@ class Config:
     temperature: float = 0.0
     thinking_enabled: bool = False  # Extended thinking OFF by default
     thinking_budget: int = 8192  # Tokens for thinking (1024-16000)
+    disable_thinking_for_simple_s3_inventory: bool = True
 
     # Testing
     mock_mode: bool = False  # Set True to test without Bedrock API
@@ -229,7 +230,7 @@ def _apply_config_file(config: Config) -> None:
     _SCALAR_FIELDS: Dict[str, type] = {
         "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
         "max_history": int, "temperature": float, "thinking_enabled": bool,
-        "thinking_budget": int, "mock_mode": bool,
+        "thinking_budget": int, "disable_thinking_for_simple_s3_inventory": bool, "mock_mode": bool,
         "bash_allow_interpreters": bool, "bash_allow_docker": bool,
         "execution_mode": str, "exec_docker_image": str,
         "exec_docker_network_disabled": bool, "exec_docker_readonly_rootfs": bool,

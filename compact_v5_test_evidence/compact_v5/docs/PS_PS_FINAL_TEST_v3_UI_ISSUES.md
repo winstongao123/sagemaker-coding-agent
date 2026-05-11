@@ -436,3 +436,15 @@ Current distinction:
 Do not treat the UI live-supervisor Claude approval as proof that the S3
 workflow is production-ready. It only approved the earlier UI streaming/card
 patch set.
+
+## S3 Real-Use UI Follow-Up - 2026-05-11
+
+The S3 real-use worker closed the UI portions that remained open in the later
+`list file and bucket structure of my s3` transcript:
+
+| UI issue | Status | Evidence |
+|---|---|---|
+| Tool cards visible but expanded/not grouped | Fixed | `ui/chat_ui.py` groups call/result events by `tool_use_id` into one closed `sageagent-tool-card`. Review artifacts: `s3_real_use_reviews/BLOCK_4_TOOL_CARDS_COLLAPSE_GROUPING_*`. |
+| Thinking rendered after metrics and could appear expanded | Fixed | Turn thinking renders before `sageagent-turn-metrics`; standalone and turn-level thinking `<details>` do not use `open`. Review artifacts: `s3_real_use_reviews/BLOCK_5_THINKING_PLACEMENT_COLLAPSE_*`. |
+| Stop wording must explain cooperative behavior | Already fixed in live-supervisor pass and preserved | UI says stop requested, finishing current Bedrock/tool/subagent call. |
+| Cost-driver telemetry measured but not acted on for simple S3 | Fixed for S3-specific drivers | Simple S3 inventory turns disable thinking for the turn, avoid `tool_search` by keeping `aws_s3_list` always visible, and block repeated `aws s3` CLI retry loops. Review artifacts: `s3_real_use_reviews/BLOCK_6_COST_CONTROLS_SIMPLE_S3_INVENTORY_*`. |

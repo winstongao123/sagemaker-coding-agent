@@ -1,0 +1,18 @@
+﻿Commands:
+- python -m py_compile compact_v5/ui/chat_ui.py compact_v5/tests/test_ui_tool_cards_smoke.py
+- python compact_v5/tests/test_ui_tool_cards_smoke.py
+
+Result:
+- py_compile: PASS
+- ui tool cards smoke: OK
+
+Assertions covered:
+- Tool card HTML contains sageagent-tool-card
+- Tool card uses <details> without open, so it is collapsed by default
+- Tool input and Tool result sections exist
+- tool_generation + tool_result with the same tool_use_id produce one grouped UI message
+- Error result shows error status
+- Unknown/stale tool_use_id appends a new message instead of mutating another message after indices are cleared
+- Stale index pointing at a non-tool message appends a new message and does not mutate the existing assistant message
+- Legacy output stream tool result renders as a completed result card with stream-only input text
+- Oversized result shows the truncation marker

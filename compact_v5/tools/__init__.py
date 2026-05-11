@@ -44,6 +44,7 @@ from . import read_file as _read_file   # noqa: F401  defines _register()
 from . import grep as _grep             # noqa: F401  defines _register()
 from . import glob as _glob             # noqa: F401  defines _register()
 from . import list_dir as _list_dir     # noqa: F401  defines _register()
+from . import aws_s3_list as _aws_s3_list  # noqa: F401  defines _register()
 #
 # Phase 4 — core mutating tools + view_image (per ADR-010):
 from . import write_file as _write_file       # noqa: F401  defines _register()
@@ -95,6 +96,7 @@ def bootstrap_built_ins():
     _grep._register()
     _glob._register()
     _list_dir._register()
+    _aws_s3_list._register()
     # Phase 4 — mutating tools + view_image
     _write_file._register()
     _edit_file._register()

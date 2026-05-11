@@ -1,0 +1,64 @@
+diff --git a/compact_v5/prompt/security.md b/compact_v5/prompt/security.md
+index 335aeb0..259be3d 100644
+--- a/compact_v5/prompt/security.md
++++ b/compact_v5/prompt/security.md
+@@ -10,5 +10,8 @@
+     used with the normal approval gate.
+   - S3 destructive/admin operations remain blocked in both modes, including
+     `delete_object`, `delete_objects`, and `delete_bucket`.
++  - For S3 bucket or prefix inventory, use the `aws_s3_list` tool. Do not use
++    or retry `aws s3` / `aws s3api` through bash; the bash allowlist blocks
++    those CLI paths even when Bedrock-only is off.
+   - Bedrock calls are allowed subject to the configured budget and model settings.
+ - No independent goals. Comply with stop immediately.
+diff --git a/compact_v5/security/manager.py b/compact_v5/security/manager.py
+index f9a9287..5051553 100644
+--- a/compact_v5/security/manager.py
++++ b/compact_v5/security/manager.py
+@@ -297,6 +297,13 @@ class SecurityManager:
+         if getattr(CONFIG, "aws_bedrock_only", False) and re.search(r'\baws\s', command):
+             return False, "AWS CLI blocked (aws_bedrock_only=true). v5 only uses Bedrock via Python SDK."
+ 
++        if re.search(r"\baws\s+s3(?:api)?\b", command):
++            return False, (
++                "AWS S3 CLI is blocked by the bash allowlist. Use the "
++                "`aws_s3_list` tool for read-only S3 bucket/prefix inventory. "
++                "Do not retry the same `aws s3` bash command."
++            )
++
+         # Layer 1: Allowlist
+         bases = self._extract_base_command(command)
+         if not bases:
+diff --git a/compact_v5/tools/__init__.py b/compact_v5/tools/__init__.py
+index d4c54e9..e560463 100644
+--- a/compact_v5/tools/__init__.py
++++ b/compact_v5/tools/__init__.py
+@@ -44,6 +44,7 @@ from . import read_file as _read_file   # noqa: F401  defines _register()
+ from . import grep as _grep             # noqa: F401  defines _register()
+ from . import glob as _glob             # noqa: F401  defines _register()
+ from . import list_dir as _list_dir     # noqa: F401  defines _register()
++from . import aws_s3_list as _aws_s3_list  # noqa: F401  defines _register()
+ #
+ # Phase 4 — core mutating tools + view_image (per ADR-010):
+ from . import write_file as _write_file       # noqa: F401  defines _register()
+@@ -95,6 +96,7 @@ def bootstrap_built_ins():
+     _grep._register()
+     _glob._register()
+     _list_dir._register()
++    _aws_s3_list._register()
+     # Phase 4 — mutating tools + view_image
+     _write_file._register()
+     _edit_file._register()
+diff --git a/compact_v5/tools/registry.py b/compact_v5/tools/registry.py
+index 1b6600a..07c0fc7 100644
+--- a/compact_v5/tools/registry.py
++++ b/compact_v5/tools/registry.py
+@@ -46,7 +46,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set,
+ PLAN_MODE_ALLOWED_TOOLS: frozenset = frozenset({
+     "read_file", "glob", "grep", "list_dir", "semantic_search",
+     "todo_write", "todo_read", "view_image", "skill", "web_fetch", "ask_user",
+-    "result_replay",
++    "result_replay", "aws_s3_list",
+ })
+ 
+ 

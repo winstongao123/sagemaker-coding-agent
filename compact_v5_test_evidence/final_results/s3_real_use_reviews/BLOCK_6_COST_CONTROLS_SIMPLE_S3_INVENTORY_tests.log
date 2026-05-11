@@ -1,0 +1,14 @@
+﻿Commands:
+- python -m py_compile compact_v5/agent.py compact_v5/core/query_engine.py compact_v5/runtime/config.py compact_v5/ui/chat_ui.py compact_v5/tests/test_s3_cost_controls.py
+- python compact_v5/tests/test_s3_cost_controls.py
+
+Result:
+- py_compile: PASS
+- s3 cost controls smoke: OK
+
+Assertions covered:
+- Simple S3 inventory turns send thinking_enabled=False for that turn and emit a cost-control notice
+- Non-S3/coding turns keep the configured thinking_enabled=True state
+- Simple S3 inventory detector rejects destructive/coding prompts
+- aws_s3_list remains visible under tool_search deferral and is not deferred
+- bash aws s3 retry class records one failure and points to aws_s3_list instead of another CLI retry

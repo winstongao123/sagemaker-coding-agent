@@ -1,0 +1,27 @@
+﻿# BLOCK_7 Real AWS S3 Smoke
+
+Command: direct read-only aws_s3_list executor with max_items=5.
+No delete/write/admin calls are attempted.
+Traceback (most recent call last):
+  File "<stdin>", line 8, in <module>
+  File "D:\Github\sagemaker-coding-agent\compact_v5\tools\aws_s3_list.py", line 90, in _aws_s3_list_executor
+    client = _s3_client(context)
+  File "D:\Github\sagemaker-coding-agent\compact_v5\tools\aws_s3_list.py", line 60, in _s3_client
+    import boto3
+ModuleNotFoundError: No module named 'boto3'
+exit_code=1
+
+Fallback command: aws s3 ls --no-cli-pager (read-only credential/environment probe outside runtime).
+2026-04-22 13:53:00 amazon-sagemaker-903039434627-ap-southeast-2-4j0mdothn41yqq
+2026-04-22 10:00:35 bedrock-agent-docs-ap-southeast-2-903039434627
+2026-04-22 15:35:59 bedrock-agentcore-code-903039434627-ap-southeast-2
+2026-04-22 14:26:00 cdk-hnb659fds-assets-903039434627-ap-southeast-2
+2026-04-22 09:20:20 demotech-agent-data-ap-southeast-2-903039434627
+2026-04-22 13:03:55 pdf-split-merge-poc-ap-southeast-2-903039434627
+2026-05-06 18:01:58 sagemaker-us-east-1-903039434627
+2026-04-22 13:43:46 winston-tech-athena-results-903039434627
+aws_cli_exit_code=0
+
+After missing-boto3 handling fix: direct aws_s3_list executor with max_items=5.
+Error: boto3 is not installed in this Python environment. Install boto3 in the SageMaker kernel or run in the packaged SageMaker runtime that includes the AWS SDK.
+direct_tool_after_fix_exit_code=0

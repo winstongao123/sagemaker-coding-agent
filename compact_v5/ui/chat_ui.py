@@ -284,6 +284,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._run_lock = threading.Lock()
         self._render_generation = 0
         self._live_assistant_index = None
+        self._tool_card_indices: Dict[str, int] = {}
         self._ui_running = False
         self._build()
 
@@ -525,21 +526,12 @@ class V4WidgetChatUI(WidgetChatUI):
                 elif role == "tool":
                     color = "#ffb74d"
                     label = f"Tool: {self._escape((meta or {}).get('tool_name', 'tool'))}"
-                    phase = self._escape((meta or {}).get("phase", "result"))
-                    body = (
-                        f"<div style='color:{c['muted']};font-size:11px;margin-bottom:4px;'>"
-                        f"{phase}</div>"
-                        f"<pre style='white-space:pre-wrap;max-height:260px;overflow:auto;"
-                        f"background:{'#151515' if self._dark_mode else '#f7f7f7'};"
-                        f"border:1px solid {c['border']};border-radius:6px;padding:8px;"
-                        "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
-                        f"font-size:12px;color:{c['fg']};'>{self._escape(text)}</pre>"
-                    )
+                    body = self._render_tool_card(text, meta or {}, c)
                 elif role == "thinking":
                     color = "#ab47bc"
                     label = "Thinking"
                     body = (
-                        f"<details open><summary style='cursor:pointer;color:{color};'>"
+                        f"<details><summary style='cursor:pointer;color:{color};'>"
                         "Reasoning / thinking</summary>"
                         f"<div style='color:{c['muted']};font-size:12px;line-height:1.45;"
                         f"margin-top:4px;'>{self._escape(text).replace(chr(10), '<br>')}</div></details>"
@@ -577,6 +569,45 @@ class V4WidgetChatUI(WidgetChatUI):
                 rows.append(f"<div style='margin:8px 0;border-left:3px solid {color};background:{bg};padding:8px 10px;border-radius:6px;'><b style='color:{color};'>[{ts}] {label}:</b><div style='color:{c['fg']};margin-top:4px;line-height:1.5;'>{body}</div>{meta_html}</div>")
             content = "".join(rows)
         self._chat_display.value = f"<div style='height:{self._chat_height}px;min-height:200px;max-height:90vh;overflow-y:auto;overflow-x:hidden;border:1px solid {c['border']};background:{c['bg']};display:flex;flex-direction:column-reverse;width:100%;box-sizing:border-box;resize:vertical;'><div style='padding:10px;font-family:system-ui,-apple-system,sans-serif;'>{content}</div></div>"
+
+    def _render_tool_card(self, text: str, meta: Dict[str, Any], colors: Dict[str, str]) -> str:
+        """Render one collapsed v4-style tool card, grouping call + result."""
+        tool_name = self._escape(meta.get("tool_name", "tool"))
+        phase = self._escape(meta.get("phase", "result"))
+        tool_use_id = self._escape(meta.get("tool_use_id", ""))
+        input_text = str(meta.get("input_text", text) or "")
+        result_text = str(meta.get("result_text", "") or "")
+        is_error = bool(meta.get("is_error", False))
+        status_color = "#ef5350" if is_error else "#66bb6a"
+        status = "error" if is_error else ("done" if result_text else "running")
+        bg = "#151515" if self._dark_mode else "#f7f7f7"
+        border = colors["border"]
+        muted = colors["muted"]
+
+        def _pre(value: str) -> str:
+            if not value:
+                return f"<span style='color:{muted};font-size:12px;'>(waiting)</span>"
+            return (
+                f"<pre style='white-space:pre-wrap;max-height:220px;overflow:auto;"
+                f"background:{bg};border:1px solid {border};border-radius:6px;"
+                "padding:8px;margin:4px 0 0 0;"
+                "font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
+                f"font-size:12px;color:{colors['fg']};'>{self._escape(value)}</pre>"
+            )
+
+        id_part = f" · id {tool_use_id}" if tool_use_id else ""
+        return (
+            f"<details class='sageagent-tool-card' style='border:1px solid {border};"
+            "border-radius:6px;padding:6px 8px;'>"
+            f"<summary style='cursor:pointer;color:#ffb74d;font-size:12px;'>"
+            f"<b>{tool_name}</b> · <span style='color:{status_color}'>{status}</span>"
+            f" · {phase}{id_part}</summary>"
+            f"<div style='margin-top:6px;color:{muted};font-size:11px;'>Tool input</div>"
+            f"{_pre(input_text)}"
+            f"<div style='margin-top:8px;color:{muted};font-size:11px;'>Tool result</div>"
+            f"{_pre(result_text)}"
+            "</details>"
+        )
 
     def _format_inline_md(self, text: str, dark: bool) -> str:
         """Render the same safe inline markdown subset as compact_v4."""
@@ -967,7 +998,7 @@ class V4WidgetChatUI(WidgetChatUI):
         return (
             f"<div style='color:{colors['muted']};font-size:11px;margin-top:6px;"
             f"border-top:1px solid {colors['border']};padding-top:4px;'>"
-            f"{summary}{thinking_html}</div>"
+            f"{thinking_html}<div class='sageagent-turn-metrics'>{summary}</div></div>"
         )
 
     def _stats_snapshot(self) -> Dict[str, Any]:
@@ -984,7 +1015,12 @@ class V4WidgetChatUI(WidgetChatUI):
         input_tokens = int(stats.get("session_input", 0) or 0)
         output_tokens = int(stats.get("session_output", 0) or 0)
         calls = int(stats.get("api_calls", 0) or 0)
-        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
+        effective_thinking = getattr(
+            self.agent,
+            "last_effective_thinking_enabled",
+            getattr(self.agent, "thinking_enabled", False),
+        )
+        thinking_state = "ON" if bool(effective_thinking) else "OFF"
         if calls <= 0:
             return (
                 "Cost drivers: no calls yet; measure calls, output tokens, thinking state, "
@@ -1027,7 +1063,12 @@ class V4WidgetChatUI(WidgetChatUI):
         def _num(key: str) -> float:
             return float(after.get(key, 0) or 0) - float(before.get(key, 0) or 0)
 
-        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
+        effective_thinking = getattr(
+            self.agent,
+            "last_effective_thinking_enabled",
+            getattr(self.agent, "thinking_enabled", False),
+        )
+        thinking_state = "ON" if bool(effective_thinking) else "OFF"
         thinking_budget = int(getattr(self.agent, "thinking_budget", 4096) or 4096)
         return {
             "input_tokens": int(_num("session_input")),
@@ -1058,6 +1099,84 @@ class V4WidgetChatUI(WidgetChatUI):
         self._messages.append((role, content, datetime.now().strftime("%H:%M:%S"), msg_meta))
         self._render_chat()
         return len(self._messages) - 1
+
+    def _append_tool_call_card(self, event: Dict[str, Any]) -> int:
+        name = str(event.get("name", "tool") or "tool")
+        tool_use_id = str(event.get("tool_use_id", "") or "")
+        try:
+            input_text = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
+        except Exception:
+            input_text = str(event.get("input", {}) or {})
+        idx = self._append_message(
+            "tool",
+            input_text,
+            {
+                "phase": "call requested",
+                "tool_use_id": tool_use_id,
+                "input_text": input_text,
+                "result_text": "",
+                "is_error": False,
+            },
+            tool_name=name,
+        )
+        if tool_use_id:
+            self._tool_card_indices[tool_use_id] = idx
+        return idx
+
+    def _append_or_update_tool_result_card(self, event: Dict[str, Any]) -> int:
+        name = str(event.get("name", "tool") or "tool")
+        tool_use_id = str(event.get("tool_use_id", "") or "")
+        body = str(event.get("content", "") or "")
+        if len(body) > 12000:
+            body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
+        phase = "error result" if event.get("is_error") else "result"
+        idx = self._tool_card_indices.get(tool_use_id) if tool_use_id else None
+        if idx is None or idx < 0 or idx >= len(self._messages):
+            return self._append_message(
+                "tool",
+                body,
+                {
+                    "phase": phase,
+                    "tool_use_id": tool_use_id,
+                    "input_text": "",
+                    "result_text": body,
+                    "is_error": bool(event.get("is_error")),
+                },
+                tool_name=name,
+            )
+
+        message = self._messages[idx]
+        if len(message) == 4:
+            role, text, ts, old_meta = message
+        else:
+            role, text, ts = message
+            old_meta = {}
+        if role != "tool" or str((old_meta or {}).get("tool_use_id", "") or "") != tool_use_id:
+            return self._append_message(
+                "tool",
+                body,
+                {
+                    "phase": phase,
+                    "tool_use_id": tool_use_id,
+                    "input_text": "",
+                    "result_text": body,
+                    "is_error": bool(event.get("is_error")),
+                },
+                tool_name=name,
+            )
+        meta = dict(old_meta or {})
+        meta.update({
+            "phase": phase,
+            "tool_use_id": tool_use_id,
+            "result_text": body,
+            "is_error": bool(event.get("is_error")),
+            "tool_name": name,
+        })
+        if "input_text" not in meta:
+            meta["input_text"] = text
+        self._messages[idx] = (role, text, ts, meta)
+        self._render_chat()
+        return idx
 
     def _set_message_meta(self, index: Optional[int], meta: Dict[str, Any]) -> None:
         if index is None or index < 0 or index >= len(self._messages):
@@ -1107,7 +1226,17 @@ class V4WidgetChatUI(WidgetChatUI):
         if tool_match:
             tool = tool_match.group(1)
             body = tool_match.group(2).strip()
-            self._append_message("tool", body, {"phase": "result from output stream"}, tool_name=tool)
+            self._append_message(
+                "tool",
+                body,
+                {
+                    "phase": "result from output stream",
+                    "input_text": "(stream-only; input not captured)",
+                    "result_text": body,
+                    "is_error": False,
+                },
+                tool_name=tool,
+            )
             self._render_status()
             return None
         if self._is_status_output(stripped):
@@ -1178,11 +1307,7 @@ class V4WidgetChatUI(WidgetChatUI):
         event_type = str(event.get("type", "tool_generation"))
         name = str(event.get("name", "tool") or "tool")
         if event_type == "tool_generation":
-            try:
-                body = json.dumps(event.get("input", {}) or {}, indent=2, sort_keys=True, default=str)
-            except Exception:
-                body = str(event.get("input", {}) or {})
-            self._append_message("tool", body, {"phase": "call requested"}, tool_name=name)
+            self._append_tool_call_card(event)
         elif event_type == "tool_result":
             body = str(event.get("content", "") or "")
             if name == "task":
@@ -1191,10 +1316,7 @@ class V4WidgetChatUI(WidgetChatUI):
                     self._append_message("subagent", parsed["text"], parsed["meta"])
                     self._render_status()
                     return
-            if len(body) > 12000:
-                body = body[:12000] + "\n\n[tool result truncated in UI; full result remains in runtime conversation/audit]"
-            phase = "error result" if event.get("is_error") else "result"
-            self._append_message("tool", body, {"phase": phase}, tool_name=name)
+            self._append_or_update_tool_result_card(event)
         self._render_status()
 
     def _dispatch_ui_command(self, command: str) -> None:
@@ -1291,6 +1413,7 @@ class V4WidgetChatUI(WidgetChatUI):
     def _on_clear(self, _btn) -> None:
         self.agent.clear()
         self._messages.clear()
+        self._tool_card_indices.clear()
         self._render_chat()
         self.budget_widget.update()
         self._render_status()
@@ -1298,6 +1421,7 @@ class V4WidgetChatUI(WidgetChatUI):
     def _on_new(self, _btn) -> None:
         self.agent.clear(reset_budget=True)
         self._messages.clear()
+        self._tool_card_indices.clear()
         self._render_chat()
         self._render_status()
 
@@ -1306,6 +1430,7 @@ class V4WidgetChatUI(WidgetChatUI):
         if not messages:
             self._append_message("system", "No conversation to compact.")
             return
+        self._tool_card_indices.clear()
         self._status_html.value = "<span style='color:#ff9800'><b>* Compacting</b></span>"
         try:
             from core.compactor import Compactor

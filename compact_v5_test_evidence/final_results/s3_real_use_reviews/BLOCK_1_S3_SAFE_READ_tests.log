@@ -1,0 +1,13 @@
+﻿## py_compile after Claude MEDIUM fixes
+
+## fake-client S3 safe-read tests after Claude MEDIUM fixes
+test_aws_s3_list_lists_buckets_with_fake_client: PASS
+test_aws_s3_list_lists_prefixes_and_objects_with_fake_client: PASS
+test_aws_s3_list_truncated_output_returns_continuation_token: PASS
+test_bedrock_only_blocks_s3_tool: PASS
+test_aws_s3_tool_registered_read_only_and_no_destructive_schema: PASS
+test_blocked_aws_s3_cli_guidance_points_to_safe_tool: PASS
+
+## Fixes for Claude review findings
+- M1 fixed: `aws s3` detection now uses `\baws\s+s3(?:api)?\b`, covering bare `aws s3` and `aws s3api`.
+- M2 fixed: tool accepts `continuation_token`, returns `NextContinuationToken`, normalizes `s3://bucket/`, and tests truncated output.

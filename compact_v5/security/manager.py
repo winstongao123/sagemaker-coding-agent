@@ -297,6 +297,13 @@ class SecurityManager:
         if getattr(CONFIG, "aws_bedrock_only", False) and re.search(r'\baws\s', command):
             return False, "AWS CLI blocked (aws_bedrock_only=true). v5 only uses Bedrock via Python SDK."
 
+        if re.search(r"\baws\s+s3(?:api)?\b", command):
+            return False, (
+                "AWS S3 CLI is blocked by the bash allowlist. Use the "
+                "`aws_s3_list` tool for read-only S3 bucket/prefix inventory. "
+                "Do not retry the same `aws s3` bash command."
+            )
+
         # Layer 1: Allowlist
         bases = self._extract_base_command(command)
         if not bases:

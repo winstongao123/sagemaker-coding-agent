@@ -420,6 +420,7 @@ class QueryEngine:
         # hard max_turns cap, otherwise the last state file can stay stale.
         self._turn_budget_warning_sent = False
         self._final_claim_guard_sent = False
+        self._intent_drift_guard_sent = False
         # Preserve the original user request outside `self.messages` so exact
         # deliverables survive compaction/truncation and remain available to
         # max-turn/final-claim guards.
@@ -1115,6 +1116,15 @@ class QueryEngine:
                     })
                     continue
                 if response.text:
+                    guard = self._intent_drift_guard_message(response.text)
+                    if guard:
+                        output_fn("[intent-drift guard: S3 inventory evidence is not ready; continuing]")
+                        self.messages.append({
+                            "role": "user",
+                            "content": [{"type": "text", "text": guard}],
+                            "is_meta": True,
+                        })
+                        continue
                     output_fn(response.text)
                 break
 
@@ -1402,6 +1412,8 @@ class QueryEngine:
             _class_key = (call.name, _predicted_failure_class)
             _class_count = self._tool_failure_class_counts.get(_class_key, 0)
             _should_block_class = _class_count >= 2
+            if _predicted_failure_class == "bash_aws_s3_cli_blocked":
+                _should_block_class = _class_count >= 1
             if _predicted_failure_class == "python_exec_error":
                 _should_block_class = (
                     _should_block_class
@@ -1680,6 +1692,8 @@ class QueryEngine:
             return "read_before_write"
         if tool_name == "bash" and "command not allowed: 'cd'" in t:
             return "bash_cd_blocked"
+        if tool_name == "bash" and "aws s3 cli is blocked by the bash allowlist" in t:
+            return "bash_aws_s3_cli_blocked"
         if tool_name == "python_exec" and (
             "syntaxerror" in t
             or "unicodeencodeerror" in t
@@ -1712,6 +1726,11 @@ class QueryEngine:
                 "allowed command directly from the current workspace or use the "
                 "dedicated file tools."
             ),
+            "bash_aws_s3_cli_blocked": (
+                "aws s3/aws s3api is blocked in bash. Stop retrying the CLI; "
+                "use the read-only aws_s3_list tool for S3 bucket/prefix "
+                "inventory, or report the exact AWS credential/permission blocker."
+            ),
             "python_exec_error": (
                 "python_exec has failed repeatedly. Stop retrying near-identical "
                 "scripts; simplify the script, remove non-ASCII/path escaping "
@@ -1731,6 +1750,8 @@ class QueryEngine:
             return "python_exec_error"
         if tool_name == "bash":
             command = str(args.get("command", "")).strip().lower()
+            if re.search(r"\baws\s+s3(?:api)?\b", command):
+                return "bash_aws_s3_cli_blocked"
             if command == "cd" or command.startswith("cd ") or "&& cd " in command or command.startswith("cd\t"):
                 return "bash_cd_blocked"
             return None
@@ -2268,6 +2289,93 @@ class QueryEngine:
             "summary. If you cannot fix it, answer NOT_DONE with exact blockers."
         )
         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
+    def _intent_drift_guard_message(self, text: str) -> str:
+        """Keep S3 inventory answers from drifting into local workspace inventory."""
+        if self._intent_drift_guard_sent:
+            return ""
+        requested = self._requested_user_text()
+        if not self._is_s3_inventory_request(requested):
+            return ""
+
+        final_lower = (text or "").lower()
+        if not final_lower:
+            return ""
+        if self._final_text_has_s3_answer_or_blocker(final_lower):
+            return ""
+
+        local_signals = (
+            "compact_v5",
+            "agent.py",
+            "core/",
+            "tools/",
+            "ui/",
+            "repository",
+            "source tree",
+            "workspace",
+            "local file",
+        )
+        if not any(signal in final_lower for signal in local_signals):
+            return ""
+
+        self._intent_drift_guard_sent = True
+        body = (
+            "Intent-drift guard: the user asked for S3 bucket/file structure, "
+            "but the draft answer appears to describe the local workspace or "
+            "compact_v5 source tree instead. Do not substitute repository "
+            "inventory for S3 inventory. Use the read-only `aws_s3_list` tool "
+            "for bucket/prefix inventory when allowed, or clearly report the "
+            "actual blocker (for example Bedrock-only, bash allowlist, approval, "
+            "AWS credentials, or AWS permissions) and stop."
+        )
+        return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
+    @staticmethod
+    def _is_s3_inventory_request(text: str) -> bool:
+        lowered = (text or "").lower()
+        if "s3" not in lowered:
+            return False
+        inventory_terms = (
+            "list",
+            "inventory",
+            "structure",
+            "bucket",
+            "buckets",
+            "prefix",
+            "prefixes",
+            "files",
+            "objects",
+        )
+        return any(term in lowered for term in inventory_terms)
+
+    @staticmethod
+    def _final_text_has_s3_answer_or_blocker(final_lower: str) -> bool:
+        s3_answer_terms = (
+            "s3 bucket",
+            "s3 buckets",
+            "bucket:",
+            "buckets:",
+            "prefixes:",
+            "objects:",
+            "s3://",
+            "aws_s3_list",
+        )
+        if any(term in final_lower for term in s3_answer_terms):
+            return True
+        blocker_terms = (
+            "aws_bedrock_only=true",
+            "bedrock-only",
+            "bash allowlist",
+            "python sandbox",
+            "approval",
+            "credentials",
+            "access denied",
+            "permission",
+            "not authorized",
+            "unable to list s3",
+            "could not list s3",
+        )
+        return "s3" in final_lower and any(term in final_lower for term in blocker_terms)
 
     def _current_workspace(self) -> str:
         try:

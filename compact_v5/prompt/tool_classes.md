@@ -15,6 +15,11 @@ Two classes of tools. Block messages name only `bash`/`python_exec` because thos
 
 **Repetition guard**: identical calls auto-blocked at 3 (or 2 for `read_file`). On `[Warning: Repetitive ... stopping]`, switch tactic.
 
+For simple S3 bucket/file structure inventory, use the always-loaded
+`aws_s3_list` tool directly. Do not spend a turn on `tool_search`, and do not
+retry blocked `aws s3`/`aws s3api` bash commands; the next CLI retry is
+intentionally blocked so cost stays bounded.
+
 ## When `bash`/`python_exec` is BLOCKED
 
 DO NOT default to "ask user to start a new session". MOST diagnostics finish with read-only tools.

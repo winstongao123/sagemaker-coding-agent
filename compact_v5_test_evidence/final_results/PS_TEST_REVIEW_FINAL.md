@@ -505,3 +505,33 @@ Post-zip Claude re-review:
 
 - `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/UI-LIVE-SUPERVISOR-FINAL-20260511-post-zip_claude_review.md`
 - Result: `SHIP DECISION: APPROVE`, no findings, no drift.
+
+# 2026-05-11 S3 Real-Use Fix Addendum
+
+The later hand-run prompt `list file and bucket structure of my s3` is now
+handled as a separate runtime/UI fix set, not as part of the earlier
+live-supervisor approval.
+
+Shipped changes:
+
+- read-only `aws_s3_list` tool for S3 bucket/prefix/object inventory;
+- accurate bash/Python sandbox diagnosis instead of Bedrock-only guessing;
+- S3 intent-drift guard before final answers;
+- collapsed/grouped tool cards and collapsed thinking placement before metrics;
+- per-turn cost control for simple S3 inventory: no `tool_search` tax for the
+  S3 tool, no repeated blocked `aws s3` retry loop, and Extended Thinking
+  disabled for the simple inventory turn only;
+- focused smoke tests plus independent Claude CLI review per block.
+
+Evidence:
+
+- per-block review artifacts:
+  `compact_v5_test_evidence/final_results/s3_real_use_reviews/`;
+- implementation status:
+  `compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`;
+- zip verification report:
+  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
+
+Real AWS smoke is recorded in the final integration artifacts. If credentials
+are unavailable, the result is documented as an environment/permission blocker
+rather than hidden.

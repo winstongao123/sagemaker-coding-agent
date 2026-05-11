@@ -20,6 +20,7 @@ PORT_LOG: #031.
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, Iterable, List, Optional
+import re
 
 from core import IterationBudget, QueryEngine
 from core.query_engine import QueryResult
@@ -140,6 +141,42 @@ def _build_prompt_metrics(
     }
 
 
+def _is_simple_s3_inventory_request(message: str) -> bool:
+    """Detect a narrow S3 list/inventory request suitable for lower-cost mode."""
+    lowered = (message or "").lower()
+    if "s3" not in lowered:
+        return False
+    if any(term in lowered for term in ("delete", "remove", "upload", "put object", "write")):
+        return False
+    inventory_terms = (
+        "list",
+        "inventory",
+        "structure",
+        "bucket",
+        "buckets",
+        "prefix",
+        "prefixes",
+        "files",
+        "objects",
+    )
+    if not any(term in lowered for term in inventory_terms):
+        return False
+    coding_terms = (
+        "fix",
+        "implement",
+        "refactor",
+        "debug",
+        "test",
+        "modify",
+        "code",
+        "repo",
+        "repository",
+    )
+    if any(re.search(rf"\b{term}\b", lowered) for term in coding_terms):
+        return False
+    return True
+
+
 class Agent:
     """Minimal public Agent wrapping the Phase 8-10 surfaces."""
 
@@ -204,6 +241,7 @@ class Agent:
         self._auto_compact_enabled = bool(auto_compact_enabled)
         self._thinking_enabled = bool(thinking_enabled)
         self._thinking_budget = int(thinking_budget)
+        self.last_effective_thinking_enabled = bool(thinking_enabled)
         self._ui_subagent_preferences: Dict[str, Any] = {}
         self.last_prompt_metrics: Dict[str, Any] = {}
         # Historical B+ state retained for compatibility with tests that
@@ -272,6 +310,23 @@ class Agent:
         from runtime.config import CONFIG as _CFG
         _max_tokens = getattr(_CFG, "max_tokens", 4096)
         _temperature = getattr(_CFG, "temperature", 0.0)
+        _thinking_enabled = self._thinking_enabled
+        if (
+            _thinking_enabled
+            and bool(getattr(_CFG, "disable_thinking_for_simple_s3_inventory", True))
+            and _is_simple_s3_inventory_request(message)
+        ):
+            _thinking_enabled = False
+            try:
+                output_fn(
+                    "[cost control] Extended Thinking disabled for this simple S3 "
+                    "inventory turn; model, cache, and compaction settings unchanged."
+                )
+            except Exception:
+                pass
+        self.last_effective_thinking_enabled = bool(_thinking_enabled)
+        if isinstance(self.last_prompt_metrics, dict):
+            self.last_prompt_metrics["thinking_enabled"] = bool(_thinking_enabled)
         status_memory: Dict[str, Any] = {}
         try:
             from runtime.state import STATE
@@ -300,7 +355,7 @@ class Agent:
                 plan_mode=self._plan_mode,
                 auto_compact_enabled=self._auto_compact_enabled,
                 output_fn=output_fn,
-                thinking_enabled=self._thinking_enabled,
+                thinking_enabled=_thinking_enabled,
                 thinking_budget=self._thinking_budget,
                 max_tokens=_max_tokens,
                 temperature=_temperature,

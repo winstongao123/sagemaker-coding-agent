@@ -34,6 +34,10 @@ from security.manager import (
     run_subprocess,
     safe_exec_env,
 )
+from security.diagnostics import (
+    python_exec_runtime_diagnosis,
+    python_exec_security_block_diagnosis,
+)
 
 
 _DESCRIPTION = """Execute Python code in a sandboxed subprocess.
@@ -232,6 +236,11 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
 
     ok, msg = _security_manager.SECURITY.validate_python(code)
     if not ok:
+        diagnosis = python_exec_security_block_diagnosis(
+            msg, aws_bedrock_only=CONFIG.aws_bedrock_only
+        )
+        if diagnosis:
+            return f"Security blocked: {msg}\n[diagnosis]\n{diagnosis}"
         return f"Security blocked: {msg}"
 
     # Build preamble at call time (captures current CONFIG state).
@@ -266,6 +275,11 @@ def _python_exec_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]
             output += f"\n[stderr]\n{result.stderr}"
         if result.returncode != 0:
             output += f"\n[exit code: {result.returncode}]"
+        diagnosis = python_exec_runtime_diagnosis(
+            output, aws_bedrock_only=CONFIG.aws_bedrock_only
+        )
+        if diagnosis:
+            output += f"\n[diagnosis]\n{diagnosis}"
         return _security_manager.SECURITY.truncate_output(output) if output else "(no output)"
     except _subprocess.TimeoutExpired:
         return f"Error: code timed out after {timeout} seconds"

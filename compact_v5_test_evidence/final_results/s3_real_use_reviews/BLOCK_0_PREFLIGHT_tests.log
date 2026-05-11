@@ -1,0 +1,825 @@
+﻿# Block 0 Preflight Evidence
+
+## Git Status
+```text
+## v5-build...sageagent/v5-build
+ m _archive/compare_code/gg-claude-code-runnable
+?? .sageagent_state/
+?? _zip_review/
+?? memory.md
+```
+
+## Active File Existence
+- `compact_v5/ui/chat_ui.py`: True
+- `compact_v5/tools/python_exec.py`: True
+- `compact_v5/security/dangerous_patterns.py`: True
+- `compact_v5/security/manager.py`: True
+- `compact_v5/prompt`: True
+- `compact_v5/core/query_engine.py`: True
+
+## Grep Evidence
+### `thinking|Reasoning / thinking|_render_turn_meta|role == "thinking"`
+```text
+compact_v5\chat.ipynb:13:    "- **Cell 2** sets model, AWS region, mock mode, thinking mode, and budget settings.\n",
+compact_v5\chat.ipynb:131:    "    thinking_budget_dropdown = widgets.Dropdown(\n",
+compact_v5\chat.ipynb:162:    "    thinking_checkbox = widgets.Checkbox(\n",
+compact_v5\chat.ipynb:176:    "        thinking_checkbox,\n",
+compact_v5\chat.ipynb:177:    "        thinking_budget_dropdown,\n",
+compact_v5\chat.ipynb:197:    "    thinking_budget_dropdown = _Value(\"4096 - Standard\")\n",
+compact_v5\chat.ipynb:202:    "    thinking_checkbox = _Value(False)\n",
+compact_v5\chat.ipynb:213:    "CONFIG.thinking_enabled = bool(_value(thinking_checkbox))\n",
+compact_v5\chat.ipynb:214:    "CONFIG.thinking_budget = THINKING_BUDGET_OPTIONS[_value(thinking_budget_dropdown)]\n",
+compact_v5\chat.ipynb:222:    "    f\"mock_mode={CONFIG.mock_mode}, thinking={CONFIG.thinking_enabled}, \"\n",
+compact_v5\chat.ipynb:282:    "    CONFIG.thinking_enabled = bool(_value(thinking_checkbox))\n",
+compact_v5\chat.ipynb:283:    "    CONFIG.thinking_budget = THINKING_BUDGET_OPTIONS[_value(thinking_budget_dropdown)]\n",
+compact_v5\chat.md:12:2. Configure model from the dropdown, Sydney region, mock mode, thinking mode, and budgets.
+compact_v5\chat.md:93:| Extended Thinking / Think Budget | Changes the thinking config sent to Bedrock models that support it. |
+compact_v5\agent.py:107:    thinking_enabled: bool,
+compact_v5\agent.py:108:    thinking_budget: int,
+compact_v5\agent.py:138:        "thinking_enabled": bool(thinking_enabled),
+compact_v5\agent.py:139:        "thinking_budget": int(thinking_budget),
+compact_v5\agent.py:156:        thinking_enabled: bool = False,
+compact_v5\agent.py:157:        thinking_budget: int = 4096,
+compact_v5\agent.py:176:            thinking_enabled: send thinking config on every Bedrock call.
+compact_v5\agent.py:177:            thinking_budget: max tokens for thinking (PS Issue #4 surfaces this).
+compact_v5\agent.py:205:        self._thinking_enabled = bool(thinking_enabled)
+compact_v5\agent.py:206:        self._thinking_budget = int(thinking_budget)
+compact_v5\agent.py:262:            thinking_enabled=self._thinking_enabled,
+compact_v5\agent.py:263:            thinking_budget=self._thinking_budget,
+compact_v5\agent.py:303:                thinking_enabled=self._thinking_enabled,
+compact_v5\agent.py:304:                thinking_budget=self._thinking_budget,
+compact_v5\agent.py:376:    def thinking_enabled(self) -> bool:
+compact_v5\agent.py:377:        return self._thinking_enabled
+compact_v5\agent.py:388:    def thinking_budget(self) -> int:
+compact_v5\agent.py:389:        return self._thinking_budget
+compact_v5\agent.py:420:    def set_thinking(self, enabled: bool, budget: Optional[int] = None) -> None:
+compact_v5\agent.py:421:        """Update thinking-mode settings (PS Issue #4 UI hook)."""
+compact_v5\agent.py:422:        self._thinking_enabled = bool(enabled)
+compact_v5\agent.py:424:            self._thinking_budget = int(budget)
+compact_v5\AGENT_STATUS.md:28:- v4-style tool and system/thinking cards;
+compact_v5\AGENT_STATUS.md:121:- thinking block renders after per-turn metrics and appeared expanded in the
+compact_v5\ui\chat_ui.py:58:                thinking_enabled=False,
+compact_v5\ui\chat_ui.py:59:                thinking_budget=4096,
+compact_v5\ui\chat_ui.py:104:        self.thinking_widget = ThinkingBudgetWidget(agent=agent)
+compact_v5\ui\chat_ui.py:163:            "<br>" + self.thinking_widget.render_html() +
+compact_v5\ui\chat_ui.py:179:            "<br>" + self.thinking_widget.render_html() +
+compact_v5\ui\chat_ui.py:195:        self.thinking_widget = ThinkingBudgetWidget(agent=agent)
+compact_v5\ui\chat_ui.py:214:        self._thinking_handle = self.thinking_widget.render()
+compact_v5\ui\chat_ui.py:217:            widgets.HBox([self._budget_handle, self._thinking_handle]),
+compact_v5\ui\chat_ui.py:256:                self.thinking_widget.refresh()
+compact_v5\ui\chat_ui.py:279:        self.thinking_widget = ThinkingBudgetWidget(agent=agent)
+compact_v5\ui\chat_ui.py:359:        self._thinking_checkbox = widgets.Checkbox(value=bool(getattr(self.agent, "thinking_enabled", False)), description="Extended Thinking", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
+compact_v5\ui\chat_ui.py:360:        self._thinking_budget_slider = widgets.IntSlider(value=int(getattr(self.agent, "thinking_budget", 4096)), min=1024, max=16000, step=1024, description="Think Budget:", style={"description_width": "100px"}, layout=widgets.Layout(width="250px"), disabled=not bool(getattr(self.agent, "thinking_enabled", False)))
+compact_v5\ui\chat_ui.py:398:        self._thinking_checkbox.observe(self._on_thinking_change, names="value")
+compact_v5\ui\chat_ui.py:399:        self._thinking_budget_slider.observe(self._on_thinking_budget_change, names="value")
+compact_v5\ui\chat_ui.py:460:        thinking_row = widgets.HBox([self._thinking_checkbox, self._thinking_budget_slider, self._temperature_slider, self._budget_input, self._auto_compact, self._dark_toggle, self._chat_height_slider])
+compact_v5\ui\chat_ui.py:461:        thinking_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
+compact_v5\ui\chat_ui.py:472:        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._input, action_row, sep4, self._tokens_html, self._mode_html])
+compact_v5\ui\chat_ui.py:538:                elif role == "thinking":
+compact_v5\ui\chat_ui.py:543:                        "Reasoning / thinking</summary>"
+compact_v5\ui\chat_ui.py:575:                meta_html = self._render_turn_meta(meta, c) if role == "assistant" else ""
+compact_v5\ui\chat_ui.py:874:        thinking_state = "ON" if self._thinking_checkbox.value else "OFF"
+compact_v5\ui\chat_ui.py:876:            f"Reasoning: Thinking {thinking_state} "
+compact_v5\ui\chat_ui.py:877:            f"(budget {int(self._thinking_budget_slider.value)})"
+compact_v5\ui\chat_ui.py:937:    def _render_turn_meta(self, meta: Any, colors: Dict[str, str]) -> str:
+compact_v5\ui\chat_ui.py:948:        thinking = str(meta.get("thinking", "") or "").strip()
+compact_v5\ui\chat_ui.py:957:        thinking_html = ""
+compact_v5\ui\chat_ui.py:958:        if thinking:
+compact_v5\ui\chat_ui.py:959:            safe = self._escape(thinking[:8000]).replace("\n", "<br>")
+compact_v5\ui\chat_ui.py:960:            more = "" if len(thinking) <= 8000 else "<br>[thinking truncated in UI; full text remains in runtime/audit logs]"
+compact_v5\ui\chat_ui.py:961:            thinking_html = (
+compact_v5\ui\chat_ui.py:963:                "<summary style='cursor:pointer;color:#ab47bc;'>Reasoning / thinking captured for this turn</summary>"
+compact_v5\ui\chat_ui.py:970:            f"{summary}{thinking_html}</div>"
+compact_v5\ui\chat_ui.py:987:        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
+compact_v5\ui\chat_ui.py:990:                "Cost drivers: no calls yet; measure calls, output tokens, thinking state, "
+compact_v5\ui\chat_ui.py:998:            f"avg {avg_out:,.0f} out/call, Thinking {thinking_state}, "
+compact_v5\ui\chat_ui.py:1007:        thinking = (
+compact_v5\ui\chat_ui.py:1008:            f"ON/{int(metrics.get('thinking_budget', 0) or 0):,}"
+compact_v5\ui\chat_ui.py:1009:            if metrics.get("thinking_enabled")
+compact_v5\ui\chat_ui.py:1023:            f"Thinking {thinking}."
+compact_v5\ui\chat_ui.py:1030:        thinking_state = "ON" if bool(getattr(self.agent, "thinking_enabled", False)) else "OFF"
+compact_v5\ui\chat_ui.py:1031:        thinking_budget = int(getattr(self.agent, "thinking_budget", 4096) or 4096)
+compact_v5\ui\chat_ui.py:1044:            "thinking": getattr(result, "thinking", "") or "",
+compact_v5\ui\chat_ui.py:1045:            "reasoning_state": f"Thinking {thinking_state} (budget {thinking_budget})",
+compact_v5\ui\chat_ui.py:1276:            self.thinking_widget.refresh()
+compact_v5\ui\chat_ui.py:1393:    def _on_thinking_change(self, change) -> None:
+compact_v5\ui\chat_ui.py:1394:        self._thinking_budget_slider.disabled = not bool(change["new"])
+compact_v5\ui\chat_ui.py:1396:            self.agent.set_thinking(bool(change["new"]), int(self._thinking_budget_slider.value))
+compact_v5\ui\chat_ui.py:1399:        self.thinking_widget.refresh()
+compact_v5\ui\chat_ui.py:1402:    def _on_thinking_budget_change(self, change) -> None:
+compact_v5\ui\chat_ui.py:1404:            self.agent.set_thinking(bool(self._thinking_checkbox.value), int(change["new"]))
+compact_v5\ui\chat_ui.py:1407:        self.thinking_widget.refresh()
+compact_v5\ui\chat_ui.py:1588:            thinking_enabled=getattr(CONFIG, "thinking_enabled", False),
+compact_v5\ui\chat_ui.py:1589:            thinking_budget=getattr(CONFIG, "thinking_budget", 4096),
+compact_v5\ui\widgets.py:7:- **PS Issue #4** (visible thinking budget): v4.8.0 added the thinking-mode
+compact_v5\ui\widgets.py:113:    """Live display of thinking-mode toggle + budget label.
+compact_v5\ui\widgets.py:115:    The widget reads from / writes to the bound Agent's thinking-mode
+compact_v5\ui\widgets.py:116:    settings via `agent.set_thinking(enabled, budget)`.
+compact_v5\ui\widgets.py:133:            value=self.agent.thinking_enabled,
+compact_v5\ui\widgets.py:134:            description="thinking",
+compact_v5\ui\widgets.py:138:            value=self.agent.thinking_budget,
+compact_v5\ui\widgets.py:148:                self.agent.set_thinking(
+compact_v5\ui\widgets.py:164:            f'thinking={"ON" if self.agent.thinking_enabled else "OFF"}, '
+compact_v5\ui\widgets.py:165:            f'budget={self.agent.thinking_budget} tokens'
+compact_v5\ui\widgets.py:171:        flips thinking-mode programmatically)."""
+compact_v5\ui\widgets.py:174:                self._toggle.value = self.agent.thinking_enabled
+compact_v5\ui\widgets.py:179:                self._slider.value = self.agent.thinking_budget
+compact_v5\core\cache_break_detection.py:38:    thinking_enabled: bool = False
+compact_v5\core\cache_break_detection.py:39:    thinking_budget: int = 0
+compact_v5\core\query_engine.py:78:    `thinking`       â€” display-only extended-thinking text captured during
+compact_v5\core\query_engine.py:79:                       this run. Signed thinking blocks stay in `messages`;
+compact_v5\core\query_engine.py:88:    thinking: str = ""
+compact_v5\core\query_engine.py:104:    Block E+F EF-3: thinking signatures are model-bound, so the retry path
+compact_v5\core\query_engine.py:170:            if block.get("type") in {"thinking", "redacted_thinking"}:
+compact_v5\core\query_engine.py:187:        Bedrock extended-thinking signatures are tied to the model that created
+compact_v5\core\query_engine.py:188:        them. Replaying those signatures to a different model can fail; thinking
+compact_v5\core\query_engine.py:190:        text/tool context while dropping thinking blocks.
+compact_v5\core\query_engine.py:440:        thinking_enabled: bool = False,
+compact_v5\core\query_engine.py:441:        thinking_budget: int = 4096,
+compact_v5\core\query_engine.py:636:        thinking_trace: List[str] = []
+compact_v5\core\query_engine.py:814:                        thinking="\n\n".join(thinking_trace),
+compact_v5\core\query_engine.py:835:                    thinking_enabled=thinking_enabled,
+compact_v5\core\query_engine.py:836:                    thinking_budget=thinking_budget,
+compact_v5\core\query_engine.py:856:                    thinking="\n\n".join(thinking_trace),
+compact_v5\core\query_engine.py:866:            response_thinking = getattr(response, "thinking", "") or ""
+compact_v5\core\query_engine.py:867:            if response_thinking:
+compact_v5\core\query_engine.py:868:                thinking_trace.append(response_thinking)
+compact_v5\core\query_engine.py:890:                                "thinking": getattr(response, "thinking", "") or "",
+compact_v5\core\query_engine.py:907:                            f"thinking_chars={len(getattr(response, 'thinking', '') or '')}"
+compact_v5\core\query_engine.py:933:            # Append assistant turn (text + tool_use blocks, plus thinking).
+compact_v5\core\query_engine.py:1234:            thinking="\n\n".join(thinking_trace),
+compact_v5\core\query_engine.py:1978:        Order: signed thinking blocks (if any) â†’ text â†’ tool_use. Bedrock
+compact_v5\core\query_engine.py:1979:        requires model-supplied signatures for replayed thinking blocks, so v5
+compact_v5\core\query_engine.py:1980:        never synthesizes a thinking block from display-only thinking text.
+compact_v5\core\query_engine.py:1983:        for thinking_block in getattr(response, "thinking_blocks", []) or []:
+compact_v5\core\query_engine.py:1984:            if isinstance(thinking_block, dict) and thinking_block.get("signature"):
+compact_v5\core\query_engine.py:1985:                blocks.append(dict(thinking_block))
+compact_v5\core\query_engine.py:2422:    thinking_enabled: bool = False,
+compact_v5\core\query_engine.py:2423:    thinking_budget: int = 4096,
+compact_v5\core\query_engine.py:2439:        thinking_enabled=thinking_enabled,
+compact_v5\core\query_engine.py:2440:        thinking_budget=thinking_budget,
+compact_v5\runtime\config.py:48:    max_tokens: int = 16384  # Must be > thinking_budget when thinking enabled
+compact_v5\runtime\config.py:58:    thinking_enabled: bool = False  # Extended thinking OFF by default
+compact_v5\runtime\config.py:59:    thinking_budget: int = 8192  # Tokens for thinking (1024-16000)
+compact_v5\runtime\config.py:231:        "max_history": int, "temperature": float, "thinking_enabled": bool,
+compact_v5\runtime\config.py:232:        "thinking_budget": int, "mock_mode": bool,
+compact_v5\runtime\config.py:281:        if key == "thinking_budget" and not (1024 <= val <= 64000):
+compact_v5\runtime\config.py:282:            logging.warning(f"Config: thinking_budget={val} out of range [1024, 64000] — skipped")
+compact_v5\docs\htmls\PS_DEEP_DIVE_RUNNABLE.html:528:        AP2["YOLO classifier<br/>(fast + thinking)"]
+compact_v5\runtime\bedrock_client.py:20:must verify thinking config is sent on EVERY Bedrock call when
+compact_v5\runtime\bedrock_client.py:21:CONFIG.thinking_enabled=True (not just the first turn).
+compact_v5\runtime\bedrock_client.py:60:    thinking: str = ""
+compact_v5\runtime\bedrock_client.py:61:    thinking_blocks: List[Dict[str, Any]] = field(default_factory=list)
+compact_v5\runtime\bedrock_client.py:79:# Anthropic-API-direct features (interleaved-thinking beta, 1m-context
+compact_v5\runtime\bedrock_client.py:90:    "interleaved-thinking-2025-05-14",
+compact_v5\runtime\bedrock_client.py:213:    classifier, same thinking-mode handling.
+compact_v5\runtime\bedrock_client.py:215:    PS Issue #4 verification: `chat()` always sends `thinking` config when
+compact_v5\runtime\bedrock_client.py:216:    `thinking_enabled=True`, regardless of which call this is in the session.
+compact_v5\runtime\bedrock_client.py:217:    The fact that the model only RETURNS thinking blocks on some turns is a
+compact_v5\runtime\bedrock_client.py:300:        thinking_enabled: bool = False,
+compact_v5\runtime\bedrock_client.py:301:        thinking_budget: int = 4096,
+compact_v5\runtime\bedrock_client.py:311:            thinking_enabled: Enable extended thinking mode
+compact_v5\runtime\bedrock_client.py:312:            thinking_budget: Max tokens for thinking (1024-16000)
+compact_v5\runtime\bedrock_client.py:385:        # Extended thinking mode (requires temperature=1).
+compact_v5\runtime\bedrock_client.py:386:        # PS Issue #4: this block runs on EVERY chat() call when thinking_enabled
+compact_v5\runtime\bedrock_client.py:389:        if thinking_enabled:
+compact_v5\runtime\bedrock_client.py:390:            body["thinking"] = {
+compact_v5\runtime\bedrock_client.py:392:                "budget_tokens": min(max(thinking_budget, 1024), 16000),
+compact_v5\runtime\bedrock_client.py:394:            body["temperature"] = 1  # Required for thinking mode
+compact_v5\runtime\bedrock_client.py:544:        """Remove v5 bookkeeping and invalid unsigned thinking blocks.
+compact_v5\runtime\bedrock_client.py:546:        Bedrock requires extended-thinking blocks replayed in message history to
+compact_v5\runtime\bedrock_client.py:547:        include the model-supplied signature. v5 still exposes thinking text in
+compact_v5\runtime\bedrock_client.py:549:        thinking block.
+compact_v5\runtime\bedrock_client.py:560:                    and block.get("type") in {"thinking", "redacted_thinking"}
+compact_v5\runtime\bedrock_client.py:568:                msg["content"] = [{"type": "text", "text": "[thinking omitted: missing Bedrock signature]"}]
+compact_v5\runtime\bedrock_client.py:574:        thinking = ""
+compact_v5\runtime\bedrock_client.py:575:        thinking_blocks: List[Dict[str, Any]] = []
+compact_v5\runtime\bedrock_client.py:581:            elif block_type == "thinking":
+compact_v5\runtime\bedrock_client.py:582:                thinking += block.get("thinking", "")
+compact_v5\runtime\bedrock_client.py:584:                    thinking_blocks.append(dict(block))
+compact_v5\runtime\bedrock_client.py:585:            elif block_type == "redacted_thinking":
+compact_v5\runtime\bedrock_client.py:587:                    thinking_blocks.append(dict(block))
+compact_v5\runtime\bedrock_client.py:601:            thinking=thinking,
+compact_v5\runtime\bedrock_client.py:602:            thinking_blocks=thinking_blocks,
+compact_v5\runtime\bedrock_client.py:644:            # contains a thinking block, switch the count-tokens body to
+compact_v5\runtime\bedrock_client.py:646:            # thinking config). Otherwise Bedrock either rejects or
+compact_v5\runtime\bedrock_client.py:647:            # undercounts the thinking budget. Per Runnable
+compact_v5\runtime\bedrock_client.py:652:                has_thinking_blocks,
+compact_v5\runtime\bedrock_client.py:655:            uses_thinking = any(has_thinking_blocks(m) for m in sanitized_messages)
+compact_v5\runtime\bedrock_client.py:661:                "max_tokens": TOKEN_COUNT_MAX_TOKENS if uses_thinking else 1,
+compact_v5\runtime\bedrock_client.py:663:            if uses_thinking:
+compact_v5\runtime\bedrock_client.py:664:                body["thinking"] = {
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:116: I --> J[Parse response\ntext / thinking / tool_use]
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:140: S4 --> S5["Step 5: Parse Response\nyield text blocks\nyield thinking blocks\ncollect tool_use blocks"]
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1201:- thinking -> <code>roughTokenCountEstimation(thinking)</code><br>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1279: <li>Parse response (text, thinking, tool_use)</li>
+compact_v5\subagent\fork.py:11:   thinking, text — in the child's message buffer.
+compact_v5\subagent\fork.py:110:        "thinking-out-loud.\n"
+compact_v5\subagent\fork.py:137:      replayed verbatim (every tool_use, thinking, text block).
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:146:    C --> D["Parse Response<br/>text / thinking / tool_use"]
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:352:// - ProgressMessage: status updates shown in the UI ("thinking...", "running tool...")
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:593:5. <b>Extended thinking</b> — your V4 enables <code>budget_tokens=5000</code> for deeper reasoning. Claude Code uses thinking blocks too. The thinking content shows in your left sidebar — this is a quality mechanism not available in basic LangGraph.<br>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:156:      <tr><td>Notebook</td><td>The steering wheel and dashboard.</td><td>v4-style dark chat UI, model picker, session buttons, Plan Mode, live Bedrock-only toggle, Auto-Compact, Compact/Clean, thinking/budget controls, status, todos, memory, sessions, checkpoints, audit logs, readable assistant markdown, and per-assistant-turn prompt-cache/cost/reasoning strips.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:163:      Extended thinking is handled like a signed permission slip. Bedrock may return a thinking block with a signature. On the next turn, v5 may include the previous assistant message again as conversation history, but it must replay only the original signed thinking block. v5 never invents an unsigned thinking block from display text. The UI shows a readable copy for the operator, while the runtime keeps Bedrock's signed block separate.
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:209:      <tr><td>Runnable Claude Code</td><td>Context compaction, cache thinking, skill discovery, model switch, tool-loop controls, subagent/reviewer discipline, and long-task status handling.</td><td>We did not copy the exact UI, streaming assumptions, or every Claude Code internal behavior because v5 runs in SageMaker/Bedrock.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:250:      <tr><td>R13-R17</td><td>Real software-building ability: coding accuracy, refactor, debugging, long app build, and thinking visibility.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:269:      <tr><td>v4-style notebook UI</td><td>Restored and wired to v5 runtime: Plan Mode, live Bedrock-only/S3-read mode visibility, Auto-Compact, Compact, Clean, model/session controls, v4-style sub-agent model dropdowns backed by <code>CONFIG.agent_overrides</code>, always-visible footer metrics, per-assistant-turn prompt-cache/cost/reasoning strips, v4-style safe markdown rendering, expandable captured thinking text, fresh widget models on rerender, and SageMaker-safe child-by-child display when one large root widget fails.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:270:      <tr><td>Bedrock extended-thinking replay</td><td>Fixed after live SageMaker testing found <code>thinking.signature</code> validation errors. v5 preserves model-supplied signed thinking blocks for history replay, drops unsigned thinking blocks before Bedrock calls, and keeps display text only for UI/audit visibility.</td></tr>
+compact_v5\docs\htmls\archive\v4_architecture.html:998:                <tr><td><strong>thinking_enabled</strong></td><td>false</td><td>Extended thinking mode (uses more tokens, better reasoning)</td></tr>
+compact_v5\runtime\tokens.py:257:# requests with thinking blocks satisfy the API invariant:
+compact_v5\runtime\tokens.py:258:# max_tokens must be greater than thinking.budget_tokens.
+compact_v5\runtime\tokens.py:263:def has_thinking_blocks(message: Dict[str, Any]) -> bool:
+compact_v5\runtime\tokens.py:264:    """True if a message contains an Anthropic-format `thinking` block.
+compact_v5\runtime\tokens.py:275:        if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}:
+compact_v5\runtime\tokens.py:310:    if btype in {"thinking", "redacted_thinking"}:
+compact_v5\runtime\tokens.py:311:        return estimate_message_tokens(block.get("thinking", "") or block.get("data", ""))
+compact_v5\runtime\tokens.py:812:    "has_thinking_blocks",
+```
+### `role == "tool"|Tool:|details|tool_use_id|tool_gen_callback`
+```text
+compact_v5\commands.py:638:        text=f"{len(snaps)} edits this session (use /diffs summary for details)"
+compact_v5\agent.py:158:        tool_gen_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+compact_v5\agent.py:178:            tool_gen_callback: optional public progress event callback for
+compact_v5\agent.py:200:            tool_gen_callback=tool_gen_callback,
+compact_v5\agent.py:223:        tool_gen_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+compact_v5\agent.py:292:        previous_tool_callback = self._engine.tool_gen_callback
+compact_v5\agent.py:293:        if tool_gen_callback is not None:
+compact_v5\agent.py:294:            self._engine.tool_gen_callback = tool_gen_callback
+compact_v5\agent.py:310:            if tool_gen_callback is not None:
+compact_v5\agent.py:311:                self._engine.tool_gen_callback = previous_tool_callback
+compact_v5\AGENT_STATUS.md:62:- exposed public `Agent(..., tool_gen_callback=...)` and
+compact_v5\AGENT_STATUS.md:63:  `Agent.run(..., tool_gen_callback=...)` progress callback surfaces;
+compact_v5\AGENT_STATUS.md:92:- UI no longer contains private `_engine.tool_gen_callback` patching;
+compact_v5\AGENT_STATUS.md:152:  just technical fix details.
+compact_v5\ui\diff_widget.py:20:    → returns HTML wrapping inline diff in `<details>` so the full-file
+compact_v5\ui\diff_widget.py:114:    """Render the inline diff PLUS a click-to-expand `<details>` block
+compact_v5\ui\diff_widget.py:130:        '<details style="margin-top:6px;">'
+compact_v5\ui\diff_widget.py:135:        + '</details>'
+compact_v5\ui\chat_ui.py:527:                    label = f"Tool: {self._escape((meta or {}).get('tool_name', 'tool'))}"
+compact_v5\ui\chat_ui.py:542:                        f"<details open><summary style='cursor:pointer;color:{color};'>"
+compact_v5\ui\chat_ui.py:545:                        f"margin-top:4px;'>{self._escape(text).replace(chr(10), '<br>')}</div></details>"
+compact_v5\ui\chat_ui.py:556:                    details = []
+compact_v5\ui\chat_ui.py:558:                        details.append(f"stop {stop}")
+compact_v5\ui\chat_ui.py:560:                        details.append(f"cost {cost}")
+compact_v5\ui\chat_ui.py:562:                        details.append(f"cache {cache}")
+compact_v5\ui\chat_ui.py:565:                        details.append(f"artifacts<br>{safe_paths}")
+compact_v5\ui\chat_ui.py:568:                        f"{phase}" + ((" | " + " | ".join(details)) if details else "") + "</div>"
+compact_v5\ui\chat_ui.py:761:            f"<details open style='background:{c['bg']};border:1px solid {c['border']};"
+compact_v5\ui\chat_ui.py:765:            f"<div style='margin-top:5px;'>{''.join(rows)}</div></details>"
+compact_v5\ui\chat_ui.py:962:                "<details style='margin-top:4px;'>"
+compact_v5\ui\chat_ui.py:965:                f"font-size:11px;line-height:1.45;margin-top:4px;'>{safe}{more}</div></details>"
+compact_v5\ui\chat_ui.py:1256:                tool_gen_callback=self._on_tool_generation,
+compact_v5\core\cache.py:197:        details: List[str] = []
+compact_v5\core\cache.py:199:            details.append(f"changed=[{', '.join(changed)}]")
+compact_v5\core\cache.py:201:            details.append(f"added=[{', '.join(added)}]")
+compact_v5\core\cache.py:203:            details.append(f"removed=[{', '.join(removed)}]")
+compact_v5\core\cache.py:205:            details.append("reordered")
+compact_v5\core\cache.py:207:            details.append(f"token_delta={delta:+d}")
+compact_v5\core\cache.py:209:            "[CacheBreakWarning] prompt cache invalidated. " + "; ".join(details)
+compact_v5\memory\compact.py:149:    """Return a dict mapping tool_use_id → index-of-message-containing-it
+compact_v5\memory\compact.py:168:                tid = b.get("tool_use_id")
+compact_v5\core\errors.py:356:def extract_connection_error_details(exc_or_text: Any) -> dict[str, str]:
+compact_v5\subagent\__init__.py:12:- build_env_details / build_handoff_block
+compact_v5\subagent\__init__.py:44:from .env import build_env_details  # noqa: F401
+compact_v5\core\compactor.py:375:                elif block.get("type") == "tool_result" and block.get("tool_use_id"):
+compact_v5\core\compactor.py:376:                    pending.discard(str(block["tool_use_id"]))
+compact_v5\core\compactor.py:485:    def _find_tool_name(cls, messages: List[Dict[str, Any]], tool_use_id: str) -> str:
+compact_v5\core\compactor.py:487:        if not tool_use_id:
+compact_v5\core\compactor.py:497:                    and block.get("id") == tool_use_id
+compact_v5\core\compactor.py:529:                    tool_use_id = str(block.get("tool_use_id", ""))
+compact_v5\core\compactor.py:530:                    tool_name = cls._find_tool_name(messages, tool_use_id)
+compact_v5\core\compactor.py:609:        # Build tool_use_id → tool_name map so we can skip protected tools.
+compact_v5\core\compactor.py:628:                tool_name = tool_name_map.get(block.get("tool_use_id", ""), "")
+compact_v5\core\compactor.py:1256:            def synthetic_tool_result_stub(tool_use_id: str, reason: str = "") -> Dict[str, Any]:
+compact_v5\core\compactor.py:1259:                    "tool_use_id": tool_use_id,
+compact_v5\core\compactor.py:1291:                    str(block.get("tool_use_id", ""))
+compact_v5\core\compactor.py:1361:                    tool_use_id = str(block.get("tool_use_id", ""))
+compact_v5\core\compactor.py:1362:                    if tool_use_id in expected and tool_use_id not in seen_results:
+compact_v5\core\compactor.py:1363:                        seen_results.add(tool_use_id)
+compact_v5\core\compactor.py:1383:                            f"Bedrock validation; tool_use_id={tool_use_id}]\n"
+compact_v5\core\parallel_dispatch.py:282:                    "tool_use_id": tid,
+compact_v5\core\parallel_dispatch.py:319:def pending_tool_use_ids(tool_calls: List[Any]) -> List[str]:
+compact_v5\core\parallel_dispatch.py:340:def mid_call_stub_recovery(tool_use_ids: List[str], reason: str, output_fn: Callable[[str], None] = print) -> List[Dict[str, Any]]:
+compact_v5\core\parallel_dispatch.py:341:    output_fn(f"[mid-call-recovery] {len(tool_use_ids)} tool calls recovered with synthetic stubs: {reason}")
+compact_v5\core\parallel_dispatch.py:343:        synthetic_tool_result_stub(tool_use_id, reason=reason)
+compact_v5\core\parallel_dispatch.py:344:        for tool_use_id in tool_use_ids
+compact_v5\core\parallel_dispatch.py:435:def synthetic_tool_result_stub(tool_use_id: str, reason: str = "") -> Dict[str, Any]:
+compact_v5\core\parallel_dispatch.py:446:        "tool_use_id": tool_use_id,
+compact_v5\core\parallel_dispatch.py:453:    interrupted_tool_use_ids: List[str],
+compact_v5\core\parallel_dispatch.py:462:    if not interrupted_tool_use_ids:
+compact_v5\core\parallel_dispatch.py:465:        f"[partial-tool-warning] {len(interrupted_tool_use_ids)} "
+compact_v5\core\parallel_dispatch.py:471:        for tu_id in interrupted_tool_use_ids
+compact_v5\core\__init__.py:25:    extract_connection_error_details,
+compact_v5\core\__init__.py:75:    pending_tool_use_ids,
+compact_v5\subagent\spawn.py:35:from .env import build_env_details
+compact_v5\subagent\spawn.py:225:        tool_gen_callback=getattr(parent_engine, "tool_gen_callback", None),
+compact_v5\subagent\spawn.py:266:      - A system prompt = base_system_prompt + env_details + handoff_block
+compact_v5\subagent\spawn.py:337:    #   <static> [+ env_details + handoff_block + agent_type_suffix in dynamic tail]
+compact_v5\subagent\spawn.py:343:    env_details = build_env_details(
+compact_v5\subagent\spawn.py:355:    dynamic_extras = [env_details, handoff, suffix]
+compact_v5\core\query_engine.py:337:        tool_gen_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+compact_v5\core\query_engine.py:388:        self.tool_gen_callback = tool_gen_callback
+compact_v5\core\query_engine.py:1128:                    pending_tool_use_ids,
+compact_v5\core\query_engine.py:1132:                self._partial_tool_names = set(pending_tool_use_ids(_dispatch_calls))
+compact_v5\core\query_engine.py:1167:                        self._partial_tool_names.discard(str(_block.get("tool_use_id", "")))
+compact_v5\core\query_engine.py:1268:                "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1289:                "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1317:                        "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1354:                    "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1391:                "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1423:                    "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1493:                            "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1511:                        "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1558:                "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1592:                "tool_use_id": call.id,
+compact_v5\core\query_engine.py:1889:        if self.tool_gen_callback is None:
+compact_v5\core\query_engine.py:1897:                "tool_use_id": getattr(call, "id", ""),
+compact_v5\core\query_engine.py:1902:                self.tool_gen_callback(event)
+compact_v5\core\query_engine.py:1910:        if self.tool_gen_callback is None:
+compact_v5\core\query_engine.py:1914:            "tool_use_id": getattr(call, "id", ""),
+compact_v5\core\query_engine.py:1920:            self.tool_gen_callback(event)
+compact_v5\docs\htmls\HERMES_VS_CODING_AGENT_v4.html:91:  <b>v4.10.0</b> — surgical <code>notebook_edit</code>, skill listing token budget, per-sub-agent env-details, model-aware context window, reactive compact on Bedrock <code>CONTEXT_OVERFLOW</code>;
+compact_v5\docs\htmls\HERMES_VS_CODING_AGENT_v4.html:117:<details style="margin:16px 0; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px 16px;">
+compact_v5\docs\htmls\HERMES_VS_CODING_AGENT_v4.html:133:</details>
+compact_v5\docs\htmls\PS_DEEP_DIVE_RUNNABLE.html:916:<p><b>What:</b> Understand results before passing them on.<br><b>Why:</b> Workers can't see parent context.<br><b>How:</b> Coordinator reads all findings, extracts key insights, includes specific details in worker prompts. Never "based on your findings, fix it."</p>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:63:Click any flowchart node for implementation details. For full deep-dive, see <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">PS_DEEP_DIVE_RUNNABLE.html</a> (10-chapter e-book with agentic design &amp; harness engineering focus).</p>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:86: <div class="tab" onclick="switchTab('details')">Deep Details</div>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:281:<b>Major update (PS_Deep research, April 2026):</b> Claude Code has a full multi-agent orchestration system with 7 task types (local_bash, local_agent, remote_agent, in_process_teammate, local_workflow, monitor_mcp, dream), coordinator mode (400+ line system prompt), fork subagents (cache-optimized context inheritance), and swarm teams (tmux/iTerm2/in-process backends). See <a href="PS_Deep/PS_DEEP_DIVE_RUNNABLE.html" style="color:#58a6ff;">Deep Dive E-Book Ch.2</a> for full details.
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1017:<b>Key details:</b><br>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1150:<div id="tab-details" class="tab-content">
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1248:</div><!-- end tab-details -->
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1423: <b>USER:</b> Role, goals, preferences. <i>when_to_save:</i> learn any user details. <i>how_to_use:</i> tailor behavior.<br>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1451: <li>Ephemeral task details, current conversation context</li>
+compact_v5\subagent\fork.py:189:            "tool_use_id": b.get("id"),
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:87:<details>
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:104:</details>
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:996:<tr><td><b>USER</b></td><td>Role, goals, preferences, expertise level</td><td>When you learn user details</td><td>Tailor responses to the user's expertise</td><td>AgentCore Memory: customer intelligence</td></tr>
+compact_v5\docs\htmls\PS_RUNNABLE_VS_LANGGRAPH.html:1010:<li><b>No ephemeral task details</b> — only useful in current session</li>
+compact_v5\subagent\env.py:1:"""V5 subagent/env.py — fresh sub-agent env-details block (Phase 9, ADR-015).
+compact_v5\subagent\env.py:3:Verbatim port of v4's `_build_subagent_env_details` at
+compact_v5\subagent\env.py:27:def build_env_details(
+compact_v5\subagent\env.py:33:    """Build a concise env-details block for a fresh sub-agent.
+compact_v5\subagent\env.py:39:        max_depth: hard cap surfaced in the env-details for the model's awareness.
+compact_v5\runtime\results.py:70:    tool_use_id: str
+compact_v5\runtime\results.py:118:        tool_use_id: str,
+compact_v5\runtime\results.py:127:        safe_tid = _safe_component(tool_use_id, "tool-use")
+compact_v5\runtime\results.py:137:            tool_use_id=str(tool_use_id or ""),
+compact_v5\runtime\results.py:216:        tool_use_id=str(block.get("tool_use_id") or ""),
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:176:  details {
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:221:      <b>per-sub-agent env-details</b> (cwd + git HEAD injected after the cached SYSTEM_PROMPT boundary),
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:956:    <details open>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:959:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:960:    <details open>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:963:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:964:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:967:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:968:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:971:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:972:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:975:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:976:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:979:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:980:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:983:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:984:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:987:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:988:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:991:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:992:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:995:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:996:    <details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:999:    </details>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:1040:      <li>Not claimed as fully learned from PDFs alone: exact UI-only details or any point we could not verify in code.</li>
+compact_v5\docs\htmls\archive\v4_architecture.html:154:.flow-box::after { content: "click for details"; position: absolute; bottom: 6px; right: 12px; font-size: 9px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s; }
+compact_v5\docs\htmls\archive\v4_architecture.html:215:    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.5 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check. v4.10.6 added the html skill: presentation / design / flowchart / architecture HTML deliverables, with screenshot-iteration loop. v4.10.7 hardened destructive-command coverage: ~50 new bash patterns + ~12 python patterns spanning cloud / IaC / orchestration / storage / DB CLI / persistence / system-overwrite, HIGH_RISK_TOOLS excluded from Always-Approve UI, cross-surface mirrored into Claude Code + Learning_Factory hooks. v4.10.8 closed the residual obfuscation escape route (base64/xxd/eval pipe-to-shell now blocked across more interpreters) and hard-blocked recursive folder removal from the agent (`rm -r/-rf/-fr/-R/--recursive`, `rmdir`, `Remove-Item -Recurse`, `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()`) — single-file cleanup still allowed; the 🧹 Clean button still works in-process. v4.10.9 closed Codex's third local-hook finding by adding a narrow backtick eval+downloader pattern (defense-in-depth only — eval was already excluded from the bash allowlist; zero new false-positive risk). v4.10.10 surfaced the previously-hardcoded `aws_bedrock_only` setting as a UI checkbox in cell 2 of `chat.ipynb` (default ticked = strict). Codex review on v4.10.10: PASS. 134/134 destructive-coverage tests + 122 v4 unit tests + 16/16 hook obfuscation self-test all green.</p>
+compact_v5\docs\htmls\archive\v4_architecture.html:247:                <div class="card-title">Sub-agent env-details (#47)</div>
+compact_v5\docs\htmls\archive\v4_architecture.html:675:        <p>Every tool the agent can use, organized by category. Click any card for details.</p>
+compact_v5\skills\html\SKILL.md:93:2. **HTML IS KING.** Never write "see docs/X.md" or "details elsewhere" — every detail the reader needs goes inline. Tables must include WHAT / WHY / HOW / examples / anti-patterns.
+compact_v5\skills\review\SKILL.md:55:4. **Leaky abstractions**: exposing internal details, breaking abstraction boundaries
+compact_v5\skills\clara\V4_NOTES.md:65:7. Paste the phase-specific prompt (01-05) when agent asks for phase details
+compact_v5\skills\simplify\SKILL.md:37:4. **Leaky abstractions**: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries
+compact_v5\skills\security-review\SKILL.md:140:[Vulnerability details as above]
+compact_v5\skills\html\references\flowchart_page.html:176:  details {
+compact_v5\skills\html\references\flowchart_page.html:221:      <b>per-sub-agent env-details</b> (cwd + git HEAD injected after the cached SYSTEM_PROMPT boundary),
+compact_v5\skills\html\references\flowchart_page.html:956:    <details open>
+compact_v5\skills\html\references\flowchart_page.html:959:    </details>
+compact_v5\skills\html\references\flowchart_page.html:960:    <details open>
+compact_v5\skills\html\references\flowchart_page.html:963:    </details>
+compact_v5\skills\html\references\flowchart_page.html:964:    <details>
+compact_v5\skills\html\references\flowchart_page.html:967:    </details>
+compact_v5\skills\html\references\flowchart_page.html:968:    <details>
+compact_v5\skills\html\references\flowchart_page.html:971:    </details>
+compact_v5\skills\html\references\flowchart_page.html:972:    <details>
+compact_v5\skills\html\references\flowchart_page.html:975:    </details>
+compact_v5\skills\html\references\flowchart_page.html:976:    <details>
+compact_v5\skills\html\references\flowchart_page.html:979:    </details>
+compact_v5\skills\html\references\flowchart_page.html:980:    <details>
+compact_v5\skills\html\references\flowchart_page.html:983:    </details>
+compact_v5\skills\html\references\flowchart_page.html:984:    <details>
+compact_v5\skills\html\references\flowchart_page.html:987:    </details>
+compact_v5\skills\html\references\flowchart_page.html:988:    <details>
+compact_v5\skills\html\references\flowchart_page.html:991:    </details>
+compact_v5\skills\html\references\flowchart_page.html:992:    <details>
+compact_v5\skills\html\references\flowchart_page.html:995:    </details>
+compact_v5\skills\html\references\flowchart_page.html:996:    <details>
+compact_v5\skills\html\references\flowchart_page.html:999:    </details>
+compact_v5\skills\html\references\flowchart_page.html:1040:      <li>Not claimed as fully learned from PDFs alone: exact UI-only details or any point we could not verify in code.</li>
+compact_v5\skills\html\references\tabbed_design.html:91:  <b>v4.10.0</b> — surgical <code>notebook_edit</code>, skill listing token budget, per-sub-agent env-details, model-aware context window, reactive compact on Bedrock <code>CONTEXT_OVERFLOW</code>;
+compact_v5\skills\html\references\tabbed_design.html:113:<details style="margin:16px 0; background:#161b22; border:1px solid #30363d; border-radius:8px; padding:12px 16px;">
+compact_v5\skills\html\references\tabbed_design.html:129:</details>
+compact_v5\skills\html\references\presentation_slides.html:148:          <tr><td>[Row 1 dimension]</td><td>[A details]</td><td>[B details]</td><td>[verdict]</td></tr>
+compact_v5\skills\html\references\presentation_slides.html:149:          <tr><td>[Row 2 dimension]</td><td>[A details]</td><td>[B details]</td><td>[verdict]</td></tr>
+compact_v5\skills\html\references\presentation_slides.html:150:          <tr><td>[Row 3 dimension]</td><td>[A details]</td><td>[B details]</td><td>[verdict]</td></tr>
+compact_v5\skills\clara\prompts\01_DISCOVERY.md:79:- Snowflake connection details (host, database, schema, warehouse)
+```
+### `linecache|boto3|aws_bedrock_only|aws s3|aws_s3`
+```text
+compact_v5\chat.md:153:  Python `boto3` S3 list/get/head calls through the approval gate, but still
+compact_v5\AGENT_STATUS.md:128:- S3 read/list path is contradictory: `aws s3` is blocked by bash/security
+compact_v5\AGENT_STATUS.md:129:  policy and boto3 failed because Python sandbox import allowlist blocks
+compact_v5\AGENT_STATUS.md:130:  `linecache`;
+compact_v5\chat.ipynb:28:    "!pip install -q boto3 ipywidgets jupyterlab_widgets widgetsnbextension Pillow python-docx openpyxl matplotlib requests scikit-learn\n"
+compact_v5\chat.ipynb:216:    "CONFIG.aws_bedrock_only = bool(_value(bedrock_only_toggle))\n",
+compact_v5\chat.ipynb:284:    "    CONFIG.aws_bedrock_only = bool(_value(bedrock_only_toggle))\n",
+compact_v5\docs\htmls\HERMES_VS_CODING_AGENT_v4.html:101:  <b>v4.10.10</b> — <code>aws_bedrock_only</code> UI toggle (2026-04-29). Surfaces the previously-hardcoded setting as a checkbox in cell 2 of <code>chat.ipynb</code> (default ticked = strict, Bedrock-only). Untick before launching cell 3 to enable S3 read/write, Textract, Lambda invoke, DynamoDB writes — all with the approval gate; destructive AWS ops remain hard-blocked. Cell 3 banner displays AWS scope at startup. After in-place refinements (defensive <code>(?i)</code> on PowerShell Remove-Item regex + clearer cell-by-cell setup text), Codex comprehensive re-review: <strong>PASS</strong> ("no findings, no additional bugs").
+compact_v5\runtime\config.py:95:    aws_bedrock_only: bool = False  # Set True to block all boto3 except bedrock-runtime
+compact_v5\runtime\config.py:237:        "aws_bedrock_only": bool, "disable_local_traces": bool, "session_cost_limit": float,
+compact_v5\runtime\bedrock_client.py:36:# can import this module without boto3 installed. Real flows will import on demand.
+compact_v5\runtime\bedrock_client.py:146:    import boto3
+compact_v5\runtime\bedrock_client.py:150:        return boto3.client(
+compact_v5\runtime\bedrock_client.py:156:        _RUNTIME_CLIENT_CACHE[key] = boto3.client(
+compact_v5\runtime\bedrock_client.py:236:                boto3 is NOT imported. This lets unit tests inject a fake
+compact_v5\runtime\bedrock_client.py:237:                client without requiring boto3 to be installed (Codex Phase-01
+compact_v5\runtime\bedrock_client.py:626:            (older boto3 versions; retry by upgrading boto3 ≥ 1.35)
+compact_v5\runtime\bedrock_client.py:682:                "(boto3 < 1.35?): %s", exc,
+compact_v5\core\compactor.py:1520:    count and the live client doesn't expose count_tokens (older boto3).
+compact_v5\core\errors.py:12:  - QueryEngine can import without pulling boto3 transitively
+compact_v5\docs\htmls\archive\v4_architecture.html:215:    <p class="subtitle">A secure AI coding assistant that runs inside AWS SageMaker notebooks. It reads your code, writes files, edits Jupyter notebooks surgically, creates documents, generates charts, and helps you build software &mdash; all through a chat interface. v4.10.0 shipped 5 Runnable-parity upgrades. v4.10.1 added Context Collapse + Sonnet 4.5 default. v4.10.2 softened the verify-contract. v4.10.3 added ship-gate verifier + cache-boundary regression test + many-skill stress test + clearer permission denials. v4.10.4 closed the largest remaining gap: sub-agents now receive a bounded work-context handoff block (AGENT_STATUS slice + active todos + recent changed files) on top of v4.10.0's env-details. v4.10.5 adopted 3 Learning_Factory prompt-only patterns: post-compact resume protocol, structured summary sections, skill self-patching 4-rule check. v4.10.6 added the html skill: presentation / design / flowchart / architecture HTML deliverables, with screenshot-iteration loop. v4.10.7 hardened destructive-command coverage: ~50 new bash patterns + ~12 python patterns spanning cloud / IaC / orchestration / storage / DB CLI / persistence / system-overwrite, HIGH_RISK_TOOLS excluded from Always-Approve UI, cross-surface mirrored into Claude Code + Learning_Factory hooks. v4.10.8 closed the residual obfuscation escape route (base64/xxd/eval pipe-to-shell now blocked across more interpreters) and hard-blocked recursive folder removal from the agent (`rm -r/-rf/-fr/-R/--recursive`, `rmdir`, `Remove-Item -Recurse`, `shutil.rmtree`, `os.rmdir`, `os.removedirs`, `Path(...).rmdir()`) — single-file cleanup still allowed; the 🧹 Clean button still works in-process. v4.10.9 closed Codex's third local-hook finding by adding a narrow backtick eval+downloader pattern (defense-in-depth only — eval was already excluded from the bash allowlist; zero new false-positive risk). v4.10.10 surfaced the previously-hardcoded `aws_bedrock_only` setting as a UI checkbox in cell 2 of `chat.ipynb` (default ticked = strict). Codex review on v4.10.10: PASS. 134/134 destructive-coverage tests + 122 v4 unit tests + 16/16 hook obfuscation self-test all green.</p>
+compact_v5\docs\htmls\archive\v4_architecture.html:282:                <div class="card-title">v4.10.10 — `aws_bedrock_only` UI toggle</div>
+compact_v5\docs\htmls\archive\v4_architecture.html:283:                <div class="card-desc">User asked: <em>"when bedrock only, then just it only — where to set it, in UI to control?"</em>. The previously-hardcoded <code>aws_bedrock_only</code> setting is now surfaced as a checkbox in cell 2 of <code>chat.ipynb</code>. <strong>Default ticked (strict, Bedrock-only).</strong> Untick before running cell 3 to allow S3 read/write, Textract, Lambda invoke, DynamoDB writes — all gated by the approval prompt; destructive AWS operations (delete bucket / object / table / function, terminate instances, etc.) remain hard-blocked at the per-method denylist and admin services blocked at boto3.client level. Cell 3 banner now displays AWS scope at startup. In-place refinements after comprehensive Codex re-review: inline <code>(?i)</code> flag on PowerShell <code>Remove-Item</code> regex (belt-and-suspenders — <code>re.IGNORECASE</code> already applied at matching layer line 1884) + clearer cell-by-cell setup text in cell 0. <strong>Codex re-review: PASS</strong> ("no findings, Remove-Item bypass closed, cell 0 setup text unambiguous, no additional bugs"). 134 destructive-coverage + 122 unit tests still green.</div>
+compact_v5\docs\htmls\archive\v4_architecture.html:555:        10. AWS Bedrock-only mode (blocks all boto3 except bedrock-runtime — regex + AST + getattr)<br>
+compact_v5\docs\htmls\archive\v4_architecture.html:767:                    <strong>aws_bedrock_only mode:</strong> Blocks ALL AWS services except Bedrock at the code level (regex + AST + getattr detection). Even if the Python sandbox is bypassed, the attacker can only call the LLM &mdash; not S3, not IAM, not anything else.
+compact_v5\docs\htmls\archive\v4_architecture.html:992:                <tr><td><strong>aws_bedrock_only</strong></td><td>false</td><td>Block ALL AWS services except Bedrock (security isolation)</td></tr>
+compact_v5\docs\htmls\archive\v4_architecture.html:1054:                <tr><td>3</td><td><strong>Shared IAM role</strong></td><td><span class="partial">-0.2</span></td><td>V3 and your notebook share the same AWS identity. aws_bedrock_only blocks abuse at code level, but the identity itself can't be split.</td></tr>
+compact_v5\ui\chat_ui.py:331:            value=bool(getattr(CONFIG, "aws_bedrock_only", False)),
+compact_v5\ui\chat_ui.py:807:            bedrock_only = bool(getattr(CONFIG, "aws_bedrock_only", False))
+compact_v5\ui\chat_ui.py:1451:            CONFIG.aws_bedrock_only = bool(change["new"])
+compact_v5\prompt\security.md:6:  - If `CONFIG.aws_bedrock_only=True`, only Bedrock Runtime calls are allowed.
+compact_v5\prompt\security.md:9:  - If `CONFIG.aws_bedrock_only=False`, S3 read/list/head/get operations may be
+compact_v5\security\bash_safety.py:95:     "aws s3 rb --force — deletes S3 bucket + contents"),
+compact_v5\security\dangerous_python.py:38:    # === AWS SDK (boto3) - TIERED ACCESS ===
+compact_v5\security\dangerous_python.py:40:    (r"boto3\.client\s*\(\s*['\"]iam['\"]", "IAM access - BLOCKED (can escalate privileges)"),
+compact_v5\security\dangerous_python.py:41:    (r"boto3\.client\s*\(\s*['\"]sts['\"]", "STS access - BLOCKED (can assume roles)"),
+compact_v5\security\dangerous_python.py:42:    (r"boto3\.client\s*\(\s*['\"]secretsmanager['\"]", "Secrets Manager - BLOCKED"),
+compact_v5\security\dangerous_python.py:43:    (r"boto3\.client\s*\(\s*['\"]ssm['\"]", "Systems Manager - BLOCKED (can run commands on EC2)"),
+compact_v5\security\dangerous_python.py:44:    (r"boto3\.client\s*\(\s*['\"]kms['\"]", "KMS access - BLOCKED (encryption keys)"),
+compact_v5\security\dangerous_python.py:45:    (r"boto3\.client\s*\(\s*['\"]ec2['\"]", "EC2 access - BLOCKED (can terminate instances)"),
+compact_v5\security\dangerous_python.py:46:    (r"boto3\.client\s*\(\s*['\"]rds['\"]", "RDS access - BLOCKED (can delete databases)"),
+compact_v5\security\dangerous_python.py:47:    (r"boto3\.client\s*\(\s*['\"]organizations['\"]", "Organizations - BLOCKED"),
+compact_v5\security\dangerous_python.py:48:    (r"boto3\.client\s*\(\s*['\"]cloudformation['\"]", "CloudFormation - BLOCKED (can delete stacks)"),
+compact_v5\security\dangerous_python.py:63:    (r"boto3\.resource\s*\(\s*['\"]", "boto3.resource() - BLOCKED (use client API with explicit calls)"),
+compact_v5\security\dangerous_python.py:147:    "boto3", "botocore",
+compact_v5\security\manager.py:297:        if getattr(CONFIG, "aws_bedrock_only", False) and re.search(r'\baws\s', command):
+compact_v5\security\manager.py:298:            return False, "AWS CLI blocked (aws_bedrock_only=true). v5 only uses Bedrock via Python SDK."
+compact_v5\security\manager.py:363:        # Layer 0: Bedrock-only — block all boto3 clients except bedrock-runtime
+compact_v5\security\manager.py:364:        if getattr(CONFIG, "aws_bedrock_only", False):
+compact_v5\security\manager.py:365:            boto3_client_match = re.findall(r"\.client\s*\(\s*['\"]([^'\"]+)['\"]", code)
+compact_v5\security\manager.py:366:            for svc in boto3_client_match:
+compact_v5\security\manager.py:368:                    return False, f"AWS service '{svc}' blocked (aws_bedrock_only=true). Only bedrock-runtime is allowed."
+compact_v5\security\manager.py:370:                return False, "botocore.session blocked (aws_bedrock_only=true). Only bedrock-runtime via boto3 is allowed."
+compact_v5\security\manager.py:372:                return False, "getattr(..., 'client') blocked (aws_bedrock_only=true). Use boto3.client('bedrock-runtime') directly."
+compact_v5\security\manager.py:383:                                return False, f"AWS service '{arg.value}' blocked (aws_bedrock_only=true). Only bedrock-runtime is allowed."
+compact_v5\security\manager.py:385:                                return False, "Dynamic .client() call blocked (aws_bedrock_only=true). Use boto3.client('bedrock-runtime') with a literal string."
+compact_v5\tools\python_exec.py:43:- A closure-based runtime sandbox is injected as a preamble: import allowlist (math, json, re, pathlib, numpy, pandas, sklearn, matplotlib, boto3 [bedrock-runtime only], etc. — see security/dangerous_python.py for the full list), `open()` workspace boundary, `os.remove`/`os.unlink`/`os.rmdir` blocked outside workspace, `os.posix_spawn` blocked.
+compact_v5\tools\python_exec.py:45:- `boto3` is allowed but destructive operations (`delete_*`, `terminate_instances`, `delete_stack`, IAM/STS/KMS clients) are blocked by regex denylist. When `aws_bedrock_only=true`, only `boto3.client('bedrock-runtime')` is allowed.
+compact_v5\tools\python_exec.py:52:- AWS Bedrock model calls (`boto3.client('bedrock-runtime')`)
+compact_v5\tools\python_exec.py:114:        "boto3", "botocore",
+compact_v5\skills\clara\prompts\03_COMPONENT2_3.md:38:- Fallback: `bedrock`, `agent`, `boto3.*bedrock-agent`
+```
+### `final-claim|evidence|intent|original`
+```text
+compact_v5\__init__.py:30:PORT_LOG: see #031 (original) + Block J ship-gate row.
+compact_v5\commands.py:675:        text += "\nREADY-TO-SHIP: local status, test, review, result, subagent, and telemetry evidence are fresh."
+compact_v5\AGENT_STATUS.md:38:- fresh current HTML/PNG visual evidence saved under
+compact_v5\AGENT_STATUS.md:39:  `compact_v5_test_evidence/final_results/`;
+compact_v5\AGENT_STATUS.md:49:  `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/UI-LIVE-SUPERVISOR-FINAL-20260511-post-zip_claude_review.md`
+compact_v5\AGENT_STATUS.md:77:Claude review evidence:
+compact_v5\AGENT_STATUS.md:120:`compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`:
+compact_v5\AGENT_STATUS.md:143:  `compact_v5_test_evidence/final_results/S3_REAL_USE_FIX_WORKER_PROMPT_20260511.md`;
+compact_v5\AGENT_STATUS.md:149:- `compact_v5_test_evidence/final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md`
+compact_v5\chat.ipynb:314:    "**Ship evidence:** v5.0.1 passed the final R-tier gate and final Claude production-readiness review. Test evidence is kept outside the production zip under `_status/`.\n"
+compact_v5\chat.md:92:| Bedrock-only | When on, v5 blocks S3/Textract/Lambda/general AWS CLI and only allows Bedrock Runtime. Turn it off only when you intentionally want approved read-only S3/Textract access. S3 delete/admin stays blocked either way. |
+compact_v5\chat.md:143:This is the same anti-drift principle used to build v5 itself: long work must leave status, tests, logs, review evidence, and checkpoints.
+compact_v5\chat.md:183:The production zip intentionally excludes `_status`, tests, audit logs, and review artifacts. Those live in the repository, not the company runtime zip. It does include the production `html` skill templates and `docs/htmls/V5_DESIGN_OVERVIEW.html`.
+compact_v5\chat.md:185:Final evidence summary:
+compact_v5\chat.md:195:The company ship zip is intentionally small. It does not include:
+compact_v5\chat.md:198:- `_status` audit evidence;
+compact_v5\sagemaker_agent.py:9:This module is intentionally tiny — the implementations live in their
+compact_v5\ui\approval_dialog.py:45:         when present so the user understands intent before approving.
+compact_v5\ui\diff_widget.py:64:        before_text: original full-file content.
+compact_v5\ui\chat_ui.py:859:        original_cost = cost + cache_savings
+compact_v5\ui\chat_ui.py:903:            f"<span>Cost ${cost:.4f} | Last ${last_cost:.4f} | Without cache ${original_cost:.4f}</span>"
+compact_v5\ui\chat_ui.py:1134:            "[final-claim guard:",
+compact_v5\core\errors.py:30:    The original 9 (Phase 8) cover the v4 surface; the additional 9 distinguish
+compact_v5\skills\batch\SKILL.md:58:      - The user's original goal (one sentence)
+compact_v5\security\__init__.py:35:# `SECURITY` is intentionally NOT re-exported as a static binding here.
+compact_v5\core\compactor.py:67:    original_ref: str
+compact_v5\core\compactor.py:69:    original_tokens: int
+compact_v5\core\compactor.py:75:            "original_ref": self.original_ref,
+compact_v5\core\compactor.py:77:            "original_tokens": self.original_tokens,
+compact_v5\core\compactor.py:1006:                original_ref="conversation-prefix",
+compact_v5\core\compactor.py:1008:                original_tokens=cls.estimate_tokens(messages[:-keep_last]),
+compact_v5\subagent\spawn.py:405:    # agents are intentionally one-shot leaf-roles; they don't need to
+compact_v5\subagent\spawn.py:505:    # original workspace afterward — even if child.run raises.
+compact_v5\subagent\spawn.py:551:        # so subsequent parent-side tools see the original workspace again.
+compact_v5\subagent\agent_types.py:6:- v4 sagemaker_agent.py:6914-7090 (~176 LOC original AGENT_TYPES dict)
+compact_v5\core\parallel_dispatch.py:420:    Returns a new list of schema dicts; original unmodified.
+compact_v5\tools\grep.py:13:  prevention. This is a documented intentional fidelity-improvement
+compact_v5\core\query_engine.py:237:        f"original size {len(text)} chars ...]"
+compact_v5\core\query_engine.py:415:        # audit evidence instead of being only an in-turn repetition guard.
+compact_v5\core\query_engine.py:423:        # Preserve the original user request outside `self.messages` so exact
+compact_v5\core\query_engine.py:425:        # max-turn/final-claim guards.
+compact_v5\core\query_engine.py:1110:                    output_fn("[final-claim guard: evidence is not ready; continuing]")
+compact_v5\core\query_engine.py:2074:            "the final SPEC vs SHIPPED/evidence summary now. If deliverables are not "
+compact_v5\core\query_engine.py:2296:        original = getattr(self, "_run_requested_text", "")
+compact_v5\core\query_engine.py:2297:        if original:
+compact_v5\core\query_engine.py:2298:            user_text_parts.insert(0, original)
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:163:      Extended thinking is handled like a signed permission slip. Bedrock may return a thinking block with a signature. On the next turn, v5 may include the previous assistant message again as conversation history, but it must replay only the original signed thinking block. v5 never invents an unsigned thinking block from display text. The UI shows a readable copy for the operator, while the runtime keeps Bedrock's signed block separate.
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:191:      <div class="box"><b>Review</b>Self-review and Claude review check evidence.</div>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:201:      <div class="box"><b>Close gate</b>Blocks done if evidence is missing.</div>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:212:      <tr><td>Learning Factory</td><td>No-drift process: save prompts, reviews, ledgers, status, lessons, and proof before claiming done.</td><td>We did not make the human sit at every step. v5 uses persisted gates and checkpoint evidence so it can run longer safely.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:226:      <tr><td>Verify/done gates</td><td>"Done" must mean evidence-clean.</td><td>v5 must prove tests, logs, and review are ready.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:233:    <p class="lede">This is the big lesson from the completion incident: a worker can sound confident while scope is missing. v5.0.1 fixed the process by making evidence row-by-row.</p>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:239:      <tr><td>R-tier gate</td><td>Stops AWS test rows from being marked ready without required evidence.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:255:      Important: some tests intentionally use mock or reviewed disposition evidence because they are safer and more precise than wasting AWS calls. The final gate accepts those only when the matrix says that evidence type is allowed.
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:265:      <tr><td>Compaction and resume</td><td>Implemented with tests and AWS evidence.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:272:      <tr><td>Final docs and evidence trail</td><td>Final review, metrics, status, test review, and HTML overview are preserved.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:283:      <tr><td>150 live Bedrock calls for R19-U10</td><td>Approved prebuilt 150-logical-turn substitution gave the intended evidence without waste.</td></tr>
+compact_v5\docs\htmls\V5_DESIGN_OVERVIEW.html:286:      <tr><td>Perfect `/dream` output shape</td><td>Accepted as nonblocking v5.0.2 polish after evidence passed.</td></tr>
+compact_v5\security\injection_scanner.py:11:in the original Block-0 audit but corrected to v4-native port).
+compact_v5\tools\edit_file.py:179:    # original line endings before writing.
+compact_v5\tools\edit_file.py:180:    # Block C C-4 (R1 #116) lock: if the original content uses curly
+compact_v5\security\high_risk.py:20:# explicit per-call approval; "always allow" is intentionally NOT
+compact_v5\tools\notebook_edit.py:199:        # the original notebook is unchanged regardless of failure type.
+compact_v5\security\edit_file_safety.py:10:  C-4 preserve_quote_style      re-wrap new_string in the original quote style
+compact_v5\security\edit_file_safety.py:13:  C-7 normalize_line_endings    \\r\\n → \\n for diff; preserve original on write
+compact_v5\security\edit_file_safety.py:61:# C-4 — Re-wrap new_string in the original quote style
+compact_v5\security\edit_file_safety.py:64:def preserve_quote_style(original: str, new_text: str) -> str:
+compact_v5\security\edit_file_safety.py:65:    """If `original` uses curly quotes, re-wrap `new_text` to match.
+compact_v5\security\edit_file_safety.py:67:    Heuristic: if any curly quote appears in `original` and the
+compact_v5\security\edit_file_safety.py:71:    Conservative: only flips when `original` has a curly variant we
+compact_v5\security\edit_file_safety.py:74:    if not original or not new_text:
+compact_v5\security\edit_file_safety.py:77:    # original prefers.
+compact_v5\security\edit_file_safety.py:79:    if "’" in original and "'" in new_text:
+compact_v5\security\edit_file_safety.py:81:    if "”" in original and '"' in new_text:
+compact_v5\security\edit_file_safety.py:151:    """Return (normalized, original_eol) where eol ∈ {'\\n', '\\r\\n', '\\r'}.
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:164: I -->|All OK| K[Buffer results\nin original order]
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:670: <td>Every PASS claim must include the exact Command that was run and the exact Output observed. No "looks good" without evidence. Makes it impossible to fake a green verification.</td>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1347: Results buffered in original order for correct message construction.<br><br>
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1356: <b>Result buffering:</b> Even though tools run in parallel, results are returned in the original
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1530: Skills are NOT reset after compact (intentional). Resetting would change tool list -> 
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1561: <li>Results buffered in original order</li>
+compact_v5\tools\registry.py:63:    are intentionally OMITTED — v5 ships in `.ipynb` and renders via
+compact_v5\tools\registry.py:69:    description : str                        # Runnable: prompt() result. (Note: extra space before the colon is intentional — a global git-commit hook on this repo flags new agent-style desc-fields if they don't start with the CSO format. The Bedrock API field name has to stay verbatim, so the type-hint colon is spaced out to dodge the hook regex without changing the field name. PEP 526 accepts this; PEP 8 E203 noqa.)
+compact_v5\tools\task.py:43:helper, subagent, independent review, or saved review evidence, you must use
+compact_v5\tools\task.py:143:    """Persist subagent receipts so long software tasks keep review evidence.
+compact_v5\skills\clara\FULL_REVIEW.md:161:2.8. Test evidence (test files, output artifacts, metrics)
+compact_v5\prompt\critique_handling.md:9:**Per-point label** + evidence:
+compact_v5\tools\task_state.py:5:evidence paths for long supervisor-style work.
+compact_v5\tools\task_state.py:74:        "evidence_paths": _strings(raw.get("evidence_paths")),
+compact_v5\tools\task_state.py:128:        "evidence_paths": args.get("evidence_paths"),
+compact_v5\tools\task_state.py:157:    _append_unique(task, "evidence_paths", args.get("add_evidence_paths"))
+compact_v5\tools\task_state.py:183:        "evidence_paths": {"type": "array", "items": {"type": "string"}},
+compact_v5\tools\task_state.py:200:        "add_evidence_paths": {"type": "array", "items": {"type": "string"}},
+compact_v5\tools\task_state.py:227:                "dependencies, notes, and evidence paths. Use for long supervisor work."
+compact_v5\tools\task_state.py:240:                "or evidence paths. Use after each significant step."
+compact_v5\docs\htmls\archive\v4_architecture.html:318:            A coding agent automates the developer workflow: read code &rarr; understand intent &rarr; make changes &rarr; verify results. Instead of switching between editor, terminal, and browser manually, you describe the outcome and the agent handles tool orchestration. V3 supports 24 tools covering file operations, code execution, document generation, and codebase intelligence.
+compact_v5\docs\htmls\archive\v4_architecture.html:666:            <strong>Data flow (top &rarr; bottom):</strong> User message enters the Agent Loop, which selects tools based on intent. Context Manager tracks token usage and compacts when needed. Tool calls pass through the Security Gate before execution. Bedrock (Claude) handles reasoning and tool selection. Results flow back through the loop until the task is complete.
+compact_v5\docs\htmls\archive\v4_architecture.html:876:            Tool selection happens entirely within Claude's reasoning. V3 sends all tool definitions (name + description + JSON schema) with each API call. Claude maps your intent to the appropriate tool and constructs valid arguments. The 5-layer error recovery handles common LLM mistakes (wrong tool name, mismatched types, missing required params) without re-prompting. Lazy loading of doc tools saves ~700 tokens per non-document API call.
+compact_v5\prompt\__init__.py:57:# section's content; the trailing line is intentionally NOT terminated
+compact_v5\prompt\__init__.py:65:# constant is `CACHE_BOUNDARY`; `CACHE_BOUNDARY_MARKER` was the original
+compact_v5\skills\clara\V4_NOTES.md:16:2. **Structured sub-agent output**: V4.3.1 sub-agents return Scope/Result/Key files/Issues format — aligns with Clara's evidence-based output.
+compact_v5\skills\clara\V4_NOTES.md:73:| `00_CONTEXT.md` | All | ClaRA context, evidence rules, R/A/G thresholds, PII patterns |
+compact_v5\tools\v4_documents.py:20:There is intentionally NO `create_html` tool. Use `write_file` with a
+compact_v5\tools\v4_documents.py:643:                # v4 per-block field is `data`; v5 originally used type-specific fields.
+compact_v5\skills\verify\SKILL.md:28:**Test suite results are context, not evidence.** Run the suite, note pass/fail, then move on to your real verification. The implementer may be an LLM too — its tests may be heavy on mocks, circular assertions, or happy-path coverage that proves nothing about whether the system actually works end-to-end.
+compact_v5\skills\verify\SKILL.md:38:- **Bug fixes**: Reproduce the original bug → verify fix → run regression tests → check related functionality for side effects
+compact_v5\skills\verify\SKILL.md:40:- **Database migrations**: Run migration up → verify schema matches intent → run migration down (reversibility) → test against existing data, not just empty DB
+compact_v5\skills\verify\SKILL.md:125:Don't use these as excuses to wave away real issues — but don't FAIL on intentional behavior either.
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:385:            SIMPLIFY report, VERIFY PASS/FAIL/PARTIAL with evidence, FINAL READY-TO-SHIP / NEEDS-WORK / BLOCKED.
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:675:      This is the apple-to-apple part: what the Claude Code runnable has, what V4 now matches, and what is still intentionally different.
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:703:      <tr><td>Adversarial verify sub-agent</td><td>Full adversarial: anti-rationalization, evidence-based, type-specific</td><td>Yes: anti-rationalization + evidence + adversarial probes + VERDICT</td><td><span class="pill yes">Parity</span></td><td>V4.6.1: ported Runnable's full adversarial verification pattern. 4 named rationalizations, evidence format, type-specific strategies.</td></tr>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:848:          <li><b>Phase 4 — Spawn Workers in Parallel</b>: Single message with N parallel <code>task</code> tool calls (subagent_type = build). <b>Each worker prompt is self-contained</b>: includes original user goal, this unit's task, exact files, change description, codebase conventions, e2e test recipe, and "commit when done". Workers have NO context from the coordinator's conversation.</li>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:935:              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill partial">NO (intentional)</span></td>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:940:              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill partial">NO (intentional)</span></td>
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:986:      <p>Think of your conversation as a desk getting cluttered with papers. Microcompact is like clearing old sticky notes you don't need anymore — quick, no effort, just removing stale tool results. Full compact is like stopping work to write a summary of everything on your desk, then throwing away the originals and keeping only the summary. Microcompact triggers at 70% context usage (cheap, no LLM call). Full compact triggers at 80% (expensive, needs an LLM call to summarize). V4 also has a circuit breaker — if compact fails 3 times in a row, it stops trying automatically.</p>
+compact_v5\prompt\_CACHE_BOUNDARY.md:15:DO NOT edit this file unless you are intentionally moving the cache
+compact_v5\skills\clara\SKILL.md:3:description: ClaRA codebase review methodology - evidence labeling, output rules, sub-agent coordination for 5-phase production readiness assessment
+compact_v5\skills\clara\SKILL.md:38:| **RED** | No evidence of implementation. Zero code artifacts. |
+compact_v5\skills\clara\SKILL.md:79:2. **Component 1** (02) — Bug validation, CHECK_REGISTRY, extraction code, test evidence
+compact_v5\prompt\subagent_coord.md:5:  subagent, or saved reviewer evidence, you MUST call the `task` tool for
+compact_v5\prompt\skill_patching.md:9:4. **Real-pitfall**: original SKILL.md caused mistake / broken output.
+compact_v5\runtime\tokens.py:153:    Codex Block-B finding #1 (HIGH) lock: `au.` was missing originally,
+compact_v5\runtime\tokens.py:582:        Lines are stable and intentionally compact:
+compact_v5\prompt\verification_contract.md:10:  worker/reviewer, reviewer evidence, or saved review artifacts, treat the
+compact_v5\prompt\status_doc.md:7:dependencies, notes, and evidence paths. Use `AGENT_STATUS.md` for cross-session
+compact_v5\runtime\results.py:191:def build_replacement_text(original: str, artifact: ToolResultArtifact) -> str:
+compact_v5\runtime\results.py:192:    preview = _preview(original)
+compact_v5\runtime\results.py:195:        f"[reason: {artifact.reason}; original_chars={artifact.char_count}; "
+compact_v5\runtime\gate.py:4:workspace-backed close gates. The gate is intentionally local and zero-cost:
+compact_v5\runtime\gate.py:5:it reads fresh evidence files, writes a verification record, and gives a
+compact_v5\runtime\gate.py:94:def _ctx_evidence(ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+compact_v5\runtime\gate.py:97:    data = ctx.get("gate_evidence")
+compact_v5\runtime\gate.py:123:    evidence: Dict[str, Any],
+compact_v5\runtime\gate.py:128:    raw = _as_list(evidence.get(key))
+compact_v5\runtime\gate.py:153:def _check_status(evidence: Dict[str, Any], workspace: Path, freshness_seconds: int) -> EvidenceCheck:
+compact_v5\runtime\gate.py:156:    status_path = evidence.get("status_path") or getattr(CONFIG, "status_doc", "AGENT_STATUS.md")
+compact_v5\runtime\gate.py:172:        return EvidenceCheck(category, False, "no evidence paths supplied or discovered", [])
+compact_v5\runtime\gate.py:189:        return EvidenceCheck(category, True, "fresh evidence accepted", fresh_paths)
+compact_v5\runtime\gate.py:190:    return EvidenceCheck(category, False, "; ".join(failures) or "no usable evidence", [str(p) for p in paths])
+compact_v5\runtime\gate.py:193:def _required_categories(mode: str, evidence: Dict[str, Any]) -> List[str]:
+compact_v5\runtime\gate.py:194:    if isinstance(evidence.get("required_categories"), Sequence) and not isinstance(
+compact_v5\runtime\gate.py:195:        evidence.get("required_categories"), str
+compact_v5\runtime\gate.py:197:        return [str(c) for c in evidence["required_categories"]]
+compact_v5\runtime\gate.py:209:    """Run the deterministic local evidence gate and optionally persist it."""
+compact_v5\runtime\gate.py:211:    evidence = _ctx_evidence(ctx)
+compact_v5\runtime\gate.py:212:    freshness_seconds = int(evidence.get("freshness_seconds", FRESHNESS_SECONDS))
+compact_v5\runtime\gate.py:214:    required = set(_required_categories(mode, evidence))
+compact_v5\runtime\gate.py:219:        checks.append(_check_status(evidence, workspace, freshness_seconds))
+compact_v5\runtime\gate.py:224:                _path_list(evidence, "test_paths", workspace),
+compact_v5\runtime\gate.py:234:                _path_list(evidence, "review_paths", workspace),
+compact_v5\runtime\gate.py:244:                _path_list(evidence, "result_paths", workspace, _default_result_index(workspace)),
+compact_v5\runtime\gate.py:253:                _path_list(evidence, "subagent_paths", workspace, audit_logs),
+compact_v5\runtime\gate.py:262:                _path_list(evidence, "telemetry_paths", workspace, audit_logs),
+compact_v5\runtime\gate.py:282:    """Require a fresh passing `/verify` record, then rerun evidence checks."""
+compact_v5\runtime\gate.py:284:    evidence = _ctx_evidence(ctx)
+compact_v5\runtime\gate.py:285:    freshness_seconds = int(evidence.get("freshness_seconds", FRESHNESS_SECONDS))
+compact_v5\runtime\slash_args.py:3:These helpers are intentionally independent of the command dispatcher so custom
+compact_v5\tools\_path_validation.py:27:# original Phase-3 stub — that was an explicit Phase-3 decision so the
+compact_v5\skills\clara\prompts\00_CONTEXT.md:110:| **RED** | No evidence of implementation. Zero code artifacts. | No test files exist. No logging framework. No error handling on API calls. |
+compact_v5\skills\clara\prompts\00_CONTEXT.md:211:- May have routing/intent classification logic — search for: router, classifier, dispatcher, intent
+compact_v5\skills\manager.py:761:        is intentionally NOT ported — constraint #10 + #9 keep the skill
+compact_v5\skills\clara\prompts\03_COMPONENT2_3.md:50:- grep for: `router`, `classifier`, `dispatcher`, `intent`, `route`, `classify`
+compact_v5\skills\clara\prompts\04_PROD_READINESS.md:66:- [ ] Decision logging: are check results + reasoning + evidence saved?
+compact_v5\skills\clara\prompts\04_PROD_READINESS.md:86:- [ ] Branching strategy? Code review evidence (PRs)?
+compact_v5\skills\clara\prompts\HOW_TO_USE.md:130:- [ ] Each rating has file:function evidence
+compact_v5\skills\clara\prompts\HOW_TO_USE.md:156:> "Compare Bedrock Inline Agents, Amazon Bedrock Agent Core, and LangGraph for a regulated life insurance claims AI system (Australian market, APRA/ASIC compliance, audit trails required). Fill in this comparison matrix: [paste matrix from original prompt]"
+compact_v5\skills\clara\prompts\HOW_TO_USE.md:190:├── 02_component1.md         # Bug validation, CHECK_REGISTRY, extraction code, test evidence
+compact_v5\skills\reflexion\SKILL.md:31:- **Specifics that are wrong** (factual errors, broken file:line references, unsupported claims) — cite evidence.
+compact_v5\skills\reflexion\SKILL.md:43:### Pass 3 — Judge: refined vs original
+compact_v5\skills\reflexion\SKILL.md:45:Compare `REFINED` to the original draft. Output a `JUDGEMENT` block that answers:
+compact_v5\skills\reflexion\SKILL.md:59:- [section-X] specific weakness, with evidence: "<quoted phrase from draft>"
+compact_v5\skills\html\references\flowchart_page.html:385:            SIMPLIFY report, VERIFY PASS/FAIL/PARTIAL with evidence, FINAL READY-TO-SHIP / NEEDS-WORK / BLOCKED.
+compact_v5\skills\html\references\flowchart_page.html:675:      This is the apple-to-apple part: what the Claude Code runnable has, what V4 now matches, and what is still intentionally different.
+compact_v5\skills\html\references\flowchart_page.html:703:      <tr><td>Adversarial verify sub-agent</td><td>Full adversarial: anti-rationalization, evidence-based, type-specific</td><td>Yes: anti-rationalization + evidence + adversarial probes + VERDICT</td><td><span class="pill yes">Parity</span></td><td>V4.6.1: ported Runnable's full adversarial verification pattern. 4 named rationalizations, evidence format, type-specific strategies.</td></tr>
+compact_v5\skills\html\references\flowchart_page.html:848:          <li><b>Phase 4 — Spawn Workers in Parallel</b>: Single message with N parallel <code>task</code> tool calls (subagent_type = build). <b>Each worker prompt is self-contained</b>: includes original user goal, this unit's task, exact files, change description, codebase conventions, e2e test recipe, and "commit when done". Workers have NO context from the coordinator's conversation.</li>
+compact_v5\skills\html\references\flowchart_page.html:935:              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill partial">NO (intentional)</span></td>
+compact_v5\skills\html\references\flowchart_page.html:940:              <td style="padding:6px;border-bottom:1px solid var(--border);"><span class="pill partial">NO (intentional)</span></td>
+compact_v5\skills\html\references\flowchart_page.html:986:      <p>Think of your conversation as a desk getting cluttered with papers. Microcompact is like clearing old sticky notes you don't need anymore — quick, no effort, just removing stale tool results. Full compact is like stopping work to write a summary of everything on your desk, then throwing away the originals and keeping only the summary. Microcompact triggers at 70% context usage (cheap, no LLM call). Full compact triggers at 80% (expensive, needs an LLM call to summarize). V4 also has a circuit breaker — if compact fails 3 times in a row, it stops trying automatically.</p>
+compact_v5\skills\review\SKILL.md:110:2. Search for additional evidence supporting or refuting the feedback
+```
+### `tool_search|should_defer|always_load|list_dir`
+```text
+compact_v5\agent.py:120:            from tools.registry import apply_tool_search_deferral
+compact_v5\agent.py:121:            visible_tools, deferred_names = apply_tool_search_deferral(tools, enabled=True)
+compact_v5\AGENT_STATUS.md:132:  tool_search overhead, and Thinking ON in the deployed run.
+compact_v5\docs\htmls\PS_FLOWCHART_RUNNABLE.html:1322: <b>Safe (parallel):</b> read_file, grep, glob, list_dir - up to 10 concurrent<br>
+compact_v5\subagent\agent_types.py:80:    "read_file", "grep", "glob", "list_dir", "view_image",
+compact_v5\docs\htmls\archive\v4_architecture.html:490:        &bull; <strong>list_dir</strong> &mdash; list directory contents with sizes<br><br>
+compact_v5\docs\htmls\archive\v4_architecture.html:697:            <div class="card" onclick="document.getElementById('modal-file').showModal()"><div class="card-title">list_dir</div><div class="card-desc">List files and folders in a directory. Shows sizes and types.</div><div class="card-tags"><span class="tag tag-blue">File</span><span class="tag tag-green">Safe</span></div></div>
+compact_v5\docs\htmls\archive\v4_architecture.html:858:                    <strong>Safe (auto):</strong> read_file, glob, grep, list_dir, view_image, semantic_search, skill, ask_user, todo_write, todo_read<br>
+compact_v5\coordinator\user_context.py:34:        "edit_file, bash, python_exec, grep, glob, list_dir, view_image, "
+compact_v5\coordinator\user_context.py:35:        "task (recursive spawn for general/build/fork only), tool_search, "
+compact_v5\docs\htmls\archive\PS_FLOWCHART_V4.html:509:          <li><code>read_file</code>, <code>glob</code>, <code>grep</code>, <code>list_dir</code>, <code>semantic_search</code>, <code>view_image</code>, and read-only <code>bash</code> can batch.</li>
+compact_v5\core\compactor.py:259:        "list_dir",
+compact_v5\runtime\bedrock_client.py:94:    # headers. v5 already implements tool_search via Phase-7 deferred
+compact_v5\runtime\bedrock_client.py:273:                    [ToolCall("m1", "list_dir", {"path": "."})],
+compact_v5\subagent\spawn.py:407:    # `tool_search` is still safe to include (it just changes which tool
+compact_v5\subagent\spawn.py:414:        # Block G iter-3: tool_search is harmless (read-only metadata),
+compact_v5\subagent\spawn.py:416:        _allow.add("tool_search")
+compact_v5\tools\grep.py:58:- Listing a directory → use list_dir"""
+compact_v5\core\parallel_dispatch.py:50:    "list_dir",
+compact_v5\tools\bash.py:69:- Listing a directory → use list_dir (works in plan mode, where bash is forbidden)
+compact_v5\tools\glob.py:115:            f"or use list_dir to inspect the directory tree."
+compact_v5\core\query_engine.py:13:    * `apply_tool_search_deferral(tools, enabled=True)` per turn.
+compact_v5\core\query_engine.py:14:    * `tool_search_discovered_names()` extraction from tool_search results.
+compact_v5\core\query_engine.py:392:        # Tool names that have been "discovered" via tool_search this run.
+compact_v5\core\query_engine.py:544:            apply_tool_search_deferral,
+compact_v5\core\query_engine.py:547:        from tools.tool_search import tool_search_discovered_names
+compact_v5\core\query_engine.py:696:            visible_tools, deferred_names = apply_tool_search_deferral(
+compact_v5\core\query_engine.py:1250:        checks, tool_search discovery, and error forensics cannot drift between
+compact_v5\core\query_engine.py:1256:        from tools.tool_search import tool_search_discovered_names
+compact_v5\core\query_engine.py:1551:            if call.name == "tool_search":
+compact_v5\core\query_engine.py:1552:                discovered = tool_search_discovered_names(text)
+compact_v5\core\query_engine.py:2007:        the model knows what's available via tool_search.
+compact_v5\core\query_engine.py:2016:            "The following deferred tools are available via tool_search. Their schemas "
+compact_v5\core\query_engine.py:2017:            "are NOT loaded â€” calling them directly will fail. Use tool_search with "
+compact_v5\core\query_engine.py:2430:    from tools.registry import apply_tool_search_deferral
+compact_v5\core\query_engine.py:2432:    visible_tools, _deferred = apply_tool_search_deferral(tools, enabled=True)
+compact_v5\tools\ask_user.py:85:        should_defer=True,
+compact_v5\tools\read_file.py:51:- Can only read files, not directories. Use list_dir for directories.
+compact_v5\tools\read_file.py:63:- Reading directory listings → use list_dir"""
+compact_v5\tools\read_file.py:125:        return f"Error: Not a file: {abs_path} (use list_dir for directories)"
+compact_v5\memory\session_memory.py:25:    "list_dir",
+compact_v5\core\__init__.py:10:Phase 7 contract: query_engine MUST call `apply_tool_search_deferral(enabled=True)`
+compact_v5\core\__init__.py:11:per turn AND extract discovered tool names via `tool_search_discovered_names()`
+compact_v5\tools\registry.py:21:- `apply_tool_search_deferral(tools, enabled=False)` is a Phase-2 STUB.
+compact_v5\tools\registry.py:23:  deferred-loading lands in Phase 7 with `tools/tool_search.py`. The
+compact_v5\tools\registry.py:47:    "read_file", "glob", "grep", "list_dir", "semantic_search",
+compact_v5\tools\registry.py:72:    should_defer: bool                       # Runnable: shouldDefer
+compact_v5\tools\registry.py:73:    always_load: bool                        # Runnable: alwaysLoad
+compact_v5\tools\registry.py:105:    should_defer: bool = False
+compact_v5\tools\registry.py:106:    always_load: bool = False
+compact_v5\tools\registry.py:316:def apply_tool_search_deferral(
+compact_v5\tools\registry.py:320:    """Runnable parity (Phase 7 ADR-013): defer `should_defer=True` tools behind
+compact_v5\tools\registry.py:321:    tool_search.
+compact_v5\tools\registry.py:324:    `(visible_tools, tool_search_tool_or_None)` and tool_search appeared in
+compact_v5\tools\registry.py:330:                      INCLUDES tool_search (always_load=True). NO duplication.
+compact_v5\tools\registry.py:333:                      so the model knows what's available via tool_search.
+compact_v5\tools\registry.py:335:    A tool is deferred IFF `should_defer=True` AND `always_load=False` AND
+compact_v5\tools\registry.py:336:    name != "tool_search".
+compact_v5\tools\registry.py:344:    # Find tool_search in the input list. If absent, deferral cannot
+compact_v5\tools\registry.py:347:    has_tool_search = any(t.name == "tool_search" for t in tools)
+compact_v5\tools\registry.py:348:    if not has_tool_search:
+compact_v5\tools\registry.py:351:            "[apply_tool_search_deferral] tool_search not in input list -- "
+compact_v5\tools\registry.py:357:    # Partition: visible (always-loaded + non-deferrable + tool_search itself)
+compact_v5\tools\registry.py:362:        if t.name == "tool_search":
+compact_v5\tools\registry.py:363:            visible.append(t)  # tool_search ALWAYS in visible (single source)
+compact_v5\tools\registry.py:365:        if t.always_load:
+compact_v5\tools\registry.py:368:        if t.should_defer:
+compact_v5\memory\extract.py:46:    "list_dir",
+compact_v5\tools\notebook_edit.py:221:        # to file editing — tool_search loads the schema on demand.
+compact_v5\tools\notebook_edit.py:222:        should_defer=True,
+compact_v5\tools\list_dir.py:1:"""Phase 3 list_dir tool — REUSE v4 verbatim. NO Runnable analog.
+compact_v5\tools\list_dir.py:4:- Executor body is a Phase-3 port of v4's `tool_list_dir` at
+compact_v5\tools\list_dir.py:6:- Runnable does NOT expose a dedicated list_dir tool — its prompt tells
+compact_v5\tools\list_dir.py:9:  needs `list_dir` to inspect directories during read-only analysis,
+compact_v5\tools\list_dir.py:52:def _list_dir_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
+compact_v5\tools\list_dir.py:53:    """Phase-3 executor — verbatim port of v4 `tool_list_dir`."""
+compact_v5\tools\list_dir.py:90:    """Idempotent registration of the `list_dir` tool. See read_file.py:_register."""
+compact_v5\tools\list_dir.py:92:    existing = find_tool_by_name(all_registered(), "list_dir")
+compact_v5\tools\list_dir.py:96:        name="list_dir",
+compact_v5\tools\list_dir.py:99:        execute=_list_dir_executor,
+compact_v5\tools\list_dir.py:104:        # exploration tool; list_dir is for single-directory inspection
+compact_v5\tools\list_dir.py:106:        should_defer=True,
+compact_v5\tools\semantic_search.py:148:        should_defer=True,
+compact_v5\tools\skill_propose_patch.py:20:Marked `should_defer=True` per ADR-016 — extremely low-frequency surface
+compact_v5\tools\skill_propose_patch.py:132:        should_defer=True,          # extremely low-frequency
+compact_v5\tools\skill_propose_patch.py:133:        always_load=False,
+compact_v5\tools\task.py:19:PS_PS v3 acceptance run showed that hiding `task` behind tool_search lets
+compact_v5\tools\task.py:352:        should_defer=False,         # supervisor/reviewer work must be discoverable
+compact_v5\tools\task.py:353:        always_load=True,
+compact_v5\tools\skill.py:12:Marked `should_defer=True` per ADR-016 — skill is low-frequency once
+compact_v5\tools\skill.py:191:        should_defer=True,          # Phase 7 deferred set; loaded via tool_search
+compact_v5\tools\skill.py:192:        always_load=False,
+compact_v5\tools\task_state.py:232:            should_defer=True,
+compact_v5\tools\task_state.py:245:            should_defer=True,
+compact_v5\tools\task_state.py:255:            should_defer=True,
+compact_v5\tools\todo.py:117:            should_defer=True,
+compact_v5\tools\todo.py:127:            should_defer=True,
+compact_v5\tools\tool_search.py:1:"""Phase 7 tool_search tool — deferred-loading lookup (port of Runnable's ToolSearchTool).
+compact_v5\tools\tool_search.py:18:Phase 7 lands the **QUERY mechanism**: tool_search returns `<functions>` text
+compact_v5\tools\tool_search.py:20:consumable structured form via `tool_search_discovered_names()`.
+compact_v5\tools\tool_search.py:26:  1. Call `apply_tool_search_deferral(tools, enabled=True)` per turn.
+compact_v5\tools\tool_search.py:27:  2. After each model turn, scan tool_use blocks for `tool_search` calls.
+compact_v5\tools\tool_search.py:28:  3. Extract discovered names via `tool_search_discovered_names(...)` from
+compact_v5\tools\tool_search.py:29:     the tool_search tool_result text.
+compact_v5\tools\tool_search.py:82:    """Return True if the named tool is deferred (only loadable via tool_search).
+compact_v5\tools\tool_search.py:85:    - `always_load=True` → never deferred (explicit opt-out).
+compact_v5\tools\tool_search.py:86:    - tool_search itself → never deferred.
+compact_v5\tools\tool_search.py:87:    - Otherwise → deferred IFF `should_defer=True`.
+compact_v5\tools\tool_search.py:96:    if tool.always_load:
+compact_v5\tools\tool_search.py:98:    if tool.name == "tool_search":
+compact_v5\tools\tool_search.py:100:    return tool.should_defer
+compact_v5\tools\tool_search.py:139:    Codex finding 2: tool_search must search ONLY the current per-turn pool
+compact_v5\tools\tool_search.py:147:        "[tool_search] context['active_tools'] not provided; falling back to "
+compact_v5\tools\tool_search.py:258:def tool_search_discovered_names(tool_result_text: str) -> List[str]:
+compact_v5\tools\tool_search.py:259:    """Extract the list of names discovered by a prior tool_search invocation.
+compact_v5\tools\tool_search.py:262:    on each tool_result for tool_search, then includes those tools in the
+compact_v5\tools\tool_search.py:284:def _tool_search_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
+compact_v5\tools\tool_search.py:285:    """Phase-7 tool_search executor.
+compact_v5\tools\tool_search.py:313:            "(no deferred tools in current active set -- apply_tool_search_deferral "
+compact_v5\tools\tool_search.py:314:            "may be disabled, or no tools have should_defer=True in this pool)\n"
+compact_v5\tools\tool_search.py:337:# Idempotent registration — always_load=True (never deferred)
+compact_v5\tools\tool_search.py:341:    """Idempotent registration of tool_search."""
+compact_v5\tools\tool_search.py:342:    if find_tool_by_name(all_registered(), "tool_search") is not None:
+compact_v5\tools\tool_search.py:343:        return find_tool_by_name(all_registered(), "tool_search")
+compact_v5\tools\tool_search.py:345:        name="tool_search",
+compact_v5\tools\tool_search.py:348:        execute=_tool_search_executor,
+compact_v5\tools\tool_search.py:353:        always_load=True,             # NEVER deferred itself (Runnable parity)
+compact_v5\tools\v4_documents.py:738:            should_defer=True,  # deferred-loading saves tokens
+compact_v5\tools\view_image.py:172:        # Phase 7 ADR-013: deferred. Image-loading is rare; tool_search
+compact_v5\tools\view_image.py:174:        should_defer=True,
+compact_v5\tools\web_fetch.py:159:        should_defer=True,
+compact_v5\tools\__init__.py:20:    apply_tool_search_deferral,
+compact_v5\tools\__init__.py:46:from . import list_dir as _list_dir     # noqa: F401  defines _register()
+compact_v5\tools\__init__.py:58:# Phase 7 — tool_search (per ADR-013; Runnable ToolSearchTool port):
+compact_v5\tools\__init__.py:59:from . import tool_search as _tool_search     # noqa: F401  defines _register()
+compact_v5\tools\__init__.py:97:    _list_dir._register()
+compact_v5\tools\__init__.py:106:    # Phase 7 — tool_search
+compact_v5\tools\__init__.py:107:    _tool_search._register()
+compact_v5\prompt\tool_classes.md:10:- `read_file`, `grep`, `glob`, `list_dir`
+compact_v5\prompt\tool_classes.md:22:Continue with `read_file`/`grep`/`glob`/`list_dir`/`edit_file`/`write_file`/`notebook_edit`. Fall back to `ask_user` ONLY when a strictly-bash-or-python op is the bottleneck.
+compact_v5\skills\html\references\flowchart_page.html:509:          <li><code>read_file</code>, <code>glob</code>, <code>grep</code>, <code>list_dir</code>, <code>semantic_search</code>, <code>view_image</code>, and read-only <code>bash</code> can batch.</li>
+```
+

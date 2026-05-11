@@ -1,0 +1,13 @@
+﻿Commands:
+- python -m py_compile compact_v5/core/query_engine.py compact_v5/tests/test_s3_intent_drift_guard.py
+- python compact_v5/tests/test_s3_intent_drift_guard.py
+
+Result:
+- py_compile: PASS
+- s3 intent drift guard smoke: OK
+
+Assertions covered:
+- S3 inventory request detection for "list file and bucket structure of my s3"
+- Local compact_v5/source-tree answer triggers an intent-drift system reminder
+- Real S3 answer does not trigger guard
+- Explicit S3 credential blocker does not trigger guard
