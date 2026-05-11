@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>compact_v5 S3 Real-Use Diagnostic - Consolidated 2026-05-11</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #222; line-height: 1.45; }
+    h1, h2 { margin-bottom: 8px; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0 24px; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; vertical-align: top; }
+    th { background: #f4f6f8; text-align: left; }
+    .open { color: #b00020; font-weight: 700; }
+    .note { background: #fff8df; border-left: 4px solid #e0a800; padding: 10px 12px; }
+    code { background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>compact_v5 S3 Real-Use Diagnostic</h1>
+  <p><strong>Date:</strong> 2026-05-11</p>
+  <p><strong>Scope:</strong> consolidated Claude + Codex diagnostic for the user transcript:
+    <code>list file and bucket structure of my s3</code>.</p>
+
+  <div class="note">
+    This is documentation evidence only. It does not claim the S3 workflow is
+    fixed. The authoritative Markdown punch list is
+    <code>compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md</code>.
+  </div>
+
+  <h2>Current Status</h2>
+  <table>
+    <thead>
+      <tr><th>Area</th><th>Status</th><th>Plain-English Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Thinking block placement</td>
+        <td class="open">Open</td>
+        <td>The reasoning text is shown in the wrong part of the message and may appear expanded.</td>
+      </tr>
+      <tr>
+        <td>Tool cards</td>
+        <td class="open">Open</td>
+        <td>Tool calls/results exist as cards, but they are still too noisy because they are not collapsed/grouped.</td>
+      </tr>
+      <tr>
+        <td>Task drift</td>
+        <td class="open">Open</td>
+        <td>The agent moved from "show my S3 structure" to "summarize the compact_v5 code folder."</td>
+      </tr>
+      <tr>
+        <td>AWS/S3 access path</td>
+        <td class="open">Open</td>
+        <td>The UI says S3 reads are possible, but both attempted paths failed: <code>aws s3</code> was blocked and boto3 failed in the Python sandbox.</td>
+      </tr>
+      <tr>
+        <td>Cost</td>
+        <td class="open">Open</td>
+        <td>The simple S3 request used too many calls and too much output because it retried blocked paths and produced verbose fallback prose.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Do Not Mark Solved Until</h2>
+  <table>
+    <thead>
+      <tr><th>Gate</th><th>Required Evidence</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>S3 safe-read smoke</td><td>Real SageMaker run lists buckets/prefixes through an allowed path.</td></tr>
+      <tr><td>Intent guard</td><td>Fallback response explicitly preserves the original S3 goal.</td></tr>
+      <tr><td>Accurate diagnosis</td><td>Blocked AWS path reports bash allowlist or Python sandbox cause, not Bedrock-only when OFF.</td></tr>
+      <tr><td>UI screenshot</td><td>Thinking and tool cards render collapsed/placed correctly in the target notebook UI.</td></tr>
+      <tr><td>Cost check</td><td>Same prompt avoids repeated blocked calls and large follow-up menus.</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

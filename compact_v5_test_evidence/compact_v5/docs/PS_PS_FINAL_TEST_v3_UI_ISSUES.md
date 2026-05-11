@@ -415,3 +415,24 @@ Claude review correction:
   under `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/`.
 - Post-zip Claude re-review returned `SHIP DECISION: APPROVE` with no findings:
   `compact_v5_test_evidence/final_results/ui_live_supervisor_reviews/UI-LIVE-SUPERVISOR-FINAL-20260511-post-zip_claude_review.md`.
+
+## Real-Use S3 Follow-Up - 2026-05-11
+
+A later hand-run prompt, `list file and bucket structure of my s3`, exposed a
+separate class of issues that are **not** closed by the UI live-supervisor
+approval above. See `PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`.
+
+Current distinction:
+
+| Area | UI live-supervisor status | S3 real-use status |
+|---|---|---|
+| Live streaming | Fixed and reviewed. | Not the main failure in the S3 run. |
+| Tool role existence | Fixed: `tool` role exists. | Still open: cards are expanded, not grouped/collapsed. |
+| Thinking display | Role exists and default source constructor is OFF. | Still open: captured thinking renders after metrics and appeared expanded in the user's kernel. |
+| Metrics | Fixed for layout/visibility. | Still open: metrics reveal high-cost behavior but do not prevent it. |
+| Drift | Not covered by the UI approval. | Open: S3 request drifted into compact_v5 source-tree inventory. |
+| AWS/S3 access | Not covered by the UI approval. | Open: `aws s3` is blocked and boto3 failed on Python sandbox import `linecache`. |
+
+Do not treat the UI live-supervisor Claude approval as proof that the S3
+workflow is production-ready. It only approved the earlier UI streaming/card
+patch set.

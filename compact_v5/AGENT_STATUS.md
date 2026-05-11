@@ -105,3 +105,35 @@ Follow-up review repair:
 - final independent Claude recheck after cleanup returned `APPROVE`, with no
   HIGH or MEDIUM runtime regressions remaining. The only remaining note is SCM
   durability: the flattened-tree transition is not committed in git history.
+
+---
+
+## 2026-05-11 S3 Real-Use Diagnostic - Open
+
+Current task state: diagnostic/docs-only consolidation after the user's
+hand-run prompt `list file and bucket structure of my s3`.
+
+Important: the earlier UI live-supervisor approval does **not** close these
+new S3 real-use issues.
+
+Open blockers documented in
+`compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`:
+- thinking block renders after per-turn metrics and appeared expanded in the
+  user's SageMaker/Jupyter render;
+- tool cards exist but are expanded by default and are not grouped/collapsed;
+- the agent drifted from S3 inventory to compact_v5 source-tree inventory after
+  fallback Option 2;
+- the agent misdiagnosed the cause as Bedrock-only even though status showed
+  `Bedrock-only: OFF`;
+- S3 read/list path is contradictory: `aws s3` is blocked by bash/security
+  policy and boto3 failed because Python sandbox import allowlist blocks
+  `linecache`;
+- simple S3 inventory cost was too high due to blocked retries, verbose output,
+  tool_search overhead, and Thinking ON in the deployed run.
+
+No runtime files were changed for this diagnostic entry. Next worker should
+fix only after confirming scope and should prove each fix with focused smoke
+tests plus independent Claude CLI review.
+
+Packaging note: `compact_v5.zip` was refreshed only because this status file is
+part of the ship zip. The zip member manifest stayed unchanged.

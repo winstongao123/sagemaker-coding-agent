@@ -23,6 +23,19 @@ production zip stays small; this archive stays in GitHub as proof and reference.
 | Full test review | `final_results/PS_TEST_REVIEW_FINAL.md` | Explains every major R-tier / PS/PS issue found, fixed, reviewed, and retested. |
 | Fresh v4-vs-v5 report | `final_results/Critical_PS_PS_V4_FRESH_COMPARE_REPORT.md` | Side-by-side evidence that v5 is stronger than v4 on the software-engineering benchmark. |
 
+## Post-acceptance Real-Use Findings (2026-05-10 → 2026-05-11)
+
+The v3 acceptance test passes the engine layer, but real-use sessions
+surfaced UI, drift, cost, and sandbox issues that the benchmark could
+not catch. These docs are the worker-facing punch list.
+
+| Doc | Easy path | What it captures |
+|---|---|---|
+| v3 UI issues (notes_cli session) | `compact_v5/docs/PS_PS_FINAL_TEST_v3_UI_ISSUES.md` | 7 UI/UX gaps from the notes_cli build session: metrics layout, token usage, raw-md rendering, looks "stuck", no subagent visibility, final-claim guard wording, render-status hot path. |
+| v3 real-use issues (S3 session) | `compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md` | Consolidated Claude + Codex diagnostic. Thinking-block ordering, tool-use collapse, **task drift**, cost-waste drivers, **python_exec sandbox bug** (blocks linecache), `aws` CLI not allowlisted, status-bar vs self-diagnosis mismatch, +7 side-finds. Status: open punch list, not fixed. |
+| S3 diagnostic HTML summary | `final_results/S3_REAL_USE_DIAGNOSTIC_CONSOLIDATED_20260511.html` | Small human-readable status page for the S3 real-use diagnostic. Status: open punch list, not fixed. |
+| v5 vs Runnable deep review | `compact_v5/docs/PS_V5_VS_RUNNABLE_DEEP_REVIEW_20260511.md` | Cross-codebase audit on 6 axes (tools / subagents / memory-plan-status / tokens-cache / streaming / UI). Tier 1/2/3 patch recommendations ranked by ROI. |
+
 ## Full Evidence Bundles
 
 | Bundle | Path | Contents |
