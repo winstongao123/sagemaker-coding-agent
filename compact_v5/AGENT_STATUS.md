@@ -144,3 +144,9 @@ Worker handoff ready:
 - includes per-block fix order, no-drift boundaries, Claude subscription CLI
   command, independent review prompt skeleton, proof gates, zip verification,
   and final review requirements.
+
+Learning doc ready:
+- `compact_v5_test_evidence/final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md`
+  records higher-level future-development lessons with concrete S3/notes_cli/
+  Claude-review examples and references. It documents the principle layer, not
+  just technical fix details.

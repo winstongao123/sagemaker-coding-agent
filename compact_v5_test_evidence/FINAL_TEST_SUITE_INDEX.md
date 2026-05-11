@@ -35,6 +35,7 @@ not catch. These docs are the worker-facing punch list.
 | v3 real-use issues (S3 session) | `compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md` | Consolidated Claude + Codex diagnostic. Thinking-block ordering, tool-use collapse, **task drift**, cost-waste drivers, **python_exec sandbox bug** (blocks linecache), `aws` CLI not allowlisted, status-bar vs self-diagnosis mismatch, +7 side-finds. Status: open punch list, not fixed. |
 | S3 diagnostic HTML summary | `final_results/S3_REAL_USE_DIAGNOSTIC_CONSOLIDATED_20260511.html` | Small human-readable status page for the S3 real-use diagnostic. Status: open punch list, not fixed. |
 | S3 fix worker prompt | `final_results/S3_REAL_USE_FIX_WORKER_PROMPT_20260511.md` | Persistent worker handoff: block plan, no-drift rules, Claude subscription CLI protocol, independent review prompts, and proof gates for fixing all S3 real-use blockers. |
+| Future software-development lessons | `final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md` | Higher-level lessons with actual examples and references: benchmark-vs-real-use gap, UI as supervision, tool-truth contracts, drift, cost as behavior signal, independent review process, packaging/source drift. |
 | v5 vs Runnable deep review | `compact_v5/docs/PS_V5_VS_RUNNABLE_DEEP_REVIEW_20260511.md` | Cross-codebase audit on 6 axes (tools / subagents / memory-plan-status / tokens-cache / streaming / UI). Tier 1/2/3 patch recommendations ranked by ROI. |
 
 ## Full Evidence Bundles
