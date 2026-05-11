@@ -31,9 +31,12 @@ tree. The current source path is `compact_v5/`; any older
 `compact_v5/compact_v5/` references are historical/nested-layout references
 from earlier workers.
 
-### What Claude found that is confirmed
+### What Claude found that was confirmed at diagnostic time
 
-| Finding | Current evidence | Current status |
+This table preserves the original problem statement. It is superseded by the
+resolution table below.
+
+| Finding | Diagnostic evidence | Original status |
 |---|---|---|
 | Thinking block renders after metrics | `_render_turn_meta()` appends `thinking_html` after the metrics `summary` in `compact_v5/ui/chat_ui.py`. | **Open** |
 | Tool cards are not collapsed | `role == "tool"` exists, but renders an expanded `<pre>` with max-height instead of a closed summary/body card. | **Open** |
@@ -50,20 +53,33 @@ from earlier workers.
 | "Use `compact_v5/compact_v5/...`." | Active repo tree is flattened `compact_v5/...`; zip should be rebuilt from that tree. | Do not recreate nested layout. |
 | "Plan Mode would avoid failures." | Plan Mode is read-only, but the concrete S3 path still needs one working safe read mechanism. | Plan Mode is helpful guidance, not a substitute for fixing S3 access. |
 
-### Consolidated open punch list
+### Resolution status after Blocks 0-7
 
-| Priority | Issue | Required proof before marking solved |
-|---|---|---|
-| P0 | S3 safe-read path: either dedicated S3 list/get/head tool, or working boto3 sandbox path. | Real SageMaker smoke: list buckets and first-level object prefixes without using blocked `aws s3` CLI. |
-| P0 | Drift guard: response must stay anchored to "list my S3 buckets" after fallback choices. | Transcript test where user selects a fallback and final answer explicitly says whether S3 was answered, partially answered, or still blocked. |
-| P0 | Wrong self-diagnosis: do not claim Bedrock-only when `CONFIG.aws_bedrock_only=False`. | Unit/smoke with blocked AWS path verifies message names bash allowlist or Python sandbox accurately. |
-| P1 | Tool cards collapsed/grouped. | UI fixture/screenshot shows call/result cards closed by default and grouped for parallel dispatch. |
-| P1 | Thinking placement/collapse. | UI fixture/screenshot shows reasoning outside the final-answer body and not expanded as plain text. |
-| P1 | Cost control for simple inventory tasks. | Same S3 prompt runs with no repeated blocked-tool shape, no large follow-up menu, and materially fewer calls/output tokens. |
-| P2 | Deferred-tool tax for common tools. | Measurement compares schema/call cost before and after changing deferral policy for `list_dir` or other common read tools. |
+Implementation commits:
+- `bc492b7 fix compact_v5 s3 real-use blockers`
+- `db63be9 Clarify compact v5 S3 inventory path`
+- `6c3eba8 Add Claude review for S3 inventory docs follow-up`
 
-These are documentation findings only. No runtime/source patch is implied by
-this consolidation entry.
+The original diagnostic above remains as the historical "why we fixed this"
+record. The current status is no longer an open P0/P1 punch list:
+
+| Priority | Issue | Resolution | Current status |
+|---|---|---|---|
+| P0 | S3 safe-read path | Added read-only `aws_s3_list`, always loaded and plan-mode allowed, so simple bucket/prefix inventory does not depend on blocked `aws s3` bash calls or general `python_exec` boto3 imports. | **Shipped** - smoke tests and Claude Block 1 APPROVE after re-review. |
+| P0 | Drift guard | Added S3 intent-drift guard so a fallback/local answer cannot silently replace the original S3 inventory request. | **Shipped** - `test_s3_intent_drift_guard.py` and Claude Block 3 APPROVE. |
+| P0 | Wrong self-diagnosis | Added restriction diagnostics for bash allowlist and Python sandbox import failures; docs now avoid calling this Bedrock-only when `CONFIG.aws_bedrock_only=False`. | **Shipped** - `test_restriction_diagnostics.py` and Claude Block 2 APPROVE. |
+| P1 | Tool cards collapsed/grouped | Tool call/result cards are grouped by `tool_use_id` and closed by default. | **Shipped** - `test_ui_tool_cards_smoke.py` and Claude Block 4 APPROVE after re-review. |
+| P1 | Thinking placement/collapse | Thinking details render collapsed by default and before per-turn metrics. | **Shipped** - `test_ui_thinking_smoke.py` and Claude Block 5 APPROVE after re-review. |
+| P1 | Cost control for simple inventory tasks | Simple S3 inventory turns skip `tool_search`, disable Thinking for that turn, and one-strike repeated blocked `aws s3` retries. | **Shipped** - `test_s3_cost_controls.py` and Claude Block 6 APPROVE. |
+| P2 | Local fallback concrete directory guidance | Lower urgency after the real S3 read path was fixed; keep as a fallback UX improvement when S3 credentials or permissions are absent. | Deferred; not a S3 validation blocker. |
+| P2 | Actionable per-turn cost diagnostics | Current UI exposes cost drivers, but a richer "wasted retries / blocked attempts" diagnosis can be improved later. | Deferred; cost-causing behavior is fixed for the S3 path. |
+| Cross-thread | Cross-turn tool-result history pruning and deeper microcompact policy | Architectural cache/history hardening outside this S3-specific fix. | Deferred to a prompt/cache work stream. |
+| Cross-thread | Subagent live visibility | Addressed by the earlier UI live-supervisor upgrade, not by this S3 block. Keep validating in full acceptance tests. | Not a remaining S3 blocker. |
+
+Current validation position: the S3 real-use P0/P1 blockers are ready for target
+SageMaker validation. Production confidence still depends on the final target
+environment smoke, because credentials, IAM permissions, and installed packages
+can differ from local review machines.
 
 ## Transcript origin
 

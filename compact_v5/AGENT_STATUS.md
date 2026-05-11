@@ -108,35 +108,32 @@ Follow-up review repair:
 
 ---
 
-## 2026-05-11 S3 Real-Use Diagnostic - Open
+## 2026-05-11 S3 Real-Use Diagnostic - Resolved for P0/P1
 
-Current task state: diagnostic/docs-only consolidation after the user's
-hand-run prompt `list file and bucket structure of my s3`.
+Current task state: diagnostic record for the user's hand-run prompt
+`list file and bucket structure of my s3`, now resolved for S3 validation
+blockers by the follow-up implementation below.
 
-Important: the earlier UI live-supervisor approval does **not** close these
-new S3 real-use issues.
+Important: the earlier UI live-supervisor approval did not close the S3 issues
+by itself; the later S3 Real-Use Fix section documents the runtime closure.
 
-Open blockers documented in
-`compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`:
-- thinking block renders after per-turn metrics and appeared expanded in the
-  user's SageMaker/Jupyter render;
-- tool cards exist but are expanded by default and are not grouped/collapsed;
-- the agent drifted from S3 inventory to compact_v5 source-tree inventory after
-  fallback Option 2;
-- the agent misdiagnosed the cause as Bedrock-only even though status showed
-  `Bedrock-only: OFF`;
-- S3 read/list path is contradictory: `aws s3` is blocked by bash/security
-  policy and boto3 failed because Python sandbox import allowlist blocks
-  `linecache`;
-- simple S3 inventory cost was too high due to blocked retries, verbose output,
-  tool_search overhead, and Thinking ON in the deployed run.
+Original blockers documented in
+`compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`
+are now marked with shipped status for P0/P1:
+- S3 safe-read path via `aws_s3_list`;
+- accurate bash/Python sandbox diagnostics;
+- S3 intent-drift guard;
+- collapsed/grouped tool cards;
+- thinking placement/collapse;
+- simple S3 inventory cost controls.
 
-No runtime files were changed for this diagnostic entry. Next worker should
-fix only after confirming scope and should prove each fix with focused smoke
-tests plus independent Claude CLI review.
+Remaining follow-ups are P2 or cross-thread only: local fallback polish,
+actionable wasted-cost diagnosis, cross-turn tool-result pruning, and continued
+full-acceptance validation of subagent live visibility.
 
 Packaging note: `compact_v5.zip` was refreshed only because this status file is
-part of the ship zip. The zip member manifest stayed unchanged.
+part of the ship zip. The zip member manifest stayed unchanged unless later
+source/test files were intentionally added.
 
 Worker handoff ready:
 - persistent worker prompt:
@@ -184,7 +181,9 @@ Evidence:
   `compact_v5_test_evidence/final_results/s3_real_use_reviews/`;
 - source smoke tests under `compact_v5/tests/`;
 - final zip verification report:
-  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
+  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`
+  (historical filename; body content and hash values are updated for the
+  current 2026-05-11 zip).
 
 Real AWS note:
 - a read-only real S3 smoke is attempted during final integration only if

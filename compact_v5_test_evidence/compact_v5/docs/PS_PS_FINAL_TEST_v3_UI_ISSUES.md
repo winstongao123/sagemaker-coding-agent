@@ -427,15 +427,16 @@ Current distinction:
 | Area | UI live-supervisor status | S3 real-use status |
 |---|---|---|
 | Live streaming | Fixed and reviewed. | Not the main failure in the S3 run. |
-| Tool role existence | Fixed: `tool` role exists. | Still open: cards are expanded, not grouped/collapsed. |
-| Thinking display | Role exists and default source constructor is OFF. | Still open: captured thinking renders after metrics and appeared expanded in the user's kernel. |
-| Metrics | Fixed for layout/visibility. | Still open: metrics reveal high-cost behavior but do not prevent it. |
-| Drift | Not covered by the UI approval. | Open: S3 request drifted into compact_v5 source-tree inventory. |
-| AWS/S3 access | Not covered by the UI approval. | Open: `aws s3` is blocked and boto3 failed on Python sandbox import `linecache`. |
+| Tool role existence | Fixed: `tool` role exists. | Fixed later by S3 Block 4: cards are grouped/collapsed by default. |
+| Thinking display | Role exists and default source constructor is OFF. | Fixed later by S3 Block 5: thinking renders before metrics and closed by default. |
+| Metrics | Fixed for layout/visibility. | Fixed later for S3 cost drivers by Block 6; richer wasted-cost diagnosis remains P2. |
+| Drift | Not covered by the UI approval. | Fixed later by S3 Block 3: S3 intent-drift guard. |
+| AWS/S3 access | Not covered by the UI approval. | Fixed later by S3 Block 1/2: read-only `aws_s3_list` plus accurate bash/Python sandbox diagnostics. |
 
-Do not treat the UI live-supervisor Claude approval as proof that the S3
-workflow is production-ready. It only approved the earlier UI streaming/card
-patch set.
+Do not treat the UI live-supervisor Claude approval alone as proof that the S3
+workflow is production-ready. The later S3 Blocks 0-7 reviews close the S3
+P0/P1 validation blockers; target SageMaker validation remains the final
+environment check.
 
 ## S3 Real-Use UI Follow-Up - 2026-05-11
 

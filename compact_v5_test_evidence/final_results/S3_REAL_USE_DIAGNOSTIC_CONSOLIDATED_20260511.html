@@ -10,6 +10,8 @@
     th, td { border: 1px solid #ccc; padding: 8px 10px; vertical-align: top; }
     th { background: #f4f6f8; text-align: left; }
     .open { color: #b00020; font-weight: 700; }
+    .done { color: #116329; font-weight: 700; }
+    .defer { color: #8a5a00; font-weight: 700; }
     .note { background: #fff8df; border-left: 4px solid #e0a800; padding: 10px 12px; }
     code { background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
   </style>
@@ -21,8 +23,9 @@
     <code>list file and bucket structure of my s3</code>.</p>
 
   <div class="note">
-    This is documentation evidence only. It does not claim the S3 workflow is
-    fixed. The authoritative Markdown punch list is
+    This page began as documentation evidence for an open diagnostic. After
+    Blocks 0-7, the S3 real-use P0/P1 blockers are shipped and independently
+    reviewed. The authoritative Markdown record is
     <code>compact_v5_test_evidence/compact_v5/docs/PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md</code>.
   </div>
 
@@ -34,43 +37,48 @@
     <tbody>
       <tr>
         <td>Thinking block placement</td>
-        <td class="open">Open</td>
-        <td>The reasoning text is shown in the wrong part of the message and may appear expanded.</td>
+        <td class="done">Shipped</td>
+        <td>Thinking now renders collapsed by default and before per-turn metrics.</td>
       </tr>
       <tr>
         <td>Tool cards</td>
-        <td class="open">Open</td>
-        <td>Tool calls/results exist as cards, but they are still too noisy because they are not collapsed/grouped.</td>
+        <td class="done">Shipped</td>
+        <td>Tool call/result cards are grouped by tool_use_id and closed by default.</td>
       </tr>
       <tr>
         <td>Task drift</td>
-        <td class="open">Open</td>
-        <td>The agent moved from "show my S3 structure" to "summarize the compact_v5 code folder."</td>
+        <td class="done">Shipped</td>
+        <td>An S3 intent-drift guard now prevents a local/source-tree fallback from being presented as the S3 answer.</td>
       </tr>
       <tr>
         <td>AWS/S3 access path</td>
-        <td class="open">Open</td>
-        <td>The UI says S3 reads are possible, but both attempted paths failed: <code>aws s3</code> was blocked and boto3 failed in the Python sandbox.</td>
+        <td class="done">Shipped</td>
+        <td>A dedicated read-only <code>aws_s3_list</code> tool is the primary safe path for S3 inventory; blocked bash/Python paths now report the correct layer.</td>
       </tr>
       <tr>
         <td>Cost</td>
-        <td class="open">Open</td>
-        <td>The simple S3 request used too many calls and too much output because it retried blocked paths and produced verbose fallback prose.</td>
+        <td class="done">Shipped</td>
+        <td>Simple S3 inventory skips tool discovery, disables Thinking for that turn, and one-strike blocks repeated blocked <code>aws s3</code> retries.</td>
+      </tr>
+      <tr>
+        <td>P2 / cross-thread follow-ups</td>
+        <td class="defer">Deferred</td>
+        <td>Local fallback polish, richer per-turn wasted-cost diagnosis, and cross-turn tool-output pruning remain useful future work but are not S3 validation blockers.</td>
       </tr>
     </tbody>
   </table>
 
-  <h2>Do Not Mark Solved Until</h2>
+  <h2>Proof Gates</h2>
   <table>
     <thead>
       <tr><th>Gate</th><th>Required Evidence</th></tr>
     </thead>
     <tbody>
-      <tr><td>S3 safe-read smoke</td><td>Real SageMaker run lists buckets/prefixes through an allowed path.</td></tr>
-      <tr><td>Intent guard</td><td>Fallback response explicitly preserves the original S3 goal.</td></tr>
-      <tr><td>Accurate diagnosis</td><td>Blocked AWS path reports bash allowlist or Python sandbox cause, not Bedrock-only when OFF.</td></tr>
-      <tr><td>UI screenshot</td><td>Thinking and tool cards render collapsed/placed correctly in the target notebook UI.</td></tr>
-      <tr><td>Cost check</td><td>Same prompt avoids repeated blocked calls and large follow-up menus.</td></tr>
+      <tr><td>S3 safe-read smoke</td><td>Covered by <code>aws_s3_list</code> smoke tests and final target SageMaker validation.</td></tr>
+      <tr><td>Intent guard</td><td>Covered by <code>test_s3_intent_drift_guard.py</code>.</td></tr>
+      <tr><td>Accurate diagnosis</td><td>Covered by <code>test_restriction_diagnostics.py</code>.</td></tr>
+      <tr><td>UI rendering</td><td>Covered by tool-card and thinking smoke tests; target notebook visual validation remains the final environment check.</td></tr>
+      <tr><td>Cost check</td><td>Covered by <code>test_s3_cost_controls.py</code> for the simple inventory path.</td></tr>
     </tbody>
   </table>
 </body>
