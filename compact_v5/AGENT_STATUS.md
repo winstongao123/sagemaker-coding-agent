@@ -189,3 +189,33 @@ Real AWS note:
 - a read-only real S3 smoke is attempted during final integration only if
   credentials are available in the environment; failures are recorded as
   environment/permission evidence, not hidden.
+
+---
+
+## 2026-05-12 Notebook Widget Regression Fix
+
+Current task state: fixed the notebook-code regression behind the user's
+`Error displaying widget: model not found` report and the complaint that v5's
+notebook cells were much longer than v4.
+
+Implemented:
+- restored the tracked S3/UI smoke tests in the local source tree before
+  changing code;
+- moved notebook config/launch plumbing from `chat.ipynb` into
+  `entry.launch_config_ui()` and `entry.launch_chat_ui()`;
+- reduced `chat.ipynb` config cell from 188 lines to 12 lines;
+- reduced `chat.ipynb` launch cell from 59 lines to 4 lines;
+- preserved the v4-style control surface: model, temperature, thinking toggle,
+  thinking budget, workspace, max turns, iteration budget, mock mode,
+  Bedrock-only, approvals, and cost limit;
+- added `compact_v5/tests/test_notebook_thin_launcher.py` to lock the
+  thin-notebook contract and CONFIG propagation;
+- ran py_compile on entry/UI/agent/query engine and focused pytest over
+  S3/UI/notebook smoke tests: 25 passed;
+- Claude Round 1 review returned `VERDICT: APPROVE`, no HIGH/MEDIUM findings.
+
+Important caveat:
+- local Python can prove the notebook shape, import path, config propagation,
+  and no saved outputs/widget metadata. It cannot fully prove the frontend
+  SageMaker/Jupyter widget manager. The rebuilt zip still needs a fresh-kernel
+  target visual smoke before calling the UI launch path 100% production-proven.

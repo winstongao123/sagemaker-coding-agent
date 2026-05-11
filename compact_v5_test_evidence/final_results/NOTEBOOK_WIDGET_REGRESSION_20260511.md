@@ -15,7 +15,8 @@ ui = create_chat_ui()
 # v5 follows compact_v4's stable display contract...
 ```
 
-This investigation is docs-only. Runtime code was not changed.
+This investigation began as docs-only. It was later fixed by moving notebook
+plumbing into `entry.py` and adding a thin-notebook regression test.
 
 ## Findings
 
@@ -37,7 +38,8 @@ Evidence from notebook history:
 | `7cad523` | restore v4 notebook parity | 188 | 69 | `display(ui.render())` |
 | `03afb06` | SageMaker-safe widget display | 188 | 76 | `render_parts()` child loop |
 | `2cbf9da` | port v4 clear-output behavior | 188 | 60 | `create_chat_ui()` auto-displays one root widget |
-| `249dcf7` | current HEAD | 188 | 59 | `create_chat_ui()` auto-displays one root widget |
+| `249dcf7` | pre-fix HEAD | 188 | 59 | `create_chat_ui()` auto-displays one root widget |
+| current fix | thin launcher | 12 | 4 | `launch_config_ui()` / `launch_chat_ui(...)` helpers |
 
 The likely regression point for the user's screenshot is therefore `2cbf9da`.
 That commit intentionally moved from the previous SageMaker-safe child display
@@ -132,6 +134,24 @@ The safe fix direction is:
 5. Never use the runtime zip as the editable source tree; restore tests from
    git before any new commit.
 
+## Implementation status
+
+Fixed in the follow-up notebook regression patch:
+
+| Fix | Evidence |
+|---|---|
+| Notebook is thin again | `compact_v5/chat.ipynb` config cell is 12 lines; launch cell is 4 lines. |
+| Config/display plumbing moved to Python | `compact_v5/entry.py` now owns `launch_config_ui()` and `launch_chat_ui()`. |
+| v4 control surface preserved | Helper exposes model, temperature, thinking, thinking budget, workspace, max turns, iteration budget, mock mode, Bedrock-only, approvals, and cost limit. |
+| Regression test added | `compact_v5/tests/test_notebook_thin_launcher.py` locks cell line counts and config propagation. |
+| Smoke tests passed | `py -3.10 -m pytest` over S3/UI plus notebook thin tests: 25 passed. |
+| Independent review | Claude Round 1 returned `VERDICT: APPROVE` with no HIGH/MEDIUM findings. |
+
+Remaining caveat: a true frontend `Error displaying widget: model not found`
+cannot be fully proven by local Python execution. The rebuilt zip still needs a
+fresh-kernel SageMaker visual smoke before claiming the notebook UI path is
+100% production proven.
+
 ## Future Software Lesson
 
 When a reference product works, copy the **user contract**, not blindly the
@@ -154,4 +174,3 @@ Future rule:
 > 20-30 lines, the code belongs in a tested Python module. If a visual widget
 > is the main product, it needs a real target-environment render check before
 > production readiness.
-

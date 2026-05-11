@@ -169,10 +169,10 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 
 | Problem | What to do |
 |---|---|
-| `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The notebook locates the runtime from `~/compact_v5`, the repo root, `compact_v5`, `compact_v5/MAIN/agent`, or the shipped zip root. |
+| `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The thin notebook bootstrap locates the runtime from the shipped zip root, `compact_v5/`, or a repo root that contains `compact_v5/`. |
 | `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
 | Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-3 from the latest zip. |
-| `Error displaying widget: model not found` or repeated `Loading widget...` | Restart the kernel, clear notebook outputs, and rerun Cells 1-3 from the latest zip. Cell 3 now follows compact_v4: `ui = create_chat_ui()` clears stale launch-cell output before constructing widgets, then displays one complete fresh top-level widget internally. Use assignment form exactly; do not call bare `create_chat_ui()`, `display(ui.render())`, or `ui.render_parts()` during normal use. |
+| `Error displaying widget: model not found` or repeated `Loading widget...` | Restart the kernel, clear notebook outputs, and rerun Cells 1-3 from the latest zip. The notebook is intentionally thin: Cell 2 calls `launch_config_ui()` and Cell 3 calls `launch_chat_ui(...)`; display construction happens inside `entry.py` / `create_chat_ui()` after clearing stale launch-cell output. Do not call `display(ui.render())` or `ui.render_parts()` during normal use. |
 | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
 | Context feels too large | Use `/context`; compaction and result replay should help. |
