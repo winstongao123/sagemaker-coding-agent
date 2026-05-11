@@ -60,6 +60,7 @@ engineering principles**. This document is the synthesis layer.
 | Review tooling is part of quality | Claude review failed once because auth mode was wrong. | Reviewer invocation must be documented and smoke-tested before relying on the verdict. |
 | Cost should influence design | Cost was visible but did not change behavior. | Cost telemetry should trigger product questions: retry loop, verbosity, wrong tool, excessive thinking, or schema tax? |
 | Packaging is a product boundary | Source fixes are irrelevant if the zip is stale. | Every status/runtime doc update that ships in zip requires zip rebuild + hash proof. |
+| Notebook thinness is a product contract | The v5 notebook became a long integration script while v4's actual user contract was a short, stable launch cell. | Keep notebooks thin; move path/config/display complexity into tested Python modules and validate in the target widget runtime. |
 
 ## Core Lessons
 
@@ -77,6 +78,7 @@ engineering principles**. This document is the synthesis layer.
 | 10. Results must name their limits | v3 acceptance passed the engine layer, but not the S3/live-user workflow. | Every result doc needs "what this does not prove." | `PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`; `FINAL_TEST_SUITE_INDEX.md` |
 | 11. Real-use failures become regression specs | The S3 transcript revealed a compound bug no unit test represented. | Convert real failures into transcript replay tests and proof gates. | `S3_REAL_USE_FIX_WORKER_PROMPT_20260511.md` |
 | 12. Ship artifacts are part of implementation | Several prior fixes needed zip rebuild/re-review after source changed. | Treat packaging verification as implementation, not release paperwork. | `compact_v5.zip` verification logs; `AGENT_STATUS.md` |
+| 13. Copy the reference contract, not the surface ritual | v5 moved to `ui = create_chat_ui()` and one-root-widget display because v4 did root display, but v5's widget tree and SageMaker runtime still produced `Error displaying widget: model not found`. | When using v4 as an example, identify what made it reliable for the user: thin notebook, hidden display complexity, and real widget rendering. | `NOTEBOOK_WIDGET_REGRESSION_20260511.md`; `compact_v4/MAIN/agent/chat.ipynb`; `compact_v5/chat.ipynb` |
 
 ## Actual Examples
 
@@ -163,6 +165,44 @@ $env:CLAUDE_CODE_USE_BEDROCK = $null
 & C:\Users\winst\AppData\Roaming\npm\claude.cmd --setting-sources user --permission-mode dontAsk -p "@review_prompt.md"
 ```
 
+### Example D - The notebook widget regression shows why reference copying needs discipline
+
+The user saw:
+
+```text
+Error displaying widget: model not found
+```
+
+The visible v5 launch cell said v5 followed v4's stable display contract:
+
+```python
+ui = create_chat_ui()
+```
+
+The investigation found two lessons:
+
+- v4's reliable user contract was a thin notebook and hidden UI complexity, not
+  merely the fact that one root widget was displayed.
+- v5's notebook grew to 188 lines of config code plus a 59-line launch cell,
+  with path-discovery duplicated in both cells. That is too much product logic
+  in a notebook surface.
+
+Future test pattern:
+
+```text
+Given the shipped notebook is the primary product UI,
+the launch cell must stay thin,
+display complexity must live in importable Python helpers,
+and the exact target SageMaker/Jupyter widget runtime must render the UI before
+production readiness is claimed.
+```
+
+Related source:
+
+- `compact_v4/MAIN/agent/chat.ipynb`
+- `compact_v5/chat.ipynb`
+- `compact_v5_test_evidence/final_results/NOTEBOOK_WIDGET_REGRESSION_20260511.md`
+
 ## Lessons From Reference Systems
 
 | Reference | What it taught v5 | What the S3 incident adds |
@@ -189,6 +229,8 @@ Use this checklist before calling a future agent/tooling release ready:
 | Did the result doc say what it does not prove? | Prevents benchmark confidence from becoming product confidence. | Explicit negative-scope section. |
 | Did a real artifact ship? | Prevents "fixed in source, stale in package." | Zip/package hash parity with source. |
 | Can another worker reproduce the review? | Prevents unverifiable approval claims. | Reviewer command, prompt, output, and error log saved. |
+| Is the notebook still thin? | Prevents fragile product logic living in cells. | Cell line-count budget plus helper-module tests. |
+| Did the actual widget runtime render it? | Prevents false confidence from structural checks only. | Target SageMaker/Jupyter visual smoke or equivalent captured evidence. |
 
 ## Reusable Playbooks For Other Software Projects
 

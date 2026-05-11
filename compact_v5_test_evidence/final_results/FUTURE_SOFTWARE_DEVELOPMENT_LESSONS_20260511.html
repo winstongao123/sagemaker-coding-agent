@@ -52,6 +52,7 @@
       <tr><td>Review is infrastructure</td><td>Claude review initially used the wrong auth route.</td><td>Document and test the reviewer command, auth, prompt, output, and verdict.</td></tr>
       <tr><td>Packaging is implementation</td><td>Source fixes do not matter if the zip is stale.</td><td>Rebuild and hash-verify shipped artifacts after relevant changes.</td></tr>
       <tr><td>Lessons need synthesis</td><td>The repo had much evidence but needed a principle layer.</td><td>Every serious incident gets a technical issue doc plus a learning note.</td></tr>
+      <tr><td>Notebook thinness is a product contract</td><td>v5 copied parts of v4's UI ritual but let the notebook become a long integration script.</td><td>Keep launch cells small; move path/config/display complexity into tested Python helpers and render-check the target widget runtime.</td></tr>
     </tbody>
   </table>
 
@@ -68,9 +69,10 @@
   </table>
 
   <div class="warn">
-    Learning documented is not the same as runtime fixed. The S3 real-use
-    blockers remain assigned to the worker handoff until tests and independent
-    review prove them solved.
+    Learning documented is not the same as runtime fixed. S3 P0/P1 blockers
+    are now shipped and reviewed, but the notebook widget regression needs its
+    own thin-notebook + target-render fix before production confidence should
+    include the UI launch path.
   </div>
 </body>
 </html>
