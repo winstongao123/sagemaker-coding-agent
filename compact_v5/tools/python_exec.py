@@ -46,7 +46,7 @@ Usage:
 - The agent runs a fresh subprocess for each call, with `-I` (isolated mode) so site-packages don't leak.
 - A closure-based runtime sandbox is injected as a preamble: import allowlist (math, json, re, pathlib, numpy, pandas, sklearn, matplotlib, boto3 [bedrock-runtime only], etc. — see security/dangerous_python.py for the full list), `open()` workspace boundary, `os.remove`/`os.unlink`/`os.rmdir` blocked outside workspace, `os.posix_spawn` blocked.
 - `subprocess`, `socket`, `requests`, `urllib`, `pickle`, `multiprocessing`, `signal`, `ctypes` are all BLOCKED at import time.
-- `boto3` is allowed but destructive operations (`delete_*`, `terminate_instances`, `delete_stack`, IAM/STS/KMS clients) are blocked by regex denylist. When `aws_bedrock_only=true`, only `boto3.client('bedrock-runtime')` is allowed.
+- `boto3` may be used for approved SDK work, but destructive operations (`delete_*`, `terminate_instances`, `delete_stack`, IAM/STS/KMS clients) are blocked by regex denylist. When `aws_bedrock_only=true`, only `boto3.client('bedrock-runtime')` is allowed. For S3 bucket/prefix inventory, prefer the dedicated `aws_s3_list` tool; Python SDK imports can still be constrained by the sandbox or package availability.
 - Default timeout 60s, max 300s.
 - Output is captured (stdout + stderr); large outputs are smart-truncated.
 - Approval is required before any code runs.

@@ -149,10 +149,11 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 - Bedrock-only is the safest mode: it allows `bedrock-runtime` and blocks
   S3/Lambda/Textract/etc. The main chat UI now shows this mode in the footer
   and exposes a live `Bedrock-only` checkbox.
-- If you need S3 reads, untick Bedrock-only before asking. v5 then allows
-  Python `boto3` S3 list/get/head calls through the approval gate, but still
-  blocks S3 destructive calls by regex: `delete_object`, `delete_objects`,
-  and `delete_bucket`.
+- If you need S3 inventory, untick Bedrock-only before asking. v5 uses the
+  dedicated read-only `aws_s3_list` tool for bucket/prefix/object listings and
+  still blocks S3 destructive/admin behavior. General Python `boto3` may be
+  constrained by the Python sandbox or local package availability; do not use
+  it as the primary S3 inventory path.
 - For simple AWS inventory questions, keep Extended Thinking off unless you
   specifically want deeper reasoning. Thinking tokens are visible in the
   footer, but they still count toward context/cost.
