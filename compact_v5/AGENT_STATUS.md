@@ -137,3 +137,10 @@ tests plus independent Claude CLI review.
 
 Packaging note: `compact_v5.zip` was refreshed only because this status file is
 part of the ship zip. The zip member manifest stayed unchanged.
+
+Worker handoff ready:
+- persistent worker prompt:
+  `compact_v5_test_evidence/final_results/S3_REAL_USE_FIX_WORKER_PROMPT_20260511.md`;
+- includes per-block fix order, no-drift boundaries, Claude subscription CLI
+  command, independent review prompt skeleton, proof gates, zip verification,
+  and final review requirements.
