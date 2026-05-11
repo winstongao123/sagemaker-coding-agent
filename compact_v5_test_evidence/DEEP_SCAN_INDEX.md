@@ -27,7 +27,7 @@ compact_v5_test_evidence/deep_scans/
 | v5 design decisions | `deep_scans/compact_v5/_status/V5_DESIGN_DECISIONS.md` | Key architecture choices and constraints. |
 | v4 UI parity | `deep_scans/compact_v5/_status/PS_UI_V4.md` | Notes from v4 UI inspection used to restore notebook UI parity. |
 | Repo learnings docs | `deep_scans/compact_v5/docs/PS_V5_LEARNINGS_FROM_REPOS.md` and `PS_V5_FUNCTIONAL_CHANGES_FROM_V4.md` | Human-readable summary of what v5 learned from v4/Runnable/Hermes/Learning Factory. |
-| Future development lessons | `final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md` | Higher-level lessons from v5 misses and real-use testing: how to prevent benchmark-only confidence, UI-supervision gaps, tool-contract drift, cost waste, review-process failure, and source/zip drift in future projects. |
+| Future development lessons | `final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md` and `.html` | Higher-level lessons from v5 misses and real-use testing: how to prevent benchmark-only confidence, UI-supervision gaps, tool-contract drift, cost waste, review-process failure, source/zip drift, and weak evidence synthesis in future projects. |
 | Runnable HTML references | `deep_scans/compact_v5/docs/htmls/PS_*RUNNABLE*.html` | Visual/reference docs for Runnable comparison. |
 
 ## Explain Like Age 9

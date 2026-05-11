@@ -150,3 +150,6 @@ Learning doc ready:
   records higher-level future-development lessons with concrete S3/notes_cli/
   Claude-review examples and references. It documents the principle layer, not
   just technical fix details.
+- It was expanded after an evidence sweep across changelogs, phase plans,
+  implementation/status docs, final tests, result summaries, and review logs.
+  A companion HTML summary exists at the same basename with `.html`.
