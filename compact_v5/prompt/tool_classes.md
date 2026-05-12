@@ -20,6 +20,21 @@ For simple S3 bucket/file structure inventory, use the always-loaded
 retry blocked `aws s3`/`aws s3api` bash commands; the next CLI retry is
 intentionally blocked so cost stays bounded.
 
+For S3 follow-ups after an inventory ("pick two files", "investigate two",
+"choose from those"), reuse the recently listed S3 object paths first. Do not
+refresh every bucket unless the user explicitly asks for a full refresh. To
+inspect a specific object, use the always-loaded `aws_s3_preview` tool, which
+performs a bounded read-only Range preview.
+
+If the user asks for ASCII output, generated text and files must be plain ASCII
+only: no emoji, Unicode arrows, or box-drawing characters. If an S3 listing says
+output was truncated or provides a continuation token, say the result is partial
+unless you consumed continuation to completion.
+
+Do not update `AGENT_STATUS.md` for small read-only S3 inventory/report tasks
+unless the user explicitly asks for status/progress/handoff. Reserve status
+updates for long-running coding/project tasks.
+
 ## When `bash`/`python_exec` is BLOCKED
 
 DO NOT default to "ask user to start a new session". MOST diagnostics finish with read-only tools.

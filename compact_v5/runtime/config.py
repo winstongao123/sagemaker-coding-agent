@@ -42,6 +42,10 @@ class Config:
     workspace: str = os.getcwd()
     sessions_dir: str = os.path.join(os.getcwd(), "sessions")
     audit_dir: str = os.path.join(os.getcwd(), "audit_logs")
+    # User-facing generated reports/diagrams default here when the runtime
+    # package itself is the current workspace. Runtime state/audit/session
+    # roots intentionally remain under workspace.
+    user_artifacts_root: str = os.path.join(os.path.expanduser("~"), "sageagent_workspace")
 
     # Limits
     max_turns: int = 60
@@ -229,6 +233,7 @@ def _apply_config_file(config: Config) -> None:
     # Scalar fields with expected types for validation
     _SCALAR_FIELDS: Dict[str, type] = {
         "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
+        "user_artifacts_root": str,
         "max_history": int, "temperature": float, "thinking_enabled": bool,
         "thinking_budget": int, "disable_thinking_for_simple_s3_inventory": bool, "mock_mode": bool,
         "bash_allow_interpreters": bool, "bash_allow_docker": bool,

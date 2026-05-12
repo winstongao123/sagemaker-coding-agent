@@ -83,6 +83,10 @@ class DurableStateManager:
         return self.state_dir / "tasks.json"
 
     @property
+    def artifacts_path(self) -> Path:
+        return self.state_dir / "artifacts.json"
+
+    @property
     def journal_path(self) -> Path:
         return self.state_dir / "turn_journal.jsonl"
 
@@ -176,6 +180,47 @@ class DurableStateManager:
         if not isinstance(tasks, list):
             return []
         return [dict(t) for t in tasks if isinstance(t, dict)]
+
+    def append_artifact(
+        self,
+        *,
+        path: str,
+        kind: str = "file",
+        source_tool: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if self.disabled or not path:
+            return
+        artifacts = self.load_artifacts(limit=100)
+        resolved = str(Path(path).expanduser().resolve())
+        artifacts = [a for a in artifacts if a.get("path") != resolved]
+        artifacts.append({
+            "path": resolved,
+            "kind": kind or "file",
+            "source_tool": source_tool or "",
+            "metadata": dict(metadata or {}),
+            "created_at": _utc_now(),
+        })
+        payload = {
+            "schema": "sageagent.artifacts.v1",
+            "updated_at": _utc_now(),
+            "artifacts": artifacts[-100:],
+        }
+        with self._lock:
+            _atomic_write_json(self.artifacts_path, payload)
+
+    def load_artifacts(self, limit: int = 20) -> List[Dict[str, Any]]:
+        if self.disabled or not self.artifacts_path.is_file():
+            return []
+        try:
+            data = json.loads(self.artifacts_path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        artifacts = data.get("artifacts", [])
+        if not isinstance(artifacts, list):
+            return []
+        cleaned = [dict(a) for a in artifacts if isinstance(a, dict)]
+        return cleaned[-max(1, int(limit)):]
 
     def append_journal(self, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
         if self.disabled:

@@ -260,7 +260,7 @@ Evidence table:
 | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
 | Tests | Green. | `python -m pytest compact_v5/tests -q` -> 33 passed. |
 | Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final widget-dependency review returned `APPROVE`; combined config/chat UI re-review `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md` returned `APPROVE` with no HIGH/MEDIUM blockers. |
-| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 152 members, `testzip() None`, required members present, forbidden folders absent. |
+| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 154 members, `testzip() None`, required members present, forbidden folders absent, SHA `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`. |
 
 Latest fix:
 - Cell 1 no longer installs `jupyterlab_widgets` or `widgetsnbextension`.
@@ -356,10 +356,10 @@ Verification:
 
 ---
 
-## 2026-05-12 S3 Follow-Up Tool Discipline - Open
+## 2026-05-12 S3 Follow-Up Tool Discipline - Implemented
 
-Current task state: documented a new S3 workflow issue discovered after the
-S3 safe-read fix. S3 access works, but narrow follow-up prompts can still
+Current task state: fixed the new S3 workflow issue discovered after the
+S3 safe-read fix. S3 access worked, but narrow follow-up prompts could still
 cause broad S3 rescans and unnecessary cost.
 
 Trigger:
@@ -375,14 +375,32 @@ Diagnosis:
 - the failure is not true parallel dispatch: `aws_s3_list.requires_approval`
   keeps it sequential, but the model can still emit many distinct S3 list
   calls in one turn and existing dedup only removes identical calls;
-- v5 lacks a "reuse previous S3 evidence first" rule;
-- there is no safe S3 object preview/read tool, only list/structure;
-- related transcript issues remain open: truncation truth, ASCII-only output,
+- v5 lacked a "reuse previous S3 evidence first" rule;
+- there was no safe S3 object preview/read tool, only list/structure;
+- related transcript issues included truncation truth, ASCII-only output,
   artifact path tracking, workspace default outside runtime folder,
   over-editing `AGENT_STATUS.md` for simple tasks, raw tool id UI polish, and
   cost proof.
 
-Docs created:
+Implemented:
+- added recent S3 object extraction and follow-up reminder injection in
+  `core/query_engine.py`;
+- capped follow-up `aws_s3_list` fanout at 2 calls per user turn;
+- added read-only bounded `aws_s3_preview` for S3 object previews;
+- added a truncation guard that blocks complete/all claims after truncated S3
+  evidence;
+- added `CONFIG.user_artifacts_root`, path allowlisting, artifact recording,
+  and deliverable rebasing out of runtime package folders;
+- added ASCII-only write/document guards when the user explicitly asks ASCII;
+- blocked `AGENT_STATUS.md` edits for small S3/report tasks unless explicitly
+  requested;
+- moved thinking display into a live collapsed pre-action row and removed the
+  duplicate after-answer thinking block from turn metrics;
+- hid raw `toolu_...` ids from normal tool-card summaries while keeping them
+  in details for debugging;
+- simple S3 inventory/follow-up turns disable thinking for that turn only.
+
+Docs/reviews:
 - issue doc:
   `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`;
 - worker prompt:
@@ -391,10 +409,21 @@ Docs created:
   `compact_v5_test_evidence/final_results/s3_followup_tool_discipline_reviews/PLAN_REVIEW_CLAUDE_REREVIEW2.md`
   returned `APPROVE` after two earlier `REQUEST_CHANGES` passes tightened the
   S3 cap, artifact path validation, and status-doc heuristic.
+- implementation Claude CLI review:
+  `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REVIEW.md`
+  returned `APPROVE`;
+- implementation re-review:
+  `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REREVIEW.md`
+  returned `APPROVE` after status-prefix polish.
 
-Required next work:
-- implement the blocks in the approved worker prompt with independent Claude
-  CLI review after each block;
-- rebuild `compact_v5_ship.zip`;
-- update status, memory, lessons, readiness, and zip verification docs;
-- do not claim S3 workflows fully solved until this block is closed.
+Verification:
+- `py -3.10 -m py_compile` passed for the touched engine/UI/agent/tool/runtime
+  modules;
+- `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed.
+
+Packaging:
+- rebuilt `compact_v5_ship.zip` from the active flat tree: 154 members,
+  `testzip() None`, forbidden members 0, required hash parity true, SHA
+  `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`;
+- refreshed
+  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.

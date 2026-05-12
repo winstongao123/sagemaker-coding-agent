@@ -654,17 +654,23 @@ class V4WidgetChatUI(WidgetChatUI):
                 f"font-size:12px;color:{colors['fg']};'>{self._escape(value)}</pre>"
             )
 
-        id_part = f" · id {tool_use_id}" if tool_use_id else ""
+        id_debug = (
+            f"<div style='margin-top:8px;color:{muted};font-size:10px;'>"
+            f"Tool id: {tool_use_id}</div>"
+            if tool_use_id
+            else ""
+        )
         return (
             f"<details class='sageagent-tool-card' style='border:1px solid {border};"
             "border-radius:6px;padding:6px 8px;'>"
             f"<summary style='cursor:pointer;color:#ffb74d;font-size:12px;'>"
             f"<b>{tool_name}</b> · <span style='color:{status_color}'>{status}</span>"
-            f" · {phase}{id_part}</summary>"
+            f" · {phase}</summary>"
             f"<div style='margin-top:6px;color:{muted};font-size:11px;'>Tool input</div>"
             f"{_pre(input_text)}"
             f"<div style='margin-top:8px;color:{muted};font-size:11px;'>Tool result</div>"
             f"{_pre(result_text)}"
+            f"{id_debug}"
             "</details>"
         )
 
@@ -1035,7 +1041,6 @@ class V4WidgetChatUI(WidgetChatUI):
         cost = float(meta.get("cost_usd", 0.0) or 0.0)
         saved = float(meta.get("cache_saved_usd", 0.0) or 0.0)
         without_cache = cost + saved
-        thinking = str(meta.get("thinking", "") or "").strip()
         reasoning_state = self._escape(meta.get("reasoning_state", "Thinking OFF"))
         summary = (
             f"In {input_tokens:,} | Out {output_tokens:,} | "
@@ -1044,20 +1049,10 @@ class V4WidgetChatUI(WidgetChatUI):
             f"Cache saved <b style='color:#4caf50'>${saved:.4f}</b> | "
             f"Calls {calls:,} | {reasoning_state}"
         )
-        thinking_html = ""
-        if thinking:
-            safe = self._escape(thinking[:8000]).replace("\n", "<br>")
-            more = "" if len(thinking) <= 8000 else "<br>[thinking truncated in UI; full text remains in runtime/audit logs]"
-            thinking_html = (
-                "<details style='margin-top:4px;'>"
-                "<summary style='cursor:pointer;color:#ab47bc;'>Reasoning / thinking captured for this turn</summary>"
-                f"<div style='border-left:3px solid #ab47bc;padding-left:8px;color:{colors['muted']};"
-                f"font-size:11px;line-height:1.45;margin-top:4px;'>{safe}{more}</div></details>"
-            )
         return (
             f"<div style='color:{colors['muted']};font-size:11px;margin-top:6px;"
             f"border-top:1px solid {colors['border']};padding-top:4px;'>"
-            f"{thinking_html}<div class='sageagent-turn-metrics'>{summary}</div></div>"
+            f"<div class='sageagent-turn-metrics'>{summary}</div></div>"
         )
 
     def _stats_snapshot(self) -> Dict[str, Any]:
@@ -1141,7 +1136,6 @@ class V4WidgetChatUI(WidgetChatUI):
                 float(after.get("_cache_savings_usd", 0.0) or 0.0)
                 - float(before.get("_cache_savings_usd", 0.0) or 0.0),
             ),
-            "thinking": getattr(result, "thinking", "") or "",
             "reasoning_state": f"Thinking {thinking_state} (budget {thinking_budget})",
         }
 
@@ -1258,6 +1252,12 @@ class V4WidgetChatUI(WidgetChatUI):
         stripped = chunk.strip()
         if not stripped:
             return None
+        if stripped.startswith("[thinking]"):
+            body = stripped[len("[thinking]"):].strip()
+            if body:
+                self._append_message("thinking", body)
+                self._render_status()
+            return None
         sub_match = re.match(r"^\[subagent:([^:\]]+)(?::child)?\]\s*(.*)$", stripped, re.DOTALL)
         if sub_match:
             kind = sub_match.group(1)
@@ -1320,6 +1320,8 @@ class V4WidgetChatUI(WidgetChatUI):
             "[Cost $",
             "[auto-compact",
             "[final-claim guard:",
+            "[intent-drift guard:",
+            "[truncation guard:",
             "[Max turns reached:",
             "[warning]",
             "[Warning",
@@ -1522,11 +1524,10 @@ class V4WidgetChatUI(WidgetChatUI):
                         self._messages.append(("tool", input_text, ts, meta))
                         if tool_use_id:
                             self._tool_card_indices[tool_use_id] = index
+                if thinking_parts:
+                    self._messages.append(("thinking", "\n\n".join(thinking_parts), ts, {}))
                 if text_parts:
-                    meta = {}
-                    if thinking_parts:
-                        meta["thinking"] = "\n\n".join(thinking_parts)
-                    self._messages.append(("assistant", "\n".join(text_parts), ts, meta))
+                    self._messages.append(("assistant", "\n".join(text_parts), ts, {}))
 
         self._render_chat()
 

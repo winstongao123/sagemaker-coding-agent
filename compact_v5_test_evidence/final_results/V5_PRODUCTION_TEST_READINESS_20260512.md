@@ -8,8 +8,9 @@ validation. After the user's fresh SageMaker screenshot still showed
 latest v4.10.10: Cell 1 no longer installs `jupyterlab_widgets` or
 `widgetsnbextension` from inside the notebook.
 
-Confidence: **98% for source/package readiness; target SageMaker retest
-required after the v4-dependency alignment fix**.
+Confidence: **100% ready for validation after the refreshed ship zip is used;
+98% source/package confidence for production testing; target SageMaker retest
+still required after upload/extract**.
 
 This is not a claim of zero production risk. It means the source, package,
 S3 real-use blockers, tests, review evidence, and zip verification are strong,
@@ -28,11 +29,11 @@ but the target SageMaker widget manager still must pass a real smoke test.
 | Session resume display | v4 reloads the visible chat after loading a saved session. | v5 now rehydrates visible chat rows from restored saved messages after `/resume`, including collapsed tool cards grouped by `tool_use_id`. | `test_ui_session_resume_smoke.py`. |
 | Thinking display/cost | Earlier v5 thinking placement/cost was confusing. | Thinking is collapsed and placed before metrics; simple S3 inventory disables thinking for that turn. | `test_ui_thinking_smoke.py`; `test_s3_cost_controls.py`. |
 | S3 real use | User asked for S3 inventory and early v5 drifted to local source inventory. | v5 has `aws_s3_list`, accurate sandbox diagnostics, S3 intent guard, and one-strike blocked retry. | S3 real-use review blocks and tests. |
-| S3 follow-up discipline | User asked "pick two files to investigate" after S3 inventory. | Open implementation block, approved plan: v5 can over-scan with multiple distinct sequential `aws_s3_list` calls instead of reusing known S3 objects. Worker prompt now specifies reuse guard, 2-call per-turn S3 cap, safe preview, truncation truth, artifact workspace, ASCII/status guards, and per-block Claude review. | `S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`; `S3_FOLLOWUP_TOOL_DISCIPLINE_WORKER_PROMPT_20260512.md`; `s3_followup_tool_discipline_reviews/PLAN_REVIEW_CLAUDE_REREVIEW2.md`. |
+| S3 follow-up discipline | User asked "pick two files to investigate" after S3 inventory. | Fixed. v5 reuses recent S3 object paths, caps follow-up `aws_s3_list` calls, adds `aws_s3_preview`, guards truncated "complete" claims, records artifact paths, rebases user deliverables outside runtime package folders, enforces ASCII writes when requested, blocks status-doc spam for small S3 tasks, hides raw tool ids in summaries, and disables thinking for simple S3 follow-ups. | `S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`; `S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REVIEW.md` -> `APPROVE`; `S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REREVIEW.md` -> `APPROVE`; `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed. |
 | Runnable lessons | Runnable patterns matter, but terminal UI does not map directly to SageMaker notebooks. | v5 adapted relevant patterns: progress visibility, review discipline, status tracking, cache/cost awareness, subagent observability. | `V5_DEEP_SCAN_RUNNABLE_COMPARE_20260511.md`; `V5_DESIGN_OVERVIEW.html`. |
-| Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `python -m pytest compact_v5/tests -q` -> 37 passed. |
+| Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed. |
 | Independent review | User required Claude CLI review with subscription auth. | Final Claude CLI review loop approved; no HIGH/MEDIUM findings; the v4-dependency alignment and combined config/chat UI patches both received `APPROVE`. | `notebook_widget_regression_reviews/ROUND3_*`; `notebook_widget_regression_reviews/claude/ROUND_1_WIDGET_DEPENDENCY_FIX_claude_review.md`; `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md`. |
-| Package | Source fixes must be in the runtime ship zip. | Minimum ship zip rebuilt and verified. | `compact_v5_ship.zip`; SHA recorded in zip verify doc. |
+| Package | Source fixes must be in the runtime ship zip. | Minimum ship zip rebuilt and verified: 154 members, `testzip() None`, required hash parity true. | `compact_v5_ship.zip`; SHA `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`; zip verify doc updated. |
 
 ## Remaining Risk
 
@@ -47,11 +48,9 @@ The current target retest focus is widget rendering:
 - IAM permissions and AWS credentials can differ;
 - installed package versions can differ;
 - production-like user prompts can still expose P2 polish needs.
-- S3 follow-up tool discipline remains open for implementation, but the fix
-  plan is independently approved: reuse previous S3 evidence, cap
-  `aws_s3_list` at 2 calls per user turn, add safe object preview, enforce
-  truncation truth, ASCII compliance, workspace/artifact policy, status-doc
-  guard, and cost proof.
+- S3 follow-up tool discipline is fixed in source and independently approved;
+  production validation should still include the exact transcript that exposed
+  the issue.
 
 The widget-manager item remains the first thing to validate in the user's
 target SageMaker runtime after uploading the new ship zip.
@@ -72,7 +71,9 @@ target SageMaker runtime after uploading the new ship zip.
    - notes_cli style build/test/review prompt;
    - an ambiguous prompt that makes the model call `ask_user`, confirming the
      inline Agent Question box displays and resumes after Submit/Skip;
-   - one long-running task with subagent/reviewer visibility.
+  - the S3 follow-up prompt `pick two files to investigate and tell me what
+    you found`, confirming v5 does not rescan every bucket;
+  - one long-running task with subagent/reviewer visibility.
 
 ## Lesson
 

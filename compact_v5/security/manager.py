@@ -721,6 +721,15 @@ def _build_singleton() -> SecurityManager:
     """Build the SECURITY singleton with auto-detected allowed_paths."""
     from runtime.config import CONFIG
     auto_allowed = _auto_detect_allowed_paths(CONFIG.workspace, CONFIG.allowed_paths or [])
+    try:
+        artifact_root = getattr(CONFIG, "user_artifacts_root", "")
+        if artifact_root:
+            artifact_root = os.path.abspath(os.path.expanduser(str(artifact_root)))
+            os.makedirs(artifact_root, exist_ok=True)
+            if artifact_root not in auto_allowed:
+                auto_allowed.append(artifact_root)
+    except Exception:
+        pass
     return SecurityManager(
         CONFIG.workspace,
         allow_interpreters=getattr(CONFIG, "bash_allow_interpreters", False),

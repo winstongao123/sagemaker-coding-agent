@@ -302,6 +302,57 @@ Why this matters: "cost high" is not enough. The S3 case showed exactly which
 behaviors produced the cost: repeated blocked paths, verbose menus, and wrong
 fallback.
 
+### Playbook 4b - Treat follow-ups as continuity tests
+
+Use when a user asks a short follow-up after a long discovery step.
+
+1. Identify the noun the follow-up refers to, such as "two files" after an S3
+   listing.
+2. Reuse the prior evidence before calling discovery tools again.
+3. Add a bounded preview/read tool when the existing list tool cannot inspect
+   content safely.
+4. Cap broad rediscovery calls unless the user explicitly asks for a fresh scan.
+5. Guard final claims when prior evidence was truncated or sampled.
+6. Save created artifact paths and answer location questions from that record.
+
+Why this matters: the S3 follow-up failure was not model intelligence alone.
+The system did not make the previous S3 objects easy enough to reuse, did not
+offer a safe preview tool, and allowed a fresh broad scan. The fix turns
+"pick two files" into an executable continuity contract.
+
+### Playbook 4c - Separate runtime package files from user deliverables
+
+Use for notebook agents, CLI tools, and packaged apps.
+
+1. Define the runtime/package directory.
+2. Define the user workspace or artifact root.
+3. If no project workspace is selected, save generated reports under the user
+   artifact root, not inside the package folder.
+4. Keep source files project-relative when the user is building a project.
+5. Record created artifact paths in durable state.
+6. Use recorded artifact paths for "where is the file?" follow-ups.
+
+Why this matters: writing `S3_Structure_Diagram.md` inside
+`compact_v5_ship/` confused the user because they were looking for work output,
+not runtime internals. The fix introduced `CONFIG.user_artifacts_root` and
+artifact tracking without moving runtime audit/session roots.
+
+### Playbook 4d - ASCII and thinking are explicit contracts
+
+Use when outputs have requested display constraints or optional reasoning mode.
+
+1. If the user asks for ASCII, enforce ASCII in generated files as well as chat.
+2. Reject non-ASCII artifacts before writing, rather than apologizing later.
+3. Keep thinking off for simple I/O and follow-up tasks unless the user enables
+   it for a reason.
+4. If thinking is enabled, show it as collapsed pre-action trace, never as
+   after-the-fact text below the answer.
+5. Make the metric line say whether thinking was actually used on that turn.
+
+Why this matters: the S3 transcript asked for ASCII but received emoji and box
+drawing. Later, thinking appeared after the answer, which made it feel like a
+post-hoc explanation. Both are UX contract failures, not just formatting bugs.
+
 ### Playbook 5 - Treat review as executable infrastructure
 
 Use when a project requires independent review.
@@ -354,9 +405,9 @@ Current readiness position:
 |---|---|---|
 | v5 preserves the latest v4 notebook contract | Ready for production test | v4.10.10 reference checked; v5 default is v4-style ipywidgets, with explicit console fallback only. |
 | v5 absorbed relevant Runnable lessons | Ready for production test | Tool/progress visibility, reviewer discipline, status tracking, subagent observability, prompt/cache/cost awareness documented and implemented where compatible with SageMaker/Bedrock. |
-| S3 real-use blockers | Fixed | `aws_s3_list`, accurate sandbox diagnostics, S3 intent-drift guard, one-strike retry block, and cost controls. |
+| S3 real-use blockers | Fixed | `aws_s3_list`, accurate sandbox diagnostics, S3 intent-drift guard, one-strike retry block, cost controls, S3 follow-up reuse, `aws_s3_preview`, truncation guard, ASCII/artifact/status guards. |
 | Notebook widget regression | Source/package fixed locally; target retest required | v5 Cell 1 now matches latest v4.10.10 by not installing `jupyterlab_widgets` or `widgetsnbextension`; local Jupyter/Playwright from rebuilt ship zip shows `HAS_MODEL_NOT_FOUND False`, `HAS_READY True`, `HAS_SEND True`, `HAS_STOP True`. Follow-up requires the visual to show one combined config/chat UI, not a separate config panel. |
-| Production-test readiness | 98% confidence | 31 focused tests passed, zip rebuilt/verified, Claude CLI reviews approved with no HIGH/MEDIUM findings. |
+| Production-test readiness | 98% confidence after refreshed ship zip | 47 focused tests passed, Claude CLI implementation review and re-review approved with no HIGH/MEDIUM findings. |
 
 Do not confuse "98% production-test ready" with "guaranteed production
 flawless." The remaining 2% is target-environment variance: SageMaker/Jupyter

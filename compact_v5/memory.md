@@ -9,7 +9,7 @@ from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
 `widgetsnbextension`. v5 now matches v4's dependency posture: install
 `ipywidgets`, not frontend widget-extension packages.
 
-The source/package confidence is based on parity checks, 36 passing focused
+The source/package confidence is based on parity checks, 47 passing focused
 smoke tests, local Jupyter/Playwright visual evidence from the rebuilt ship
 zip, rebuilt zip integrity, and independent Claude CLI review approvals. The
 remaining proof is target SageMaker retest with the new ship zip.
@@ -33,15 +33,17 @@ by tool id.
 2026-05-12 follow-up: S3 access is not the same as S3 workflow discipline.
 After a successful S3 inventory, the prompt "pick two files to investigate"
 caused v5 to run multiple new `aws_s3_list` calls instead of reusing the
-previously listed objects. Treat this as an open follow-up tool-discipline
-block: add reuse-first behavior, S3 fanout limits, a safe S3 preview tool,
-truncation truth checks, ASCII-contract tests, artifact tracking, workspace
-defaults outside the v5 runtime folder, and a guard against editing
-`AGENT_STATUS.md` for simple non-project tasks. Claude CLI subscription review
-approved the worker plan after tightening three specifics: cap
-`aws_s3_list` at 2 calls per user turn, use a separate allowed
-`user_artifacts_root` for generated deliverables, and apply concrete
-status-update thresholds.
+previously listed objects. This block is now fixed in source: v5 injects a
+reuse-first reminder with recent S3 object paths, caps follow-up
+`aws_s3_list` at 2 calls per turn, adds a bounded read-only
+`aws_s3_preview` tool, blocks complete/all claims after truncated S3 evidence,
+records generated artifact paths, rebases user deliverables to
+`CONFIG.user_artifacts_root` when the workspace is the runtime package,
+enforces explicit ASCII-only write contracts, blocks `AGENT_STATUS.md` edits
+for small S3/report tasks unless explicitly requested, hides raw tool ids from
+normal summaries, and disables thinking for simple S3 inventory/follow-up
+turns. Claude CLI subscription review and re-review both returned APPROVE;
+the focused suite is 47/47 passing.
 
 Reusable lesson:
 
@@ -61,6 +63,14 @@ Reusable lesson:
 - Follow-up prompts have a continuity contract. When the user says "pick two"
   after a list, the agent should choose from the known list first, not re-run a
   broad discovery scan.
+- Generated user deliverables are not runtime files. If no project workspace
+  is selected and the current directory is the v5 runtime package, save reports
+  under the user artifact root instead of inside `compact_v5_ship/`.
+- "ASCII diagram" is a contract, not a suggestion. Avoid emoji, arrows, and
+  box drawing in both chat and generated files when the user asks for ASCII.
+- Thinking is a cost and UX mode. Keep it off for simple I/O follow-ups, and if
+  enabled, display it as a collapsed pre-action trace, never as after-the-fact
+  text below the final answer.
 - Runnable lessons should be adapted to SageMaker/Bedrock constraints:
   structured tool/progress visibility, reviewer discipline, status tracking,
   cache/cost awareness, and subagent observability matter; terminal UI and

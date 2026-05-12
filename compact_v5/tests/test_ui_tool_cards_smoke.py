@@ -49,6 +49,8 @@ def test_tool_card_html_is_collapsed_and_grouped():
     assert "Tool result" in html
     assert "aws_s3_list" in html
     assert "Buckets:" in html
+    assert "Tool id: toolu_1" in html
+    assert "toolu_1" not in html.split("</summary>", 1)[0]
 
 
 def test_tool_card_error_unknown_and_clear_paths():

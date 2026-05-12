@@ -1,0 +1,1389 @@
+﻿diff --git a/compact_v5/agent.py b/compact_v5/agent.py
+index 6bc9dd0..b6a2b2a 100644
+--- a/compact_v5/agent.py
++++ b/compact_v5/agent.py
+@@ -177,6 +177,32 @@ def _is_simple_s3_inventory_request(message: str) -> bool:
+     return True
+
+
++def _is_simple_s3_followup_request(message: str, engine: QueryEngine) -> bool:
++    """Detect a narrow follow-up to existing S3 evidence."""
++    lowered = (message or "").lower()
++    if not any(
++        phrase in lowered
++        for phrase in (
++            "pick two",
++            "pick 2",
++            "choose two",
++            "choose 2",
++            "investigate",
++            "inspect",
++            "preview",
++            "sample",
++            "where is the file",
++            "cannot find",
++            "can't find",
++        )
++    ):
++        return False
++    try:
++        return bool(engine._recent_s3_object_paths(limit=1))  # noqa: SLF001
++    except Exception:
++        return False
++
++
+ class Agent:
+     """Minimal public Agent wrapping the Phase 8-10 surfaces."""
+
+@@ -312,16 +338,20 @@ class Agent:
+         _max_tokens = getattr(_CFG, "max_tokens", 4096)
+         _temperature = getattr(_CFG, "temperature", 0.0)
+         _thinking_enabled = self._thinking_enabled
++        _simple_s3_low_cost = _is_simple_s3_inventory_request(message) or _is_simple_s3_followup_request(
++            message,
++            self._engine,
++        )
+         if (
+             _thinking_enabled
+             and bool(getattr(_CFG, "disable_thinking_for_simple_s3_inventory", True))
+-            and _is_simple_s3_inventory_request(message)
++            and _simple_s3_low_cost
+         ):
+             _thinking_enabled = False
+             try:
+                 output_fn(
+                     "[cost control] Extended Thinking disabled for this simple S3 "
+-                    "inventory turn; model, cache, and compaction settings unchanged."
++                    "inventory/follow-up turn; model, cache, and compaction settings unchanged."
+                 )
+             except Exception:
+                 pass
+diff --git a/compact_v5/core/query_engine.py b/compact_v5/core/query_engine.py
+index f6b667f..4b9c1fd 100644
+--- a/compact_v5/core/query_engine.py
++++ b/compact_v5/core/query_engine.py
+@@ -421,6 +421,8 @@ class QueryEngine:
+         self._turn_budget_warning_sent = False
+         self._final_claim_guard_sent = False
+         self._intent_drift_guard_sent = False
++        self._s3_truncation_guard_sent = False
++        self._s3_list_calls_this_run = 0
+         # Preserve the original user request outside `self.messages` so exact
+         # deliverables survive compaction/truncation and remain available to
+         # max-turn/final-claim guards.
+@@ -477,6 +479,7 @@ class QueryEngine:
+         # parent_engine forwarding).
+         self._exec_call_count = 0  # bash + python_exec only
+         self._recent_tool_calls: list = []  # [(name, args_hash), ...]
++        self._s3_list_calls_this_run = 0
+         # Block F2 â€” fresh BudgetTracker per run() so continuation state
+         # never leaks across user messages.
+         self._budget_tracker = None
+@@ -714,6 +717,8 @@ class QueryEngine:
+             turn_messages = list(self.messages)
+             if deferred_names:
+                 turn_messages = self._inject_deferred_reminder(turn_messages, deferred_names)
++            turn_messages = self._inject_s3_followup_reminder_if_needed(turn_messages)
++            turn_messages = self._inject_artifact_reminder_if_needed(turn_messages)
+
+             # Block A A-16: time-based microcompact BEFORE the next API call.
+             # If the main loop has been idle long enough for the server-side
+@@ -762,6 +767,8 @@ class QueryEngine:
+                                     turn_messages,
+                                     deferred_names,
+                                 )
++                            turn_messages = self._inject_s3_followup_reminder_if_needed(turn_messages)
++                            turn_messages = self._inject_artifact_reminder_if_needed(turn_messages)
+                             self._audit_engine_event(
+                                 "compact_micro_end",
+                                 parameters={
+@@ -868,6 +875,10 @@ class QueryEngine:
+             response_thinking = getattr(response, "thinking", "") or ""
+             if response_thinking:
+                 thinking_trace.append(response_thinking)
++                try:
++                    output_fn("[thinking]\n" + response_thinking)
++                except Exception:
++                    pass
+
+             # Block B (PORT_LOG #039+#040): record token usage + per-agent
+             # attribution. "parent" or sub-agent type-string. Best-effort â€”
+@@ -1116,6 +1127,15 @@ class QueryEngine:
+                         "is_meta": True,
+                     })
+                     continue
++                guard = self._s3_truncation_guard_message(response.text or "")
++                if guard:
++                    output_fn("[truncation guard: S3 evidence is partial; continuing]")
++                    self.messages.append({
++                        "role": "user",
++                        "content": [{"type": "text", "text": guard}],
++                        "is_meta": True,
++                    })
++                    continue
+                 if response.text:
+                     guard = self._intent_drift_guard_message(response.text)
+                     if guard:
+@@ -1321,6 +1341,40 @@ class QueryEngine:
+                 pass
+             return result
+
++        _repaired_input = call.input
++        if isinstance(call.input, str):
++            try:
++                from security.json_repair import repair_tool_call_arguments
++                _repaired_input = repair_tool_call_arguments(call.input)
++            except Exception:
++                _repaired_input = {}
++
++        if call.name == "aws_s3_list" and self._is_s3_followup_request(self._run_requested_text):
++            with _guard():
++                self._s3_list_calls_this_run += 1
++                if self._s3_list_calls_this_run > 2:
++                    return {
++                        "type": "tool_result",
++                        "tool_use_id": call.id,
++                        "content": (
++                            "Blocked: too many aws_s3_list calls this turn. "
++                            "Reuse prior S3 results or ask for a narrower prefix."
++                        ),
++                        "is_error": True,
++                    }
++
++        if call.name in {"edit_file", "write_file"} and self._is_blocked_status_doc_update(call.name, _repaired_input):
++            return {
++                "type": "tool_result",
++                "tool_use_id": call.id,
++                "content": (
++                    "Blocked: AGENT_STATUS.md updates are reserved for explicit "
++                    "status/progress/handoff requests, long-running coding tasks, "
++                    "or large project edits. This looks like a small read-only/report task."
++                ),
++                "is_error": True,
++            }
++
+         if call.name in {"bash", "python_exec"}:
+             from runtime.config import CONFIG as _CFG
+             cap = getattr(_CFG, "max_exec_calls_per_session", 200)
+@@ -1379,14 +1433,6 @@ class QueryEngine:
+             if len(self._recent_tool_calls) > 12:
+                 self._recent_tool_calls = self._recent_tool_calls[-12:]
+
+-        _repaired_input = call.input
+-        if isinstance(call.input, str):
+-            try:
+-                from security.json_repair import repair_tool_call_arguments
+-                _repaired_input = repair_tool_call_arguments(call.input)
+-            except Exception:
+-                _repaired_input = {}
+-
+         _failure_key = self._tool_failure_key(call.name, _repaired_input)
+         _failure_count = self._tool_failure_counts.get(_failure_key, 0)
+         if _failure_count >= 2:
+@@ -1546,6 +1592,8 @@ class QueryEngine:
+                 "abort_events": self.abort_events,
+                 "output_fn": output_fn,
+                 "ask_user_response_provider": ask_user_response_provider,
++                "ascii_only": self._requests_ascii_only(self._run_requested_text),
++                "tool_name": call.name,
+             })
+             text = _coerce_tool_result_to_text(raw)
+             self._notify_tool_result(call, text, is_error=False)
+@@ -2335,6 +2383,207 @@ class QueryEngine:
+         )
+         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
++    def _inject_s3_followup_reminder_if_needed(
++        self,
++        messages: List[Dict[str, Any]],
++    ) -> List[Dict[str, Any]]:
++        """Anchor S3 follow-ups to prior results instead of re-scanning buckets."""
++        requested = getattr(self, "_run_requested_text", "") or ""
++        if not self._is_s3_followup_request(requested):
++            return messages
++        paths = self._recent_s3_object_paths(limit=24)
++        if not paths:
++            return messages
++        shown = "\n".join(f"- {p}" for p in paths[:12])
++        more = "" if len(paths) <= 12 else f"\n- ... {len(paths) - 12} more recent object paths"
++        body = (
++            "S3 follow-up guard: the user is referring to recently listed S3 "
++            "files. Reuse the known object paths below before calling "
++            "`aws_s3_list` again. For inspecting file contents, pick at most the "
++            "requested number of files and use `aws_s3_preview`. Do not refresh "
++            "all buckets unless the user explicitly asks for a fresh full scan.\n"
++            f"{shown}{more}"
++        )
++        return self._append_transient_text_reminder(messages, body)
++
++    def _inject_artifact_reminder_if_needed(
++        self,
++        messages: List[Dict[str, Any]],
++    ) -> List[Dict[str, Any]]:
++        """Answer artifact-location follow-ups from durable artifact state."""
++        requested = (getattr(self, "_run_requested_text", "") or "").lower()
++        if not any(
++            phrase in requested
++            for phrase in (
++                "where is the file",
++                "where is file",
++                "cannot find",
++                "can't find",
++                "file location",
++                "saved where",
++                "where did you save",
++            )
++        ):
++            return messages
++        try:
++            from tools.artifacts import recent_artifacts
++            artifacts = recent_artifacts(limit=8)
++        except Exception:
++            artifacts = []
++        if not artifacts:
++            return messages
++        lines = []
++        for item in artifacts[:8]:
++            path = item.get("path") if isinstance(item, dict) else ""
++            source = item.get("source_tool", "") if isinstance(item, dict) else ""
++            if path:
++                suffix = f" ({source})" if source else ""
++                lines.append(f"- {path}{suffix}")
++        if not lines:
++            return messages
++        body = (
++            "Artifact-location guard: answer file-location questions from these "
++            "recorded artifacts first. Do not search the filesystem unless the "
++            "artifact list is insufficient.\n" + "\n".join(lines)
++        )
++        return self._append_transient_text_reminder(messages, body)
++
++    def _s3_truncation_guard_message(self, text: str) -> str:
++        """Prevent complete/all claims when recent S3 evidence was truncated."""
++        if self._s3_truncation_guard_sent:
++            return ""
++        if not self._recent_s3_truncation_seen():
++            return ""
++        lowered = (text or "").lower()
++        complete_claims = (
++            "complete",
++            "fully mapped",
++            "all files",
++            "all buckets",
++            "all s3",
++            "entire",
++            "everything",
++        )
++        partial_qualifiers = (
++            "partial",
++            "truncated",
++            "first-level",
++            "sample",
++            "preview",
++            "continuation_token",
++            "narrower prefix",
++        )
++        if not any(term in lowered for term in complete_claims):
++            return ""
++        if any(term in lowered for term in partial_qualifiers):
++            return ""
++        self._s3_truncation_guard_sent = True
++        body = (
++            "S3 truncation guard: recent `aws_s3_list` output was truncated or "
++            "included a continuation token. Do not claim a complete S3/file "
++            "inventory. Either continue with a narrower prefix/continuation token "
++            "or clearly label the answer as a partial first-level/sample view."
++        )
++        return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
++
++    def _recent_s3_truncation_seen(self) -> bool:
++        for msg in reversed(self.messages[-16:]):
++            content = msg.get("content") if isinstance(msg, dict) else None
++            text_parts: List[str] = []
++            if isinstance(content, str):
++                text_parts.append(content)
++            elif isinstance(content, list):
++                for block in content:
++                    if isinstance(block, dict):
++                        text_parts.append(str(block.get("content") or block.get("text") or ""))
++            joined = "\n".join(text_parts).lower()
++            if "aws_s3_list" in joined or "s3://" in joined or "s3 structure" in joined:
++                if "output truncated" in joined or "continuation_token" in joined:
++                    return True
++        return False
++
++    def _recent_s3_object_paths(self, limit: int = 20) -> List[str]:
++        """Extract recent concrete S3 object paths from conversation history."""
++        seen: Set[str] = set()
++        paths: List[str] = []
++        pattern = re.compile(r"s3://([A-Za-z0-9.\-_]+)/([^\s\]\)>,\"']+)")
++        for msg in reversed(self.messages[-24:]):
++            if not isinstance(msg, dict):
++                continue
++            content = msg.get("content")
++            chunks: List[str] = []
++            if isinstance(content, str):
++                chunks.append(content)
++            elif isinstance(content, list):
++                for block in content:
++                    if isinstance(block, dict):
++                        chunks.append(str(block.get("content") or block.get("text") or ""))
++            for text in chunks:
++                for match in pattern.finditer(text):
++                    bucket = match.group(1)
++                    key = match.group(2).strip().rstrip(".,;:")
++                    if not key or key.endswith("/"):
++                        continue
++                    uri = f"s3://{bucket}/{key}"
++                    if uri not in seen:
++                        seen.add(uri)
++                        paths.append(uri)
++                    if len(paths) >= limit:
++                        return paths
++        return paths
++
++    @staticmethod
++    def _is_s3_followup_request(text: str) -> bool:
++        lowered = (text or "").lower()
++        if not lowered:
++            return False
++        if "s3" in lowered and any(
++            term in lowered
++            for term in (
++                "pick",
++                "choose",
++                "investigate",
++                "inspect",
++                "sample",
++                "preview",
++                "open",
++                "read",
++                "relationship",
++                "where is the file",
++            )
++        ):
++            return True
++        return (
++            any(phrase in lowered for phrase in ("pick two", "pick 2", "choose two", "choose 2"))
++            and any(term in lowered for term in ("file", "files", "object", "objects", "investigate", "inspect"))
++        )
++
++    @staticmethod
++    def _requests_ascii_only(text: str) -> bool:
++        lowered = (text or "").lower()
++        return "ascii" in lowered or "plain text diagram" in lowered
++
++    def _is_blocked_status_doc_update(self, tool_name: str, args: Any) -> bool:
++        if not isinstance(args, dict):
++            return False
++        path = str(args.get("file_path") or args.get("filepath") or "")
++        if not path:
++            return False
++        if os.path.basename(path).lower() != "agent_status.md":
++            return False
++        requested = (getattr(self, "_run_requested_text", "") or "").lower()
++        explicit_status = (
++            "agent_status" in requested
++            or "status doc" in requested
++            or "update status" in requested
++            or "keep status" in requested
++            or "handoff" in requested
++            or "document" in requested and "status" in requested
++        )
++        if explicit_status:
++            return False
++        return self._is_s3_inventory_request(requested) or self._is_s3_followup_request(requested)
++
+     @staticmethod
+     def _is_s3_inventory_request(text: str) -> bool:
+         lowered = (text or "").lower()
+diff --git a/compact_v5/prompt/tool_classes.md b/compact_v5/prompt/tool_classes.md
+index 3a413b8..79369ad 100644
+--- a/compact_v5/prompt/tool_classes.md
++++ b/compact_v5/prompt/tool_classes.md
+@@ -20,6 +20,21 @@ For simple S3 bucket/file structure inventory, use the always-loaded
+ retry blocked `aws s3`/`aws s3api` bash commands; the next CLI retry is
+ intentionally blocked so cost stays bounded.
+
++For S3 follow-ups after an inventory ("pick two files", "investigate two",
++"choose from those"), reuse the recently listed S3 object paths first. Do not
++refresh every bucket unless the user explicitly asks for a full refresh. To
++inspect a specific object, use the always-loaded `aws_s3_preview` tool, which
++performs a bounded read-only Range preview.
++
++If the user asks for ASCII output, generated text and files must be plain ASCII
++only: no emoji, Unicode arrows, or box-drawing characters. If an S3 listing says
++output was truncated or provides a continuation token, say the result is partial
++unless you consumed continuation to completion.
++
++Do not update `AGENT_STATUS.md` for small read-only S3 inventory/report tasks
++unless the user explicitly asks for status/progress/handoff. Reserve status
++updates for long-running coding/project tasks.
++
+ ## When `bash`/`python_exec` is BLOCKED
+
+ DO NOT default to "ask user to start a new session". MOST diagnostics finish with read-only tools.
+diff --git a/compact_v5/runtime/config.py b/compact_v5/runtime/config.py
+index 8fc0ff1..6e77e25 100644
+--- a/compact_v5/runtime/config.py
++++ b/compact_v5/runtime/config.py
+@@ -42,6 +42,10 @@ class Config:
+     workspace: str = os.getcwd()
+     sessions_dir: str = os.path.join(os.getcwd(), "sessions")
+     audit_dir: str = os.path.join(os.getcwd(), "audit_logs")
++    # User-facing generated reports/diagrams default here when the runtime
++    # package itself is the current workspace. Runtime state/audit/session
++    # roots intentionally remain under workspace.
++    user_artifacts_root: str = os.path.join(os.path.expanduser("~"), "sageagent_workspace")
+
+     # Limits
+     max_turns: int = 60
+@@ -229,6 +233,7 @@ def _apply_config_file(config: Config) -> None:
+     # Scalar fields with expected types for validation
+     _SCALAR_FIELDS: Dict[str, type] = {
+         "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
++        "user_artifacts_root": str,
+         "max_history": int, "temperature": float, "thinking_enabled": bool,
+         "thinking_budget": int, "disable_thinking_for_simple_s3_inventory": bool, "mock_mode": bool,
+         "bash_allow_interpreters": bool, "bash_allow_docker": bool,
+diff --git a/compact_v5/runtime/state.py b/compact_v5/runtime/state.py
+index 1ef751c..c37a724 100644
+--- a/compact_v5/runtime/state.py
++++ b/compact_v5/runtime/state.py
+@@ -82,6 +82,10 @@ class DurableStateManager:
+     def tasks_path(self) -> Path:
+         return self.state_dir / "tasks.json"
+
++    @property
++    def artifacts_path(self) -> Path:
++        return self.state_dir / "artifacts.json"
++
+     @property
+     def journal_path(self) -> Path:
+         return self.state_dir / "turn_journal.jsonl"
+@@ -177,6 +181,47 @@ class DurableStateManager:
+             return []
+         return [dict(t) for t in tasks if isinstance(t, dict)]
+
++    def append_artifact(
++        self,
++        *,
++        path: str,
++        kind: str = "file",
++        source_tool: str = "",
++        metadata: Optional[Dict[str, Any]] = None,
++    ) -> None:
++        if self.disabled or not path:
++            return
++        artifacts = self.load_artifacts(limit=100)
++        resolved = str(Path(path).expanduser().resolve())
++        artifacts = [a for a in artifacts if a.get("path") != resolved]
++        artifacts.append({
++            "path": resolved,
++            "kind": kind or "file",
++            "source_tool": source_tool or "",
++            "metadata": dict(metadata or {}),
++            "created_at": _utc_now(),
++        })
++        payload = {
++            "schema": "sageagent.artifacts.v1",
++            "updated_at": _utc_now(),
++            "artifacts": artifacts[-100:],
++        }
++        with self._lock:
++            _atomic_write_json(self.artifacts_path, payload)
++
++    def load_artifacts(self, limit: int = 20) -> List[Dict[str, Any]]:
++        if self.disabled or not self.artifacts_path.is_file():
++            return []
++        try:
++            data = json.loads(self.artifacts_path.read_text(encoding="utf-8"))
++        except Exception:
++            return []
++        artifacts = data.get("artifacts", [])
++        if not isinstance(artifacts, list):
++            return []
++        cleaned = [dict(a) for a in artifacts if isinstance(a, dict)]
++        return cleaned[-max(1, int(limit)):]
++
+     def append_journal(self, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
+         if self.disabled:
+             return
+diff --git a/compact_v5/security/manager.py b/compact_v5/security/manager.py
+index 5051553..9181fa2 100644
+--- a/compact_v5/security/manager.py
++++ b/compact_v5/security/manager.py
+@@ -721,6 +721,15 @@ def _build_singleton() -> SecurityManager:
+     """Build the SECURITY singleton with auto-detected allowed_paths."""
+     from runtime.config import CONFIG
+     auto_allowed = _auto_detect_allowed_paths(CONFIG.workspace, CONFIG.allowed_paths or [])
++    try:
++        artifact_root = getattr(CONFIG, "user_artifacts_root", "")
++        if artifact_root:
++            artifact_root = os.path.abspath(os.path.expanduser(str(artifact_root)))
++            os.makedirs(artifact_root, exist_ok=True)
++            if artifact_root not in auto_allowed:
++                auto_allowed.append(artifact_root)
++    except Exception:
++        pass
+     return SecurityManager(
+         CONFIG.workspace,
+         allow_interpreters=getattr(CONFIG, "bash_allow_interpreters", False),
+diff --git a/compact_v5/tests/test_artifact_workspace_policy.py b/compact_v5/tests/test_artifact_workspace_policy.py
+new file mode 100644
+index 0000000..782c4ee
+--- /dev/null
++++ b/compact_v5/tests/test_artifact_workspace_policy.py
+@@ -0,0 +1,46 @@
++from pathlib import Path
++import sys
++from types import SimpleNamespace
++
++ROOT = Path(__file__).resolve().parents[1]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from tools.artifacts import ascii_contract_error, resolve_user_artifact_path
++
++
++def test_relative_deliverable_rebases_out_of_runtime_package():
++    cfg = SimpleNamespace(
++        workspace="/home/sagemaker-user/compact_v5_ship",
++        user_artifacts_root="/home/sagemaker-user/sageagent_workspace",
++    )
++
++    path = resolve_user_artifact_path("S3_Structure_Diagram.md", cfg)
++
++    assert path.replace("\\", "/").endswith(
++        "/home/sagemaker-user/sageagent_workspace/S3_Structure_Diagram.md"
++    )
++
++
++def test_relative_source_file_stays_in_workspace():
++    cfg = SimpleNamespace(
++        workspace="/home/sagemaker-user/compact_v5_ship",
++        user_artifacts_root="/home/sagemaker-user/sageagent_workspace",
++    )
++
++    path = resolve_user_artifact_path("notes_cli/models.py", cfg)
++
++    assert path == "notes_cli/models.py"
++
++
++def test_ascii_contract_rejects_non_ascii_when_requested():
++    error = ascii_contract_error("hello " + chr(8594) + " world")
++    assert "ASCII-only" in error
++    assert not ascii_contract_error("hello --> world")
++
++
++if __name__ == "__main__":
++    test_relative_deliverable_rebases_out_of_runtime_package()
++    test_relative_source_file_stays_in_workspace()
++    test_ascii_contract_rejects_non_ascii_when_requested()
++    print("artifact workspace policy smoke: OK")
+diff --git a/compact_v5/tests/test_aws_s3_preview_tool.py b/compact_v5/tests/test_aws_s3_preview_tool.py
+new file mode 100644
+index 0000000..1bf57b3
+--- /dev/null
++++ b/compact_v5/tests/test_aws_s3_preview_tool.py
+@@ -0,0 +1,62 @@
++from pathlib import Path
++import sys
++
++ROOT = Path(__file__).resolve().parents[1]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from tools.aws_s3_preview import _aws_s3_preview_executor
++
++
++class _Body:
++    def __init__(self, data: bytes):
++        self._data = data
++
++    def read(self) -> bytes:
++        return self._data
++
++
++class _S3:
++    def __init__(self, data: bytes = b"hello\nworld\n", content_type: str = "text/plain"):
++        self.calls = []
++        self.data = data
++        self.content_type = content_type
++
++    def get_object(self, **kwargs):
++        self.calls.append(kwargs)
++        return {
++            "Body": _Body(self.data),
++            "ContentType": self.content_type,
++            "ContentLength": len(self.data),
++            "ContentRange": "bytes 0-10/11",
++        }
++
++
++def test_s3_preview_reads_bounded_text_range():
++    client = _S3()
++    text = _aws_s3_preview_executor(
++        {"bucket": "bucket-a", "key": "folder/file.txt", "max_bytes": 20},
++        context={"s3_client": client},
++    )
++
++    assert client.calls[0]["Range"] == "bytes=0-19"
++    assert "S3 preview for s3://bucket-a/folder/file.txt" in text
++    assert "hello" in text
++    assert "Content-Type: text/plain" in text
++
++
++def test_s3_preview_does_not_dump_binary():
++    client = _S3(data=b"\x00\x01\x02abc", content_type="application/octet-stream")
++    text = _aws_s3_preview_executor(
++        {"bucket": "bucket-a", "key": "bin.dat"},
++        context={"s3_client": client},
++    )
++
++    assert "binary or unsupported content" in text
++    assert "\x00" not in text
++
++
++if __name__ == "__main__":
++    test_s3_preview_reads_bounded_text_range()
++    test_s3_preview_does_not_dump_binary()
++    print("aws_s3_preview smoke: OK")
+diff --git a/compact_v5/tests/test_s3_followup_tool_discipline.py b/compact_v5/tests/test_s3_followup_tool_discipline.py
+new file mode 100644
+index 0000000..1863eec
+--- /dev/null
++++ b/compact_v5/tests/test_s3_followup_tool_discipline.py
+@@ -0,0 +1,116 @@
++from pathlib import Path
++import sys
++from types import SimpleNamespace
++
++ROOT = Path(__file__).resolve().parents[1]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from core.query_engine import QueryEngine
++from core.budget import IterationBudget
++from tools import all_registered, bootstrap_built_ins
++
++
++def _engine() -> QueryEngine:
++    return QueryEngine(client=object(), budget=IterationBudget())
++
++
++def test_s3_followup_reminder_reuses_recent_object_paths():
++    qe = _engine()
++    qe._run_requested_text = "pick two files to investigate and tell me what you found"
++    qe.messages = [
++        {
++            "role": "user",
++            "content": [
++                {
++                    "type": "tool_result",
++                    "content": (
++                        "Objects:\n"
++                        "- s3://bucket-a/folder/one.csv\n"
++                        "- s3://bucket-a/folder/two.json\n"
++                        "Prefixes:\n"
++                        "- s3://bucket-a/folder/\n"
++                    ),
++                }
++            ],
++        }
++    ]
++
++    messages = [{"role": "user", "content": [{"type": "text", "text": "pick two files"}]}]
++    out = qe._inject_s3_followup_reminder_if_needed(messages)
++    text = "\n".join(block.get("text", "") for block in out[-1]["content"])
++
++    assert "S3 follow-up guard" in text
++    assert "s3://bucket-a/folder/one.csv" in text
++    assert "s3://bucket-a/folder/two.json" in text
++    assert "s3://bucket-a/folder/\n" not in text
++    assert "aws_s3_preview" in text
++
++
++def test_s3_followup_blocks_third_list_call_this_turn():
++    bootstrap_built_ins()
++    qe = _engine()
++    qe._run_requested_text = "pick two files to investigate"
++    qe.messages = [
++        {
++            "role": "user",
++            "content": [{"type": "tool_result", "content": "- s3://bucket-a/a.txt"}],
++        }
++    ]
++    qe._s3_list_calls_this_run = 2
++    call = SimpleNamespace(name="aws_s3_list", id="toolu_test", input={"bucket": "bucket-a"})
++
++    result = qe._dispatch_single_tool_call(
++        call,
++        tools=all_registered(),
++        plan_mode=False,
++        output_fn=lambda _s: None,
++    )
++
++    assert result["is_error"] is True
++    assert "too many aws_s3_list calls" in result["content"]
++
++
++def test_s3_truncation_guard_blocks_complete_claim():
++    qe = _engine()
++    qe.messages = [
++        {
++            "role": "user",
++            "content": [
++                {
++                    "type": "tool_result",
++                    "content": (
++                        "S3 structure for s3://bucket/\n"
++                        "... output truncated at 50 items. Use continuation_token='abc'."
++                    ),
++                }
++            ],
++        }
++    ]
++
++    guard = qe._s3_truncation_guard_message("Complete. I listed all files in S3.")
++
++    assert "S3 truncation guard" in guard
++
++
++def test_status_doc_update_blocked_for_small_s3_report():
++    qe = _engine()
++    qe._run_requested_text = "list all files of my s3 and make an ascii diagram"
++
++    assert qe._is_blocked_status_doc_update(
++        "write_file",
++        {"file_path": "AGENT_STATUS.md", "content": "done"},
++    )
++    qe._run_requested_text = "list all files of my s3 and update status doc"
++    assert not qe._is_blocked_status_doc_update(
++        "write_file",
++        {"file_path": "AGENT_STATUS.md", "content": "done"},
++    )
++
++
++if __name__ == "__main__":
++    test_s3_followup_reminder_reuses_recent_object_paths()
++    test_s3_followup_blocks_third_list_call_this_turn()
++    test_s3_truncation_guard_blocks_complete_claim()
++    test_status_doc_update_blocked_for_small_s3_report()
++    print("s3 followup discipline smoke: OK")
+diff --git a/compact_v5/tests/test_ui_thinking_smoke.py b/compact_v5/tests/test_ui_thinking_smoke.py
+index d901a16..7028392 100644
+--- a/compact_v5/tests/test_ui_thinking_smoke.py
++++ b/compact_v5/tests/test_ui_thinking_smoke.py
+@@ -21,7 +21,7 @@ def _ui():
+     return ui
+
+
+-def test_turn_thinking_is_collapsed_and_before_metrics():
++def test_turn_meta_does_not_duplicate_thinking_after_answer():
+     ui = _ui()
+     html = ui._render_turn_meta(
+         {
+@@ -37,12 +37,25 @@ def test_turn_thinking_is_collapsed_and_before_metrics():
+         },
+         ui._colors(),
+     )
+-    assert "Reasoning / thinking captured for this turn" in html
+-    assert "<details open" not in html
+-    assert html.index("Reasoning / thinking captured") < html.index("sageagent-turn-metrics")
++    assert "private reasoning trace" not in html
++    assert "Reasoning / thinking captured for this turn" not in html
+     assert "Prompt Cache R/W 10/5" in html
+
+
++def test_live_thinking_renders_before_assistant_and_metrics():
++    ui = _ui()
++    streamed = []
++    ui._render_status = lambda: None
++    ui._live_output_router("[thinking]\nchoose next safe tool", streamed)
++    ui._append_message("assistant", "Answer", {"input_tokens": 1, "output_tokens": 2})
++    html = ui._chat_display.value
++    assert "Reasoning / thinking" in html
++    assert "choose next safe tool" in html
++    assert html.index("Reasoning / thinking") < html.index("Answer")
++    assert html.index("Reasoning / thinking") < html.index("sageagent-turn-metrics")
++    assert "<details open" not in html
++
++
+ def test_standalone_thinking_card_is_collapsed():
+     ui = _ui()
+     ui._messages.append(("thinking", "expanded text should stay hidden", "12:00:00", {}))
+@@ -52,6 +65,7 @@ def test_standalone_thinking_card_is_collapsed():
+
+
+ if __name__ == "__main__":
+-    test_turn_thinking_is_collapsed_and_before_metrics()
++    test_turn_meta_does_not_duplicate_thinking_after_answer()
++    test_live_thinking_renders_before_assistant_and_metrics()
+     test_standalone_thinking_card_is_collapsed()
+     print("ui thinking smoke: OK")
+diff --git a/compact_v5/tests/test_ui_tool_cards_smoke.py b/compact_v5/tests/test_ui_tool_cards_smoke.py
+index b1f8ad7..1935fb3 100644
+--- a/compact_v5/tests/test_ui_tool_cards_smoke.py
++++ b/compact_v5/tests/test_ui_tool_cards_smoke.py
+@@ -49,6 +49,8 @@ def test_tool_card_html_is_collapsed_and_grouped():
+     assert "Tool result" in html
+     assert "aws_s3_list" in html
+     assert "Buckets:" in html
++    assert "Tool id: toolu_1" in html
++    assert "toolu_1" not in html.split("</summary>", 1)[0]
+
+
+ def test_tool_card_error_unknown_and_clear_paths():
+diff --git a/compact_v5/tools/__init__.py b/compact_v5/tools/__init__.py
+index e560463..0ee7f3a 100644
+--- a/compact_v5/tools/__init__.py
++++ b/compact_v5/tools/__init__.py
+@@ -45,6 +45,7 @@ from . import grep as _grep             # noqa: F401  defines _register()
+ from . import glob as _glob             # noqa: F401  defines _register()
+ from . import list_dir as _list_dir     # noqa: F401  defines _register()
+ from . import aws_s3_list as _aws_s3_list  # noqa: F401  defines _register()
++from . import aws_s3_preview as _aws_s3_preview  # noqa: F401  defines _register()
+ #
+ # Phase 4 — core mutating tools + view_image (per ADR-010):
+ from . import write_file as _write_file       # noqa: F401  defines _register()
+@@ -97,6 +98,7 @@ def bootstrap_built_ins():
+     _glob._register()
+     _list_dir._register()
+     _aws_s3_list._register()
++    _aws_s3_preview._register()
+     # Phase 4 — mutating tools + view_image
+     _write_file._register()
+     _edit_file._register()
+diff --git a/compact_v5/tools/artifacts.py b/compact_v5/tools/artifacts.py
+new file mode 100644
+index 0000000..f3c3cc8
+--- /dev/null
++++ b/compact_v5/tools/artifacts.py
+@@ -0,0 +1,93 @@
++"""Helpers for user-facing generated artifacts.
++
++Runtime state stays under CONFIG.workspace. User deliverables created without an
++explicit project workspace should land in a clear user folder instead of inside
++the compact_v5 runtime package.
++"""
++from __future__ import annotations
++
++import os
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++
++DELIVERABLE_EXTENSIONS = {
++    ".csv",
++    ".docx",
++    ".html",
++    ".ipynb",
++    ".json",
++    ".md",
++    ".pdf",
++    ".png",
++    ".txt",
++    ".xlsx",
++}
++
++
++def user_artifacts_root(config: Any = None) -> str:
++    if config is None:
++        from runtime.config import CONFIG as config
++    root = str(
++        getattr(config, "user_artifacts_root", "")
++        or os.path.join(os.path.expanduser("~"), "sageagent_workspace")
++    )
++    return os.path.abspath(os.path.expanduser(root))
++
++
++def _looks_like_runtime_workspace(path: str) -> bool:
++    normalized = os.path.abspath(path or os.getcwd()).replace("\\", "/").lower()
++    base = os.path.basename(normalized.rstrip("/"))
++    if base in {"compact_v5", "compact_v5_ship"}:
++        return True
++    return normalized.endswith("/sagemaker-coding-agent/compact_v5")
++
++
++def should_rebase_user_artifact(filepath: str, config: Any = None) -> bool:
++    if not filepath or os.path.isabs(filepath):
++        return False
++    ext = Path(filepath).suffix.lower()
++    if ext and ext not in DELIVERABLE_EXTENSIONS:
++        return False
++    if config is None:
++        from runtime.config import CONFIG as config
++    return _looks_like_runtime_workspace(str(getattr(config, "workspace", os.getcwd())))
++
++
++def resolve_user_artifact_path(filepath: str, config: Any = None) -> str:
++    if should_rebase_user_artifact(filepath, config=config):
++        return os.path.join(user_artifacts_root(config), filepath)
++    return filepath
++
++
++def is_ascii_only_request(context: Optional[Dict[str, Any]] = None) -> bool:
++    return bool(isinstance(context, dict) and context.get("ascii_only"))
++
++
++def ascii_contract_error(text: str) -> str:
++    for idx, ch in enumerate(text or ""):
++        if ord(ch) >= 128:
++            return (
++                "Error: ASCII-only output was requested, but generated content "
++                f"contains non-ASCII character U+{ord(ch):04X} at offset {idx}. "
++                "Replace emoji, arrows, and box-drawing characters with plain ASCII."
++            )
++    return ""
++
++
++def record_artifact(path: str, *, kind: str = "file", context: Optional[Dict[str, Any]] = None) -> None:
++    try:
++        from runtime.state import STATE
++
++        STATE.append_artifact(path=path, kind=kind, source_tool=(context or {}).get("tool_name", ""))
++    except Exception:
++        pass
++
++
++def recent_artifacts(limit: int = 8) -> List[Dict[str, Any]]:
++    try:
++        from runtime.state import STATE
++
++        return STATE.load_artifacts(limit=limit)
++    except Exception:
++        return []
+diff --git a/compact_v5/tools/aws_s3_preview.py b/compact_v5/tools/aws_s3_preview.py
+new file mode 100644
+index 0000000..62efe07
+--- /dev/null
++++ b/compact_v5/tools/aws_s3_preview.py
+@@ -0,0 +1,150 @@
++"""Read-only bounded S3 object preview tool."""
++from __future__ import annotations
++
++from typing import Any, Dict, Optional
++
++from .registry import build_tool, register
++
++
++_DESCRIPTION = """Preview a small, read-only slice of an S3 object.
++
++Usage:
++- Provide `bucket` and `key`.
++- `max_bytes` defaults to 8192 and is hard-capped at 65536.
++- Uses S3 Range reads, so large objects are not downloaded in full.
++
++WHEN to use:
++- User asks to inspect, preview, sample, or investigate specific S3 files.
++- Follow-up asks like "pick two files and tell me what you found" after an S3 listing.
++
++WHEN NOT to use:
++- Listing buckets/prefixes; use aws_s3_list.
++- Binary object dumps or large downloads.
++- Any S3 write/delete/copy/admin operation."""
++
++
++_INPUT_SCHEMA: Dict[str, Any] = {
++    "type": "object",
++    "properties": {
++        "bucket": {"type": "string", "description": "S3 bucket name."},
++        "key": {"type": "string", "description": "Object key inside the bucket."},
++        "max_bytes": {
++            "type": "integer",
++            "description": "Maximum bytes to preview. Default 8192, hard cap 65536.",
++        },
++    },
++    "required": ["bucket", "key"],
++}
++
++
++def _s3_client(context: Optional[Dict[str, Any]] = None) -> Any:
++    if isinstance(context, dict) and context.get("s3_client") is not None:
++        return context["s3_client"]
++    import boto3
++
++    return boto3.client("s3")
++
++
++def _max_bytes(value: Any) -> int:
++    try:
++        parsed = int(value)
++    except (TypeError, ValueError):
++        parsed = 8192
++    return max(1, min(65536, parsed))
++
++
++def _looks_binary(data: bytes) -> bool:
++    if not data:
++        return False
++    if b"\x00" in data:
++        return True
++    textish = sum(1 for b in data if b in (9, 10, 13) or 32 <= b <= 126)
++    return (textish / max(1, len(data))) < 0.85
++
++
++def _aws_s3_preview_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
++    from runtime.config import CONFIG
++
++    if bool(getattr(CONFIG, "aws_bedrock_only", False)):
++        return (
++            "Blocked: S3 preview is disabled because CONFIG.aws_bedrock_only=True. "
++            "Turn Bedrock-only off to allow read-only S3 object preview."
++        )
++
++    bucket = str(args.get("bucket", "") or "").strip()
++    if bucket.startswith("s3://"):
++        bucket = bucket[5:]
++    bucket = bucket.strip("/")
++    key = str(args.get("key", "") or "").lstrip("/")
++    max_bytes = _max_bytes(args.get("max_bytes"))
++    if not bucket:
++        return "Error: bucket is required"
++    if not key:
++        return "Error: key is required"
++
++    try:
++        client = _s3_client(context)
++    except ModuleNotFoundError as exc:
++        if getattr(exc, "name", "") == "boto3":
++            return (
++                "Error: boto3 is not installed in this Python environment. "
++                "Install boto3 in the SageMaker kernel or run in the packaged "
++                "SageMaker runtime that includes the AWS SDK."
++            )
++        return f"Error: missing Python module while creating S3 client: {exc.name}"
++    except Exception as exc:  # noqa: BLE001
++        return f"Error: could not create S3 client: {type(exc).__name__}: {exc}"
++
++    try:
++        response = client.get_object(
++            Bucket=bucket,
++            Key=key,
++            Range=f"bytes=0-{max_bytes - 1}",
++        )
++        body = response.get("Body")
++        data = body.read() if hasattr(body, "read") else bytes(body or b"")
++    except Exception as exc:  # noqa: BLE001
++        return f"Error: could not preview s3://{bucket}/{key}: {type(exc).__name__}: {exc}"
++
++    content_type = str(response.get("ContentType", "") or "unknown")
++    content_range = str(response.get("ContentRange", "") or "")
++    truncated = bool(content_range) or len(data) >= max_bytes
++    header = [
++        f"S3 preview for s3://{bucket}/{key}",
++        f"Content-Type: {content_type}",
++        f"Bytes read: {len(data)}",
++        f"Truncated: {'true' if truncated else 'false'}",
++    ]
++    if content_range:
++        header.append(f"Content-Range: {content_range}")
++    if _looks_binary(data):
++        header.append("Preview: binary or unsupported content; not dumping bytes into chat.")
++        return "\n".join(header)
++
++    text = data.decode("utf-8", errors="replace")
++    if "\ufffd" in text and content_type == "unknown":
++        header.append("Preview: undecodable bytes detected; showing safe replacement characters only.")
++    header.append("Preview:")
++    header.append(text)
++    return "\n".join(header)
++
++
++def _register():
++    """Idempotent registration of aws_s3_preview."""
++    from .registry import all_registered, find_tool_by_name
++
++    existing = find_tool_by_name(all_registered(), "aws_s3_preview")
++    if existing is not None:
++        return existing
++    return register(build_tool(
++        name="aws_s3_preview",
++        description=_DESCRIPTION,
++        input_schema=_INPUT_SCHEMA,
++        execute=_aws_s3_preview_executor,
++        is_read_only=True,
++        is_concurrency_safe=False,
++        requires_approval=True,
++        should_defer=False,
++        always_load=True,
++        search_hint="s3 object file preview read sample investigate",
++    ))
+diff --git a/compact_v5/tools/registry.py b/compact_v5/tools/registry.py
+index 07c0fc7..2e4cfcc 100644
+--- a/compact_v5/tools/registry.py
++++ b/compact_v5/tools/registry.py
+@@ -46,7 +46,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set,
+ PLAN_MODE_ALLOWED_TOOLS: frozenset = frozenset({
+     "read_file", "glob", "grep", "list_dir", "semantic_search",
+     "todo_write", "todo_read", "view_image", "skill", "web_fetch", "ask_user",
+-    "result_replay", "aws_s3_list",
++    "result_replay", "aws_s3_list", "aws_s3_preview",
+ })
+
+
+diff --git a/compact_v5/tools/v4_documents.py b/compact_v5/tools/v4_documents.py
+index 910b755..7979ddc 100644
+--- a/compact_v5/tools/v4_documents.py
++++ b/compact_v5/tools/v4_documents.py
+@@ -47,6 +47,8 @@ def _validate_doc_path(filepath: str):
+     """
+     try:
+         from . import _path_validation as path_security
++        from .artifacts import resolve_user_artifact_path
++        filepath = resolve_user_artifact_path(filepath)
+         ok, msg = path_security.validate_path(filepath)
+         if not ok:
+             return f"Error: {msg}", None
+@@ -56,6 +58,26 @@ def _validate_doc_path(filepath: str):
+         return f"Error: path validation failed: {type(exc).__name__}: {exc}", None
+
+
++def _ascii_contract_check(content: str, context: Optional[Dict] = None) -> str:
++    try:
++        from .artifacts import ascii_contract_error, is_ascii_only_request
++        if is_ascii_only_request(context):
++            return ascii_contract_error(content)
++    except Exception:
++        return ""
++    return ""
++
++
++def _record_created_artifact(abs_path: str, tool_name: str, context: Optional[Dict] = None) -> None:
++    try:
++        from .artifacts import record_artifact
++        ctx = dict(context or {})
++        ctx.setdefault("tool_name", tool_name)
++        record_artifact(abs_path, kind="document", context=ctx)
++    except Exception:
++        pass
++
++
+ # ============================================================
+ # create_word — python-docx
+ # ============================================================
+@@ -71,6 +93,9 @@ def _create_word_executor(args: Dict[str, Any], context: Optional[Dict] = None)
+         return "Error: filepath is required"
+     if not filepath.endswith(".docx"):
+         filepath += ".docx"
++    err = _ascii_contract_check(content, context)
++    if err:
++        return err
+     err, abs_path = _validate_doc_path(filepath)
+     if err:
+         return err
+@@ -106,6 +131,7 @@ def _create_word_executor(args: Dict[str, Any], context: Optional[Dict] = None)
+                 doc.add_paragraph("")
+         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+         doc.save(abs_path)
++        _record_created_artifact(abs_path, "create_word", context)
+         return f"Wrote {abs_path}"
+     except Exception as exc:  # noqa: BLE001
+         return f"Error: {type(exc).__name__}: {exc}"
+@@ -268,6 +294,9 @@ def _create_markdown_executor(args: Dict[str, Any], context: Optional[Dict] = No
+         return "Error: filepath is required"
+     if not filepath.endswith(".md"):
+         filepath += ".md"
++    err = _ascii_contract_check(content, context)
++    if err:
++        return err
+     err, abs_path = _validate_doc_path(filepath)
+     if err:
+         return err
+@@ -275,6 +304,7 @@ def _create_markdown_executor(args: Dict[str, Any], context: Optional[Dict] = No
+         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+         with open(abs_path, "w", encoding="utf-8") as f:
+             f.write(content)
++        _record_created_artifact(abs_path, "create_markdown", context)
+         return f"Wrote {abs_path}"
+     except OSError as exc:
+         return f"Error: {exc}"
+@@ -301,6 +331,9 @@ def _create_notebook_executor(args: Dict[str, Any], context: Optional[Dict] = No
+         return "Error: filepath is required"
+     if not filepath.endswith(".ipynb"):
+         filepath += ".ipynb"
++    err = _ascii_contract_check(json.dumps(cells, ensure_ascii=False, default=str), context)
++    if err:
++        return err
+     err, abs_path = _validate_doc_path(filepath)
+     if err:
+         return err
+@@ -343,6 +376,7 @@ def _create_notebook_executor(args: Dict[str, Any], context: Optional[Dict] = No
+         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
+         with open(abs_path, "w", encoding="utf-8") as f:
+             json.dump(notebook, f, indent=2)
++        _record_created_artifact(abs_path, "create_notebook", context)
+         return f"Wrote {abs_path}"
+     except Exception as exc:  # noqa: BLE001
+         return f"Error: {type(exc).__name__}: {exc}"
+@@ -548,6 +582,7 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
+                 pass
+         fig.savefig(abs_path, **save_kwargs)
+         plt.close(fig)
++        _record_created_artifact(abs_path, "create_chart", context)
+         return f"Wrote {abs_path}"
+     except Exception as exc:  # noqa: BLE001
+         return f"Error: {type(exc).__name__}: {exc}"
+@@ -615,6 +650,9 @@ def _create_pdf_executor(args: Dict[str, Any], context: Optional[Dict] = None) -
+         return "Error: filepath is required"
+     if not filepath.endswith(".pdf"):
+         filepath += ".pdf"
++    err = _ascii_contract_check(json.dumps(content_blocks, ensure_ascii=False, default=str), context)
++    if err:
++        return err
+     err, abs_path = _validate_doc_path(filepath)
+     if err:
+         return err
+@@ -668,6 +706,7 @@ def _create_pdf_executor(args: Dict[str, Any], context: Optional[Dict] = None) -
+                     y = 0.95
+             pdf.savefig(fig)
+             plt.close(fig)
++        _record_created_artifact(abs_path, "create_pdf", context)
+         return f"Wrote {abs_path}"
+     except Exception as exc:  # noqa: BLE001
+         return f"Error: {type(exc).__name__}: {exc}"
+diff --git a/compact_v5/tools/write_file.py b/compact_v5/tools/write_file.py
+index 9cff597..f3fbb3e 100644
+--- a/compact_v5/tools/write_file.py
++++ b/compact_v5/tools/write_file.py
+@@ -76,6 +76,21 @@ def _write_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]]
+     if mode not in ("write", "append"):
+         return f"Error: mode must be 'write' or 'append'; got {mode!r}"
+
++    try:
++        from .artifacts import (
++            ascii_contract_error,
++            is_ascii_only_request,
++            record_artifact,
++            resolve_user_artifact_path,
++        )
++        file_path = resolve_user_artifact_path(file_path)
++        if is_ascii_only_request(context):
++            ascii_error = ascii_contract_error(content)
++            if ascii_error:
++                return ascii_error
++    except Exception:
++        record_artifact = None
++
+     ok, msg = path_security.validate_path(file_path)
+     if not ok:
+         return f"Error: {msg}"
+@@ -120,6 +135,13 @@ def _write_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]]
+     # After write, the file's "current state" is what we just wrote, so mark
+     # it as read so a subsequent edit_file doesn't trip the read-first check.
+     read_tracking.mark_read(abs_path)
++    try:
++        if callable(record_artifact):
++            ctx = dict(context or {})
++            ctx.setdefault("tool_name", "write_file")
++            record_artifact(abs_path, kind="file", context=ctx)
++    except Exception:
++        pass
+
+     return f"Written {len(content):,} chars to {abs_path}"
+
+diff --git a/compact_v5/ui/chat_ui.py b/compact_v5/ui/chat_ui.py
+index 199d0a8..7e5bca6 100644
+--- a/compact_v5/ui/chat_ui.py
++++ b/compact_v5/ui/chat_ui.py
+@@ -654,17 +654,23 @@ class V4WidgetChatUI(WidgetChatUI):
+                 f"font-size:12px;color:{colors['fg']};'>{self._escape(value)}</pre>"
+             )
+
+-        id_part = f" · id {tool_use_id}" if tool_use_id else ""
++        id_debug = (
++            f"<div style='margin-top:8px;color:{muted};font-size:10px;'>"
++            f"Tool id: {tool_use_id}</div>"
++            if tool_use_id
++            else ""
++        )
+         return (
+             f"<details class='sageagent-tool-card' style='border:1px solid {border};"
+             "border-radius:6px;padding:6px 8px;'>"
+             f"<summary style='cursor:pointer;color:#ffb74d;font-size:12px;'>"
+             f"<b>{tool_name}</b> · <span style='color:{status_color}'>{status}</span>"
+-            f" · {phase}{id_part}</summary>"
++            f" · {phase}</summary>"
+             f"<div style='margin-top:6px;color:{muted};font-size:11px;'>Tool input</div>"
+             f"{_pre(input_text)}"
+             f"<div style='margin-top:8px;color:{muted};font-size:11px;'>Tool result</div>"
+             f"{_pre(result_text)}"
++            f"{id_debug}"
+             "</details>"
+         )
+
+@@ -1035,7 +1041,6 @@ class V4WidgetChatUI(WidgetChatUI):
+         cost = float(meta.get("cost_usd", 0.0) or 0.0)
+         saved = float(meta.get("cache_saved_usd", 0.0) or 0.0)
+         without_cache = cost + saved
+-        thinking = str(meta.get("thinking", "") or "").strip()
+         reasoning_state = self._escape(meta.get("reasoning_state", "Thinking OFF"))
+         summary = (
+             f"In {input_tokens:,} | Out {output_tokens:,} | "
+@@ -1044,20 +1049,10 @@ class V4WidgetChatUI(WidgetChatUI):
+             f"Cache saved <b style='color:#4caf50'>${saved:.4f}</b> | "
+             f"Calls {calls:,} | {reasoning_state}"
+         )
+-        thinking_html = ""
+-        if thinking:
+-            safe = self._escape(thinking[:8000]).replace("\n", "<br>")
+-            more = "" if len(thinking) <= 8000 else "<br>[thinking truncated in UI; full text remains in runtime/audit logs]"
+-            thinking_html = (
+-                "<details style='margin-top:4px;'>"
+-                "<summary style='cursor:pointer;color:#ab47bc;'>Reasoning / thinking captured for this turn</summary>"
+-                f"<div style='border-left:3px solid #ab47bc;padding-left:8px;color:{colors['muted']};"
+-                f"font-size:11px;line-height:1.45;margin-top:4px;'>{safe}{more}</div></details>"
+-            )
+         return (
+             f"<div style='color:{colors['muted']};font-size:11px;margin-top:6px;"
+             f"border-top:1px solid {colors['border']};padding-top:4px;'>"
+-            f"{thinking_html}<div class='sageagent-turn-metrics'>{summary}</div></div>"
++            f"<div class='sageagent-turn-metrics'>{summary}</div></div>"
+         )
+
+     def _stats_snapshot(self) -> Dict[str, Any]:
+@@ -1141,7 +1136,6 @@ class V4WidgetChatUI(WidgetChatUI):
+                 float(after.get("_cache_savings_usd", 0.0) or 0.0)
+                 - float(before.get("_cache_savings_usd", 0.0) or 0.0),
+             ),
+-            "thinking": getattr(result, "thinking", "") or "",
+             "reasoning_state": f"Thinking {thinking_state} (budget {thinking_budget})",
+         }
+
+@@ -1258,6 +1252,12 @@ class V4WidgetChatUI(WidgetChatUI):
+         stripped = chunk.strip()
+         if not stripped:
+             return None
++        if stripped.startswith("[thinking]"):
++            body = stripped[len("[thinking]"):].strip()
++            if body:
++                self._append_message("thinking", body)
++                self._render_status()
++            return None
+         sub_match = re.match(r"^\[subagent:([^:\]]+)(?::child)?\]\s*(.*)$", stripped, re.DOTALL)
+         if sub_match:
+             kind = sub_match.group(1)
+@@ -1320,6 +1320,8 @@ class V4WidgetChatUI(WidgetChatUI):
+             "[Cost $",
+             "[auto-compact",
+             "[final-claim guard:",
++            "[intent-drift guard:",
++            "[truncation guard:",
+             "[Max turns reached:",
+             "[warning]",
+             "[Warning",
+@@ -1522,11 +1524,10 @@ class V4WidgetChatUI(WidgetChatUI):
+                         self._messages.append(("tool", input_text, ts, meta))
+                         if tool_use_id:
+                             self._tool_card_indices[tool_use_id] = index
++                if thinking_parts:
++                    self._messages.append(("thinking", "\n\n".join(thinking_parts), ts, {}))
+                 if text_parts:
+-                    meta = {}
+-                    if thinking_parts:
+-                        meta["thinking"] = "\n\n".join(thinking_parts)
+-                    self._messages.append(("assistant", "\n".join(text_parts), ts, meta))
++                    self._messages.append(("assistant", "\n".join(text_parts), ts, {}))
+
+         self._render_chat()

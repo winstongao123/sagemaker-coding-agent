@@ -76,6 +76,21 @@ def _write_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]]
     if mode not in ("write", "append"):
         return f"Error: mode must be 'write' or 'append'; got {mode!r}"
 
+    try:
+        from .artifacts import (
+            ascii_contract_error,
+            is_ascii_only_request,
+            record_artifact,
+            resolve_user_artifact_path,
+        )
+        file_path = resolve_user_artifact_path(file_path)
+        if is_ascii_only_request(context):
+            ascii_error = ascii_contract_error(content)
+            if ascii_error:
+                return ascii_error
+    except Exception:
+        record_artifact = None
+
     ok, msg = path_security.validate_path(file_path)
     if not ok:
         return f"Error: {msg}"
@@ -120,6 +135,13 @@ def _write_file_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]]
     # After write, the file's "current state" is what we just wrote, so mark
     # it as read so a subsequent edit_file doesn't trip the read-first check.
     read_tracking.mark_read(abs_path)
+    try:
+        if callable(record_artifact):
+            ctx = dict(context or {})
+            ctx.setdefault("tool_name", "write_file")
+            record_artifact(abs_path, kind="file", context=ctx)
+    except Exception:
+        pass
 
     return f"Written {len(content):,} chars to {abs_path}"
 

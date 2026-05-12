@@ -54,7 +54,9 @@
       <tr><td>Lessons need synthesis</td><td>The repo had much evidence but needed a principle layer.</td><td>Every serious incident gets a technical issue doc plus a learning note.</td></tr>
       <tr><td>Notebook thinness is a product contract</td><td>v5 copied parts of v4's UI ritual but let the notebook become a long integration script.</td><td>Keep launch cells small; move path/config/display complexity into tested Python helpers and render-check the target widget runtime.</td></tr>
       <tr><td>Callback plumbing needs end-to-end proof</td><td>The first ask_user UI patch looked right visually, but the engine did not pass the provider into tool dispatch.</td><td>For every interactive callback, pair the screenshot with an engine/tool smoke test that proves the model can actually reach it.</td></tr>
-      <tr><td>Follow-up prompts have a continuity contract</td><td>After an S3 inventory, "pick two files" should reuse the known object list, not trigger another broad scan. Claude review confirmed this is sequential tool overuse, not a parallel-dispatch bug.</td><td>Add reuse-before-refresh tests, a 2-call per-turn S3 list cap, safe preview tool, truncation-truth gate, artifact memory, workspace policy, and ASCII/status guards.</td></tr>
+      <tr><td>Follow-up prompts have a continuity contract</td><td>After an S3 inventory, "pick two files" should reuse the known object list, not trigger another broad scan. Claude review confirmed this is sequential tool overuse, not a parallel-dispatch bug.</td><td>v5 now injects recent S3 object paths, caps follow-up S3 list calls, and uses a bounded preview tool.</td></tr>
+      <tr><td>User deliverables are not runtime files</td><td>A generated report inside <code>compact_v5_ship/</code> looked lost because the user was looking for work output, not package internals.</td><td>Use a separate artifact root, record created paths, and answer "where is the file?" from durable artifact state.</td></tr>
+      <tr><td>ASCII and thinking are explicit contracts</td><td>"ASCII diagram" means no emoji/box drawing, and thinking should not appear after the answer as post-hoc text.</td><td>Reject non-ASCII generated files when ASCII is requested; show thinking only as collapsed pre-action trace when thinking is actually enabled.</td></tr>
     </tbody>
   </table>
 
@@ -66,15 +68,17 @@
       <tr><td>Close a phase</td><td>Multi-week or multi-block build</td><td>Changelog, status, focused tests, negative scope, review evidence, package check.</td></tr>
       <tr><td>User complaint to engineering asset</td><td>User says it feels wrong or drifted</td><td>Preserve transcript, root-cause across layers, issue doc, learning note, replay test.</td></tr>
       <tr><td>Make cost actionable</td><td>Token/cost metrics look high</td><td>Attribute to retries, verbosity, thinking, schemas, subagents, or history.</td></tr>
+      <tr><td>Continuity test</td><td>Short follow-up after a long discovery step</td><td>Reuse prior evidence, add safe preview/read path, cap rediscovery, and guard truncated complete claims.</td></tr>
+      <tr><td>Artifact separation</td><td>Packaged app creates user-facing files</td><td>Separate runtime package, project workspace, and user artifact root; save and surface artifact paths.</td></tr>
       <tr><td>Executable independent review</td><td>Review is required</td><td>Exact command, auth mode, cleared env, prompt/output/error logs, explicit verdict.</td></tr>
     </tbody>
   </table>
 
   <div class="warn">
-    Learning documented is not the same as runtime fixed. S3 P0/P1 blockers
-    are now shipped and reviewed, but the notebook widget regression needs its
-    own thin-notebook + target-render fix before production confidence should
-    include the UI launch path.
+    Learning documented is not the same as runtime fixed. The S3 real-use and
+    follow-up discipline blockers are now fixed in source and reviewed. Final
+    confidence still depends on rebuilding the ship zip and running target
+    SageMaker validation from a fresh kernel.
   </div>
 </body>
 </html>

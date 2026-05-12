@@ -2,15 +2,25 @@
 
 ## Status
 
-Open worker block. Do not mark v5 fully solved for S3 workflows until these
-items are implemented, tested, independently reviewed, and packaged into
-`compact_v5_ship.zip`.
+Implemented and independently reviewed. The source fix is complete; v5 should
+not be marked packaged for this block until `compact_v5_ship.zip` is rebuilt
+from the current tree and the zip verification doc is refreshed.
 
 Plan-review status: independent Claude CLI subscription review returned
 `APPROVE` after two `REQUEST_CHANGES` loops tightened the root cause, exact
 S3 call cap, artifact path-validation mechanism, and status-doc heuristic.
 Final review path:
 `compact_v5_test_evidence/final_results/s3_followup_tool_discipline_reviews/PLAN_REVIEW_CLAUDE_REREVIEW2.md`.
+
+Implementation review paths:
+- `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REVIEW.md`
+  -> `APPROVE`.
+- `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REREVIEW.md`
+  -> `APPROVE` after the status-prefix polish fix.
+
+Verification:
+- `py -3.10 -m py_compile compact_v5/core/query_engine.py compact_v5/ui/chat_ui.py compact_v5/agent.py compact_v5/tools/aws_s3_preview.py compact_v5/tools/artifacts.py compact_v5/tools/v4_documents.py compact_v5/tools/write_file.py compact_v5/runtime/state.py compact_v5/runtime/config.py compact_v5/security/manager.py`
+- `py -3.10 -m pytest compact_v5/tests -q` -> `47 passed`.
 
 ## Trigger Transcript
 
@@ -39,17 +49,17 @@ This was a simple follow-up, not a request to refresh the full S3 inventory.
 
 | Issue | Severity | Evidence | Expected Behavior |
 |---|---:|---|---|
-| Follow-up intent not preserved | P0 | "pick two files" after an S3 inventory caused new broad listing calls. | Treat as a continuation of the previous S3 result unless user asks to refresh. |
-| S3 list fanout too easy | P0 | Multiple distinct `aws_s3_list` calls were emitted in one follow-up. They were sequential, not true parallel; the model produced many tool uses and the dispatcher allowed distinct args through. | Add a per-turn cap / same-name throttle for `aws_s3_list`; do not broad-rescan buckets for a small follow-up. |
-| No "reuse previous evidence first" rule | P0 | v5 did not choose from already listed object paths. | Reuse recent visible/session S3 object list before calling tools. |
-| No safe object preview/read tool | P0 | `aws_s3_list` can list names only, so "investigate files" has no clean read path. | Add read-only `aws_s3_preview` with size/content-type safety limits. |
-| Truncation truth gap | P0 | Earlier response claimed "all/complete" even when CDK output was truncated at 50 items. | Never claim all/complete when a continuation token or truncation marker exists. |
-| ASCII compliance gap | P1 | User requested ASCII; generated output contained emoji, arrows, and box-drawing characters. | If ASCII requested, output and generated files must use plain ASCII only. |
-| Workspace default wrong for deliverables | P1 | Created `S3_Structure_Diagram.md` under `/home/sagemaker-user/compact_v5_ship`. | User artifacts should default outside the v5 runtime folder, e.g. `/home/sagemaker-user/sageagent_workspace`. |
-| Created artifact memory weak | P1 | User asked where the file was; v5 searched again instead of answering from the create result. | Track created artifact paths in UI/session state and final answers. |
-| AGENT_STATUS overuse | P1 | v5 edited `AGENT_STATUS.md` for a simple S3 inventory/report task. | Reserve status updates for project/long-running coding tasks or explicit request. |
-| Tool ID exposed too prominently | P2 | UI shows raw `toolu_bdrk_...` IDs in normal tool cards. | Hide raw ids by default; keep them in debug/details. |
-| Cost drift | P1 | Follow-up had too many calls, verbose output, and Thinking ON in later turn. | Keep simple S3 follow-ups low-call, concise, and Thinking OFF unless user enables it. |
+| Follow-up intent not preserved | P0 | "pick two files" after an S3 inventory caused new broad listing calls. | **Fixed:** follow-up reminders reuse recent S3 object paths before new list calls. |
+| S3 list fanout too easy | P0 | Multiple distinct `aws_s3_list` calls were emitted in one follow-up. They were sequential, not true parallel; the model produced many tool uses and the dispatcher allowed distinct args through. | **Fixed:** follow-up turns cap `aws_s3_list` at 2 calls. |
+| No "reuse previous evidence first" rule | P0 | v5 did not choose from already listed object paths. | **Fixed:** bounded recent S3 object extraction and reminder injection. |
+| No safe object preview/read tool | P0 | `aws_s3_list` can list names only, so "investigate files" has no clean read path. | **Fixed:** read-only `aws_s3_preview` with Range cap and binary refusal. |
+| Truncation truth gap | P0 | Earlier response claimed "all/complete" even when CDK output was truncated at 50 items. | **Fixed:** final guard blocks complete/all claims after truncated S3 evidence. |
+| ASCII compliance gap | P1 | User requested ASCII; generated output contained emoji, arrows, and box-drawing characters. | **Fixed:** write/document tools reject non-ASCII content when user explicitly asks ASCII. |
+| Workspace default wrong for deliverables | P1 | Created `S3_Structure_Diagram.md` under `/home/sagemaker-user/compact_v5_ship`. | **Fixed:** deliverables rebase to `CONFIG.user_artifacts_root` when workspace is the runtime package. |
+| Created artifact memory weak | P1 | User asked where the file was; v5 searched again instead of answering from the create result. | **Fixed:** created artifacts persist to `.sageagent_state/artifacts.json` and are injected for file-location follow-ups. |
+| AGENT_STATUS overuse | P1 | v5 edited `AGENT_STATUS.md` for a simple S3 inventory/report task. | **Fixed:** small S3/report tasks cannot update status unless explicitly requested. |
+| Tool ID exposed too prominently | P2 | UI shows raw `toolu_bdrk_...` IDs in normal tool cards. | **Fixed:** raw id hidden from summary; retained only inside details. |
+| Cost drift | P1 | Follow-up had too many calls, verbose output, and Thinking ON in later turn. | **Fixed:** simple S3 inventory/follow-up disables thinking for that turn and reduces list fanout. |
 
 ## Root Causes
 
@@ -62,19 +72,19 @@ This was a simple follow-up, not a request to refresh the full S3 inventory.
 | There is no S3 object preview tool with strict read-only limits. | missing tool |
 | File writes default to current runtime working directory when workspace is `"."`; user deliverables then land under `/home/sagemaker-user/compact_v5_ship/`. Runtime state/audit dirs also depend on workspace, so the fix must avoid moving all state roots accidentally. | `runtime/config.py`, `entry.py`, `ui/chat_ui.py`, document tools |
 
-## Required Fix Blocks
+## Shipped Fix Blocks
 
 | Block | Goal | Acceptance |
 |---|---|---|
-| 1. S3 follow-up reuse guard | At turn start, extract recent `aws_s3_list` object paths from a bounded window of `self.messages` (last 6 user/assistant turns or about 8 KB of recent tool-result text) and inject a compact reminder for S3 follow-ups. | Transcript replay makes zero broad bucket-rescan calls when recent object paths exist. |
-| 2. S3 same-name fanout cap | Add a per-`QueryEngine.run` turn cap of 2 `aws_s3_list` calls, independent of parallel-dispatch flags. | The 3rd S3 list call in one user turn returns a synthetic block saying to reuse prior results or narrow the prefix. |
-| 3. Safe S3 preview tool | Add always-loaded `aws_s3_preview` for small text/CSV/JSON object previews using S3 Range reads. | Can inspect two chosen files with byte cap and binary/large-object refusal. |
-| 4. Truncation truth gate | Prevent "all/complete" claims when any list result is truncated; enforce near final-text claim, mirroring existing final-claim guards. | Regression test with truncated S3 result forces "partial/truncated" wording or continuation. |
-| 5. User artifact policy | Keep runtime state/audit roots unchanged, but default newly created user deliverables outside the v5 runtime folder, pass path validation, and track created files. | Add a user-artifacts root such as `CONFIG.user_artifacts_root`, include it in allowed paths, rebase only user deliverables there when no project workspace is chosen, and answer file-location questions from recorded artifact state. |
-| 6. ASCII contract | Honor explicit ASCII-only requests only when user asks for ASCII. | Generated diagram/report contains only bytes `< 0x80` when user asks ASCII. |
-| 7. Status-doc guard | Do not update `AGENT_STATUS.md` for small non-project tasks using a concrete heuristic. | Update status only when user asks for status/progress/handoff, `iter_used > 15`, or project-source writes exceed 3 files; simple S3 report prompts do not edit status. |
-| 8. UI polish | Hide raw tool ids by default. | Tool card summary is readable; id appears only in details/debug. |
-| 9. Cost proof | Show before/after call and token budget for the transcript. | Replay stays within agreed call budget and Thinking remains OFF for simple S3 follow-up. |
+| 1. S3 follow-up reuse guard | Shipped in `core/query_engine.py`. | Recent S3 object paths are injected before follow-up turns. |
+| 2. S3 same-name fanout cap | Shipped in `core/query_engine.py`. | The 3rd follow-up `aws_s3_list` call is blocked. |
+| 3. Safe S3 preview tool | Shipped as `tools/aws_s3_preview.py`. | Bounded Range read, binary refusal, Bedrock-only aware. |
+| 4. Truncation truth gate | Shipped in `core/query_engine.py`. | Complete/all claims are blocked after truncated S3 evidence. |
+| 5. User artifact policy | Shipped in `runtime/config.py`, `runtime/state.py`, `security/manager.py`, `tools/artifacts.py`, write/document tools. | Runtime-state roots stay unchanged; user deliverables default outside runtime package workspaces. |
+| 6. ASCII contract | Shipped in write/document tools. | Non-ASCII writes fail when the user asks for ASCII. |
+| 7. Status-doc guard | Shipped in `core/query_engine.py`. | Small S3/report tasks cannot edit `AGENT_STATUS.md` unless explicit. |
+| 8. UI polish | Shipped in `ui/chat_ui.py`. | Tool summary hides raw `toolu_...` ids. |
+| 9. Cost proof | Shipped via behavior and tests. | S3 follow-up calls are capped; thinking is disabled for simple S3 inventory/follow-up turns. |
 
 ## Non-Goals
 

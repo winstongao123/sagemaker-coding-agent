@@ -21,7 +21,7 @@ def _ui():
     return ui
 
 
-def test_turn_thinking_is_collapsed_and_before_metrics():
+def test_turn_meta_does_not_duplicate_thinking_after_answer():
     ui = _ui()
     html = ui._render_turn_meta(
         {
@@ -37,10 +37,23 @@ def test_turn_thinking_is_collapsed_and_before_metrics():
         },
         ui._colors(),
     )
-    assert "Reasoning / thinking captured for this turn" in html
-    assert "<details open" not in html
-    assert html.index("Reasoning / thinking captured") < html.index("sageagent-turn-metrics")
+    assert "private reasoning trace" not in html
+    assert "Reasoning / thinking captured for this turn" not in html
     assert "Prompt Cache R/W 10/5" in html
+
+
+def test_live_thinking_renders_before_assistant_and_metrics():
+    ui = _ui()
+    streamed = []
+    ui._render_status = lambda: None
+    ui._live_output_router("[thinking]\nchoose next safe tool", streamed)
+    ui._append_message("assistant", "Answer", {"input_tokens": 1, "output_tokens": 2})
+    html = ui._chat_display.value
+    assert "Reasoning / thinking" in html
+    assert "choose next safe tool" in html
+    assert html.index("Reasoning / thinking") < html.index("Answer")
+    assert html.index("Reasoning / thinking") < html.index("sageagent-turn-metrics")
+    assert "<details open" not in html
 
 
 def test_standalone_thinking_card_is_collapsed():
@@ -52,6 +65,7 @@ def test_standalone_thinking_card_is_collapsed():
 
 
 if __name__ == "__main__":
-    test_turn_thinking_is_collapsed_and_before_metrics()
+    test_turn_meta_does_not_duplicate_thinking_after_answer()
+    test_live_thinking_renders_before_assistant_and_metrics()
     test_standalone_thinking_card_is_collapsed()
     print("ui thinking smoke: OK")

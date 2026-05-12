@@ -177,6 +177,32 @@ def _is_simple_s3_inventory_request(message: str) -> bool:
     return True
 
 
+def _is_simple_s3_followup_request(message: str, engine: QueryEngine) -> bool:
+    """Detect a narrow follow-up to existing S3 evidence."""
+    lowered = (message or "").lower()
+    if not any(
+        phrase in lowered
+        for phrase in (
+            "pick two",
+            "pick 2",
+            "choose two",
+            "choose 2",
+            "investigate",
+            "inspect",
+            "preview",
+            "sample",
+            "where is the file",
+            "cannot find",
+            "can't find",
+        )
+    ):
+        return False
+    try:
+        return bool(engine._recent_s3_object_paths(limit=1))  # noqa: SLF001
+    except Exception:
+        return False
+
+
 class Agent:
     """Minimal public Agent wrapping the Phase 8-10 surfaces."""
 
@@ -312,16 +338,20 @@ class Agent:
         _max_tokens = getattr(_CFG, "max_tokens", 4096)
         _temperature = getattr(_CFG, "temperature", 0.0)
         _thinking_enabled = self._thinking_enabled
+        _simple_s3_low_cost = _is_simple_s3_inventory_request(message) or _is_simple_s3_followup_request(
+            message,
+            self._engine,
+        )
         if (
             _thinking_enabled
             and bool(getattr(_CFG, "disable_thinking_for_simple_s3_inventory", True))
-            and _is_simple_s3_inventory_request(message)
+            and _simple_s3_low_cost
         ):
             _thinking_enabled = False
             try:
                 output_fn(
                     "[cost control] Extended Thinking disabled for this simple S3 "
-                    "inventory turn; model, cache, and compaction settings unchanged."
+                    "inventory/follow-up turn; model, cache, and compaction settings unchanged."
                 )
             except Exception:
                 pass

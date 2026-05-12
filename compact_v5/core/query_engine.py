@@ -421,6 +421,8 @@ class QueryEngine:
         self._turn_budget_warning_sent = False
         self._final_claim_guard_sent = False
         self._intent_drift_guard_sent = False
+        self._s3_truncation_guard_sent = False
+        self._s3_list_calls_this_run = 0
         # Preserve the original user request outside `self.messages` so exact
         # deliverables survive compaction/truncation and remain available to
         # max-turn/final-claim guards.
@@ -477,6 +479,7 @@ class QueryEngine:
         # parent_engine forwarding).
         self._exec_call_count = 0  # bash + python_exec only
         self._recent_tool_calls: list = []  # [(name, args_hash), ...]
+        self._s3_list_calls_this_run = 0
         # Block F2 â€” fresh BudgetTracker per run() so continuation state
         # never leaks across user messages.
         self._budget_tracker = None
@@ -714,6 +717,8 @@ class QueryEngine:
             turn_messages = list(self.messages)
             if deferred_names:
                 turn_messages = self._inject_deferred_reminder(turn_messages, deferred_names)
+            turn_messages = self._inject_s3_followup_reminder_if_needed(turn_messages)
+            turn_messages = self._inject_artifact_reminder_if_needed(turn_messages)
 
             # Block A A-16: time-based microcompact BEFORE the next API call.
             # If the main loop has been idle long enough for the server-side
@@ -762,6 +767,8 @@ class QueryEngine:
                                     turn_messages,
                                     deferred_names,
                                 )
+                            turn_messages = self._inject_s3_followup_reminder_if_needed(turn_messages)
+                            turn_messages = self._inject_artifact_reminder_if_needed(turn_messages)
                             self._audit_engine_event(
                                 "compact_micro_end",
                                 parameters={
@@ -868,6 +875,10 @@ class QueryEngine:
             response_thinking = getattr(response, "thinking", "") or ""
             if response_thinking:
                 thinking_trace.append(response_thinking)
+                try:
+                    output_fn("[thinking]\n" + response_thinking)
+                except Exception:
+                    pass
 
             # Block B (PORT_LOG #039+#040): record token usage + per-agent
             # attribution. "parent" or sub-agent type-string. Best-effort â€”
@@ -1116,6 +1127,15 @@ class QueryEngine:
                         "is_meta": True,
                     })
                     continue
+                guard = self._s3_truncation_guard_message(response.text or "")
+                if guard:
+                    output_fn("[truncation guard: S3 evidence is partial; continuing]")
+                    self.messages.append({
+                        "role": "user",
+                        "content": [{"type": "text", "text": guard}],
+                        "is_meta": True,
+                    })
+                    continue
                 if response.text:
                     guard = self._intent_drift_guard_message(response.text)
                     if guard:
@@ -1321,6 +1341,40 @@ class QueryEngine:
                 pass
             return result
 
+        _repaired_input = call.input
+        if isinstance(call.input, str):
+            try:
+                from security.json_repair import repair_tool_call_arguments
+                _repaired_input = repair_tool_call_arguments(call.input)
+            except Exception:
+                _repaired_input = {}
+
+        if call.name == "aws_s3_list" and self._is_s3_followup_request(self._run_requested_text):
+            with _guard():
+                self._s3_list_calls_this_run += 1
+                if self._s3_list_calls_this_run > 2:
+                    return {
+                        "type": "tool_result",
+                        "tool_use_id": call.id,
+                        "content": (
+                            "Blocked: too many aws_s3_list calls this turn. "
+                            "Reuse prior S3 results or ask for a narrower prefix."
+                        ),
+                        "is_error": True,
+                    }
+
+        if call.name in {"edit_file", "write_file"} and self._is_blocked_status_doc_update(call.name, _repaired_input):
+            return {
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": (
+                    "Blocked: AGENT_STATUS.md updates are reserved for explicit "
+                    "status/progress/handoff requests, long-running coding tasks, "
+                    "or large project edits. This looks like a small read-only/report task."
+                ),
+                "is_error": True,
+            }
+
         if call.name in {"bash", "python_exec"}:
             from runtime.config import CONFIG as _CFG
             cap = getattr(_CFG, "max_exec_calls_per_session", 200)
@@ -1378,14 +1432,6 @@ class QueryEngine:
             self._recent_tool_calls.append(_key)
             if len(self._recent_tool_calls) > 12:
                 self._recent_tool_calls = self._recent_tool_calls[-12:]
-
-        _repaired_input = call.input
-        if isinstance(call.input, str):
-            try:
-                from security.json_repair import repair_tool_call_arguments
-                _repaired_input = repair_tool_call_arguments(call.input)
-            except Exception:
-                _repaired_input = {}
 
         _failure_key = self._tool_failure_key(call.name, _repaired_input)
         _failure_count = self._tool_failure_counts.get(_failure_key, 0)
@@ -1546,6 +1592,8 @@ class QueryEngine:
                 "abort_events": self.abort_events,
                 "output_fn": output_fn,
                 "ask_user_response_provider": ask_user_response_provider,
+                "ascii_only": self._requests_ascii_only(self._run_requested_text),
+                "tool_name": call.name,
             })
             text = _coerce_tool_result_to_text(raw)
             self._notify_tool_result(call, text, is_error=False)
@@ -2334,6 +2382,207 @@ class QueryEngine:
             "AWS credentials, or AWS permissions) and stop."
         )
         return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
+    def _inject_s3_followup_reminder_if_needed(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Anchor S3 follow-ups to prior results instead of re-scanning buckets."""
+        requested = getattr(self, "_run_requested_text", "") or ""
+        if not self._is_s3_followup_request(requested):
+            return messages
+        paths = self._recent_s3_object_paths(limit=24)
+        if not paths:
+            return messages
+        shown = "\n".join(f"- {p}" for p in paths[:12])
+        more = "" if len(paths) <= 12 else f"\n- ... {len(paths) - 12} more recent object paths"
+        body = (
+            "S3 follow-up guard: the user is referring to recently listed S3 "
+            "files. Reuse the known object paths below before calling "
+            "`aws_s3_list` again. For inspecting file contents, pick at most the "
+            "requested number of files and use `aws_s3_preview`. Do not refresh "
+            "all buckets unless the user explicitly asks for a fresh full scan.\n"
+            f"{shown}{more}"
+        )
+        return self._append_transient_text_reminder(messages, body)
+
+    def _inject_artifact_reminder_if_needed(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Answer artifact-location follow-ups from durable artifact state."""
+        requested = (getattr(self, "_run_requested_text", "") or "").lower()
+        if not any(
+            phrase in requested
+            for phrase in (
+                "where is the file",
+                "where is file",
+                "cannot find",
+                "can't find",
+                "file location",
+                "saved where",
+                "where did you save",
+            )
+        ):
+            return messages
+        try:
+            from tools.artifacts import recent_artifacts
+            artifacts = recent_artifacts(limit=8)
+        except Exception:
+            artifacts = []
+        if not artifacts:
+            return messages
+        lines = []
+        for item in artifacts[:8]:
+            path = item.get("path") if isinstance(item, dict) else ""
+            source = item.get("source_tool", "") if isinstance(item, dict) else ""
+            if path:
+                suffix = f" ({source})" if source else ""
+                lines.append(f"- {path}{suffix}")
+        if not lines:
+            return messages
+        body = (
+            "Artifact-location guard: answer file-location questions from these "
+            "recorded artifacts first. Do not search the filesystem unless the "
+            "artifact list is insufficient.\n" + "\n".join(lines)
+        )
+        return self._append_transient_text_reminder(messages, body)
+
+    def _s3_truncation_guard_message(self, text: str) -> str:
+        """Prevent complete/all claims when recent S3 evidence was truncated."""
+        if self._s3_truncation_guard_sent:
+            return ""
+        if not self._recent_s3_truncation_seen():
+            return ""
+        lowered = (text or "").lower()
+        complete_claims = (
+            "complete",
+            "fully mapped",
+            "all files",
+            "all buckets",
+            "all s3",
+            "entire",
+            "everything",
+        )
+        partial_qualifiers = (
+            "partial",
+            "truncated",
+            "first-level",
+            "sample",
+            "preview",
+            "continuation_token",
+            "narrower prefix",
+        )
+        if not any(term in lowered for term in complete_claims):
+            return ""
+        if any(term in lowered for term in partial_qualifiers):
+            return ""
+        self._s3_truncation_guard_sent = True
+        body = (
+            "S3 truncation guard: recent `aws_s3_list` output was truncated or "
+            "included a continuation token. Do not claim a complete S3/file "
+            "inventory. Either continue with a narrower prefix/continuation token "
+            "or clearly label the answer as a partial first-level/sample view."
+        )
+        return xml_tag(XML_SYSTEM_REMINDER_TAG, body)
+
+    def _recent_s3_truncation_seen(self) -> bool:
+        for msg in reversed(self.messages[-16:]):
+            content = msg.get("content") if isinstance(msg, dict) else None
+            text_parts: List[str] = []
+            if isinstance(content, str):
+                text_parts.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        text_parts.append(str(block.get("content") or block.get("text") or ""))
+            joined = "\n".join(text_parts).lower()
+            if "aws_s3_list" in joined or "s3://" in joined or "s3 structure" in joined:
+                if "output truncated" in joined or "continuation_token" in joined:
+                    return True
+        return False
+
+    def _recent_s3_object_paths(self, limit: int = 20) -> List[str]:
+        """Extract recent concrete S3 object paths from conversation history."""
+        seen: Set[str] = set()
+        paths: List[str] = []
+        pattern = re.compile(r"s3://([A-Za-z0-9.\-_]+)/([^\s\]\)>,\"']+)")
+        for msg in reversed(self.messages[-24:]):
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            chunks: List[str] = []
+            if isinstance(content, str):
+                chunks.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        chunks.append(str(block.get("content") or block.get("text") or ""))
+            for text in chunks:
+                for match in pattern.finditer(text):
+                    bucket = match.group(1)
+                    key = match.group(2).strip().rstrip(".,;:")
+                    if not key or key.endswith("/"):
+                        continue
+                    uri = f"s3://{bucket}/{key}"
+                    if uri not in seen:
+                        seen.add(uri)
+                        paths.append(uri)
+                    if len(paths) >= limit:
+                        return paths
+        return paths
+
+    @staticmethod
+    def _is_s3_followup_request(text: str) -> bool:
+        lowered = (text or "").lower()
+        if not lowered:
+            return False
+        if "s3" in lowered and any(
+            term in lowered
+            for term in (
+                "pick",
+                "choose",
+                "investigate",
+                "inspect",
+                "sample",
+                "preview",
+                "open",
+                "read",
+                "relationship",
+                "where is the file",
+            )
+        ):
+            return True
+        return (
+            any(phrase in lowered for phrase in ("pick two", "pick 2", "choose two", "choose 2"))
+            and any(term in lowered for term in ("file", "files", "object", "objects", "investigate", "inspect"))
+        )
+
+    @staticmethod
+    def _requests_ascii_only(text: str) -> bool:
+        lowered = (text or "").lower()
+        return "ascii" in lowered or "plain text diagram" in lowered
+
+    def _is_blocked_status_doc_update(self, tool_name: str, args: Any) -> bool:
+        if not isinstance(args, dict):
+            return False
+        path = str(args.get("file_path") or args.get("filepath") or "")
+        if not path:
+            return False
+        if os.path.basename(path).lower() != "agent_status.md":
+            return False
+        requested = (getattr(self, "_run_requested_text", "") or "").lower()
+        explicit_status = (
+            "agent_status" in requested
+            or "status doc" in requested
+            or "update status" in requested
+            or "keep status" in requested
+            or "handoff" in requested
+            or "document" in requested and "status" in requested
+        )
+        if explicit_status:
+            return False
+        return self._is_s3_inventory_request(requested) or self._is_s3_followup_request(requested)
 
     @staticmethod
     def _is_s3_inventory_request(text: str) -> bool:

@@ -47,6 +47,8 @@ def _validate_doc_path(filepath: str):
     """
     try:
         from . import _path_validation as path_security
+        from .artifacts import resolve_user_artifact_path
+        filepath = resolve_user_artifact_path(filepath)
         ok, msg = path_security.validate_path(filepath)
         if not ok:
             return f"Error: {msg}", None
@@ -54,6 +56,26 @@ def _validate_doc_path(filepath: str):
         return None, abs_path
     except Exception as exc:  # noqa: BLE001
         return f"Error: path validation failed: {type(exc).__name__}: {exc}", None
+
+
+def _ascii_contract_check(content: str, context: Optional[Dict] = None) -> str:
+    try:
+        from .artifacts import ascii_contract_error, is_ascii_only_request
+        if is_ascii_only_request(context):
+            return ascii_contract_error(content)
+    except Exception:
+        return ""
+    return ""
+
+
+def _record_created_artifact(abs_path: str, tool_name: str, context: Optional[Dict] = None) -> None:
+    try:
+        from .artifacts import record_artifact
+        ctx = dict(context or {})
+        ctx.setdefault("tool_name", tool_name)
+        record_artifact(abs_path, kind="document", context=ctx)
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -71,6 +93,9 @@ def _create_word_executor(args: Dict[str, Any], context: Optional[Dict] = None) 
         return "Error: filepath is required"
     if not filepath.endswith(".docx"):
         filepath += ".docx"
+    err = _ascii_contract_check(content, context)
+    if err:
+        return err
     err, abs_path = _validate_doc_path(filepath)
     if err:
         return err
@@ -106,6 +131,7 @@ def _create_word_executor(args: Dict[str, Any], context: Optional[Dict] = None) 
                 doc.add_paragraph("")
         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
         doc.save(abs_path)
+        _record_created_artifact(abs_path, "create_word", context)
         return f"Wrote {abs_path}"
     except Exception as exc:  # noqa: BLE001
         return f"Error: {type(exc).__name__}: {exc}"
@@ -268,6 +294,9 @@ def _create_markdown_executor(args: Dict[str, Any], context: Optional[Dict] = No
         return "Error: filepath is required"
     if not filepath.endswith(".md"):
         filepath += ".md"
+    err = _ascii_contract_check(content, context)
+    if err:
+        return err
     err, abs_path = _validate_doc_path(filepath)
     if err:
         return err
@@ -275,6 +304,7 @@ def _create_markdown_executor(args: Dict[str, Any], context: Optional[Dict] = No
         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
         with open(abs_path, "w", encoding="utf-8") as f:
             f.write(content)
+        _record_created_artifact(abs_path, "create_markdown", context)
         return f"Wrote {abs_path}"
     except OSError as exc:
         return f"Error: {exc}"
@@ -301,6 +331,9 @@ def _create_notebook_executor(args: Dict[str, Any], context: Optional[Dict] = No
         return "Error: filepath is required"
     if not filepath.endswith(".ipynb"):
         filepath += ".ipynb"
+    err = _ascii_contract_check(json.dumps(cells, ensure_ascii=False, default=str), context)
+    if err:
+        return err
     err, abs_path = _validate_doc_path(filepath)
     if err:
         return err
@@ -343,6 +376,7 @@ def _create_notebook_executor(args: Dict[str, Any], context: Optional[Dict] = No
         os.makedirs(os.path.dirname(abs_path) or ".", exist_ok=True)
         with open(abs_path, "w", encoding="utf-8") as f:
             json.dump(notebook, f, indent=2)
+        _record_created_artifact(abs_path, "create_notebook", context)
         return f"Wrote {abs_path}"
     except Exception as exc:  # noqa: BLE001
         return f"Error: {type(exc).__name__}: {exc}"
@@ -548,6 +582,7 @@ def _create_chart_executor(args: Dict[str, Any], context: Optional[Dict] = None)
                 pass
         fig.savefig(abs_path, **save_kwargs)
         plt.close(fig)
+        _record_created_artifact(abs_path, "create_chart", context)
         return f"Wrote {abs_path}"
     except Exception as exc:  # noqa: BLE001
         return f"Error: {type(exc).__name__}: {exc}"
@@ -615,6 +650,9 @@ def _create_pdf_executor(args: Dict[str, Any], context: Optional[Dict] = None) -
         return "Error: filepath is required"
     if not filepath.endswith(".pdf"):
         filepath += ".pdf"
+    err = _ascii_contract_check(json.dumps(content_blocks, ensure_ascii=False, default=str), context)
+    if err:
+        return err
     err, abs_path = _validate_doc_path(filepath)
     if err:
         return err
@@ -668,6 +706,7 @@ def _create_pdf_executor(args: Dict[str, Any], context: Optional[Dict] = None) -
                     y = 0.95
             pdf.savefig(fig)
             plt.close(fig)
+        _record_created_artifact(abs_path, "create_pdf", context)
         return f"Wrote {abs_path}"
     except Exception as exc:  # noqa: BLE001
         return f"Error: {type(exc).__name__}: {exc}"
