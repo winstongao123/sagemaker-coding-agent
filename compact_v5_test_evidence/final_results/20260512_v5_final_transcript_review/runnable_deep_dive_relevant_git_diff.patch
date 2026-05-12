@@ -1,0 +1,402 @@
+﻿diff --git a/compact_v5/AGENT_STATUS.md b/compact_v5/AGENT_STATUS.md
+index 9445c32..13c58c6 100644
+--- a/compact_v5/AGENT_STATUS.md
++++ b/compact_v5/AGENT_STATUS.md
+@@ -263,7 +263,7 @@ Evidence table:
+ | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
+ | Tests | Green. | `python -m pytest compact_v5/tests -q` -> 48 passed. |
+ | Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; combined config/chat UI re-review returned `APPROVE`; final widget-stack no-mutation re-review `notebook_widget_regression_reviews/claude/ROUND_5_WIDGET_STACK_NO_MUTATION_REREVIEW_claude_review.md` returned `APPROVE`. |
+-| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 154 members, `testzip() None`, required members present, forbidden folders absent; current SHA is recorded in `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`. |
++| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, current member count/hash recorded in `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`. |
+ 
+ Latest fix:
+ - Cell 1 no longer installs or upgrades `ipywidgets`, `jupyterlab_widgets`, or
+@@ -360,6 +360,103 @@ Verification:
+ 
+ ---
+ 
++## 2026-05-12 UI Refresh + Project WIP Evidence Fix
++
++Current task state: implemented the user's three follow-up fixes from the
++final SageMaker history/screenshots.
++
++Implemented:
++- Cell 2 is now a rerun-safe refresh cell: it clears stale output, drops cached
++  launcher/UI modules, imports `refresh_ui`, and displays a fresh single
++  combined v4-style UI. This follows the latest v4.10.10 `clear_output` lesson
++  while keeping v5's config/chat controls in one widget.
++- added `runtime/workspace.py` so normal project work keeps the repo as
++  `CONFIG.workspace`, but writes evidence under `<project>/compact_v5_wip/`;
++  runtime-folder launches fall back to `~/sageagent_workspace/compact_v5_wip`.
++- routed AGENT_STATUS, memory, durable todos/tasks, sessions, audit logs,
++  verify/done gate records, tool-result artifacts, shell-job state, subagent
++  receipts, final-claim pytest logs, `docs/logs`, and `docs/reviews` through
++  the project WIP layout.
++- added a legacy fallback for root `AGENT_STATUS.md` / `memory.md` reads so old
++  projects do not silently lose context before migration.
++- todo display now shows symbol markers plus status text; assistant turn
++  blocks now include wall time, input/output tokens, prompt-cache R/W, cost,
++  without-cache cost, cache saved, call count, and thinking state.
++- `/clean` now sweeps the WIP `.sageagent_state` and audit logs, while also
++  checking legacy root paths.
++- updated `chat.md` with the new evidence layout.
++
++Verification:
++- `py -3.10 -m py_compile` passed over changed runtime files.
++- `py -3.10 -m pytest tests -q` -> 58 passed.
++- visual evidence saved:
++  `compact_v5_test_evidence/final_results/20260512_v5_ui_workspace_refresh/ui_refresh_workspace_metrics_embed.png`;
++  checks: `HAS_MODEL_NOT_FOUND False`, `HAS_TODO_DONE True`,
++  `HAS_TODO_SYMBOLS True`, `HAS_METRICS True`.
++- Browser plugin note: the required Node REPL control surface was not available
++  in this Codex session, so visual validation used local Playwright against an
++  embedded ipywidgets HTML fixture.
++- independent Claude CLI subscription review:
++  first review returned `REQUEST_CHANGES` for partial WIP routing; after fixes,
++  `claude_rereview.md` returned `VERDICT: APPROVE` and confirmed all prior
++  HIGH/MEDIUM items closed. API-token env vars were cleared for the review.
++- rebuilt `compact_v5_ship.zip`: 155 members, `testzip() None`; changed source
++  files matched the zip, including new `runtime/workspace.py`.
++
++---
++
++## 2026-05-12 Final Coding Transcript Investigation - Implemented
++
++Current task state: investigated
++`tests/PS_Final_test/final_test_v5_responds.md` for model reasoning, tool use,
++token/cost behavior, and final coding task workflow quality.
++
++Diagnosis:
++- the Haiku 4.5 final coding task mostly succeeded: project files were created,
++  todo/task/reviewer tools were used, tests passed, and evidence was listed;
++- v5 wasted late turns because `_missing_requested_paths` treated prose such as
++  `add/list`, `cost/context`, and process-requirement sentences as paths;
++- relative deliverables were checked under the active runtime workspace even
++  when the user explicitly requested a separate project root;
++- bash verification commands using `*.py` did not expand globs because the bash
++  executor used `shell=False` unless pipes/redirection were present;
++- the final answer's manual cost breakdown was not fully auditable; the UI
++  metrics footer/block metadata should be the source of truth.
++
++Implemented:
++- hardened `core/query_engine.py::_missing_requested_paths` with stricter path
++  extraction, URL stripping, explicit project-root handling, scoped root
++  expansion, and quoted relative directory support;
++- updated `tools/bash.py` so local commands containing `*` route through the
++  shell; the motivating production contract is POSIX/SageMaker glob expansion,
++  and Windows shell semantics remain platform-specific;
++- added `tests/test_final_task_regression_guards.py` covering the transcript
++  false-positive path guard, explicit-root lookup, root scoping, quoted relative
++  directories, and bash glob routing.
++
++Review:
++- Claude CLI subscription review loop was run with API-token env vars cleared;
++- first review returned `REQUEST_CHANGES`;
++- re-review returned `APPROVE`;
++- final review after low-risk refinements returned `APPROVE`.
++
++Verification:
++- focused test: `py -3.10 -m pytest tests\test_final_task_regression_guards.py -q`
++  -> 5 passed;
++- full suite: `py -3.10 -m pytest tests -q` -> 63 passed.
++
++Packaging:
++- rebuilt `compact_v5_ship.zip`: 155 members, no test-only files, `testzip() None`,
++  and changed runtime source files matched the zip.
++
++Evidence:
++- investigation report:
++  `compact_v5_test_evidence/final_results/20260512_v5_final_transcript_review/final_test_v5_responds_investigation.md`;
++- final Claude review:
++  `compact_v5_test_evidence/final_results/20260512_v5_final_transcript_review/claude_final_review.md`.
++
++---
++
+ ## 2026-05-12 S3 Follow-Up Tool Discipline - Implemented
+ 
+ Current task state: fixed the new S3 workflow issue discovered after the
+@@ -426,8 +523,71 @@ Verification:
+ - `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed.
+ 
+ Packaging:
+-- rebuilt `compact_v5_ship.zip` from the active flat tree: 154 members,
+-  `testzip() None`, forbidden members 0, required hash parity true, SHA
+-  `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`;
++- rebuilt `compact_v5_ship.zip` from the active flat tree for the S3 follow-up:
++  154 members, `testzip() None`, forbidden members 0, required hash parity
++  true, SHA `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`;
++  superseded by the later 2026-05-12 rebuild recorded in
++  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`;
+ - refreshed
+   `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
++
++---
++
++## 2026-05-12 Runnable Claude Code Deep Dive - Documented
++
++Current task state: completed the requested three-round deep dive into the
++local Runnable Claude Code reference to learn how v5 can improve stability and
++performance without architecture drift.
++
++Runnable reference used:
++- `D:\Github\gg_claude_code\gg-claude-code-runnable`
++
++Three rounds completed:
++- Round 1 shell/tool-output stability: learned that false tool negatives are
++  expensive and should be handled by structured diagnostics, output paths, and
++  bounded previews instead of model guesswork.
++- Round 2 session/resume/state stability: learned that resume must restore
++  control state, not just message text: todos, cost state, session identity,
++  cwd/workspace, transcript path, metadata, and UI/progress separation.
++- Round 3 cost/context/cache/delegation performance: learned that cost and
++  context reports must measure the actual API-bound prompt shape, cache
++  read/write must be first-class, complex todo closure should structurally
++  nudge verification, and subagent prompts must contain concrete scope rather
++  than delegating synthesis.
++
++v5 conclusions:
++- the final Haiku 4.5 coding transcript was functionally strong but
++  operationally noisy;
++- the already-implemented path guard and shell-routed `*` glob fix address the
++  concrete late-loop false doubts seen in the transcript; the motivating
++  acceptance case is POSIX/SageMaker, while Windows shell behavior is not a
++  claimed glob contract;
++- the next high-value improvements are restart/resume audit, artifact-backed
++  large output previews, runtime-sourced final cost tables, context diagnostics
++  after actual prompt transforms, structural verification nudges, direct resume
++  fallback, and subagent cleanup tests.
++
++Evidence:
++- deep dive report:
++  `compact_v5_test_evidence/final_results/20260512_v5_final_transcript_review/runnable_claude_code_deep_dive_v5_stability.md`;
++- investigation report link corrected to the actual local Runnable reference:
++  `D:\Github\gg_claude_code\gg-claude-code-runnable`.
++
++Review/verification:
++- `py -3.10 -m pytest tests -q` -> 63 passed;
++- Claude CLI subscription architecture review first returned `APPROVE` with
++  two medium doc-consistency polish items;
++- fixes clarified POSIX/SageMaker glob scope vs Windows shell semantics and
++  marked the older S3 zip hash as superseded;
++- Claude CLI subscription re-review returned `VERDICT: APPROVE`, with no
++  remaining HIGH/MEDIUM blockers;
++- latest `compact_v5_ship.zip` rebuild is recorded in
++  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`
++  with member count, `testzip()`, no-tests check, and SHA.
++
++No source-code behavior was changed in this documentation pass. The prior
++runtime fixes remain:
++- `core/query_engine.py` final-claim path guard hardening;
++- `tools/bash.py` shell-routed `*` glob commands for the POSIX/SageMaker
++  acceptance path;
++- `tests/test_final_task_regression_guards.py` regression coverage.
+diff --git a/compact_v5/core/query_engine.py b/compact_v5/core/query_engine.py
+index 4b9c1fd..75de5be 100644
+--- a/compact_v5/core/query_engine.py
++++ b/compact_v5/core/query_engine.py
+@@ -2665,36 +2665,107 @@ class QueryEngine:
+         """Best-effort exact-path gate for user-provided deliverable lists."""
+         if not requested:
+             return []
++        requested = re.sub(r"https?://\S+", " ", requested)
+         candidates: Set[str] = set()
+-        path_pattern = re.compile(
+-            r"(?<![A-Za-z0-9_./\\-])"
+-            r"([A-Za-z0-9_.+ -]+(?:[\\/][A-Za-z0-9_.+ -]+)+/?"
+-            r"|[A-Za-z0-9_.+-]+\.(?:py|md|txt|json|toml|yaml|yml|ipynb|zip))"
+-        )
+-        for raw in path_pattern.findall(requested):
++
++        def _clean(raw: str) -> str:
+             item = raw.strip().strip("`'\".,;:")
+             item = re.sub(r"^\s*[-*]\s+", "", item).strip()
+-            if not item or item.startswith(("/", "\\")):
+-                continue
++            return item
++
++        def _is_absolute_like(item: str) -> bool:
++            return bool(
++                re.match(r"^[A-Za-z]:[\\/]", item)
++                or item.startswith(("/", "\\", "~"))
++            )
++
++        def _looks_like_deliverable_path(
++            item: str,
++            *,
++            explicit_root: bool = False,
++            quoted: bool = False,
++        ) -> bool:
+             lowered = item.lower()
+-            if lowered.startswith(("http://", "https://")):
+-                continue
+-            if not (
+-                "/" in item
+-                or "\\" in item
+-                or lowered.endswith((".zip", "readme.md", "agent_status.md", "pyproject.toml"))
++            if explicit_root:
++                return True
++            if item.endswith(("/", "\\")):
++                return True
++            if re.search(r"\.(?:py|md|txt|json|toml|yaml|yml|ipynb|zip)$", lowered):
++                return True
++            if quoted and (_is_absolute_like(item) or "/" in item or "\\" in item):
++                return True
++            return False
++
++        explicit_roots: Set[str] = set()
++        root_context_pattern = re.compile(
++            r"\b(?:folder|directory|project|workspace|repo|repository|root)\s+"
++            r"(?:at|in|under|to|is|:)?\s*"
++            r"(?:`([^`]+)`|'([^']+)'|\"([^\"]+)\"|"
++            r"((?:[A-Za-z]:[\\/]|[\\/]|~[\\/])[A-Za-z0-9_.+-]+"
++            r"(?:[\\/][A-Za-z0-9_.+-]+)*))",
++            re.IGNORECASE,
++        )
++        for groups in root_context_pattern.findall(requested):
++            raw = next((group for group in groups if group), "")
++            item = _clean(raw)
++            if item:
++                explicit_roots.add(item)
++                candidates.add(item)
++
++        quoted_path_pattern = re.compile(
++            r"[`'\"]("
++            r"(?:[A-Za-z]:[\\/]|[\\/]|~[\\/])?[A-Za-z0-9_.+ -]+"
++            r"(?:[\\/][A-Za-z0-9_.+ -]+)+/?"
++            r"|[A-Za-z0-9_.+ -]+\.(?:py|md|txt|json|toml|yaml|yml|ipynb|zip)"
++            r")[`'\"]"
++        )
++        plain_path_pattern = re.compile(
++            r"(?<![A-Za-z0-9_.+/\\-])("
++            r"(?:[A-Za-z]:[\\/]|[\\/]|~[\\/])?[A-Za-z0-9_.+-]+"
++            r"(?:[\\/][A-Za-z0-9_.+-]+)+/?"
++            r"|[A-Za-z0-9_.+-]+\.(?:py|md|txt|json|toml|yaml|yml|ipynb|zip)"
++            r")(?![A-Za-z0-9_.+/\\-])"
++        )
++        for pattern, quoted in ((quoted_path_pattern, True), (plain_path_pattern, False)):
++            for raw in pattern.findall(requested):
++                item = _clean(raw)
++                lowered = item.lower()
++                if (
++                    item
++                    and not lowered.startswith(("http://", "https://"))
++                    and _looks_like_deliverable_path(
++                        item,
++                        explicit_root=item in explicit_roots,
++                        quoted=quoted,
++                    )
++                ):
++                    candidates.add(item)
++
++        roots: List[str] = []
++        workspace_abs = os.path.abspath(os.path.expanduser(workspace or os.getcwd()))
++        roots.append(workspace_abs)
++        for item in sorted(candidates):
++            expanded = os.path.abspath(os.path.expanduser(item))
++            if (
++                item in explicit_roots
++                and _is_absolute_like(item)
++                and os.path.isdir(expanded)
++                and expanded not in roots
+             ):
+-                continue
+-            candidates.add(item)
++                roots.append(expanded)
+ 
+         missing: List[str] = []
+         for item in sorted(candidates):
+             rel = item.replace("\\", os.sep).replace("/", os.sep)
+-            path = rel if os.path.isabs(rel) else os.path.join(workspace, rel)
++            expanded = os.path.abspath(os.path.expanduser(rel))
++            if _is_absolute_like(item):
++                paths = [expanded]
++            else:
++                paths = [os.path.join(root, rel) for root in roots]
+             if item.endswith(("/", "\\")):
+-                exists = os.path.isdir(path)
++                exists = any(os.path.isdir(path) for path in paths)
+             else:
+-                exists = os.path.exists(path)
++                exists = any(os.path.exists(path) for path in paths)
+             if not exists:
+                 missing.append(item)
+         return missing
+@@ -2740,7 +2811,13 @@ class QueryEngine:
+             )
+         ):
+             return ""
+-        log_dir = os.path.join(workspace, ".sageagent_state")
++        try:
++            from runtime.config import CONFIG
++            from runtime.workspace import state_dir
++
++            log_dir = str(state_dir(workspace, CONFIG))
++        except Exception:
++            log_dir = os.path.join(workspace, ".sageagent_state")
+         log_path = os.path.join(log_dir, "final_claim_pytest.log")
+         try:
+             os.makedirs(log_dir, exist_ok=True)
+diff --git a/compact_v5/memory.md b/compact_v5/memory.md
+index 041582c..7ae4b28 100644
+--- a/compact_v5/memory.md
++++ b/compact_v5/memory.md
+@@ -64,6 +64,13 @@ Reusable lesson:
+   one proving the engine/tool dispatch path can actually reach that callback.
+ - Session persistence has two truths: model-visible context and user-visible
+   transcript. Test both when claiming v4 session parity.
++- Rerunning the notebook UI cell must be a real refresh path. Clear stale cell
++  output before constructing new widget models, reload launcher/UI modules, and
++  keep the single combined config/chat widget as the normal path.
++- Project evidence now belongs in `<project>/compact_v5_wip/`: AGENT_STATUS,
++  memory, docs/logs, docs/reviews, todos/tasks, gates, tool results, shell jobs,
++  sessions, and audit logs. The project/repo remains the file-operation
++  workspace; the WIP folder is the agent evidence home.
+ - Follow-up prompts have a continuity contract. When the user says "pick two"
+   after a list, the agent should choose from the known list first, not re-run a
+   broad discovery scan.
+@@ -79,6 +86,24 @@ Reusable lesson:
+   structured tool/progress visibility, reviewer discipline, status tracking,
+   cache/cost awareness, and subagent observability matter; terminal UI and
+   unrelated delivery-surface features do not need to be copied.
++- Final-claim path guards must parse deliverable paths conservatively. Do not
++  treat prose like `add/list` or `cost/context` as paths, and when the user
++  gives an explicit project root, verify relative deliverables under that root.
++- SageMaker/POSIX bash verification commands often use `*.py`; v5 now routes
++  local commands containing `*` through the shell, which fixes the production
++  POSIX/SageMaker case. Windows shell glob semantics are platform-specific, so
++  prefer `find`/`glob` in cross-platform tests.
++- Deep Runnable Claude Code comparison on 2026-05-12 used
++  `D:\Github\gg_claude_code\gg-claude-code-runnable` as the real local
++  reference. The useful lessons for v5 are control-plane lessons, not terminal
++  UI copying: structured shell diagnostics, persisted large-output previews,
++  resume that restores todos/cost/session/cwd state, progress excluded from
++  transcript leaves, runtime-sourced cost/cache/context reports, verification
++  nudges before final summaries, and concrete scoped subagent prompts.
++- The final Haiku 4.5 coding transcript should be remembered as
++  "functionally strong but operationally noisy": v5 completed the software
++  work, but runtime false doubts caused extra verification loops. Improve the
++  runtime signals before changing the model's core coding behavior.
+ 
+ Production-test gate:
+ 
+diff --git a/compact_v5/tools/bash.py b/compact_v5/tools/bash.py
+index 0bf600e..8f16f7a 100644
+--- a/compact_v5/tools/bash.py
++++ b/compact_v5/tools/bash.py
+@@ -51,6 +51,7 @@ Usage:
+ - Workspace boundary: any absolute path mentioned in the command must be inside CONFIG.workspace or one of CONFIG.allowed_paths. /tmp/, /usr/bin/, /usr/local/bin/, /bin/, /opt/ are allowed.
+ - `python_exec` is the canonical Python execution tool — DO NOT use `python -c` via bash (the denylist blocks it explicitly).
+ - Output is captured (stdout + stderr); large outputs are smart-truncated (head 100 + tail 50 lines).
++- In POSIX/SageMaker local shells, globs such as `*.py` are expanded safely by the shell; use `find`/`glob` for large file inventories.
+ - Default timeout 120s, max 600s.
+ - Managed background jobs are available with `background=true`; use `action=poll|wait|kill` and `job_id` to manage them. Logs are stored under `.sageagent_state/shell_jobs/`.
+ - Approval is required before any command runs.
+@@ -168,7 +169,7 @@ def _bash_executor(args: Dict[str, Any], context: Optional[Dict[str, Any]] = Non
+                 cwd=_current_workspace(), env=safe_exec_env(),
+             )
+         else:
+-            needs_shell = bool(re.search(r"[|><;]|&&|\|\||`|\$\(", command))
++            needs_shell = bool(re.search(r"[|><;*]|&&|\|\||`|\$\(", command))
+             if needs_shell:
+                 redir_ok, redir_msg = validate_shell_redirections(command)
+                 if not redir_ok:

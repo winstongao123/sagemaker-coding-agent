@@ -1,0 +1,23 @@
+﻿ _archive/compare_code/gg-claude-code-runnable      |   0
+ compact_v5/AGENT_STATUS.md                         | 168 ++++++++++++++++++++-
+ compact_v5/agent.py                                |  26 ++--
+ compact_v5/chat.ipynb                              |   8 +-
+ compact_v5/chat.md                                 |  33 +++-
+ compact_v5/commands.py                             |  35 +++--
+ compact_v5/core/query_engine.py                    | 117 +++++++++++---
+ compact_v5/entry.py                                |  33 +++-
+ compact_v5/memory.md                               |  25 +++
+ compact_v5/runtime/config.py                       |   4 +
+ compact_v5/runtime/dream.py                        |  11 +-
+ compact_v5/runtime/gate.py                         |  20 ++-
+ compact_v5/runtime/results.py                      |   4 +-
+ compact_v5/runtime/shell_jobs.py                   |   4 +-
+ compact_v5/runtime/state.py                        |  13 +-
+ compact_v5/tests/test_notebook_thin_launcher.py    |   7 +-
+ compact_v5/tools/artifacts.py                      |  15 +-
+ compact_v5/tools/bash.py                           |   3 +-
+ compact_v5/tools/task.py                           |  16 +-
+ compact_v5/ui/chat_ui.py                           |  65 +++++++-
+ compact_v5_ship.zip                                | Bin 513300 -> 521968 bytes
+ .../UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md      |  32 ++--
+ 22 files changed, 543 insertions(+), 96 deletions(-)

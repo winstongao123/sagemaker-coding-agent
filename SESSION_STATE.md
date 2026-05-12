@@ -1,5 +1,31 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-13 — Runnable deep-scan rounds 7-9 + learning archive update (doc-only)
+
+Three more Runnable Claude Code deep-scan rounds appended to
+`compact_v5_test_evidence/final_results/20260513_runnable_additional_deep_scan.md`
+(rounds 7-9 follow Codex's earlier rounds 4-6). Covered: error-retry +
+telemetry + cache-break observability + verify/done gate; permissions +
+sandbox + hooks + banned-subsystem guard + approval UI; file-edit + read +
+notebook + REPL/Ink + skills + plugins + output styles.
+
+Net: 0 new blockers, 6 new confirmed v5 wins (cumulative 14 across rounds
+1-9), 7 post-final-test backlog items (heartbeat in retry, autoDream gate,
+per-turn telemetry events, cache-break diff state machine, image/notebook
+cohesion, output styles, 5-event hooks contract).
+
+Self-review using prior 8-row template:
+`compact_v5_test_evidence/final_results/20260513_rounds_7_9_self_review.md`.
+
+Curated copies mirrored into both
+`learning_archive_20260513/v5_build_learnings/` and
+`software_engineering_learnings/`; READMEs refreshed with new themes + read
+order; archive root README updated with current zip SHA
+`79d04c5d7162da04f4b1a9a1c20f80b2cc901571b7ea90681c8c48009ad99a6c`.
+
+Verdict: v5 stays ready for final SageMaker testing from the current
+`compact_v5_ship.zip`. Doc-only commit; no runtime source changed.
+
 ## 2026-05-04 — SCOPE-DRIFT MITIGATION TOOLKIT CREATED (post-incident, 7 pieces)
 
 Per user "yes" approval after PS_CRITICAL_WORKER_PROBLEM.md showed silent scope narrowing despite 50 prior Codex APPROVE iters. Created 7 mechanical gates so the failure mode cannot recur silently:

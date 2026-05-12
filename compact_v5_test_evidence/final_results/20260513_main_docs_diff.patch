@@ -1,0 +1,367 @@
+﻿diff --git a/compact_v5/AGENT_STATUS.md b/compact_v5/AGENT_STATUS.md
+index 9445c32..a0c1163 100644
+--- a/compact_v5/AGENT_STATUS.md
++++ b/compact_v5/AGENT_STATUS.md
+@@ -263,7 +263,7 @@ Evidence table:
+ | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
+ | Tests | Green. | `python -m pytest compact_v5/tests -q` -> 48 passed. |
+ | Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; combined config/chat UI re-review returned `APPROVE`; final widget-stack no-mutation re-review `notebook_widget_regression_reviews/claude/ROUND_5_WIDGET_STACK_NO_MUTATION_REREVIEW_claude_review.md` returned `APPROVE`. |
+-| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 154 members, `testzip() None`, required members present, forbidden folders absent; current SHA is recorded in `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`. |
++| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, current member count/hash recorded in `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`. |
+ 
+ Latest fix:
+ - Cell 1 no longer installs or upgrades `ipywidgets`, `jupyterlab_widgets`, or
+@@ -360,6 +360,103 @@ Verification:
+ 
+ ---
+ 
++## 2026-05-12 UI Refresh + Project WIP Evidence Fix
++
++Current task state: implemented the user's three follow-up fixes from the
++final SageMaker history/screenshots.
++
++Implemented:
++- Cell 2 is now a rerun-safe refresh cell: it clears stale output, drops cached
++  launcher/UI modules, imports `refresh_ui`, and displays a fresh single
++  combined v4-style UI. This follows the latest v4.10.10 `clear_output` lesson
++  while keeping v5's config/chat controls in one widget.
++- added `runtime/workspace.py` so normal project work keeps the repo as
++  `CONFIG.workspace`, but writes evidence under `<project>/compact_v5_wip/`;
++  runtime-folder launches fall back to `~/sageagent_workspace/compact_v5_wip`.
++- routed AGENT_STATUS, memory, durable todos/tasks, sessions, audit logs,
++  verify/done gate records, tool-result artifacts, shell-job state, subagent
++  receipts, final-claim pytest logs, `docs/logs`, and `docs/reviews` through
++  the project WIP layout.
++- added a legacy fallback for root `AGENT_STATUS.md` / `memory.md` reads so old
++  projects do not silently lose context before migration.
++- todo display now shows symbol markers plus status text; assistant turn
++  blocks now include wall time, input/output tokens, prompt-cache R/W, cost,
++  without-cache cost, cache saved, call count, and thinking state.
++- `/clean` now sweeps the WIP `.sageagent_state` and audit logs, while also
++  checking legacy root paths.
++- updated `chat.md` with the new evidence layout.
++
++Verification:
++- `py -3.10 -m py_compile` passed over changed runtime files.
++- `py -3.10 -m pytest tests -q` -> 58 passed.
++- visual evidence saved:
++  `compact_v5_test_evidence/final_results/20260512_v5_ui_workspace_refresh/ui_refresh_workspace_metrics_embed.png`;
++  checks: `HAS_MODEL_NOT_FOUND False`, `HAS_TODO_DONE True`,
++  `HAS_TODO_SYMBOLS True`, `HAS_METRICS True`.
++- Browser plugin note: the required Node REPL control surface was not available
++  in this Codex session, so visual validation used local Playwright against an
++  embedded ipywidgets HTML fixture.
++- independent Claude CLI subscription review:
++  first review returned `REQUEST_CHANGES` for partial WIP routing; after fixes,
++  `claude_rereview.md` returned `VERDICT: APPROVE` and confirmed all prior
++  HIGH/MEDIUM items closed. API-token env vars were cleared for the review.
++- rebuilt `compact_v5_ship.zip`: 155 members, `testzip() None`; changed source
++  files matched the zip, including new `runtime/workspace.py`.
++
++---
++
++## 2026-05-12 Final Coding Transcript Investigation - Implemented
++
++Current task state: investigated
++`tests/PS_Final_test/final_test_v5_responds.md` for model reasoning, tool use,
++token/cost behavior, and final coding task workflow quality.
++
++Diagnosis:
++- the Haiku 4.5 final coding task mostly succeeded: project files were created,
++  todo/task/reviewer tools were used, tests passed, and evidence was listed;
++- v5 wasted late turns because `_missing_requested_paths` treated prose such as
++  `add/list`, `cost/context`, and process-requirement sentences as paths;
++- relative deliverables were checked under the active runtime workspace even
++  when the user explicitly requested a separate project root;
++- bash verification commands using `*.py` did not expand globs because the bash
++  executor used `shell=False` unless pipes/redirection were present;
++- the final answer's manual cost breakdown was not fully auditable; the UI
++  metrics footer/block metadata should be the source of truth.
++
++Implemented:
++- hardened `core/query_engine.py::_missing_requested_paths` with stricter path
++  extraction, URL stripping, explicit project-root handling, scoped root
++  expansion, and quoted relative directory support;
++- updated `tools/bash.py` so local commands containing `*` route through the
++  shell; the motivating production contract is POSIX/SageMaker glob expansion,
++  and Windows shell semantics remain platform-specific;
++- added `tests/test_final_task_regression_guards.py` covering the transcript
++  false-positive path guard, explicit-root lookup, root scoping, quoted relative
++  directories, and bash glob routing.
++
++Review:
++- Claude CLI subscription review loop was run with API-token env vars cleared;
++- first review returned `REQUEST_CHANGES`;
++- re-review returned `APPROVE`;
++- final review after low-risk refinements returned `APPROVE`.
++
++Verification:
++- focused test: `py -3.10 -m pytest tests\test_final_task_regression_guards.py -q`
++  -> 5 passed;
++- full suite: `py -3.10 -m pytest tests -q` -> 63 passed.
++
++Packaging:
++- rebuilt `compact_v5_ship.zip`: 155 members, no test-only files, `testzip() None`,
++  and changed runtime source files matched the zip.
++
++Evidence:
++- investigation report:
++  `compact_v5_test_evidence/final_results/20260512_v5_final_transcript_review/final_test_v5_responds_investigation.md`;
++- final Claude review:
++  `compact_v5_test_evidence/final_results/20260512_v5_final_transcript_review/claude_final_review.md`.
++
++---
++
+ ## 2026-05-12 S3 Follow-Up Tool Discipline - Implemented
+ 
+ Current task state: fixed the new S3 workflow issue discovered after the
+@@ -426,8 +523,123 @@ Verification:
+ - `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed.
+ 
+ Packaging:
+-- rebuilt `compact_v5_ship.zip` from the active flat tree: 154 members,
+-  `testzip() None`, forbidden members 0, required hash parity true, SHA
+-  `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`;
++- rebuilt `compact_v5_ship.zip` from the active flat tree for the S3 follow-up:
++  154 members, `testzip() None`, forbidden members 0, required hash parity
++  true, SHA `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`;
++  superseded by the later 2026-05-12 rebuild recorded in
++  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`;
+ - refreshed
+   `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`.
++
++---
++
++## 2026-05-12 Runnable Claude Code Deep Dive - Documented
++
++Current task state: completed the requested three-round deep dive into the
++local Runnable Claude Code reference to learn how v5 can improve stability and
++performance without architecture drift.
++
++Runnable reference used:
++- `D:\Github\gg_claude_code\gg-claude-code-runnable`
++
++Three rounds completed:
++- Round 1 shell/tool-output stability: learned that false tool negatives are
++  expensive and should be handled by structured diagnostics, output paths, and
++  bounded previews instead of model guesswork.
++- Round 2 session/resume/state stability: learned that resume must restore
++  control state, not just message text: todos, cost state, session identity,
++  cwd/workspace, transcript path, metadata, and UI/progress separation.
++- Round 3 cost/context/cache/delegation performance: learned that cost and
++  context reports must measure the actual API-bound prompt shape, cache
++  read/write must be first-class, complex todo closure should structurally
++  nudge verification, and subagent prompts must contain concrete scope rather
++  than delegating synthesis.
++
++v5 conclusions:
++- the final Haiku 4.5 coding transcript was functionally strong but
++  operationally noisy;
++- the already-implemented path guard and shell-routed `*` glob fix address the
++  concrete late-loop false doubts seen in the transcript; the motivating
++  acceptance case is POSIX/SageMaker, while Windows shell behavior is not a
++  claimed glob contract;
++- the next high-value improvements are restart/resume audit, artifact-backed
++  large output previews, runtime-sourced final cost tables, context diagnostics
++  after actual prompt transforms, structural verification nudges, direct resume
++  fallback, and subagent cleanup tests.
++
++Evidence:
++- deep dive report:
++  `compact_v5_test_evidence/final_results/20260512_v5_final_transcript_review/runnable_claude_code_deep_dive_v5_stability.md`;
++- investigation report link corrected to the actual local Runnable reference:
++  `D:\Github\gg_claude_code\gg-claude-code-runnable`.
++
++Review/verification:
++- `py -3.10 -m pytest tests -q` -> 63 passed;
++- Claude CLI subscription architecture review first returned `APPROVE` with
++  two medium doc-consistency polish items;
++- fixes clarified POSIX/SageMaker glob scope vs Windows shell semantics and
++  marked the older S3 zip hash as superseded;
++- Claude CLI subscription re-review returned `VERDICT: APPROVE`, with no
++  remaining HIGH/MEDIUM blockers;
++- latest `compact_v5_ship.zip` rebuild is recorded in
++  `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`
++  with member count, `testzip()`, no-tests check, and SHA.
++
++No source-code behavior was changed in this documentation pass. The prior
++runtime fixes remain:
++- `core/query_engine.py` final-claim path guard hardening;
++- `tools/bash.py` shell-routed `*` glob commands for the POSIX/SageMaker
++  acceptance path;
++- `tests/test_final_task_regression_guards.py` regression coverage.
++
++---
++
++## 2026-05-13 Runnable Claude Code Additional Scan + Learning Archive
++
++Current task state: completed three more focused scans of the local Runnable
++Claude Code reference and organized recent learning evidence into a cleaner
++archive without moving/removing the original evidence files.
++
++Runnable reference used:
++- `D:\Github\gg_claude_code\gg-claude-code-runnable`
++
++Additional scan rounds:
++- Round 4 cache/context/compaction determinism: Runnable freezes cache-affecting
++  headers, persists large tool outputs once per tool id, stores exact preview
++  replacements, and distinguishes main-thread versus subagent cleanup.
++- Round 5 plan/permission/safety boundaries: Runnable uses plan mode for real
++  ambiguity, semantic permission categories for approved work, dangerous shell
++  permission detection, and no-I/O pre-permission path checks.
++- Round 6 verification/tool-choice/quality gates: Runnable's prompts require
++  behavior verification, faithful reporting, dedicated tool preference, and
++  independent adversarial verification for non-trivial implementation.
++
++Main conclusion:
++- No new blocker was found for final SageMaker testing.
++- The added scan strengthens the post-final-test roadmap:
++  `context_cache_audit`, stable large-output preview records,
++  `permission_receipt`, and `final_task_quality_gate`.
++- These are improvements, not current final-test blockers.
++
++Learning archive created:
++- `compact_v5_test_evidence/final_results/learning_archive_20260513/README.md`
++- `compact_v5_test_evidence/final_results/learning_archive_20260513/v5_build_learnings/`
++- `compact_v5_test_evidence/final_results/learning_archive_20260513/software_engineering_learnings/`
++
++Important organization note:
++- Originals were intentionally kept in place so older review/status links keep
++  working. The learning archive is a curated pickup surface, not a replacement
++  for raw evidence.
++
++Evidence:
++- new scan:
++  `compact_v5_test_evidence/final_results/20260513_runnable_additional_deep_scan.md`;
++- v5 build folder includes current readiness, Runnable scans, notebook widget,
++  S3, final transcript, solve-all, and zip verification docs;
++- software engineering folder includes future software-development lessons,
++  missed-issues root cause, Runnable scans, and final transcript investigation.
++
++Readiness judgment before final verification in this turn:
++- v5 is ready for final SageMaker testing from the current source/zip, subject
++  to the honest target-environment caveat: final proof requires a fresh-kernel
++  target SageMaker run of Cells 1-2 and the acceptance prompts.
+diff --git a/compact_v5/chat.md b/compact_v5/chat.md
+index 5251d41..8134836 100644
+--- a/compact_v5/chat.md
++++ b/compact_v5/chat.md
+@@ -37,8 +37,11 @@ from sagemaker_agent import CONFIG, BEDROCK_MODELS, create_chat_ui
+ | `sagemaker_agent.py` | v4-compatible shim. |
+ | `agent.py` | Public `Agent` wrapper. |
+ | `commands.py` | Slash command dispatcher. |
+-| `AGENT_STATUS.md` | Durable project/task status loaded into context. |
+-| `memory.md` | Durable memory loaded into context and updated by memory flows. |
++| `compact_v5_wip/AGENT_STATUS.md` | Durable project/task status loaded into context for the selected workspace. |
++| `compact_v5_wip/memory.md` | Durable project memory loaded into context and updated by memory flows. |
++| `compact_v5_wip/docs/logs/` | Project command/test logs and other human-readable evidence. |
++| `compact_v5_wip/docs/reviews/` | Reviewer/subagent output that should travel with the project. |
++| `compact_v5_wip/.sageagent_state/` | Agent diagnostics: todos, tasks, gates, tool results, shell jobs, recovery state. |
+ | `core/` | Query engine, compaction, cache, budget, retry, formatting. |
+ | `runtime/` | Bedrock client, config, session, tokens, telemetry, snapshots, gates. |
+ | `tools/` | Read, write, edit, shell, notebook, task, result replay, skills. |
+@@ -100,6 +103,32 @@ Use slash commands in the chat box.
+ | Clean | Removes local non-session traces such as audit logs, snapshots, indexes, and temp output; saved sessions are kept. |
+ | Sub-Agent Models | Opens five v4-style child model dropdowns: `explore`, `review`, `general`, `build`, and `plan`. Each can use `Same as main` or any `BEDROCK_MODELS` entry. The choice writes to `CONFIG.agent_overrides`; it does not push prompt text into the model. |
+ 
++## Workspace Evidence Layout
++
++Keep the Workspace control pointed at your project/repo folder. v5 now keeps the
++repo itself as the tool workspace, but writes agent evidence under:
++
++```text
++<project>/compact_v5_wip/
++  AGENT_STATUS.md
++  memory.md
++  docs/
++    logs/
++    reviews/
++  .sageagent_state/
++    todos.json
++    tasks.json
++    gates/
++    tool_results/
++    shell_jobs/
++  sessions/
++  audit_logs/
++```
++
++If you accidentally launch from the v5 runtime folder, v5 defaults to
++`~/sageagent_workspace/compact_v5_wip` so project records do not land inside
++the runtime source tree.
++
+ ## Skills
+ 
+ Production skills included in the company zip:
+@@ -220,6 +249,16 @@ The company ship zip is intentionally small. It does not include:
+ 
+ Those files stay in the repository for traceability. The zip contains only the runtime package and the user-facing notebook guide.
+ 
++## Learning Archive
++
++Recent v5 and software-engineering lessons are curated under:
++
++- `compact_v5_test_evidence/final_results/learning_archive_20260513/v5_build_learnings/`
++- `compact_v5_test_evidence/final_results/learning_archive_20260513/software_engineering_learnings/`
++
++The archive copies and indexes the most relevant recent docs while preserving
++the original evidence paths, so old review/status links keep working.
++
+ ## Live Supervisor UI
+ 
+ The notebook chat is now a live supervisor surface:
+diff --git a/compact_v5/memory.md b/compact_v5/memory.md
+index 041582c..e4baf0a 100644
+--- a/compact_v5/memory.md
++++ b/compact_v5/memory.md
+@@ -64,6 +64,13 @@ Reusable lesson:
+   one proving the engine/tool dispatch path can actually reach that callback.
+ - Session persistence has two truths: model-visible context and user-visible
+   transcript. Test both when claiming v4 session parity.
++- Rerunning the notebook UI cell must be a real refresh path. Clear stale cell
++  output before constructing new widget models, reload launcher/UI modules, and
++  keep the single combined config/chat widget as the normal path.
++- Project evidence now belongs in `<project>/compact_v5_wip/`: AGENT_STATUS,
++  memory, docs/logs, docs/reviews, todos/tasks, gates, tool results, shell jobs,
++  sessions, and audit logs. The project/repo remains the file-operation
++  workspace; the WIP folder is the agent evidence home.
+ - Follow-up prompts have a continuity contract. When the user says "pick two"
+   after a list, the agent should choose from the known list first, not re-run a
+   broad discovery scan.
+@@ -79,6 +86,36 @@ Reusable lesson:
+   structured tool/progress visibility, reviewer discipline, status tracking,
+   cache/cost awareness, and subagent observability matter; terminal UI and
+   unrelated delivery-surface features do not need to be copied.
++- Final-claim path guards must parse deliverable paths conservatively. Do not
++  treat prose like `add/list` or `cost/context` as paths, and when the user
++  gives an explicit project root, verify relative deliverables under that root.
++- SageMaker/POSIX bash verification commands often use `*.py`; v5 now routes
++  local commands containing `*` through the shell, which fixes the production
++  POSIX/SageMaker case. Windows shell glob semantics are platform-specific, so
++  prefer `find`/`glob` in cross-platform tests.
++- Deep Runnable Claude Code comparison on 2026-05-12 used
++  `D:\Github\gg_claude_code\gg-claude-code-runnable` as the real local
++  reference. The useful lessons for v5 are control-plane lessons, not terminal
++  UI copying: structured shell diagnostics, persisted large-output previews,
++  resume that restores todos/cost/session/cwd state, progress excluded from
++  transcript leaves, runtime-sourced cost/cache/context reports, verification
++  nudges before final summaries, and concrete scoped subagent prompts.
++- The final Haiku 4.5 coding transcript should be remembered as
++  "functionally strong but operationally noisy": v5 completed the software
++  work, but runtime false doubts caused extra verification loops. Improve the
++  runtime signals before changing the model's core coding behavior.
++- 2026-05-13 added three more Runnable scan rounds. Extra lessons: cache and
++  context decisions should be deterministic across compact/resume; large-output
++  preview replacement must store the exact preview shown to the model; plan mode
++  belongs to genuine ambiguity rather than ordinary clear tasks; permission
++  receipts should be scoped and auditable; verification must prove behavior and
++  cite commands, not merely confirm files exist. These are post-final-test
++  roadmap items, not blockers for current SageMaker final testing.
++- Recent learning evidence is now curated under
++  `compact_v5_test_evidence/final_results/learning_archive_20260513/` with two
++  folders: `v5_build_learnings/` for product/runtime v5 lessons and
++  `software_engineering_learnings/` for broader coding-agent lessons. Originals
++  remain in place so historical review links still work.
+ 
+ Production-test gate:
+ 

@@ -1,0 +1,507 @@
+﻿diff --git a/compact_v5/agent.py b/compact_v5/agent.py
+index b6a2b2a..1e80d5a 100644
+--- a/compact_v5/agent.py
++++ b/compact_v5/agent.py
+@@ -37,16 +37,15 @@ def _load_agent_status_text() -> Optional[str]:
+     Returns None silently when the file is missing or disabled — the
+     handoff path is a v4 capability that gracefully degrades.
+     """
+-    import os
+     from runtime.config import CONFIG
++    from runtime.workspace import status_path
+     if not getattr(CONFIG, "enable_status_doc", True):
+         return None
+-    status_path = os.path.join(CONFIG.workspace, CONFIG.status_doc)
+-    if not os.path.isfile(status_path):
++    path = status_path(config=CONFIG)
++    if not path.is_file():
+         return None
+     try:
+-        with open(status_path, "r", encoding="utf-8") as f:
+-            text = f.read()
++        text = path.read_text(encoding="utf-8", errors="replace")
+     except OSError:
+         return None
+     text = text.strip()
+@@ -60,14 +59,13 @@ def _load_agent_status_text() -> Optional[str]:
+ 
+ def _load_agent_memory_text() -> Optional[str]:
+     """Return the contents of `<workspace>/memory.md`, or None."""
+-    import os
+     from runtime.config import CONFIG
+-    memory_path = os.path.join(CONFIG.workspace, "memory.md")
+-    if not os.path.isfile(memory_path):
++    from runtime.workspace import memory_path
++    path = memory_path(config=CONFIG)
++    if not path.is_file():
+         return None
+     try:
+-        with open(memory_path, "r", encoding="utf-8") as f:
+-            text = f.read()
++        text = path.read_text(encoding="utf-8", errors="replace")
+     except OSError:
+         return None
+     text = text.strip()
+diff --git a/compact_v5/chat.ipynb b/compact_v5/chat.ipynb
+index 40b85ab..d75c5ff 100644
+--- a/compact_v5/chat.ipynb
++++ b/compact_v5/chat.ipynb
+@@ -50,6 +50,10 @@
+     "# Cell 2: launch the single v4-style v5 UI.\n",
+     "import sys\n",
+     "from pathlib import Path\n",
++    "from IPython.display import clear_output\n",
++    "\n",
++    "# Rerunning this cell is the supported UI refresh path.\n",
++    "clear_output(wait=True)\n",
+     "\n",
+     "for _p in [Path.cwd(), Path.cwd() / \"compact_v5\", Path.cwd() / \"sagemaker-coding-agent\" / \"compact_v5\"]:\n",
+     "    if (_p / \"entry.py\").is_file():\n",
+@@ -61,8 +65,8 @@
+     "for _m in [\"ui.chat_ui\", \"ui.widgets\", \"entry\"]:\n",
+     "    sys.modules.pop(_m, None)\n",
+     "\n",
+-    "from entry import launch_ui\n",
+-    "ui = launch_ui(use_widgets=True)\n"
++    "from entry import refresh_ui  # wraps launch_ui\n",
++    "ui = refresh_ui(use_widgets=True)\n"
+    ]
+   },
+   {
+diff --git a/compact_v5/commands.py b/compact_v5/commands.py
+index 7173022..7ea7c74 100644
+--- a/compact_v5/commands.py
++++ b/compact_v5/commands.py
+@@ -482,28 +482,27 @@ def cmd_context(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResul
+ 
+ def cmd_status(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
+     from runtime.config import CONFIG
++    from runtime.workspace import ensure_project_layout, status_path
+     sub = args.strip()
++    path = status_path(config=CONFIG)
+     if sub == "path":
+         return CommandResult(
+-            text=f"AGENT_STATUS path: {os.path.join(CONFIG.workspace, CONFIG.status_doc)}"
++            text=f"AGENT_STATUS path: {path}"
+         )
+     if sub == "init":
+-        path = os.path.join(CONFIG.workspace, CONFIG.status_doc)
+-        if not os.path.exists(path):
++        ensure_project_layout(config=CONFIG, create_status=False)
++        if not path.exists():
+             try:
+-                with open(path, "w", encoding="utf-8") as f:
+-                    f.write("# Agent Status\n\n_(empty)_\n")
++                path.write_text("# Agent Status\n\n_(empty)_\n", encoding="utf-8")
+                 return CommandResult(text=f"Created {path}", side_effect="status_init")
+             except OSError as e:
+                 return CommandResult(text=f"Init failed: {e}")
+         return CommandResult(text=f"Status doc already exists at {path}")
+     # Default: dump the current AGENT_STATUS contents.
+-    path = os.path.join(CONFIG.workspace, CONFIG.status_doc)
+-    if not os.path.isfile(path):
++    if not path.is_file():
+         return CommandResult(text="(no AGENT_STATUS.md found; use /status init)")
+     try:
+-        with open(path, "r", encoding="utf-8") as f:
+-            text = f.read()
++        text = path.read_text(encoding="utf-8", errors="replace")
+     except OSError as e:
+         return CommandResult(text=f"Cannot read status: {e}")
+     return CommandResult(text=f"=== AGENT_STATUS.md ===\n{text}")
+@@ -696,15 +695,17 @@ def cmd_simplify(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResu
+ def cmd_init(args: str, ctx: Optional[Dict[str, Any]] = None) -> CommandResult:
+     """Initialize workspace AGENT_STATUS + skills dirs."""
+     from runtime.config import CONFIG
++    from runtime.workspace import ensure_project_layout, status_path
+     workspace = CONFIG.workspace
+-    status_path = os.path.join(workspace, CONFIG.status_doc)
+     skills_dir = os.path.join(workspace, "skills")
+     created: List[str] = []
+-    if not os.path.exists(status_path):
++    wip = ensure_project_layout(config=CONFIG, create_status=False)
++    created.append(os.path.relpath(str(wip), workspace) + "/")
++    sp = status_path(config=CONFIG)
++    if not sp.exists():
+         try:
+-            with open(status_path, "w", encoding="utf-8") as f:
+-                f.write("# Agent Status\n\n_(empty)_\n")
+-            created.append(CONFIG.status_doc)
++            sp.write_text("# Agent Status\n\n_(empty)_\n", encoding="utf-8")
++            created.append(os.path.relpath(str(sp), workspace))
+         except OSError as e:
+             return CommandResult(text=f"Init failed: {e}")
+     if not os.path.isdir(skills_dir):
+diff --git a/compact_v5/entry.py b/compact_v5/entry.py
+index 9d730d3..5efa9dc 100644
+--- a/compact_v5/entry.py
++++ b/compact_v5/entry.py
+@@ -141,6 +141,18 @@ def _label_for_model(model_id):
+     return BEDROCK_MODELS[0][0]
+ 
+ 
++def _default_notebook_workspace():
++    try:
++        from runtime.workspace import default_user_workspace, looks_like_runtime_workspace
++
++        current = str(getattr(CONFIG, "workspace", "") or "")
++        if not current or looks_like_runtime_workspace(current):
++            return default_user_workspace(CONFIG)
++        return current
++    except Exception:
++        return "."
++
++
+ def _make_notebook_controls(widgets=None):
+     model_labels = [label for label, _ in BEDROCK_MODELS]
+     default_model = _label_for_model(getattr(CONFIG, "model_id", BEDROCK_MODELS[0][1]))
+@@ -154,7 +166,7 @@ def _make_notebook_controls(widgets=None):
+             "thinking_budget": _NotebookValue("4096 - Standard"),
+             "max_turns": _NotebookValue(60),
+             "iteration_budget": _NotebookValue(600),
+-            "workspace": _NotebookValue("."),
++            "workspace": _NotebookValue(_default_notebook_workspace()),
+             "mock_mode": _NotebookValue(False),
+             "thinking": _NotebookValue(False),
+             "bedrock_only": _NotebookValue(True),
+@@ -201,7 +213,7 @@ def _make_notebook_controls(widgets=None):
+             layout=widgets.Layout(width="400px"),
+         ),
+         "workspace": widgets.Text(
+-            value=".",
++            value=_default_notebook_workspace(),
+             description="Workspace:",
+             placeholder="Directory for file operations",
+             style={"description_width": "120px"},
+@@ -287,6 +299,12 @@ def _apply_notebook_config(config_ui=None):
+     CONFIG.aws_bedrock_only = bool(_widget_value(controls["bedrock_only"]))
+     CONFIG.session_cost_limit = 5.0
+     CONFIG.enable_skill_auto_trigger = False
++    try:
++        from runtime.workspace import configure_workspace_paths
++
++        configure_workspace_paths(CONFIG, ensure=True)
++    except Exception:
++        pass
+     return CONFIG
+ 
+ 
+@@ -435,6 +453,17 @@ def launch_ui(use_widgets: bool = True, **overrides):
+     _LAST_NOTEBOOK_CONFIG_UI = state
+     return create_chat_ui(force_console=not bool(use_widgets))
+ 
++
++def refresh_ui(use_widgets: bool = True, **overrides):
++    """Rerun-safe notebook refresh helper for a stale/broken widget cell."""
++    try:
++        from IPython.display import clear_output
++
++        clear_output(wait=True)
++    except Exception:
++        pass
++    return launch_ui(use_widgets=use_widgets, **overrides)
++
+ # Skill manager helper for power users who want to inspect / activate
+ # skills programmatically (Phase 10).
+ from skills.manager import SkillManager  # noqa: F401
+diff --git a/compact_v5/runtime/config.py b/compact_v5/runtime/config.py
+index 6e77e25..a345716 100644
+--- a/compact_v5/runtime/config.py
++++ b/compact_v5/runtime/config.py
+@@ -46,6 +46,9 @@ class Config:
+     # package itself is the current workspace. Runtime state/audit/session
+     # roots intentionally remain under workspace.
+     user_artifacts_root: str = os.path.join(os.path.expanduser("~"), "sageagent_workspace")
++    # Human-readable project evidence, durable todos/tasks, sessions, and
++    # audit logs are grouped here under the selected workspace.
++    project_wip_dir: str = "compact_v5_wip"
+ 
+     # Limits
+     max_turns: int = 60
+@@ -234,6 +237,7 @@ def _apply_config_file(config: Config) -> None:
+     _SCALAR_FIELDS: Dict[str, type] = {
+         "region": str, "model_id": str, "max_turns": int, "max_tokens": int,
+         "user_artifacts_root": str,
++        "project_wip_dir": str,
+         "max_history": int, "temperature": float, "thinking_enabled": bool,
+         "thinking_budget": int, "disable_thinking_for_simple_s3_inventory": bool, "mock_mode": bool,
+         "bash_allow_interpreters": bool, "bash_allow_docker": bool,
+diff --git a/compact_v5/runtime/state.py b/compact_v5/runtime/state.py
+index c37a724..56498eb 100644
+--- a/compact_v5/runtime/state.py
++++ b/compact_v5/runtime/state.py
+@@ -72,7 +72,9 @@ class DurableStateManager:
+ 
+     @property
+     def state_dir(self) -> Path:
+-        return self.workspace / ".sageagent_state"
++        from runtime.workspace import state_dir
++
++        return state_dir(str(self.workspace), self._config)
+ 
+     @property
+     def todos_path(self) -> Path:
+@@ -95,7 +97,14 @@ class DurableStateManager:
+         return self.state_dir / "last_turn.json"
+ 
+     def _read_text_file(self, relative_name: str, max_chars: int) -> Dict[str, Any]:
+-        path = (self.workspace / relative_name).resolve()
++        from runtime.workspace import memory_path, status_path
++
++        if relative_name == "memory.md":
++            path = memory_path(str(self.workspace), self._config).resolve()
++        elif relative_name == getattr(self._config, "status_doc", "AGENT_STATUS.md"):
++            path = status_path(str(self.workspace), self._config).resolve()
++        else:
++            path = (self.workspace / relative_name).resolve()
+         exists = path.is_file()
+         text = ""
+         if exists:
+diff --git a/compact_v5/tests/test_notebook_thin_launcher.py b/compact_v5/tests/test_notebook_thin_launcher.py
+index 0cfa4bd..62760a1 100644
+--- a/compact_v5/tests/test_notebook_thin_launcher.py
++++ b/compact_v5/tests/test_notebook_thin_launcher.py
+@@ -17,6 +17,7 @@ from entry import (
+     launch_ui,
+ )
+ from ui.chat_ui import V4WidgetChatUI
++from runtime.workspace import expand_path
+ 
+ 
+ def test_chat_notebook_launcher_cells_stay_thin():
+@@ -70,7 +71,7 @@ def test_notebook_config_helper_applies_console_safe_defaults():
+     }
+     try:
+         _apply_notebook_config(state)
+-        assert CONFIG.workspace == "workspace-x"
++        assert CONFIG.workspace == expand_path("workspace-x")
+         assert CONFIG.mock_mode is True
+         assert CONFIG.thinking_enabled is False
+         assert CONFIG.aws_bedrock_only is True
+@@ -126,7 +127,7 @@ def test_combined_launch_ui_defaults_to_v4_widget_ui():
+         entry.create_chat_ui = fake_create_chat_ui
+         assert launch_ui(use_widgets=True, workspace="workspace-y", max_turns=120) == "combined-widget-ui"
+         assert captured["force_console"] is False
+-        assert CONFIG.workspace == "workspace-y"
++        assert CONFIG.workspace == expand_path("workspace-y")
+         assert CONFIG.max_turns == 120
+     finally:
+         entry.create_chat_ui = old_factory
+@@ -167,7 +168,7 @@ def test_notebook_control_defaults_match_production_docs():
+     assert controls["mock_mode"].value is False
+     assert controls["thinking"].value is False
+     assert controls["bedrock_only"].value is True
+-    assert controls["workspace"].value == "."
++    assert controls["workspace"].value.endswith("sageagent_workspace\\compact_v5_wip") or controls["workspace"].value.endswith("sageagent_workspace/compact_v5_wip")
+     assert controls["max_turns"].value == 60
+     assert controls["iteration_budget"].value == 600
+ 
+diff --git a/compact_v5/tools/artifacts.py b/compact_v5/tools/artifacts.py
+index f3c3cc8..9a77ceb 100644
+--- a/compact_v5/tools/artifacts.py
++++ b/compact_v5/tools/artifacts.py
+@@ -36,11 +36,16 @@ def user_artifacts_root(config: Any = None) -> str:
+ 
+ 
+ def _looks_like_runtime_workspace(path: str) -> bool:
+-    normalized = os.path.abspath(path or os.getcwd()).replace("\\", "/").lower()
+-    base = os.path.basename(normalized.rstrip("/"))
+-    if base in {"compact_v5", "compact_v5_ship"}:
+-        return True
+-    return normalized.endswith("/sagemaker-coding-agent/compact_v5")
++    try:
++        from runtime.workspace import looks_like_runtime_workspace
++
++        return looks_like_runtime_workspace(path)
++    except Exception:
++        normalized = os.path.abspath(path or os.getcwd()).replace("\\", "/").lower()
++        base = os.path.basename(normalized.rstrip("/"))
++        if base in {"compact_v5", "compact_v5_ship"}:
++            return True
++        return normalized.endswith("/sagemaker-coding-agent/compact_v5")
+ 
+ 
+ def should_rebase_user_artifact(filepath: str, config: Any = None) -> bool:
+diff --git a/compact_v5/tools/task.py b/compact_v5/tools/task.py
+index 14269c3..90267d8 100644
+--- a/compact_v5/tools/task.py
++++ b/compact_v5/tools/task.py
+@@ -167,21 +167,29 @@ def _persist_subagent_receipts(
+     )
+ 
+     paths: list[str] = []
+-    state_path = os.path.join(workspace, ".sageagent_state", "subagents", filename)
++    try:
++        from runtime.workspace import docs_dir, state_dir
++
++        state_root = str(state_dir(workspace, CONFIG))
++        docs_root = str(docs_dir(workspace, CONFIG))
++    except Exception:
++        state_root = os.path.join(workspace, ".sageagent_state")
++        docs_root = os.path.join(workspace, "docs")
++
++    state_path = os.path.join(state_root, "subagents", filename)
+     try:
+         _atomic_write_text(state_path, receipt)
+         paths.append(state_path)
+     except Exception:
+         pass
+ 
+-    docs_dir = os.path.join(workspace, "docs")
+-    review_path = os.path.join(docs_dir, "reviews", filename)
++    review_path = os.path.join(docs_root, "reviews", filename)
+     try:
+         _atomic_write_text(review_path, receipt)
+         paths.append(review_path)
+     except Exception:
+         pass
+-    log_path = os.path.join(docs_dir, "logs", "subagent_artifacts.log")
++    log_path = os.path.join(docs_root, "logs", "subagent_artifacts.log")
+     try:
+         existing = ""
+         if os.path.exists(log_path):
+diff --git a/compact_v5/ui/chat_ui.py b/compact_v5/ui/chat_ui.py
+index 7e5bca6..2f81835 100644
+--- a/compact_v5/ui/chat_ui.py
++++ b/compact_v5/ui/chat_ui.py
+@@ -24,6 +24,7 @@ import logging
+ import json
+ import re
+ import threading
++import time
+ from datetime import datetime
+ from typing import Any, Dict, Optional
+ 
+@@ -840,13 +841,23 @@ class V4WidgetChatUI(WidgetChatUI):
+             )
+             return
+         rows = []
++        icons = {
++            "completed": "✅",
++            "in_progress": "🔄",
++            "blocked": "⛔",
++            "cancelled": "✖",
++            "pending": "⬜",
++        }
+         for item in todos[:12]:
+             status = str(item.get("status", "pending"))
+             content = self._escape(item.get("content", ""))
+             color = "#4caf50" if status == "completed" else ("#ff9800" if status == "in_progress" else c["muted"])
++            icon = icons.get(status, "⬜")
+             rows.append(
+                 f"<div style='padding:2px 0;color:{color};font-size:12px;'>"
+-                f"{self._escape(status)} - {content}</div>"
++                f"<span aria-hidden='true'>{icon}</span> "
++                f"<span style='font-size:11px;text-transform:uppercase;'>{self._escape(status)}</span> "
++                f"{content}</div>"
+             )
+         if len(todos) > 12:
+             rows.append(
+@@ -1040,10 +1051,12 @@ class V4WidgetChatUI(WidgetChatUI):
+         calls = int(meta.get("api_calls", 0) or 0)
+         cost = float(meta.get("cost_usd", 0.0) or 0.0)
+         saved = float(meta.get("cache_saved_usd", 0.0) or 0.0)
++        duration = float(meta.get("duration_s", 0.0) or 0.0)
+         without_cache = cost + saved
+         reasoning_state = self._escape(meta.get("reasoning_state", "Thinking OFF"))
++        duration_part = f"Time {duration:.1f}s | " if duration > 0 else ""
+         summary = (
+-            f"In {input_tokens:,} | Out {output_tokens:,} | "
++            f"{duration_part}In {input_tokens:,} | Out {output_tokens:,} | "
+             f"Prompt Cache R/W {cache_read:,}/{cache_write:,} | "
+             f"Cost ${cost:.4f} | Without cache ${without_cache:.4f} | "
+             f"Cache saved <b style='color:#4caf50'>${saved:.4f}</b> | "
+@@ -1124,6 +1137,7 @@ class V4WidgetChatUI(WidgetChatUI):
+         )
+         thinking_state = "ON" if bool(effective_thinking) else "OFF"
+         thinking_budget = int(getattr(self.agent, "thinking_budget", 4096) or 4096)
++        duration_s = max(0.0, float(after.get("_wall_time_s", 0.0) or 0.0) - float(before.get("_wall_time_s", 0.0) or 0.0))
+         return {
+             "input_tokens": int(_num("session_input")),
+             "output_tokens": int(_num("session_output")),
+@@ -1137,6 +1151,7 @@ class V4WidgetChatUI(WidgetChatUI):
+                 - float(before.get("_cache_savings_usd", 0.0) or 0.0),
+             ),
+             "reasoning_state": f"Thinking {thinking_state} (budget {thinking_budget})",
++            "duration_s": duration_s,
+         }
+ 
+     def _append_message(
+@@ -1649,6 +1664,7 @@ class V4WidgetChatUI(WidgetChatUI):
+             streamed = []
+             self._live_assistant_index = None
+             before_stats = self._stats_snapshot()
++            before_stats["_wall_time_s"] = time.perf_counter()
+             result = self.agent.run(
+                 msg,
+                 output_fn=lambda s: self._live_output_router(s, streamed),
+@@ -1656,6 +1672,7 @@ class V4WidgetChatUI(WidgetChatUI):
+                 ask_user_response_provider=self._request_user_input,
+             )
+             after_stats = self._stats_snapshot()
++            after_stats["_wall_time_s"] = time.perf_counter()
+             turn_meta = self._turn_meta_from_stats(before_stats, after_stats, result)
+             if self._live_assistant_index is not None and result.text:
+                 self._set_message_meta(self._live_assistant_index, turn_meta)
+@@ -1830,9 +1847,23 @@ class V4WidgetChatUI(WidgetChatUI):
+     def _on_workspace_change(self, change) -> None:
+         try:
+             from runtime.config import CONFIG
++            from runtime.workspace import configure_workspace_paths
+             CONFIG.workspace = str(change["new"] or ".")
++            configure_workspace_paths(CONFIG, ensure=True)
++            try:
++                from runtime.session import SESSIONS
++                SESSIONS.sessions_dir = CONFIG.sessions_dir
++            except Exception:
++                pass
++            try:
++                from runtime.audit import AUDIT
++                AUDIT.audit_dir = CONFIG.audit_dir
++            except Exception:
++                pass
+         except Exception:
+             pass
++        self._append_message("system", f"Workspace set to {self._escape(str(change.get('new', '') or '.'))}; evidence in compact_v5_wip/.")
++        self._refresh_sessions()
+         self._render_header()
+         self._render_status()
+ 
+@@ -2006,6 +2037,16 @@ class V4WidgetChatUI(WidgetChatUI):
+             print("UI created. Open this in Jupyter/Studio to render widgets.")
+         return self
+ 
++    def refresh(self) -> "V4WidgetChatUI":
++        """Clear stale cell output and display a fresh root widget."""
++        try:
++            from IPython.display import clear_output
++
++            clear_output(wait=True)
++        except Exception:
++            pass
++        return self.display()
++
+     def render_parts(self) -> list:
+         """Compatibility fallback: return one root widget, not split children."""
+         return [self.render()]
+@@ -2046,8 +2087,20 @@ def create_chat_ui(
+         from core import IterationBudget
+         from runtime.bedrock_client import BedrockClient
+         from runtime.config import CONFIG
++        from runtime.workspace import configure_workspace_paths
+         if mock_mode is not None:
+             CONFIG.mock_mode = bool(mock_mode)
++        configure_workspace_paths(CONFIG, ensure=True)
++        try:
++            from runtime.session import SESSIONS
++            SESSIONS.sessions_dir = CONFIG.sessions_dir
++        except Exception:
++            pass
++        try:
++            from runtime.audit import AUDIT
++            AUDIT.audit_dir = CONFIG.audit_dir
++        except Exception:
++            pass
+         client = BedrockClient(
+             model_id=CONFIG.model_id,
+             region=CONFIG.region,
