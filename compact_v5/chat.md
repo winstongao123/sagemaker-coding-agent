@@ -174,7 +174,7 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 | Problem | What to do |
 |---|---|
 | `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The thin notebook bootstrap locates the runtime from the shipped zip root, `compact_v5/`, or a repo root that contains `compact_v5/`. |
-| `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
+| `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5_ship.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
 | Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-3 from the latest zip. Cell 2 intentionally drops cached `entry` and UI modules before importing so a reused kernel picks up the files on disk. |
 | `Error displaying widget: model not found` or repeated `Loading widget...` | First restart the kernel and rerun Cells 1-3. If the same error appears, confirm the active zip is current and that `ipywidgets`/`jupyterlab_widgets` installed in the running kernel. For emergency headless use only, call `launch_config_ui(use_widgets=False)` and `launch_chat_ui(config_ui, use_widgets=False)`, then send with `ui.send("your message")`. |
 | Console fallback blocks a mutating tool | The fallback is only for headless/debug use. Use the v4-style widget UI for normal validation because it provides the intended approval and live-supervisor controls. |

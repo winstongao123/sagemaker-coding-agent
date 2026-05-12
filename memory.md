@@ -29,7 +29,9 @@ Reusable lesson:
 
 Production-test gate:
 
-- Open the latest `compact_v5.zip` in the target SageMaker environment.
+- Open the latest `compact_v5_ship.zip` in the target SageMaker environment.
+  `compact_v5/` is the complete source tree; `compact_v5_ship.zip` is the
+  minimum runtime artifact to upload/extract.
 - Restart the kernel.
 - Run Cells 1-3.
 - Confirm Cell 2 renders widgets, Cell 3 renders the dark v4-style chat UI,

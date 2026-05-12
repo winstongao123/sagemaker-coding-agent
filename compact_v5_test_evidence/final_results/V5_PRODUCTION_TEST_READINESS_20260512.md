@@ -24,7 +24,7 @@ verification are strong enough to move to target-environment validation.
 | Runnable lessons | Runnable patterns matter, but terminal UI does not map directly to SageMaker notebooks. | v5 adapted relevant patterns: progress visibility, review discipline, status tracking, cache/cost awareness, subagent observability. | `V5_DEEP_SCAN_RUNNABLE_COMPARE_20260511.md`; `V5_DESIGN_OVERVIEW.html`. |
 | Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `python -m pytest compact_v5/tests -q` -> 31 passed. |
 | Independent review | User required Claude CLI review with subscription auth. | Final Claude CLI review loop approved; no HIGH/MEDIUM findings. | `notebook_widget_regression_reviews/ROUND3_*`. |
-| Package | Source fixes must be in the runtime zip. | Zip rebuilt and verified. | `compact_v5.zip`; SHA recorded in zip verify doc. |
+| Package | Source fixes must be in the runtime ship zip. | Minimum ship zip rebuilt and verified. | `compact_v5_ship.zip`; SHA recorded in zip verify doc. |
 
 ## Remaining Risk
 
@@ -39,7 +39,7 @@ These are production-test risks, not current source/package blockers.
 
 ## Production-Test Gate
 
-1. Upload/extract latest `compact_v5.zip` in target SageMaker.
+1. Upload/extract latest `compact_v5_ship.zip` in target SageMaker.
 2. Restart the kernel.
 3. Run Cells 1-3.
 4. Confirm:
@@ -63,4 +63,3 @@ For future software work, use this language:
 - **98% production-test ready** means the only known remaining uncertainty is
   the actual deployment/runtime environment.
 - Do not say **production flawless** until target-environment validation passes.
-

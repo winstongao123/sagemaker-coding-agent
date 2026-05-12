@@ -37,7 +37,7 @@ Completed:
 - zero-cost smoke checks and py_compile checks;
 - fresh current HTML/PNG visual evidence saved under
   `compact_v5_test_evidence/final_results/`;
-- `compact_v5.zip` rebuilt from active tree and verified with required-member
+- `compact_v5_ship.zip` rebuilt from active tree and verified with required-member
   hash parity.
 
 Notes:
@@ -71,7 +71,7 @@ Completed:
   `Agent.last_prompt_metrics` and the UI Prompt metrics footer line;
 - added smoke tests for read-only subagent scope, public progress callbacks,
   task-state persistence, and prompt metrics;
-- rebuilt `compact_v5.zip` from the flattened active tree and verified required
+- rebuilt `compact_v5_ship.zip` from the flattened active tree and verified required
   members.
 
 Claude review evidence:
@@ -99,7 +99,7 @@ Follow-up review repair:
   named ` + $tmp + r/compact_v5`;
 - restored the four focused source smoke tests under `compact_v5/tests/`;
 - re-ran py_compile and all four source smoke tests against `compact_v5/`;
-- rebuilt `compact_v5.zip` again from the restored active tree.
+- rebuilt `compact_v5_ship.zip` again from the restored active tree.
 - removed the stray ` + $tmp + r/` duplicate tree after an independent Claude
   recheck flagged it as a future drift hazard;
 - final independent Claude recheck after cleanup returned `APPROVE`, with no
@@ -131,7 +131,7 @@ Remaining follow-ups are P2 or cross-thread only: local fallback polish,
 actionable wasted-cost diagnosis, cross-turn tool-result pruning, and continued
 full-acceptance validation of subagent live visibility.
 
-Packaging note: `compact_v5.zip` was refreshed only because this status file is
+Packaging note: `compact_v5_ship.zip` was refreshed only because this status file is
 part of the ship zip. The zip member manifest stayed unchanged unless later
 source/test files were intentionally added.
 
@@ -250,7 +250,7 @@ Evidence table:
 | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
 | Tests | Green. | `python -m pytest compact_v5/tests -q` -> 31 passed. |
 | Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final no HIGH/MEDIUM. |
-| Zip/package | Rebuilt and verified. | `compact_v5.zip`, 158 members, `testzip() None`, required members present, forbidden folders absent. |
+| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 152 members, `testzip() None`, required members present, forbidden folders absent. |
 
 Residual risk:
 - target SageMaker/Jupyter widget-manager behavior can differ from the local
@@ -259,7 +259,7 @@ Residual risk:
 - production test must still run from a fresh kernel and latest zip.
 
 Required next validation:
-1. Upload/extract latest `compact_v5.zip` in target SageMaker.
+1. Upload/extract latest `compact_v5_ship.zip` in target SageMaker.
 2. Restart kernel.
 3. Run Cells 1-3.
 4. Confirm Cell 2 widgets and Cell 3 dark v4-style chat UI render with no
