@@ -230,3 +230,38 @@ Important follow-up:
   found`.
 - focused smoke suite now passes 31 tests. Latest Claude CLI review loop
   returned `VERDICT: APPROVE` after the LOW numeric-override edge was fixed.
+
+---
+
+## 2026-05-12 Production-Test Readiness Status
+
+Current conclusion: compact_v5 is ready for target SageMaker production testing.
+Confidence is 98% for production-test readiness, not a promise of zero
+production defects.
+
+Evidence table:
+
+| Area | Status | Evidence |
+|---|---|---|
+| Latest v4 comparison | Done against current tracked v4.10.10 reference, not an old archive. | `compact_v4/MAIN/agent/chat.ipynb`, `compact_v4/MAIN/agent/sagemaker_agent.py`, latest v4 commit `3ba3425`. |
+| v4 UI contract | Preserved and made normal path. | `chat.ipynb` launches v4-style ipywidgets by default; console fallback is explicit `use_widgets=False`. |
+| Notebook regression | Fixed and visually checked locally. | Local Jupyter/Playwright screenshots under `notebook_widget_regression_reviews/local_visual/`; `HAS_WIDGET_ERROR False`. |
+| S3 real-use blockers | P0/P1 shipped. | `aws_s3_list`, sandbox diagnostics, S3 intent-drift guard, one-strike blocked retry, cost controls. |
+| Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
+| Tests | Green. | `python -m pytest compact_v5/tests -q` -> 31 passed. |
+| Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final no HIGH/MEDIUM. |
+| Zip/package | Rebuilt and verified. | `compact_v5.zip`, 158 members, `testzip() None`, required members present, forbidden folders absent. |
+
+Residual risk:
+- target SageMaker/Jupyter widget-manager behavior can differ from the local
+  visual test environment;
+- IAM credentials and installed package versions can differ;
+- production test must still run from a fresh kernel and latest zip.
+
+Required next validation:
+1. Upload/extract latest `compact_v5.zip` in target SageMaker.
+2. Restart kernel.
+3. Run Cells 1-3.
+4. Confirm Cell 2 widgets and Cell 3 dark v4-style chat UI render with no
+   `Error displaying widget: model not found`.
+5. Run the S3 inventory and notes_cli-style acceptance prompts.

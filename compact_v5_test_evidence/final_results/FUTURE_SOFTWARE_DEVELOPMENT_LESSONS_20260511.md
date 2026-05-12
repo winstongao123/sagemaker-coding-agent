@@ -341,10 +341,20 @@ Reference docs / files
 
 ## Current Gap Status
 
-As of 2026-05-11, the higher-level lessons are now documented here. The actual
-S3 real-use blockers remain open and are assigned to the persistent worker
-handoff:
+As of 2026-05-12, the higher-level lessons are documented and the P0/P1 runtime
+blockers from the S3 real-use transcript and notebook widget regression are
+fixed, reviewed, tested, and packaged.
 
-`compact_v5_test_evidence/final_results/S3_REAL_USE_FIX_WORKER_PROMPT_20260511.md`
+Current readiness position:
 
-Do not confuse "lesson documented" with "runtime fixed."
+| Claim | Status | Evidence |
+|---|---|---|
+| v5 preserves the latest v4 notebook contract | Ready for production test | v4.10.10 reference checked; v5 default is v4-style ipywidgets, with explicit console fallback only. |
+| v5 absorbed relevant Runnable lessons | Ready for production test | Tool/progress visibility, reviewer discipline, status tracking, subagent observability, prompt/cache/cost awareness documented and implemented where compatible with SageMaker/Bedrock. |
+| S3 real-use blockers | Fixed | `aws_s3_list`, accurate sandbox diagnostics, S3 intent-drift guard, one-strike retry block, and cost controls. |
+| Notebook widget regression | Fixed locally, target smoke required | Local Jupyter/Playwright visual evidence shows Cell 2 and Cell 3 render with `HAS_WIDGET_ERROR False`; final target SageMaker fresh-kernel smoke remains the production-test gate. |
+| Production-test readiness | 98% confidence | 31 focused tests passed, zip rebuilt/verified, Claude CLI reviews approved with no HIGH/MEDIUM findings. |
+
+Do not confuse "98% production-test ready" with "guaranteed production
+flawless." The remaining 2% is target-environment variance: SageMaker/Jupyter
+widget manager, IAM credentials, and installed package versions.

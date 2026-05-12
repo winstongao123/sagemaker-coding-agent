@@ -165,6 +165,9 @@ footer {
     <div class="note ok">
       Final state: Claude approved v5.0.1 production readiness after the AWS/R-tier loop. The matrix ended with 28 `READY` rows and 14 `DISPOSITION_OK` rows. Local Bedrock spend recorded by the test ledger was `$1.6757 / $14.25`.
     </div>
+    <div class="note ok">
+      Current 2026-05-12 readiness update: v5 is 98% production-test ready for the target SageMaker validation round. It keeps the latest v4.10.10 notebook user contract, restores v4-style ipywidgets as the normal path, absorbs relevant Runnable agentic patterns, passes 31 focused smoke tests, has local Jupyter/Playwright visual evidence, and ships in a rebuilt verified zip. The remaining risk is target-environment variance: SageMaker widget manager, IAM credentials, and installed packages.
+    </div>
   </section>
 
   <section id="architecture">
