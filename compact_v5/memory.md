@@ -3,15 +3,16 @@
 ## 2026-05-12 - compact_v5 production-test readiness lesson
 
 compact_v5 source and `compact_v5_ship.zip` are packaged for target SageMaker
-validation, but the user's fresh SageMaker retest still shows
-`Error displaying widget: model not found`. Treat target widget rendering as an
-active validation blocker until a basic ipywidgets smoke test and v5 Cells 2-3
-pass in that exact SageMaker runtime.
+validation. The user's fresh SageMaker retest still showed
+`Error displaying widget: model not found`; the concrete v5-side difference
+from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
+`widgetsnbextension`. v5 now matches v4's dependency posture: install
+`ipywidgets`, not frontend widget-extension packages.
 
 The source/package confidence is based on parity checks, 31 passing focused
-smoke tests, local Jupyter/Playwright visual evidence, rebuilt zip integrity,
-and independent Claude CLI review approvals. The missing proof is target
-SageMaker widget-manager compatibility.
+smoke tests, local Jupyter/Playwright visual evidence from the rebuilt ship
+zip, rebuilt zip integrity, and independent Claude CLI review approvals. The
+remaining proof is target SageMaker retest with the new ship zip.
 
 Reusable lesson:
 
@@ -35,10 +36,10 @@ Production-test gate:
   `compact_v5/` is the complete source tree; `compact_v5_ship.zip` is the
   minimum runtime artifact to upload/extract.
 - Restart the kernel.
-- Before v5, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.
-  If this simple widget fails, the target SageMaker widget manager is
-  mismatched/broken independent of v5.
 - Run Cells 1-3.
 - Confirm Cell 2 renders widgets, Cell 3 renders the dark v4-style chat UI,
   and no `Error displaying widget: model not found` appears.
+- If the error remains, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.
+  If this simple widget fails, the target SageMaker widget manager is
+  mismatched/broken independent of v5.
 - Then run the S3/read-only and notes_cli style acceptance prompts.

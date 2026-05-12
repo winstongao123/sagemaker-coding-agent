@@ -236,10 +236,12 @@ Important follow-up:
 ## 2026-05-12 Production-Test Readiness Status
 
 Current conclusion: compact_v5 source and `compact_v5_ship.zip` are packaged
-for target SageMaker validation, but the user's fresh SageMaker retest still
-shows `Error displaying widget: model not found`. Production validation is
-therefore blocked on target-environment widget rendering, not on zip contents.
-The prior 98% confidence applies to source/package readiness only.
+for target SageMaker validation. The user's fresh SageMaker retest showed
+`Error displaying widget: model not found`; the concrete v5-side difference
+from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
+`widgetsnbextension`, which v4 did not install from the notebook. Cell 1 now
+matches v4's widget dependency posture: install `ipywidgets`, not the frontend
+widget-extension packages.
 
 Evidence table:
 
@@ -247,26 +249,28 @@ Evidence table:
 |---|---|---|
 | Latest v4 comparison | Done against current tracked v4.10.10 reference, not an old archive. | `compact_v4/MAIN/agent/chat.ipynb`, `compact_v4/MAIN/agent/sagemaker_agent.py`, latest v4 commit `3ba3425`. |
 | v4 UI contract | Preserved and made normal path. | `chat.ipynb` launches v4-style ipywidgets by default; console fallback is explicit `use_widgets=False`. |
-| Notebook regression | Fixed locally, still failing in user's target SageMaker screenshot. | Local Jupyter/Playwright screenshots under `notebook_widget_regression_reviews/local_visual/`; target retest still shows `Error displaying widget: model not found`. |
+| Notebook regression | Latest local visual check passes from rebuilt `compact_v5_ship.zip`; target SageMaker retest still required. | `20260512_ship_v4deps_cell_by_cell.png`; checks: `HAS_MODEL_NOT_FOUND False`, `HAS_READY True`, `HAS_SEND True`, `HAS_STOP True`, `HAS_OLD_WIDGET_INSTALL False`. |
 | S3 real-use blockers | P0/P1 shipped. | `aws_s3_list`, sandbox diagnostics, S3 intent-drift guard, one-strike blocked retry, cost controls. |
 | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
 | Tests | Green. | `python -m pytest compact_v5/tests -q` -> 31 passed. |
-| Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final no HIGH/MEDIUM. |
+| Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final widget-dependency review `notebook_widget_regression_reviews/claude/ROUND_1_WIDGET_DEPENDENCY_FIX_claude_review.md` returned `APPROVE` with no HIGH/MEDIUM blockers. |
 | Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 152 members, `testzip() None`, required members present, forbidden folders absent. |
 
-Current blocker:
-- target SageMaker/Jupyter widget-manager behavior differs from the local
-  visual test environment and currently cannot attach to the displayed
-  ipywidgets model.
+Latest fix:
+- Cell 1 no longer installs `jupyterlab_widgets` or `widgetsnbextension`.
+  This matches latest v4.10.10's notebook dependency line and avoids mutating
+  SageMaker's browser-side widget extension stack from inside the notebook.
+- Local Jupyter + Playwright executed Cells 1-3 from the rebuilt
+  `compact_v5_ship.zip`; the v4-style dark chat UI rendered with Send/Stop,
+  metrics, and no `model not found`.
 
-Likely causes to test:
-- Cell 1 may install or upgrade `ipywidgets`, `jupyterlab_widgets`, or
-  `widgetsnbextension` in the kernel without updating the SageMaker browser
-  widget manager, causing a Python/frontend version mismatch.
-- A basic widget may fail independently of v5:
-  `display(widgets.IntSlider(description="Widget test"))`.
-- If the basic widget works but v5 fails, the v5 widget tree/display lifecycle
-  still needs further simplification against the latest v4.10.10 contract.
+Target retest still required:
+- upload/extract the latest `compact_v5_ship.zip`;
+- restart the SageMaker kernel;
+- rerun Cells 1-3;
+- if the error remains, run the basic widget smoke
+  `display(widgets.IntSlider(description="Widget test"))` to distinguish
+  target widget-stack failure from v5 widget-tree failure.
 
 Residual risk:
 - IAM credentials and installed package versions can differ;
@@ -276,8 +280,8 @@ Required next validation:
 1. Upload/extract latest `compact_v5_ship.zip` in target SageMaker.
 2. Restart kernel.
 3. Run Cells 1-3.
-4. Before v5, run a basic ipywidgets smoke:
-   `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.
-5. Confirm Cell 2 widgets and Cell 3 dark v4-style chat UI render with no
+4. Confirm Cell 2 widgets and Cell 3 dark v4-style chat UI render with no
    `Error displaying widget: model not found`.
+5. If the error remains, run a basic ipywidgets smoke:
+   `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.
 6. Run the S3 inventory and notes_cli-style acceptance prompts.
