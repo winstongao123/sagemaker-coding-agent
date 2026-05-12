@@ -25,6 +25,11 @@ and Stop unblocks the wait. Claude CLI Round 1 caught a provider propagation
 bug in the engine dispatch path; Round 2 approved after the end-to-end test
 was added.
 
+2026-05-12 follow-up: `/resume` previously restored engine messages but not
+the visible notebook transcript. v5 now rehydrates the visible chat after
+session load, including user/assistant turns and collapsed tool cards grouped
+by tool id.
+
 Reusable lesson:
 
 - Compare against the latest reference product, not an archive. For v4, the
@@ -38,6 +43,8 @@ Reusable lesson:
   is recorded.
 - UI callbacks need two tests: one proving the visible widget/card renders, and
   one proving the engine/tool dispatch path can actually reach that callback.
+- Session persistence has two truths: model-visible context and user-visible
+  transcript. Test both when claiming v4 session parity.
 - Runnable lessons should be adapted to SageMaker/Bedrock constraints:
   structured tool/progress visibility, reviewer discipline, status tracking,
   cache/cost awareness, and subagent observability matter; terminal UI and

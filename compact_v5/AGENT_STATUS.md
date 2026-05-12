@@ -327,3 +327,29 @@ Verification:
   `compact_v5_test_evidence/final_results/ask_user_ui_reviews/ask_user_prompt_fixture.png`;
 - Claude CLI subscription review Round 1 found a real provider propagation
   bug; Round 2 returned `APPROVE`, no HIGH/MEDIUM blockers.
+
+---
+
+## 2026-05-12 Session Resume Display Fix
+
+Current task state: fixed a v5/v4 parity regression where `/resume` restored
+the engine history but did not restore the visible notebook transcript.
+
+Problem:
+- `/resume` correctly loaded `agent._engine.messages` from the saved session;
+- the v5 notebook display uses a separate `V4WidgetChatUI._messages` list;
+- after resume, v5 appended only `Resumed session ...`, so the user saw an
+  empty chat even though the session reported 28 messages.
+
+Implemented:
+- added `V4WidgetChatUI._rehydrate_visible_messages_from_agent()`;
+- after a `session_resumed:*` command result, the UI now rebuilds visible rows
+  from saved model-visible messages;
+- restored user turns, assistant text turns, collapsed tool cards, tool
+  results grouped by `tool_use_id`, and saved thinking blocks as collapsed
+  assistant metadata where available.
+
+Verification:
+- added `compact_v5/tests/test_ui_session_resume_smoke.py`;
+- targeted resume smoke: 1 passed;
+- full focused suite: `py -3.10 -m pytest compact_v5\tests -q` -> 37 passed.

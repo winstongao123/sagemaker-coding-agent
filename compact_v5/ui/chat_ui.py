@@ -1378,10 +1378,164 @@ class V4WidgetChatUI(WidgetChatUI):
             self._append_or_update_tool_result_card(event)
         self._render_status()
 
+    @staticmethod
+    def _session_block_text(block: Any) -> str:
+        """Return display text from a saved Bedrock content block."""
+        if isinstance(block, str):
+            return block
+        if not isinstance(block, dict):
+            return str(block)
+        content = block.get("content")
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    parts.append(str(item.get("text") or item.get("content") or ""))
+                else:
+                    parts.append(str(item))
+            return "\n".join(p for p in parts if p)
+        if content is not None:
+            return str(content)
+        return str(block.get("text") or block.get("thinking") or block.get("data") or "")
+
+    def _rehydrate_visible_messages_from_agent(self) -> None:
+        """Rebuild visible chat rows from restored model-visible session history.
+
+        `/resume` correctly restores `agent.messages`; the notebook has its own
+        display list. This bridge gives v4-style "load session shows the full
+        chat" behavior without changing the engine's saved message contract.
+        """
+        saved = list(getattr(self.agent, "messages", []) or [])
+        pending_tools: Dict[str, Dict[str, Any]] = {}
+        self._messages.clear()
+        self._tool_card_indices.clear()
+
+        for message in saved:
+            if not isinstance(message, dict) or message.get("is_meta"):
+                continue
+            role = str(message.get("role") or "")
+            content = message.get("content")
+            ts = "--:--"
+
+            if role == "user":
+                if isinstance(content, str):
+                    self._messages.append(("user", content, ts, {}))
+                    continue
+                if isinstance(content, list):
+                    text_parts = []
+                    for block in content:
+                        if not isinstance(block, dict):
+                            text_parts.append(str(block))
+                            continue
+                        btype = block.get("type")
+                        if btype == "tool_result":
+                            tool_use_id = str(block.get("tool_use_id") or "")
+                            pending = pending_tools.get(tool_use_id, {})
+                            tool_name = str(
+                                block.get("_sageagent_tool_name")
+                                or pending.get("name")
+                                or "tool"
+                            )
+                            try:
+                                input_text = json.dumps(
+                                    pending.get("input", {}),
+                                    indent=2,
+                                    sort_keys=True,
+                                    default=str,
+                                )
+                            except Exception:
+                                input_text = str(pending.get("input", {}) or {})
+                            result_text = self._session_block_text(block)
+                            meta = {
+                                "phase": "resumed result",
+                                "tool_use_id": tool_use_id,
+                                "input_text": input_text,
+                                "result_text": result_text,
+                                "is_error": bool(block.get("is_error")),
+                                "tool_name": tool_name,
+                            }
+                            existing = self._tool_card_indices.get(tool_use_id) if tool_use_id else None
+                            if existing is not None and 0 <= existing < len(self._messages):
+                                old_role, old_text, old_ts, old_meta = self._messages[existing]
+                                if old_role == "tool":
+                                    merged = dict(old_meta or {})
+                                    merged.update(meta)
+                                    self._messages[existing] = (old_role, old_text, old_ts, merged)
+                                    continue
+                            index = len(self._messages)
+                            self._messages.append(("tool", input_text, ts, meta))
+                            if tool_use_id:
+                                self._tool_card_indices[tool_use_id] = index
+                        elif btype == "text":
+                            text = self._session_block_text(block)
+                            if text:
+                                text_parts.append(text)
+                    if text_parts:
+                        self._messages.append(("user", "\n".join(text_parts), ts, {}))
+                continue
+
+            if role == "assistant":
+                if isinstance(content, str):
+                    self._messages.append(("assistant", content, ts, {}))
+                    continue
+                if not isinstance(content, list):
+                    continue
+                text_parts = []
+                thinking_parts = []
+                for block in content:
+                    if not isinstance(block, dict):
+                        text_parts.append(str(block))
+                        continue
+                    btype = block.get("type")
+                    if btype == "text":
+                        text = self._session_block_text(block)
+                        if text:
+                            text_parts.append(text)
+                    elif btype in {"thinking", "redacted_thinking"}:
+                        text = self._session_block_text(block)
+                        if text:
+                            thinking_parts.append(text)
+                    elif btype == "tool_use":
+                        tool_use_id = str(block.get("id") or "")
+                        pending_tools[tool_use_id] = {
+                            "name": block.get("name") or "tool",
+                            "input": block.get("input") or {},
+                        }
+                        try:
+                            input_text = json.dumps(
+                                block.get("input") or {},
+                                indent=2,
+                                sort_keys=True,
+                                default=str,
+                            )
+                        except Exception:
+                            input_text = str(block.get("input") or {})
+                        meta = {
+                            "phase": "resumed call",
+                            "tool_use_id": tool_use_id,
+                            "input_text": input_text,
+                            "result_text": "",
+                            "is_error": False,
+                            "tool_name": str(block.get("name") or "tool"),
+                        }
+                        index = len(self._messages)
+                        self._messages.append(("tool", input_text, ts, meta))
+                        if tool_use_id:
+                            self._tool_card_indices[tool_use_id] = index
+                if text_parts:
+                    meta = {}
+                    if thinking_parts:
+                        meta["thinking"] = "\n\n".join(thinking_parts)
+                    self._messages.append(("assistant", "\n".join(text_parts), ts, meta))
+
+        self._render_chat()
+
     def _dispatch_ui_command(self, command: str) -> None:
         try:
             from commands import dispatch_command
             cr = dispatch_command(command, ctx={"agent": self.agent})
+            if str(getattr(cr, "side_effect", "") or "").startswith("session_resumed:"):
+                self._rehydrate_visible_messages_from_agent()
             self._append_message("assistant", cr.text)
         except Exception as exc:  # noqa: BLE001
             self._append_message("system", f"{command} failed: {type(exc).__name__}: {exc}")

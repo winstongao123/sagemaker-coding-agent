@@ -180,7 +180,7 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
 | Context feels too large | Use `/context`; compaction and result replay should help. |
-| Long task got interrupted | Use `/resume <id>`, read `AGENT_STATUS.md`, and continue from saved status. |
+| Long task got interrupted | Use `/resume <id>`, read `AGENT_STATUS.md`, and continue from saved status. The visible chat transcript should rehydrate after resume. |
 | Agent asks you a question mid-run | v5 should show an inline `Agent Question` box inside the same chat UI. Use Submit, Skip, or type the answer in the main message box and press Send. |
 | Need rollback | Use `/checkpoint list` and `/checkpoint restore ...` with preview first. |
 
@@ -198,7 +198,7 @@ Final evidence summary:
 - Current production-test readiness: 98% confidence for target SageMaker
   production testing, with the remaining risk explicitly limited to target
   environment widget/IAM/package variance.
-- Current focused smoke suite: `36 passed`.
+- Current focused smoke suite: `37 passed`.
 - Latest independent Claude CLI notebook/v4 comparison review: `APPROVE`, no
   HIGH/MEDIUM findings.
 - Latest local visual evidence: Cell 2 rendered one combined config/chat UI
@@ -230,6 +230,9 @@ The notebook chat is now a live supervisor surface:
 - Model-initiated `ask_user` prompts render as an inline `Agent Question`
   panel with Submit, Skip, and main-Send fallback, matching the v4 notebook
   contract.
+- Saved sessions reload the visible transcript as well as the engine context:
+  user messages, assistant messages, collapsed tool cards, and saved thinking
+  metadata are reconstructed from the saved session messages.
 - Markdown tables, lists, and code blocks render in assistant messages.
 - Assistant messages that begin with bracketed headings, such as
   `[SPEC vs SHIPPED]`, remain assistant messages. Only known engine/status
