@@ -30,6 +30,19 @@ the visible notebook transcript. v5 now rehydrates the visible chat after
 session load, including user/assistant turns and collapsed tool cards grouped
 by tool id.
 
+2026-05-12 follow-up: S3 access is not the same as S3 workflow discipline.
+After a successful S3 inventory, the prompt "pick two files to investigate"
+caused v5 to run multiple new `aws_s3_list` calls instead of reusing the
+previously listed objects. Treat this as an open follow-up tool-discipline
+block: add reuse-first behavior, S3 fanout limits, a safe S3 preview tool,
+truncation truth checks, ASCII-contract tests, artifact tracking, workspace
+defaults outside the v5 runtime folder, and a guard against editing
+`AGENT_STATUS.md` for simple non-project tasks. Claude CLI subscription review
+approved the worker plan after tightening three specifics: cap
+`aws_s3_list` at 2 calls per user turn, use a separate allowed
+`user_artifacts_root` for generated deliverables, and apply concrete
+status-update thresholds.
+
 Reusable lesson:
 
 - Compare against the latest reference product, not an archive. For v4, the
@@ -45,6 +58,9 @@ Reusable lesson:
   one proving the engine/tool dispatch path can actually reach that callback.
 - Session persistence has two truths: model-visible context and user-visible
   transcript. Test both when claiming v4 session parity.
+- Follow-up prompts have a continuity contract. When the user says "pick two"
+  after a list, the agent should choose from the known list first, not re-run a
+  broad discovery scan.
 - Runnable lessons should be adapted to SageMaker/Bedrock constraints:
   structured tool/progress visibility, reviewer discipline, status tracking,
   cache/cost awareness, and subagent observability matter; terminal UI and

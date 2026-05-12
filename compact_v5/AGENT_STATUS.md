@@ -353,3 +353,48 @@ Verification:
 - added `compact_v5/tests/test_ui_session_resume_smoke.py`;
 - targeted resume smoke: 1 passed;
 - full focused suite: `py -3.10 -m pytest compact_v5\tests -q` -> 37 passed.
+
+---
+
+## 2026-05-12 S3 Follow-Up Tool Discipline - Open
+
+Current task state: documented a new S3 workflow issue discovered after the
+S3 safe-read fix. S3 access works, but narrow follow-up prompts can still
+cause broad S3 rescans and unnecessary cost.
+
+Trigger:
+- user first asked for S3 structure and v5 listed buckets/prefixes;
+- user then asked `pick two fiels to invesagte adn tell me hwat you found`;
+- v5 launched multiple `aws_s3_list` calls instead of reusing prior object
+  paths or asking which bucket/prefix to inspect.
+
+Diagnosis:
+- this is a tool-discipline / follow-up-intent problem, not proof that v5 has
+  low coding ability;
+- `aws_s3_list` is always loaded and attractive to the model;
+- the failure is not true parallel dispatch: `aws_s3_list.requires_approval`
+  keeps it sequential, but the model can still emit many distinct S3 list
+  calls in one turn and existing dedup only removes identical calls;
+- v5 lacks a "reuse previous S3 evidence first" rule;
+- there is no safe S3 object preview/read tool, only list/structure;
+- related transcript issues remain open: truncation truth, ASCII-only output,
+  artifact path tracking, workspace default outside runtime folder,
+  over-editing `AGENT_STATUS.md` for simple tasks, raw tool id UI polish, and
+  cost proof.
+
+Docs created:
+- issue doc:
+  `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`;
+- worker prompt:
+  `compact_v5_test_evidence/final_results/S3_FOLLOWUP_TOOL_DISCIPLINE_WORKER_PROMPT_20260512.md`.
+- independent Claude CLI subscription plan review:
+  `compact_v5_test_evidence/final_results/s3_followup_tool_discipline_reviews/PLAN_REVIEW_CLAUDE_REREVIEW2.md`
+  returned `APPROVE` after two earlier `REQUEST_CHANGES` passes tightened the
+  S3 cap, artifact path validation, and status-doc heuristic.
+
+Required next work:
+- implement the blocks in the approved worker prompt with independent Claude
+  CLI review after each block;
+- rebuild `compact_v5_ship.zip`;
+- update status, memory, lessons, readiness, and zip verification docs;
+- do not claim S3 workflows fully solved until this block is closed.

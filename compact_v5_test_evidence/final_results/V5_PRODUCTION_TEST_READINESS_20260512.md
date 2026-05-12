@@ -28,6 +28,7 @@ but the target SageMaker widget manager still must pass a real smoke test.
 | Session resume display | v4 reloads the visible chat after loading a saved session. | v5 now rehydrates visible chat rows from restored saved messages after `/resume`, including collapsed tool cards grouped by `tool_use_id`. | `test_ui_session_resume_smoke.py`. |
 | Thinking display/cost | Earlier v5 thinking placement/cost was confusing. | Thinking is collapsed and placed before metrics; simple S3 inventory disables thinking for that turn. | `test_ui_thinking_smoke.py`; `test_s3_cost_controls.py`. |
 | S3 real use | User asked for S3 inventory and early v5 drifted to local source inventory. | v5 has `aws_s3_list`, accurate sandbox diagnostics, S3 intent guard, and one-strike blocked retry. | S3 real-use review blocks and tests. |
+| S3 follow-up discipline | User asked "pick two files to investigate" after S3 inventory. | Open implementation block, approved plan: v5 can over-scan with multiple distinct sequential `aws_s3_list` calls instead of reusing known S3 objects. Worker prompt now specifies reuse guard, 2-call per-turn S3 cap, safe preview, truncation truth, artifact workspace, ASCII/status guards, and per-block Claude review. | `S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`; `S3_FOLLOWUP_TOOL_DISCIPLINE_WORKER_PROMPT_20260512.md`; `s3_followup_tool_discipline_reviews/PLAN_REVIEW_CLAUDE_REREVIEW2.md`. |
 | Runnable lessons | Runnable patterns matter, but terminal UI does not map directly to SageMaker notebooks. | v5 adapted relevant patterns: progress visibility, review discipline, status tracking, cache/cost awareness, subagent observability. | `V5_DEEP_SCAN_RUNNABLE_COMPARE_20260511.md`; `V5_DESIGN_OVERVIEW.html`. |
 | Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `python -m pytest compact_v5/tests -q` -> 37 passed. |
 | Independent review | User required Claude CLI review with subscription auth. | Final Claude CLI review loop approved; no HIGH/MEDIUM findings; the v4-dependency alignment and combined config/chat UI patches both received `APPROVE`. | `notebook_widget_regression_reviews/ROUND3_*`; `notebook_widget_regression_reviews/claude/ROUND_1_WIDGET_DEPENDENCY_FIX_claude_review.md`; `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md`. |
@@ -46,6 +47,11 @@ The current target retest focus is widget rendering:
 - IAM permissions and AWS credentials can differ;
 - installed package versions can differ;
 - production-like user prompts can still expose P2 polish needs.
+- S3 follow-up tool discipline remains open for implementation, but the fix
+  plan is independently approved: reuse previous S3 evidence, cap
+  `aws_s3_list` at 2 calls per user turn, add safe object preview, enforce
+  truncation truth, ASCII compliance, workspace/artifact policy, status-doc
+  guard, and cost proof.
 
 The widget-manager item remains the first thing to validate in the user's
 target SageMaker runtime after uploading the new ship zip.
