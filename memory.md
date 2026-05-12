@@ -2,14 +2,16 @@
 
 ## 2026-05-12 - compact_v5 production-test readiness lesson
 
-compact_v5 is ready for target SageMaker production testing with 98% confidence
-for production-test readiness, not a claim of zero production risk.
+compact_v5 source and `compact_v5_ship.zip` are packaged for target SageMaker
+validation, but the user's fresh SageMaker retest still shows
+`Error displaying widget: model not found`. Treat target widget rendering as an
+active validation blocker until a basic ipywidgets smoke test and v5 Cells 2-3
+pass in that exact SageMaker runtime.
 
-The confidence is based on source/package parity, 31 passing focused smoke
-tests, local Jupyter/Playwright visual evidence, rebuilt zip integrity, and
-independent Claude CLI review approvals. The remaining risk is environment
-variance in the target SageMaker/Jupyter widget manager, IAM credentials, and
-installed packages.
+The source/package confidence is based on parity checks, 31 passing focused
+smoke tests, local Jupyter/Playwright visual evidence, rebuilt zip integrity,
+and independent Claude CLI review approvals. The missing proof is target
+SageMaker widget-manager compatibility.
 
 Reusable lesson:
 
@@ -33,6 +35,9 @@ Production-test gate:
   `compact_v5/` is the complete source tree; `compact_v5_ship.zip` is the
   minimum runtime artifact to upload/extract.
 - Restart the kernel.
+- Before v5, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.
+  If this simple widget fails, the target SageMaker widget manager is
+  mismatched/broken independent of v5.
 - Run Cells 1-3.
 - Confirm Cell 2 renders widgets, Cell 3 renders the dark v4-style chat UI,
   and no `Error displaying widget: model not found` appears.
