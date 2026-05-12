@@ -39,7 +39,9 @@ Evidence from notebook history:
 | `03afb06` | SageMaker-safe widget display | 188 | 76 | `render_parts()` child loop |
 | `2cbf9da` | port v4 clear-output behavior | 188 | 60 | `create_chat_ui()` auto-displays one root widget |
 | `249dcf7` | pre-fix HEAD | 188 | 59 | `create_chat_ui()` auto-displays one root widget |
-| current fix | thin launcher | 12 | 4 | `launch_config_ui()` / `launch_chat_ui(...)` helpers |
+| `e7c5932` | thin launcher | 12 | 4 | `launch_config_ui()` / `launch_chat_ui(...)` helpers |
+| `cefc0a6` | fallback detour | 12 | 4 | default console/non-widget fallback |
+| current fix | v4-widget launcher with fresh import | 18 | 4 | widgets default, explicit fallback only |
 
 The likely regression point for the user's screenshot is therefore `2cbf9da`.
 That commit intentionally moved from the previous SageMaker-safe child display
@@ -156,10 +158,10 @@ Cell 2 config: Error displaying widget: model not found
 Cell 3 chat:   Error displaying widget: model not found
 ```
 
-That proved the issue was not only a large chat root widget. The target
-SageMaker/Jupyter frontend could not render even simple config widgets.
+That initially looked like proof that the target SageMaker/Jupyter frontend
+could not render even simple config widgets.
 
-Second follow-up fix:
+Second follow-up fix was a detour:
 
 | Change | Result |
 |---|---|
@@ -171,9 +173,39 @@ Second follow-up fix:
 | Production defaults preserved | Non-widget fallback keeps `mock_mode=False`, `thinking=False`, `bedrock_only=True`, workspace `.`, max turns 60, and iteration budget 600. |
 | Claude re-review | Round 2 re-review returned `APPROVE`, no HIGH/MEDIUM. |
 
-Current status: the shipped notebook no longer depends on ipywidgets for the
-default path, so the specific `model not found` widget-rendering failure should
-not appear unless the user explicitly opts into rich widgets.
+That avoided the error but broke the product contract: the normal v5 UI must
+be the v4-style ipywidgets UI, not a console fallback.
+
+## Final follow-up: visual root cause and fix
+
+The local browser/Jupyter check found the more useful explanation. The notebook
+file had no saved widget outputs and no widget MIME state, but a reused kernel
+can keep older `entry`, `ui.chat_ui`, and `ui.widgets` modules loaded. That
+means the user can see the new short notebook cell while Python still executes
+the previous launcher implementation.
+
+Final fix:
+
+| Change | Result |
+|---|---|
+| `launch_config_ui()` default restored to `use_widgets=True` | The normal path is again v4-style ipywidgets controls. |
+| `launch_chat_ui()` default restored to widgets | The chat surface is the dark v4-style live supervisor UI. |
+| Cell 2 drops cached `entry`, `ui.chat_ui`, and `ui.widgets` before importing | Re-running the cell after a zip/code update uses the files on disk instead of stale kernel modules. |
+| Console fallback remains explicit | Headless/debug callers can still use `use_widgets=False`, but the shipped notebook does not hide widget failures by default. |
+| Local visual check added | Jupyter/Playwright ran Cell 2 and Cell 3 locally and captured screenshots under `notebook_widget_regression_reviews/local_visual/`. |
+
+Current status: local visual validation passed. Evidence:
+
+- `local_visual/03_v5_after_cell2.png` shows the real config widgets rendered.
+- `local_visual/05_v5_widget_visual_pass.png` shows the v4-style chat surface.
+- `local_visual/visual_text_after_run.txt` contains no
+  `Error displaying widget: model not found`.
+- Latest evidence after LOW-note cleanup:
+  `local_visual/10_final_after_low_note_fix_chat.png`;
+  `local_visual/final_after_low_note_fix_text.txt`.
+- Final validation: `python -m pytest compact_v5/tests -q` -> 31 passed;
+  `py_compile` passed for entry/UI/agent/query engine/task/subagent spawn;
+  Claude CLI ROUND3 re-review2 returned `VERDICT: APPROVE`.
 
 ## Future Software Lesson
 
@@ -185,7 +217,8 @@ For v4, the important contract was:
 - the notebook has a simple launch flow;
 - `create_chat_ui()` owns display complexity;
 - users do not need to understand widget internals;
-- the UI either appears or gives one clear fallback.
+- the UI appears as the normal path, with one explicit fallback only for
+  headless/debug environments.
 
 v5 copied parts of the display mechanism, but let the notebook become a large
 integration script. That made the system look more robust in review and less
@@ -196,4 +229,6 @@ Future rule:
 > Any notebook app must have a "thin-notebook" budget. If a cell exceeds about
 > 20-30 lines, the code belongs in a tested Python module. If a visual widget
 > is the main product, it needs a real target-environment render check before
-> production readiness.
+> production readiness. When validating a new zip in a reused kernel, reload or
+> drop cached launcher modules so the visual test actually exercises the files
+> on disk.

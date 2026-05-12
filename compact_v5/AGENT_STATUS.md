@@ -214,14 +214,19 @@ Implemented:
   S3/UI/notebook smoke tests: 25 passed;
 - Claude Round 1 review returned `VERDICT: APPROVE`, no HIGH/MEDIUM findings.
 
-Important caveat:
-- the first thin-notebook patch still failed target visual validation because
-  the SageMaker/Jupyter widget manager could not render even the config
-  widgets. The shipped default now bypasses ipywidgets entirely:
-  `launch_config_ui()` renders a plain HTML summary and `launch_chat_ui()`
-  returns a `ConsoleChatUI` handle. Rich widgets are opt-in only through
-  `use_widgets=True`.
-- Round 2 Claude review first requested one fix because the fallback default
-  accidentally set `mock_mode=True`; this is corrected to `mock_mode=False`
-  and locked by tests. Claude re-review returned `APPROVE`, no HIGH/MEDIUM.
-- focused pytest now passes 28 tests.
+Important follow-up:
+- the first thin-notebook patch still failed the user's visual retest. The
+  next fallback patch was technically usable but violated the product goal:
+  v5 must keep the v4-style ipywidgets UI as the normal path.
+- local browser validation then showed the real missed cause: a reused Jupyter
+  kernel can keep an older `entry`/UI module loaded, so the notebook source can
+  look fixed while Python still executes the previous widget code.
+- current fix restores v4-style widgets as the default, keeps the console path
+  as explicit `use_widgets=False`, and makes Cell 2 drop cached launcher/UI
+  modules before importing `entry`.
+- local Jupyter/Playwright visual check passed: Cell 2 rendered real
+  ipywidgets controls, Cell 3 rendered the dark v4-style chat surface, and the
+  captured browser text did not contain `Error displaying widget: model not
+  found`.
+- focused smoke suite now passes 31 tests. Latest Claude CLI review loop
+  returned `VERDICT: APPROVE` after the LOW numeric-override edge was fixed.

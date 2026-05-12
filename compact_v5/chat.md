@@ -9,11 +9,12 @@ v5 keeps the v4-style notebook experience, but the engine underneath is the fina
 Run the notebook cells in order:
 
 1. Install dependencies.
-2. Run the configuration cell. The shipped default is a non-widget safe mode
-   because some SageMaker/Jupyter frontends show `Error displaying widget:
-   model not found` even when `ipywidgets` imports.
-3. Launch the chat UI.
-4. Send messages from a new cell with `ui.send("your message")`.
+2. Run the configuration cell. It displays the v4-style ipywidgets controls
+   and refreshes the launcher/UI modules so a reused kernel does not run stale
+   code from a previous zip.
+3. Launch the v4-style chat UI.
+4. Send messages from the chat box, or from a new cell with
+   `ui.send("your message")`.
 5. Read the quick reference section when you need commands or skills.
 
 The usual production file to open is:
@@ -174,9 +175,9 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 |---|---|
 | `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The thin notebook bootstrap locates the runtime from the shipped zip root, `compact_v5/`, or a repo root that contains `compact_v5/`. |
 | `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
-| Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-3 from the latest zip. |
-| `Error displaying widget: model not found` or repeated `Loading widget...` | Use the default safe path: Cell 2 calls `launch_config_ui()` and Cell 3 calls `launch_chat_ui(...)`, which avoid ipywidgets and return a console/HTML `ui` handle. Send messages with `ui.send("your message")`. Rich widgets are opt-in only after the frontend is proven: `launch_config_ui(use_widgets=True)` and `launch_chat_ui(config_ui, use_widgets=True)`. |
-| Console fallback blocks a mutating tool | The non-widget fallback is safest for display. Approval UI is limited there, so mutating tools may block or ask for approval less ergonomically than rich widget mode. Use read-only validation first; enable rich widgets only after the frontend is proven. |
+| Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-3 from the latest zip. Cell 2 intentionally drops cached `entry` and UI modules before importing so a reused kernel picks up the files on disk. |
+| `Error displaying widget: model not found` or repeated `Loading widget...` | First restart the kernel and rerun Cells 1-3. If the same error appears, confirm the active zip is current and that `ipywidgets`/`jupyterlab_widgets` installed in the running kernel. For emergency headless use only, call `launch_config_ui(use_widgets=False)` and `launch_chat_ui(config_ui, use_widgets=False)`, then send with `ui.send("your message")`. |
+| Console fallback blocks a mutating tool | The fallback is only for headless/debug use. Use the v4-style widget UI for normal validation because it provides the intended approval and live-supervisor controls. |
 | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
 | Context feels too large | Use `/context`; compaction and result replay should help. |

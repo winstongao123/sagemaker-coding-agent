@@ -57,7 +57,33 @@ def test_notebook_config_helper_applies_console_safe_defaults():
             setattr(CONFIG, name, value)
 
 
-def test_notebook_launch_defaults_to_non_widget_fallback():
+def test_notebook_launch_defaults_to_v4_widget_ui():
+    captured = {}
+    old_factory = entry.create_chat_ui
+    old = {
+        "model_id": CONFIG.model_id,
+        "workspace": CONFIG.workspace,
+        "mock_mode": CONFIG.mock_mode,
+        "thinking_enabled": CONFIG.thinking_enabled,
+        "aws_bedrock_only": CONFIG.aws_bedrock_only,
+    }
+
+    def fake_create_chat_ui(**kwargs):
+        captured.update(kwargs)
+        return "widget-ui"
+
+    try:
+        state = SimpleNamespace(controls=_make_notebook_controls(None), use_widgets=True)
+        entry.create_chat_ui = fake_create_chat_ui
+        assert launch_chat_ui(state) == "widget-ui"
+        assert captured["force_console"] is False
+    finally:
+        entry.create_chat_ui = old_factory
+        for name, value in old.items():
+            setattr(CONFIG, name, value)
+
+
+def test_notebook_console_fallback_is_explicit_opt_in():
     captured = {}
     old_factory = entry.create_chat_ui
     old = {
@@ -73,7 +99,7 @@ def test_notebook_launch_defaults_to_non_widget_fallback():
         return "console-ui"
 
     try:
-        state = launch_config_ui()
+        state = launch_config_ui(use_widgets=False)
         assert state.use_widgets is False
         entry.create_chat_ui = fake_create_chat_ui
         assert launch_chat_ui(state) == "console-ui"
@@ -84,7 +110,7 @@ def test_notebook_launch_defaults_to_non_widget_fallback():
             setattr(CONFIG, name, value)
 
 
-def test_notebook_non_widget_defaults_match_production_docs():
+def test_notebook_control_defaults_match_production_docs():
     controls = _make_notebook_controls(None)
 
     assert controls["mock_mode"].value is False
@@ -93,6 +119,30 @@ def test_notebook_non_widget_defaults_match_production_docs():
     assert controls["workspace"].value == "."
     assert controls["max_turns"].value == 60
     assert controls["iteration_budget"].value == 600
+
+
+def test_notebook_overrides_accept_numeric_values():
+    controls = _make_notebook_controls(None)
+
+    entry._apply_control_overrides(
+        controls,
+        {"temperature": 0.3, "thinking_budget": 8192},
+    )
+
+    assert controls["temperature"].value == "0.3 - Low creativity"
+    assert controls["thinking_budget"].value == "8192 - Extended"
+
+
+def test_notebook_invalid_numeric_overrides_are_ignored():
+    controls = _make_notebook_controls(None)
+
+    entry._apply_control_overrides(
+        controls,
+        {"temperature": 0.6, "thinking_budget": 5000},
+    )
+
+    assert controls["temperature"].value == "0.0 - Deterministic"
+    assert controls["thinking_budget"].value == "4096 - Standard"
 
 
 def test_launch_chat_ui_explicit_widget_override_is_honored():
@@ -124,7 +174,10 @@ def test_launch_chat_ui_explicit_widget_override_is_honored():
 if __name__ == "__main__":
     test_chat_notebook_launcher_cells_stay_thin()
     test_notebook_config_helper_applies_console_safe_defaults()
-    test_notebook_launch_defaults_to_non_widget_fallback()
-    test_notebook_non_widget_defaults_match_production_docs()
+    test_notebook_launch_defaults_to_v4_widget_ui()
+    test_notebook_console_fallback_is_explicit_opt_in()
+    test_notebook_control_defaults_match_production_docs()
+    test_notebook_overrides_accept_numeric_values()
+    test_notebook_invalid_numeric_overrides_are_ignored()
     test_launch_chat_ui_explicit_widget_override_is_honored()
     print("notebook thin launcher smoke: OK")

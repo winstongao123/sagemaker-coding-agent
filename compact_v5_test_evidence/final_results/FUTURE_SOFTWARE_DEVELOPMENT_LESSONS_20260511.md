@@ -186,6 +186,9 @@ The investigation found two lessons:
 - v5's notebook grew to 188 lines of config code plus a 59-line launch cell,
   with path-discovery duplicated in both cells. That is too much product logic
   in a notebook surface.
+- visual retests in a reused notebook kernel can execute stale imported Python
+  modules. A cell can look fixed while `entry.py` from the previous run is
+  still in `sys.modules`.
 
 Future test pattern:
 
@@ -195,6 +198,8 @@ the launch cell must stay thin,
 display complexity must live in importable Python helpers,
 and the exact target SageMaker/Jupyter widget runtime must render the UI before
 production readiness is claimed.
+The notebook launcher must also refresh/drop its small launcher/UI modules
+before importing, so the test exercises the current files on disk.
 ```
 
 Related source:
@@ -231,6 +236,7 @@ Use this checklist before calling a future agent/tooling release ready:
 | Can another worker reproduce the review? | Prevents unverifiable approval claims. | Reviewer command, prompt, output, and error log saved. |
 | Is the notebook still thin? | Prevents fragile product logic living in cells. | Cell line-count budget plus helper-module tests. |
 | Did the actual widget runtime render it? | Prevents false confidence from structural checks only. | Target SageMaker/Jupyter visual smoke or equivalent captured evidence. |
+| Did the test run current code, not a stale kernel import? | Prevents "source looks fixed, old module still executing" regressions. | Fresh kernel or explicit launcher-module reload/drop plus visual evidence. |
 
 ## Reusable Playbooks For Other Software Projects
 

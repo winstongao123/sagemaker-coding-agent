@@ -241,11 +241,32 @@ def _apply_control_overrides(controls, overrides):
         "bedrock_only": "bedrock_only",
         "aws_bedrock_only": "bedrock_only",
     }
+
+    def _option_label(value, options, caster):
+        if value in options:
+            return value
+        try:
+            candidate = caster(value)
+        except (TypeError, ValueError):
+            return None
+        for label, numeric in options.items():
+            if candidate == caster(numeric):
+                return label
+        return None
+
     for name, value in overrides.items():
         if value is None:
             continue
         key = key_map.get(name)
         if key in controls:
+            if key == "temperature":
+                value = _option_label(value, _TEMPERATURE_OPTIONS, float)
+                if value is None:
+                    continue
+            elif key == "thinking_budget":
+                value = _option_label(value, _THINKING_BUDGET_OPTIONS, int)
+                if value is None:
+                    continue
             _set_widget_value(controls[key], value)
     return controls
 
@@ -305,11 +326,11 @@ def _display_plain_config_summary():
         print("Run ui.send('your message') after launching the chat UI.")
 
 
-def launch_config_ui(use_widgets: bool = False, **overrides):
+def launch_config_ui(use_widgets: bool = True, **overrides):
     """Display notebook config and return a small config handle.
 
-    Default is non-widget HTML because the target SageMaker frontend can report
-    "Error displaying widget: model not found" even when ipywidgets imports.
+    Default is the v4-style ipywidgets control panel. Pass
+    `use_widgets=False` only for console/headless environments.
     """
     global _LAST_NOTEBOOK_CONFIG_UI
 
@@ -367,7 +388,6 @@ def launch_config_ui(use_widgets: bool = False, **overrides):
             padding="10px",
             border="1px solid #444",
             margin="10px 0",
-            background="#2d2d2d",
         ),
     )
     display(config_box)
@@ -383,8 +403,9 @@ def launch_config_ui(use_widgets: bool = False, **overrides):
 def launch_chat_ui(config_ui=None, use_widgets=None):
     """Apply notebook controls and launch the chat UI.
 
-    Default is ConsoleChatUI / HTML fallback. Pass `use_widgets=True` only for
-    environments where ipywidgets are visually confirmed to work.
+    Default follows the configuration handle and therefore uses the v4-style
+    ipywidgets UI in the notebook. Pass `use_widgets=False` only for
+    console/headless environments.
     """
     if config_ui is None:
         config_ui = _LAST_NOTEBOOK_CONFIG_UI
@@ -392,7 +413,7 @@ def launch_chat_ui(config_ui=None, use_widgets=None):
     if use_widgets is None and config_ui is not None:
         use_widgets = bool(getattr(config_ui, "use_widgets", use_widgets))
     if use_widgets is None:
-        use_widgets = False
+        use_widgets = True
     return create_chat_ui(force_console=not use_widgets)
 
 # Skill manager helper for power users who want to inspect / activate
