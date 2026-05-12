@@ -5,11 +5,15 @@
 compact_v5 source and `compact_v5_ship.zip` are packaged for target SageMaker
 validation. The user's fresh SageMaker retest still showed
 `Error displaying widget: model not found`; the concrete v5-side difference
-from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
-`widgetsnbextension`. v5 now matches v4's dependency posture: install
-`ipywidgets`, not frontend widget-extension packages.
+from latest v4.10.10 was Cell 1 mutating the widget stack from inside the
+notebook. v4 also installed `ipywidgets`, but that unpinned install was a
+latent browser/kernel mismatch risk. The first v5 repair removed
+`jupyterlab_widgets` and `widgetsnbextension` but still installed/upgraded
+`ipywidgets`, which can also mismatch SageMaker's browser widget manager. v5 is
+now deliberately more conservative than v4: Cell 1 does not install or upgrade
+`ipywidgets`, `jupyterlab_widgets`, or `widgetsnbextension`.
 
-The source/package confidence is based on parity checks, 36 passing focused
+The source/package confidence is based on parity checks, 48 passing focused
 smoke tests, local Jupyter/Playwright visual evidence from the rebuilt ship
 zip, rebuilt zip integrity, and independent Claude CLI review approvals. The
 remaining proof is target SageMaker retest with the new ship zip.

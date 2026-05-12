@@ -1,0 +1,321 @@
+﻿diff --git a/compact_v5/AGENT_STATUS.md b/compact_v5/AGENT_STATUS.md
+index a492b7c..94ce87c 100644
+--- a/compact_v5/AGENT_STATUS.md
++++ b/compact_v5/AGENT_STATUS.md
+@@ -244,10 +244,13 @@ Important follow-up:
+ Current conclusion: compact_v5 source and `compact_v5_ship.zip` are packaged
+ for target SageMaker validation. The user's fresh SageMaker retest showed
+ `Error displaying widget: model not found`; the concrete v5-side difference
+-from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
+-`widgetsnbextension`, which v4 did not install from the notebook. Cell 1 now
+-matches v4's widget dependency posture: install `ipywidgets`, not the frontend
+-widget-extension packages.
++from latest v4.10.10 was Cell 1 mutating the widget stack from inside the
++notebook. v4 also installed `ipywidgets`, but that unpinned install was a
++latent browser/kernel mismatch risk. Earlier v5 repair removed
++`jupyterlab_widgets` and `widgetsnbextension` but still installed/upgraded
++`ipywidgets`; the user's retest showed the same `model not found` symptom.
++Cell 1 is now deliberately more conservative than v4: it does not install or
++upgrade `ipywidgets`, `jupyterlab_widgets`, or `widgetsnbextension`.
+ 
+ Evidence table:
+ 
+@@ -255,17 +258,18 @@ Evidence table:
+ |---|---|---|
+ | Latest v4 comparison | Done against current tracked v4.10.10 reference, not an old archive. | `compact_v4/MAIN/agent/chat.ipynb`, `compact_v4/MAIN/agent/sagemaker_agent.py`, latest v4 commit `3ba3425`. |
+ | v4 UI contract | Preserved and made normal path. | `chat.ipynb` launches one v4-style combined ipywidgets UI by default; console fallback is explicit `use_widgets=False`. |
+-| Notebook regression | Latest local visual check passes from rebuilt `compact_v5_ship.zip`; target SageMaker retest still required. | `20260512_combined_ui_cell2_tall.png`; checks: `HAS_MODEL_NOT_FOUND False`, `HAS_SEPARATE_AGENT_CONFIG_HEADING False`, `HAS_SINGLE_COMBINED_UI True`, `HAS_CHAT_INPUT True`, `HAS_LINE_METRICS True`, `HAS_OLD_WIDGET_INSTALL False`. |
++| Notebook regression | Latest local visual check passes from rebuilt `compact_v5_ship.zip`; target SageMaker retest still required. | `20260512_widget_contract_chat_live_final.png`; checks: `CHAT_HAS_MODEL_NOT_FOUND False`, `CHAT_HAS_SEND True`, `CHAT_HAS_STOP True`, `CHAT_HAS_READY True`, `CHAT_HAS_IPYWIDGETS_VERSION_PRINT True`, `CHAT_HAS_OLD_WIDGET_INSTALL False`; `20260512_widget_contract_simple_live_final.png` also proves a basic `IntSlider` renders locally. |
+ | S3 real-use blockers | P0/P1 shipped. | `aws_s3_list`, sandbox diagnostics, S3 intent-drift guard, one-strike blocked retry, cost controls. |
+ | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
+-| Tests | Green. | `python -m pytest compact_v5/tests -q` -> 33 passed. |
++| Tests | Green. | `python -m pytest compact_v5/tests -q` -> 48 passed. |
+ | Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final widget-dependency review returned `APPROVE`; combined config/chat UI re-review `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md` returned `APPROVE` with no HIGH/MEDIUM blockers. |
+-| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 154 members, `testzip() None`, required members present, forbidden folders absent, SHA `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`. |
++| Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 154 members, `testzip() None`, required members present, forbidden folders absent; current SHA is recorded in `compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`. |
+ 
+ Latest fix:
+-- Cell 1 no longer installs `jupyterlab_widgets` or `widgetsnbextension`.
+-  This matches latest v4.10.10's notebook dependency line and avoids mutating
+-  SageMaker's browser-side widget extension stack from inside the notebook.
++- Cell 1 no longer installs or upgrades `ipywidgets`, `jupyterlab_widgets`, or
++  `widgetsnbextension`. This goes one step beyond latest v4.10.10's notebook
++  dependency posture and avoids mutating SageMaker's widget stack from inside
++  the notebook.
+ - Local Jupyter + Playwright executed Cell 2 from the rebuilt
+   `compact_v5_ship.zip`; the single combined v4-style dark UI rendered config
+   controls and chat together, with Send/Stop, line metrics, and no
+diff --git a/compact_v5/chat.ipynb b/compact_v5/chat.ipynb
+index 266f3f1..40b85ab 100644
+--- a/compact_v5/chat.ipynb
++++ b/compact_v5/chat.ipynb
+@@ -9,7 +9,7 @@
+     "SageAgent v5 is the production-ready SageMaker notebook coding agent. It keeps the v4-style notebook UI, but runs the rebuilt v5 engine underneath: Bedrock Claude models, durable memory/status, subagents, checkpoints, compaction, result replay, telemetry, and verify/done gates.\n",
+     "\n",
+     "**Run cells 1-2 in order:**\n",
+-    "- **Cell 1** installs packages, usually once per kernel.\n",
++    "- **Cell 1** installs non-widget packages, usually once per kernel. It deliberately does not install or upgrade `ipywidgets`, which is more conservative than v4 and avoids browser/kernel widget-version drift.\n",
+     "- **Cell 2** launches the single combined UI. Configure model, workspace, budgets, thinking, mock mode, Bedrock-only, approval, and chat from that one UI.\n",
+     "\n",
+     "**Core runtime files in the production zip:** `chat.ipynb`, `entry.py`, `sagemaker_agent.py`, `agent.py`, `commands.py`, `memory.md`, `AGENT_STATUS.md`, and the `core/`, `runtime/`, `tools/`, `prompt/`, `skills/`, `subagent/`, `security/`, and `ui/` packages.\n",
+@@ -23,8 +23,22 @@
+    "execution_count": null,
+    "outputs": [],
+    "source": [
+-    "# Cell 1: install dependencies (run once per kernel)\n",
+-    "!pip install -q boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib requests scikit-learn\n"
++    "# Cell 1: install non-widget dependencies (run once per kernel)\n",
++    "# Do not install/upgrade ipywidgets here. SageMaker's browser-side widget\n",
++    "# manager must match the environment it already provides; changing the\n",
++    "# kernel widget package can cause browser-side widget model failures.\n",
++    "!pip install -q boto3 Pillow python-docx pandas openpyxl matplotlib requests scikit-learn\n",
++    "\n",
++    "try:\n",
++    "    import ipywidgets as widgets\n",
++    "except ImportError as exc:\n",
++    "    raise RuntimeError(\n",
++    "        \"ipywidgets is not available in this kernel. Use a SageMaker/Jupyter \"\n",
++    "        \"image with ipywidgets already installed, or install a version that \"\n",
++    "        \"matches the browser-side widget manager before launching v5.\"\n",
++    "    ) from exc\n",
++    "\n",
++    "print(f\"ipywidgets already available: {widgets.__version__}\")\n"
+    ]
+   },
+   {
+diff --git a/compact_v5/chat.md b/compact_v5/chat.md
+index 9f7745a..5251d41 100644
+--- a/compact_v5/chat.md
++++ b/compact_v5/chat.md
+@@ -175,7 +175,7 @@ This is the same anti-drift principle used to build v5 itself: long work must le
+ | `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The thin notebook bootstrap locates the runtime from the shipped zip root, `compact_v5/`, or a repo root that contains `compact_v5/`. |
+ | `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5_ship.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
+ | Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-2 from the latest zip. Cell 2 intentionally drops cached `entry` and UI modules before importing so a reused kernel picks up the files on disk. |
+-| `Error displaying widget: model not found` or repeated `Loading widget...` | First confirm you are using the latest `compact_v5_ship.zip`; Cell 1 should install `boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib requests scikit-learn` and should **not** install `jupyterlab_widgets` or `widgetsnbextension`. Restart the kernel and rerun Cells 1-2. If the error remains, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`. If the simple slider also fails, the target widget stack is broken or mismatched independent of v5. If the slider works but v5 fails, capture the screenshot and versions for a v5 UI fix. For emergency headless use only, call `launch_ui(use_widgets=False)`, then send with `ui.send("your message")`. |
++| `Error displaying widget: model not found` or repeated `Loading widget...` | First confirm you are using the latest `compact_v5_ship.zip`; Cell 1 should install `boto3 Pillow python-docx pandas openpyxl matplotlib requests scikit-learn` and should **not** install or upgrade `ipywidgets`, `jupyterlab_widgets`, or `widgetsnbextension`. Restart the kernel and rerun Cells 1-2. If the error remains, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`. If the simple slider also fails, the target widget stack is broken or mismatched independent of v5. If the slider works but v5 fails, capture the screenshot and versions for a v5 UI fix. For emergency headless use only, call `launch_ui(use_widgets=False)`, then send with `ui.send("your message")`. |
+ | Console fallback blocks a mutating tool | The fallback is only for headless/debug use. Use the v4-style widget UI for normal validation because it provides the intended approval and live-supervisor controls. |
+ | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
+ | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
+diff --git a/compact_v5/memory.md b/compact_v5/memory.md
+index c37aa50..041582c 100644
+--- a/compact_v5/memory.md
++++ b/compact_v5/memory.md
+@@ -5,11 +5,15 @@
+ compact_v5 source and `compact_v5_ship.zip` are packaged for target SageMaker
+ validation. The user's fresh SageMaker retest still showed
+ `Error displaying widget: model not found`; the concrete v5-side difference
+-from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
+-`widgetsnbextension`. v5 now matches v4's dependency posture: install
+-`ipywidgets`, not frontend widget-extension packages.
++from latest v4.10.10 was Cell 1 mutating the widget stack from inside the
++notebook. v4 also installed `ipywidgets`, but that unpinned install was a
++latent browser/kernel mismatch risk. The first v5 repair removed
++`jupyterlab_widgets` and `widgetsnbextension` but still installed/upgraded
++`ipywidgets`, which can also mismatch SageMaker's browser widget manager. v5 is
++now deliberately more conservative than v4: Cell 1 does not install or upgrade
++`ipywidgets`, `jupyterlab_widgets`, or `widgetsnbextension`.
+ 
+-The source/package confidence is based on parity checks, 47 passing focused
++The source/package confidence is based on parity checks, 48 passing focused
+ smoke tests, local Jupyter/Playwright visual evidence from the rebuilt ship
+ zip, rebuilt zip integrity, and independent Claude CLI review approvals. The
+ remaining proof is target SageMaker retest with the new ship zip.
+@@ -43,7 +47,7 @@ enforces explicit ASCII-only write contracts, blocks `AGENT_STATUS.md` edits
+ for small S3/report tasks unless explicitly requested, hides raw tool ids from
+ normal summaries, and disables thinking for simple S3 inventory/follow-up
+ turns. Claude CLI subscription review and re-review both returned APPROVE;
+-the focused suite is 47/47 passing.
++the focused suite is 48/48 passing.
+ 
+ Reusable lesson:
+ 
+diff --git a/compact_v5/tests/test_notebook_thin_launcher.py b/compact_v5/tests/test_notebook_thin_launcher.py
+index 58f77d7..0cfa4bd 100644
+--- a/compact_v5/tests/test_notebook_thin_launcher.py
++++ b/compact_v5/tests/test_notebook_thin_launcher.py
+@@ -32,6 +32,27 @@ def test_chat_notebook_launcher_cells_stay_thin():
+     assert "render_parts" not in launch_cell
+ 
+ 
++def test_notebook_dependency_cell_does_not_mutate_widget_stack():
++    nb = json.loads((ROOT / "chat.ipynb").read_text(encoding="utf-8"))
++    install_cell = "".join(nb["cells"][1]["source"])
++
++    assert "!pip install" in install_cell
++    assert "import ipywidgets as widgets" in install_cell
++    assert "boto3" in install_cell
++    assert "Pillow" in install_cell
++
++    pip_lines = [
++        line
++        for line in install_cell.splitlines()
++        if line.strip().startswith("!pip install")
++    ]
++    assert pip_lines, "Cell 1 must keep the runtime dependency install line"
++    for line in pip_lines:
++        assert "ipywidgets" not in line
++        assert "jupyterlab_widgets" not in line
++        assert "widgetsnbextension" not in line
++
++
+ def test_notebook_config_helper_applies_console_safe_defaults():
+     controls = _make_notebook_controls(None)
+     controls["workspace"].value = "workspace-x"
+@@ -237,6 +258,7 @@ def test_combined_ui_mock_mode_toggle_rebuilds_real_client_when_disabled():
+ 
+ if __name__ == "__main__":
+     test_chat_notebook_launcher_cells_stay_thin()
++    test_notebook_dependency_cell_does_not_mutate_widget_stack()
+     test_notebook_config_helper_applies_console_safe_defaults()
+     test_notebook_launch_defaults_to_v4_widget_ui()
+     test_combined_launch_ui_defaults_to_v4_widget_ui()
+diff --git a/compact_v5_ship.zip b/compact_v5_ship.zip
+index 5a16a2d..a816379 100644
+Binary files a/compact_v5_ship.zip and b/compact_v5_ship.zip differ
+diff --git a/compact_v5_test_evidence/final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md b/compact_v5_test_evidence/final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md
+index c987833..2e1b434 100644
+--- a/compact_v5_test_evidence/final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md
++++ b/compact_v5_test_evidence/final_results/FUTURE_SOFTWARE_DEVELOPMENT_LESSONS_20260511.md
+@@ -78,7 +78,7 @@ engineering principles**. This document is the synthesis layer.
+ | 10. Results must name their limits | v3 acceptance passed the engine layer, but not the S3/live-user workflow. | Every result doc needs "what this does not prove." | `PS_PS_FINAL_TEST_v3_REAL_USE_ISSUES.md`; `FINAL_TEST_SUITE_INDEX.md` |
+ | 11. Real-use failures become regression specs | The S3 transcript revealed a compound bug no unit test represented. | Convert real failures into transcript replay tests and proof gates. | `S3_REAL_USE_FIX_WORKER_PROMPT_20260511.md` |
+ | 12. Ship artifacts are part of implementation | Several prior fixes needed zip rebuild/re-review after source changed. The ambiguous `compact_v5.zip` name also blurred source tree vs ship artifact. | Treat packaging verification as implementation, not release paperwork. Name the runtime artifact explicitly: `compact_v5_ship.zip`; keep `compact_v5/` as the complete source tree. | `compact_v5_ship.zip` verification logs; `AGENT_STATUS.md` |
+-| 13. Copy the reference contract, not the surface ritual | v5 moved to `ui = create_chat_ui()` and one-root-widget display because v4 did root display, but v5's widget tree and the user's target SageMaker runtime still produced `Error displaying widget: model not found` after local visual checks passed. The concrete missed difference was Cell 1 installing `jupyterlab_widgets`/`widgetsnbextension`, which latest v4.10.10 did not do. | When using v4 as an example, identify what made it reliable for the user: thin notebook, stable widget-package assumptions, hidden display complexity, and real widget rendering in the actual target SageMaker frontend. Local Jupyter proof is necessary but not sufficient. | `NOTEBOOK_WIDGET_REGRESSION_20260511.md`; `compact_v4/MAIN/agent/chat.ipynb`; `compact_v5/chat.ipynb`; user's 2026-05-12 SageMaker screenshot; `20260512_combined_ui_cell2_tall.png` |
++| 13. Copy the reference contract, not the surface ritual | v5 moved to `ui = create_chat_ui()` and one-root-widget display because v4 did root display, but v5's widget tree and the user's target SageMaker runtime still produced `Error displaying widget: model not found` after local visual checks passed. The concrete missed difference was broader than the first repair: Cell 1 still installed/upgraded `ipywidgets` after `jupyterlab_widgets`/`widgetsnbextension` were removed. Latest v4.10.10 also installs `ipywidgets`, but v5's target SageMaker hit the unpinned widget-version risk; v5 now goes one step beyond v4 by not mutating the widget stack from the notebook. | When using v4 as an example, identify what made it reliable for the user: thin notebook, stable widget-package assumptions, hidden display complexity, and real widget rendering in the actual target SageMaker frontend. Local Jupyter proof is necessary but not sufficient. | `NOTEBOOK_WIDGET_REGRESSION_20260511.md`; `compact_v4/MAIN/agent/chat.ipynb`; `compact_v5/chat.ipynb`; user's 2026-05-12 SageMaker screenshot; `20260512_combined_ui_cell2_tall.png` |
+ | 14. "One place" means one user surface, not one helper function | A follow-up v5 fix still showed a separate Agent Configuration panel before the chat UI. That satisfied an implementation interpretation but not the user's workflow: select config and chat in the same UI. | Treat user workflow language literally. When the user says config is "one place," acceptance needs a screenshot showing config controls and the chat surface in one displayed widget. | `compact_v5/chat.ipynb`; `compact_v5/entry.py`; `compact_v5/ui/chat_ui.py`; `compact_v5/tests/test_notebook_thin_launcher.py`; `20260512_combined_ui_cell2_tall.png` |
+ | 15. Callback plumbing must be tested end-to-end, not just at the widget edge | The first v5 `ask_user` parity patch rendered the prompt correctly, but Claude found the provider was not forwarded into `_dispatch_single_tool_call`, so a real model tool call would raise `NameError`. | For every UI callback path, add one test at the visible widget edge and one at the engine dispatch boundary. A screenshot proves the card exists; an integration smoke proves the model can actually reach it. | `compact_v5/tools/ask_user.py`; `compact_v5/ui/chat_ui.py`; `compact_v5/core/query_engine.py`; `compact_v5/tests/test_ui_ask_user_smoke.py`; `ask_user_ui_reviews/ROUND_1_ASK_USER_UI_claude_review.md`; `ROUND_2_ASK_USER_UI_claude_review.md` |
+ | 16. Follow-up prompts have a continuity contract | After a successful S3 inventory, "pick two files to investigate" caused v5 to rescan broadly with multiple distinct `aws_s3_list` calls. The model was not dumb; the tool policy made fresh discovery too easy and reuse too weak. Claude review confirmed this is sequential tool overuse, not a parallel-dispatch bug. | For agentic tools, add "reuse known evidence before refreshing" tests. A follow-up should first use previous artifacts/object paths, then ask for clarification or run a narrow tool call only if needed. Make the guard executable: bounded recent-result reminder, exact same-tool cap, safe preview tool, truncation-truth gate, artifact memory, workspace policy, and ASCII/status guards. | `S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`; `S3_FOLLOWUP_TOOL_DISCIPLINE_WORKER_PROMPT_20260512.md`; `s3_followup_tool_discipline_reviews/PLAN_REVIEW_CLAUDE_REREVIEW2.md`; `compact_v5/tools/aws_s3_list.py`; `compact_v5/core/parallel_dispatch.py`; user's 2026-05-12 S3 follow-up transcript |
+@@ -406,8 +406,8 @@ Current readiness position:
+ | v5 preserves the latest v4 notebook contract | Ready for production test | v4.10.10 reference checked; v5 default is v4-style ipywidgets, with explicit console fallback only. |
+ | v5 absorbed relevant Runnable lessons | Ready for production test | Tool/progress visibility, reviewer discipline, status tracking, subagent observability, prompt/cache/cost awareness documented and implemented where compatible with SageMaker/Bedrock. |
+ | S3 real-use blockers | Fixed | `aws_s3_list`, accurate sandbox diagnostics, S3 intent-drift guard, one-strike retry block, cost controls, S3 follow-up reuse, `aws_s3_preview`, truncation guard, ASCII/artifact/status guards. |
+-| Notebook widget regression | Source/package fixed locally; target retest required | v5 Cell 1 now matches latest v4.10.10 by not installing `jupyterlab_widgets` or `widgetsnbextension`; local Jupyter/Playwright from rebuilt ship zip shows `HAS_MODEL_NOT_FOUND False`, `HAS_READY True`, `HAS_SEND True`, `HAS_STOP True`. Follow-up requires the visual to show one combined config/chat UI, not a separate config panel. |
+-| Production-test readiness | 98% confidence after refreshed ship zip | 47 focused tests passed, Claude CLI implementation review and re-review approved with no HIGH/MEDIUM findings. |
++| Notebook widget regression | Source/package fixed locally; target retest required | v5 Cell 1 now goes beyond latest v4.10.10 by not installing/upgrading `ipywidgets`, `jupyterlab_widgets`, or `widgetsnbextension`; local Jupyter/Playwright from rebuilt ship zip shows `CHAT_HAS_MODEL_NOT_FOUND False`, `CHAT_HAS_SEND True`, `CHAT_HAS_STOP True`, and a simple `IntSlider` smoke also passes. |
++| Production-test readiness | 98% confidence after refreshed ship zip | 48 focused tests passed, Claude CLI implementation review and re-review approved with no HIGH/MEDIUM findings. |
+ 
+ Do not confuse "98% production-test ready" with "guaranteed production
+ flawless." The remaining 2% is target-environment variance: SageMaker/Jupyter
+diff --git a/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md b/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md
+index 1e47d03..4657712 100644
+--- a/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md
++++ b/compact_v5_test_evidence/final_results/UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md
+@@ -1,18 +1,19 @@
+-# UI Live Supervisor / S3 Real-Use / Notebook / ask_user / Resume / S3 Follow-Up Ship Zip Verify - 2026-05-12
++# UI Live Supervisor / S3 Real-Use / Notebook / ask_user / Resume / S3 Follow-Up / Widget Dependency Ship Zip Verify - 2026-05-12
+ 
+ - source_tree: `D:\Github\sagemaker-coding-agent\compact_v5`
+ - source_tree_meaning: complete v5 development/runtime source tree
+ - ship_zip_path: `D:\Github\sagemaker-coding-agent\compact_v5_ship.zip`
+ - ship_zip_meaning: minimum runtime artifact to upload/extract in SageMaker
+ - retired_ambiguous_name: `compact_v5.zip`
+-- zip_size_bytes: `512610`
++- zip_size_bytes: `513299`
+ - member_count: `154`
+-- zip_sha256: `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`
++- zip_sha256: `81e15112fa464c2ede898d51240fd5f951913968c2b5b98859f00f965f1c2eb8`
+ - testzip_result: `None`
+ - required_missing: `[]`
+ - forbidden_members: `[]`
+ - required_hash_parity_ok: `True`
+ - notebook_default_ui: `v4-style ipywidgets UI; explicit console fallback only`
++- widget_dependency_contract: `Cell 1 does not install or upgrade ipywidgets, jupyterlab_widgets, or widgetsnbextension`
+ - ask_user_ui: `inline Agent Question prompt with Submit, Skip, Send fallback, and Stop unblock`
+ - resume_ui: `saved sessions rehydrate visible transcript after /resume`
+ - s3_followup_discipline: `reuse prior S3 object paths, cap follow-up list calls, preview selected files safely`
+@@ -25,10 +26,10 @@
+ 
+ | member | status | source_sha256 | zip_sha256 |
+ |---|---|---|---|
+-| `chat.ipynb` | `match` | `812d329c53827aa4fd2684a552960a73b5c382caee0ccf3ce0d7f8ab06e8921f` | `812d329c53827aa4fd2684a552960a73b5c382caee0ccf3ce0d7f8ab06e8921f` |
+-| `chat.md` | `match` | `e6ec3fe1db913e128142bc464738dff65dd0987834b79bdf187e94c434e04059` | `e6ec3fe1db913e128142bc464738dff65dd0987834b79bdf187e94c434e04059` |
++| `chat.ipynb` | `match` | `ef4029f9ad21f43bb3e1f40ed40eda2e7a5d13cf49d599bb367ddfe32de00cf2` | `ef4029f9ad21f43bb3e1f40ed40eda2e7a5d13cf49d599bb367ddfe32de00cf2` |
++| `chat.md` | `match` | `430125ca90a69e4c851195b77f8bf83c0f82906b7988a13567a99ef69d7851a7` | `430125ca90a69e4c851195b77f8bf83c0f82906b7988a13567a99ef69d7851a7` |
+ | `entry.py` | `match` | `58e4738aaf792cd6ab257606a0e88dea693ae682a68c5e7e16248cc3caaee189` | `58e4738aaf792cd6ab257606a0e88dea693ae682a68c5e7e16248cc3caaee189` |
+-| `memory.md` | `match` | `619d2f3087c0424b1289b9a1acb85177dff6be416e64fe23161cae2f12c9bb02` | `619d2f3087c0424b1289b9a1acb85177dff6be416e64fe23161cae2f12c9bb02` |
++| `memory.md` | `match` | `ca553d8f53276eeceeb7f923a99cac11e276b4a6e70c8292b97170ad2b782a3a` | `ca553d8f53276eeceeb7f923a99cac11e276b4a6e70c8292b97170ad2b782a3a` |
+ | `ui/chat_ui.py` | `match` | `0a572ddbf2e6269b26c2b57c40b0b4b7e5ce24c4acd100b587df4746b0f56841` | `0a572ddbf2e6269b26c2b57c40b0b4b7e5ce24c4acd100b587df4746b0f56841` |
+ | `agent.py` | `match` | `84b1f68baa4f74c723c6ddf7ec45e1f7f2cfff6a0b2cf93d5615d1dc98bd1fdf` | `84b1f68baa4f74c723c6ddf7ec45e1f7f2cfff6a0b2cf93d5615d1dc98bd1fdf` |
+ | `core/query_engine.py` | `match` | `0ad890c23b2fd503f17c12cc5fb3872e2c617bbdc628ca7c00c0a78251f82602` | `0ad890c23b2fd503f17c12cc5fb3872e2c617bbdc628ca7c00c0a78251f82602` |
+@@ -36,7 +37,7 @@
+ | `runtime/config.py` | `match` | `7d3da39e5f00192ef7ea06d255acc960a770d9d986f9d91bd8ad7f571db4ccd8` | `7d3da39e5f00192ef7ea06d255acc960a770d9d986f9d91bd8ad7f571db4ccd8` |
+ | `runtime/state.py` | `match` | `1235247893378d5d8845434d38cde866bf029d4e1eda89c7051dfdafb68fb44b` | `1235247893378d5d8845434d38cde866bf029d4e1eda89c7051dfdafb68fb44b` |
+ | `sagemaker_agent.py` | `match` | `eb20e51869fe5db635c88259662ab54c9dff9d63e3ed1415073362233ee43fa2` | `eb20e51869fe5db635c88259662ab54c9dff9d63e3ed1415073362233ee43fa2` |
+-| `AGENT_STATUS.md` | `match` | `e2e651b4c44543fb3743301c8279fc0f0eac68e3bce7f6f66c32aa337a193300` | `e2e651b4c44543fb3743301c8279fc0f0eac68e3bce7f6f66c32aa337a193300` |
++| `AGENT_STATUS.md` | `match` | `d36eab2e8b62e713d1082d081f08616f7af586f6ebbdb6818eb3a71a2fb2b1de` | `d36eab2e8b62e713d1082d081f08616f7af586f6ebbdb6818eb3a71a2fb2b1de` |
+ | `tools/aws_s3_list.py` | `match` | `15922ff1035972ee5d4eb2ebae53c01eb88895572dac04f04ea48ec18b665430` | `15922ff1035972ee5d4eb2ebae53c01eb88895572dac04f04ea48ec18b665430` |
+ | `tools/aws_s3_preview.py` | `match` | `e7e16e8a232809d63a0069f034e2e4b54173a5c4872344c8a191b71193828fa2` | `e7e16e8a232809d63a0069f034e2e4b54173a5c4872344c8a191b71193828fa2` |
+ | `tools/artifacts.py` | `match` | `2a172f8bbc24a74c22f1fb02deb233c3e660f9e4d50ce11bfc92ca6a64007569` | `2a172f8bbc24a74c22f1fb02deb233c3e660f9e4d50ce11bfc92ca6a64007569` |
+diff --git a/compact_v5_test_evidence/final_results/V5_PRODUCTION_TEST_READINESS_20260512.md b/compact_v5_test_evidence/final_results/V5_PRODUCTION_TEST_READINESS_20260512.md
+index 86130c3..0ef4b2a 100644
+--- a/compact_v5_test_evidence/final_results/V5_PRODUCTION_TEST_READINESS_20260512.md
++++ b/compact_v5_test_evidence/final_results/V5_PRODUCTION_TEST_READINESS_20260512.md
+@@ -5,8 +5,9 @@
+ compact_v5 source and `compact_v5_ship.zip` are ready for target SageMaker
+ validation. After the user's fresh SageMaker screenshot still showed
+ `Error displaying widget: model not found`, v5 was aligned more literally with
+-latest v4.10.10: Cell 1 no longer installs `jupyterlab_widgets` or
+-`widgetsnbextension` from inside the notebook.
++the stable widget contract the target needs: unlike v4's unpinned Cell 1
++`ipywidgets` install, v5 no longer installs or upgrades `ipywidgets`,
++`jupyterlab_widgets`, or `widgetsnbextension` from inside the notebook.
+ 
+ Confidence: **100% ready for validation after the refreshed ship zip is used;
+ 98% source/package confidence for production testing; target SageMaker retest
+@@ -23,24 +24,26 @@ but the target SageMaker widget manager still must pass a real smoke test.
+ | Latest v4 baseline | Latest tracked v4 is v4.10.10 at `3ba3425`. | Compared against `compact_v4/MAIN/agent`, not an old archive. | `compact_v4/MAIN/agent/chat.ipynb`; `compact_v4/MAIN/agent/sagemaker_agent.py`. |
+ | Notebook user contract | v4 uses SageMaker/Jupyter ipywidgets as the normal UI. | v5 default is one v4-style combined ipywidgets UI: config controls and chat live in the same displayed widget. Console fallback is explicit only with `use_widgets=False`. | `compact_v5/chat.ipynb`; `compact_v5/entry.py`; `compact_v5/ui/chat_ui.py`. |
+ | Thin launch cells | v4 was familiar but carried long config/launch cells. | v5 Cell 2 is a thin combined launcher; logic lives in `entry.py` and `ui/chat_ui.py`. | `compact_v5/tests/test_notebook_thin_launcher.py`. |
+-| Widget regression | v4 rendered widgets; v5 temporarily showed `model not found`, then still had config separated from chat. | v5 refreshes launcher/UI modules in Cell 2, matches v4's dependency posture by not installing frontend widget extension packages, and launches one combined config/chat UI. | Local Jupyter/Playwright from rebuilt ship zip: `HAS_MODEL_NOT_FOUND False`, `HAS_SEPARATE_AGENT_CONFIG_HEADING False`, `HAS_SINGLE_COMBINED_UI True`, `HAS_CHAT_INPUT True`, `HAS_LINE_METRICS True`, `HAS_OLD_WIDGET_INSTALL False`. |
++| Widget regression | v4 rendered widgets; v5 temporarily showed `model not found`, then still had config separated from chat. | v5 refreshes launcher/UI modules in Cell 2, goes beyond v4's unpinned widget install by not installing/upgrading `ipywidgets` or frontend widget extension packages, and launches one combined config/chat UI. | Local Jupyter/Playwright from rebuilt ship zip: `20260512_widget_contract_chat_live_final.png` with `CHAT_HAS_MODEL_NOT_FOUND False`, `CHAT_HAS_SEND True`, `CHAT_HAS_STOP True`, `CHAT_HAS_READY True`, `CHAT_HAS_IPYWIDGETS_VERSION_PRINT True`, `CHAT_HAS_OLD_WIDGET_INSTALL False`; simple `IntSlider` smoke: `SIMPLE_HAS_MODEL_NOT_FOUND False`. |
+ | Tool visibility | Runnable has strong tool/progress affordances; v4 had better visible flow than early v5. | v5 has live output routing and collapsed/grouped tool cards. | UI smoke tests and Claude UI reviews. |
+ | Model asks user for input | v4 `ask_user` shows an inline Agent Question box with Submit/Skip and Send fallback. | v5 now routes `ask_user` through the combined notebook UI instead of console input: inline prompt, Submit, Skip, Send fallback, Stop unblocks. | `test_ui_ask_user_smoke.py`; `ask_user_ui_reviews/ask_user_prompt_fixture.png`; `ROUND_2_ASK_USER_UI_claude_review.md` -> `APPROVE`. |
+ | Session resume display | v4 reloads the visible chat after loading a saved session. | v5 now rehydrates visible chat rows from restored saved messages after `/resume`, including collapsed tool cards grouped by `tool_use_id`. | `test_ui_session_resume_smoke.py`. |
+ | Thinking display/cost | Earlier v5 thinking placement/cost was confusing. | Thinking is collapsed and placed before metrics; simple S3 inventory disables thinking for that turn. | `test_ui_thinking_smoke.py`; `test_s3_cost_controls.py`. |
+ | S3 real use | User asked for S3 inventory and early v5 drifted to local source inventory. | v5 has `aws_s3_list`, accurate sandbox diagnostics, S3 intent guard, and one-strike blocked retry. | S3 real-use review blocks and tests. |
+-| S3 follow-up discipline | User asked "pick two files to investigate" after S3 inventory. | Fixed. v5 reuses recent S3 object paths, caps follow-up `aws_s3_list` calls, adds `aws_s3_preview`, guards truncated "complete" claims, records artifact paths, rebases user deliverables outside runtime package folders, enforces ASCII writes when requested, blocks status-doc spam for small S3 tasks, hides raw tool ids in summaries, and disables thinking for simple S3 follow-ups. | `S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`; `S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REVIEW.md` -> `APPROVE`; `S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REREVIEW.md` -> `APPROVE`; `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed. |
++| S3 follow-up discipline | User asked "pick two files to investigate" after S3 inventory. | Fixed. v5 reuses recent S3 object paths, caps follow-up `aws_s3_list` calls, adds `aws_s3_preview`, guards truncated "complete" claims, records artifact paths, rebases user deliverables outside runtime package folders, enforces ASCII writes when requested, blocks status-doc spam for small S3 tasks, hides raw tool ids in summaries, and disables thinking for simple S3 follow-ups. | `S3_FOLLOWUP_TOOL_DISCIPLINE_ISSUES_20260512.md`; `S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REVIEW.md` -> `APPROVE`; `S3_FOLLOWUP_TOOL_DISCIPLINE_CLAUDE_REREVIEW.md` -> `APPROVE`; `py -3.10 -m pytest compact_v5/tests -q` -> 48 passed. |
+ | Runnable lessons | Runnable patterns matter, but terminal UI does not map directly to SageMaker notebooks. | v5 adapted relevant patterns: progress visibility, review discipline, status tracking, cache/cost awareness, subagent observability. | `V5_DEEP_SCAN_RUNNABLE_COMPARE_20260511.md`; `V5_DESIGN_OVERVIEW.html`. |
+-| Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `py -3.10 -m pytest compact_v5/tests -q` -> 47 passed. |
++| Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `py -3.10 -m pytest compact_v5/tests -q` -> 48 passed. |
+ | Independent review | User required Claude CLI review with subscription auth. | Final Claude CLI review loop approved; no HIGH/MEDIUM findings; the v4-dependency alignment and combined config/chat UI patches both received `APPROVE`. | `notebook_widget_regression_reviews/ROUND3_*`; `notebook_widget_regression_reviews/claude/ROUND_1_WIDGET_DEPENDENCY_FIX_claude_review.md`; `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md`. |
+-| Package | Source fixes must be in the runtime ship zip. | Minimum ship zip rebuilt and verified: 154 members, `testzip() None`, required hash parity true. | `compact_v5_ship.zip`; SHA `b672a009a018fd284d513c06b2ff88b883073f85c8d334f686a2ae563125543e`; zip verify doc updated. |
++| Package | Source fixes must be in the runtime ship zip. | Minimum ship zip rebuilt and verified: 154 members, `testzip() None`, required hash parity true. | `compact_v5_ship.zip`; current SHA is recorded in `UI_LIVE_SUPERVISOR_ZIP_VERIFY_20260510.md`. |
+ 
+ ## Remaining Risk
+ 
+ The current target retest focus is widget rendering:
+ 
+-- v5 previously installed `jupyterlab_widgets` and `widgetsnbextension` in Cell
+-  1; latest v4 did not. This has been removed.
++- v5 previously installed/upgraded the widget stack in Cell 1. v4 also
++  installed `ipywidgets`, but that unpinned install is a latent mismatch risk;
++  v5 now avoids that risk by not installing or upgrading `ipywidgets`,
++  `jupyterlab_widgets`, or `widgetsnbextension` from the notebook.
+ - SageMaker/Jupyter widget manager behavior can still differ from local
+   Jupyter;
+ - if the target still produces `Error displaying widget: model not found`, run
+diff --git a/memory.md b/memory.md
+index f49b7a7..35af9cb 100644
+--- a/memory.md
++++ b/memory.md
+@@ -5,11 +5,15 @@
+ compact_v5 source and `compact_v5_ship.zip` are packaged for target SageMaker
+ validation. The user's fresh SageMaker retest still showed
+ `Error displaying widget: model not found`; the concrete v5-side difference
+-from latest v4.10.10 was Cell 1 installing `jupyterlab_widgets` and
+-`widgetsnbextension`. v5 now matches v4's dependency posture: install
+-`ipywidgets`, not frontend widget-extension packages.
++from latest v4.10.10 was Cell 1 mutating the widget stack from inside the
++notebook. v4 also installed `ipywidgets`, but that unpinned install was a
++latent browser/kernel mismatch risk. The first v5 repair removed
++`jupyterlab_widgets` and `widgetsnbextension` but still installed/upgraded
++`ipywidgets`, which can also mismatch SageMaker's browser widget manager. v5 is
++now deliberately more conservative than v4: Cell 1 does not install or upgrade
++`ipywidgets`, `jupyterlab_widgets`, or `widgetsnbextension`.
+ 
+-The source/package confidence is based on parity checks, 36 passing focused
++The source/package confidence is based on parity checks, 48 passing focused
+ smoke tests, local Jupyter/Playwright visual evidence from the rebuilt ship
+ zip, rebuilt zip integrity, and independent Claude CLI review approvals. The
+ remaining proof is target SageMaker retest with the new ship zip.

@@ -32,6 +32,27 @@ def test_chat_notebook_launcher_cells_stay_thin():
     assert "render_parts" not in launch_cell
 
 
+def test_notebook_dependency_cell_does_not_mutate_widget_stack():
+    nb = json.loads((ROOT / "chat.ipynb").read_text(encoding="utf-8"))
+    install_cell = "".join(nb["cells"][1]["source"])
+
+    assert "!pip install" in install_cell
+    assert "import ipywidgets as widgets" in install_cell
+    assert "boto3" in install_cell
+    assert "Pillow" in install_cell
+
+    pip_lines = [
+        line
+        for line in install_cell.splitlines()
+        if line.strip().startswith("!pip install")
+    ]
+    assert pip_lines, "Cell 1 must keep the runtime dependency install line"
+    for line in pip_lines:
+        assert "ipywidgets" not in line
+        assert "jupyterlab_widgets" not in line
+        assert "widgetsnbextension" not in line
+
+
 def test_notebook_config_helper_applies_console_safe_defaults():
     controls = _make_notebook_controls(None)
     controls["workspace"].value = "workspace-x"
@@ -237,6 +258,7 @@ def test_combined_ui_mock_mode_toggle_rebuilds_real_client_when_disabled():
 
 if __name__ == "__main__":
     test_chat_notebook_launcher_cells_stay_thin()
+    test_notebook_dependency_cell_does_not_mutate_widget_stack()
     test_notebook_config_helper_applies_console_safe_defaults()
     test_notebook_launch_defaults_to_v4_widget_ui()
     test_combined_launch_ui_defaults_to_v4_widget_ui()
