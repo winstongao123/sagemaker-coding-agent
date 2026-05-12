@@ -416,6 +416,25 @@ def launch_chat_ui(config_ui=None, use_widgets=None):
         use_widgets = True
     return create_chat_ui(force_console=not use_widgets)
 
+
+def launch_ui(use_widgets: bool = True, **overrides):
+    """Launch the single combined v5 notebook UI.
+
+    This is the normal user path. All runtime controls live inside the chat UI
+    itself, so the notebook does not display a separate configuration panel.
+    The older `launch_config_ui()` + `launch_chat_ui()` helpers remain for
+    compatibility and tests only.
+    """
+    global _LAST_NOTEBOOK_CONFIG_UI
+
+    controls = _make_notebook_controls(None)
+    _apply_control_overrides(controls, overrides)
+    state = _SimpleNamespace(controls=controls, use_widgets=bool(use_widgets))
+    state.apply = lambda: _apply_notebook_config(state)
+    state.apply()
+    _LAST_NOTEBOOK_CONFIG_UI = state
+    return create_chat_ui(force_console=not bool(use_widgets))
+
 # Skill manager helper for power users who want to inspect / activate
 # skills programmatically (Phase 10).
 from skills.manager import SkillManager  # noqa: F401

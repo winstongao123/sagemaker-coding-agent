@@ -201,8 +201,9 @@ notebook cells were much longer than v4.
 Implemented:
 - restored the tracked S3/UI smoke tests in the local source tree before
   changing code;
-- moved notebook config/launch plumbing from `chat.ipynb` into
-  `entry.launch_config_ui()` and `entry.launch_chat_ui()`;
+- moved notebook config/launch plumbing from `chat.ipynb` into entry helpers;
+- follow-up correction: normal notebook path now uses `entry.launch_ui()` so
+  configuration and chat live in one displayed widget, not separate panels;
 - reduced `chat.ipynb` config cell from 188 lines to 12 lines;
 - reduced `chat.ipynb` launch cell from 59 lines to 4 lines;
 - preserved the v4-style control surface: model, temperature, thinking toggle,
@@ -218,18 +219,23 @@ Important follow-up:
 - the first thin-notebook patch still failed the user's visual retest. The
   next fallback patch was technically usable but violated the product goal:
   v5 must keep the v4-style ipywidgets UI as the normal path.
-- local browser validation then showed the real missed cause: a reused Jupyter
+- local browser validation then showed the first missed cause: a reused Jupyter
   kernel can keep an older `entry`/UI module loaded, so the notebook source can
   look fixed while Python still executes the previous widget code.
 - current fix restores v4-style widgets as the default, keeps the console path
   as explicit `use_widgets=False`, and makes Cell 2 drop cached launcher/UI
   modules before importing `entry`.
-- local Jupyter/Playwright visual check passed: Cell 2 rendered real
-  ipywidgets controls, Cell 3 rendered the dark v4-style chat surface, and the
+- local Jupyter/Playwright visual check passed before the combined-UI
+  correction: widgets and the dark v4-style chat surface rendered, and the
   captured browser text did not contain `Error displaying widget: model not
   found`.
-- focused smoke suite now passes 31 tests. Latest Claude CLI review loop
+- focused smoke suite now passes 33 tests. Latest Claude CLI review loop
   returned `VERDICT: APPROVE` after the LOW numeric-override edge was fixed.
+- 2026-05-12 follow-up: user clarified config must not be a separate notebook
+  panel. v5 now launches one combined UI from Cell 2; the chat surface includes
+  model, workspace, max turns, iteration budget, mock mode, Bedrock-only,
+  approval, thinking, temperature, budget, dark mode, height, sessions, and
+  subagent controls in one place.
 
 ---
 
@@ -248,26 +254,27 @@ Evidence table:
 | Area | Status | Evidence |
 |---|---|---|
 | Latest v4 comparison | Done against current tracked v4.10.10 reference, not an old archive. | `compact_v4/MAIN/agent/chat.ipynb`, `compact_v4/MAIN/agent/sagemaker_agent.py`, latest v4 commit `3ba3425`. |
-| v4 UI contract | Preserved and made normal path. | `chat.ipynb` launches v4-style ipywidgets by default; console fallback is explicit `use_widgets=False`. |
-| Notebook regression | Latest local visual check passes from rebuilt `compact_v5_ship.zip`; target SageMaker retest still required. | `20260512_ship_v4deps_cell_by_cell.png`; checks: `HAS_MODEL_NOT_FOUND False`, `HAS_READY True`, `HAS_SEND True`, `HAS_STOP True`, `HAS_OLD_WIDGET_INSTALL False`. |
+| v4 UI contract | Preserved and made normal path. | `chat.ipynb` launches one v4-style combined ipywidgets UI by default; console fallback is explicit `use_widgets=False`. |
+| Notebook regression | Latest local visual check passes from rebuilt `compact_v5_ship.zip`; target SageMaker retest still required. | `20260512_combined_ui_cell2_tall.png`; checks: `HAS_MODEL_NOT_FOUND False`, `HAS_SEPARATE_AGENT_CONFIG_HEADING False`, `HAS_SINGLE_COMBINED_UI True`, `HAS_CHAT_INPUT True`, `HAS_LINE_METRICS True`, `HAS_OLD_WIDGET_INSTALL False`. |
 | S3 real-use blockers | P0/P1 shipped. | `aws_s3_list`, sandbox diagnostics, S3 intent-drift guard, one-strike blocked retry, cost controls. |
 | Runnable lessons | Relevant agentic patterns absorbed, delivery-surface features intentionally not copied. | Tool/progress visibility, reviewer discipline, status tracking, cache/cost awareness, subagent observability. |
-| Tests | Green. | `python -m pytest compact_v5/tests -q` -> 31 passed. |
-| Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final widget-dependency review `notebook_widget_regression_reviews/claude/ROUND_1_WIDGET_DEPENDENCY_FIX_claude_review.md` returned `APPROVE` with no HIGH/MEDIUM blockers. |
+| Tests | Green. | `python -m pytest compact_v5/tests -q` -> 33 passed. |
+| Independent review | Approved. | Claude CLI Round 3 review/re-review/re-review2 all `APPROVE`; final widget-dependency review returned `APPROVE`; combined config/chat UI re-review `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md` returned `APPROVE` with no HIGH/MEDIUM blockers. |
 | Zip/package | Rebuilt and verified. | `compact_v5_ship.zip`, 152 members, `testzip() None`, required members present, forbidden folders absent. |
 
 Latest fix:
 - Cell 1 no longer installs `jupyterlab_widgets` or `widgetsnbextension`.
   This matches latest v4.10.10's notebook dependency line and avoids mutating
   SageMaker's browser-side widget extension stack from inside the notebook.
-- Local Jupyter + Playwright executed Cells 1-3 from the rebuilt
-  `compact_v5_ship.zip`; the v4-style dark chat UI rendered with Send/Stop,
-  metrics, and no `model not found`.
+- Local Jupyter + Playwright executed Cell 2 from the rebuilt
+  `compact_v5_ship.zip`; the single combined v4-style dark UI rendered config
+  controls and chat together, with Send/Stop, line metrics, and no
+  `model not found`.
 
 Target retest still required:
 - upload/extract the latest `compact_v5_ship.zip`;
 - restart the SageMaker kernel;
-- rerun Cells 1-3;
+- rerun Cells 1-2;
 - if the error remains, run the basic widget smoke
   `display(widgets.IntSlider(description="Widget test"))` to distinguish
   target widget-stack failure from v5 widget-tree failure.
@@ -279,8 +286,8 @@ Residual risk:
 Required next validation:
 1. Upload/extract latest `compact_v5_ship.zip` in target SageMaker.
 2. Restart kernel.
-3. Run Cells 1-3.
-4. Confirm Cell 2 widgets and Cell 3 dark v4-style chat UI render with no
+3. Run Cells 1-2.
+4. Confirm Cell 2 renders the single combined dark v4-style chat/config UI with no
    `Error displaying widget: model not found`.
 5. If the error remains, run a basic ipywidgets smoke:
    `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.

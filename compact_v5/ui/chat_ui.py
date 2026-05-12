@@ -361,6 +361,39 @@ class V4WidgetChatUI(WidgetChatUI):
         self._thinking_budget_slider = widgets.IntSlider(value=int(getattr(self.agent, "thinking_budget", 4096)), min=1024, max=16000, step=1024, description="Think Budget:", style={"description_width": "100px"}, layout=widgets.Layout(width="250px"), disabled=not bool(getattr(self.agent, "thinking_enabled", False)))
         self._temperature_slider = widgets.FloatSlider(value=float(getattr(CONFIG, "temperature", 0.0)), min=0.0, max=1.0, step=0.1, description="Temperature:", style={"description_width": "100px"}, layout=widgets.Layout(width="250px"))
         self._budget_input = widgets.BoundedFloatText(value=float(getattr(CONFIG, "session_cost_limit", 0.0) or 10.0), min=0.0, max=999.0, step=0.5, description="Budget $:", style={"description_width": "70px"}, layout=widgets.Layout(width="160px"))
+        self._workspace_text = widgets.Text(
+            value=str(getattr(CONFIG, "workspace", ".") or "."),
+            description="Workspace:",
+            placeholder="Directory for file operations",
+            style={"description_width": "85px"},
+            layout=widgets.Layout(width="320px"),
+        )
+        self._max_turns_slider = widgets.IntSlider(
+            value=int(getattr(CONFIG, "max_turns", 60) or 60),
+            min=5,
+            max=500,
+            step=5,
+            description="Max Turns:",
+            style={"description_width": "85px"},
+            layout=widgets.Layout(width="260px"),
+        )
+        self._iteration_budget_slider = widgets.IntSlider(
+            value=int(getattr(CONFIG, "max_iteration_budget", 600) or 600),
+            min=90,
+            max=2000,
+            step=50,
+            description="Iter Budget:",
+            style={"description_width": "85px"},
+            layout=widgets.Layout(width="280px"),
+        )
+        self._mock_mode_toggle = widgets.Checkbox(
+            value=bool(getattr(CONFIG, "mock_mode", False)),
+            description="Mock Mode",
+            indent=False,
+            tooltip="Test without Bedrock API calls.",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="auto"),
+        )
         self._auto_compact = widgets.Checkbox(value=True, description="Auto-Compact", indent=False, layout=widgets.Layout(width="auto"))
         self._dark_toggle = widgets.Checkbox(value=True, description="Dark Mode", indent=False, style={"description_width": "initial"}, layout=widgets.Layout(width="auto"))
         self._chat_height_slider = widgets.IntSlider(value=500, min=200, max=1200, step=50, description="Chat Height:", style={"description_width": "100px"}, layout=widgets.Layout(width="250px"))
@@ -400,6 +433,10 @@ class V4WidgetChatUI(WidgetChatUI):
         self._thinking_budget_slider.observe(self._on_thinking_budget_change, names="value")
         self._temperature_slider.observe(self._on_temperature_change, names="value")
         self._budget_input.observe(self._on_budget_change, names="value")
+        self._workspace_text.observe(self._on_workspace_change, names="value")
+        self._max_turns_slider.observe(self._on_max_turns_change, names="value")
+        self._iteration_budget_slider.observe(self._on_iteration_budget_change, names="value")
+        self._mock_mode_toggle.observe(self._on_mock_mode_change, names="value")
         self._chat_height_slider.observe(self._on_chat_height_change, names="value")
         self._dark_toggle.observe(self._on_dark_mode_change, names="value")
         self._plan_mode.observe(self._on_plan_mode_change, names="value")
@@ -458,6 +495,13 @@ class V4WidgetChatUI(WidgetChatUI):
         session_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
         model_row = widgets.HBox([self._model_dropdown, self._subagent_toggle, self._plan_mode, self._approval_toggle, self._bedrock_only_toggle])
         model_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
+        runtime_row = widgets.HBox([
+            self._workspace_text,
+            self._max_turns_slider,
+            self._iteration_budget_slider,
+            self._mock_mode_toggle,
+        ])
+        runtime_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
         thinking_row = widgets.HBox([self._thinking_checkbox, self._thinking_budget_slider, self._temperature_slider, self._budget_input, self._auto_compact, self._dark_toggle, self._chat_height_slider])
         thinking_row.layout = widgets.Layout(flex_flow="row wrap", align_items="center", grid_gap="4px 8px")
         action_left = widgets.HBox([self._send_btn, self._stop_btn, self._clear_btn])
@@ -470,7 +514,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._render_header()
         self._render_chat()
         self._render_status()
-        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._input, action_row, sep4, self._tokens_html, self._mode_html])
+        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, runtime_row, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._input, action_row, sep4, self._tokens_html, self._mode_html])
         self._panel.add_class("sageagent-v4-dark")
 
     def _refresh_sessions(self) -> None:
@@ -1544,6 +1588,75 @@ class V4WidgetChatUI(WidgetChatUI):
             CONFIG.session_cost_limit = float(change["new"])
         except Exception:
             pass
+        self._render_status()
+
+    def _on_workspace_change(self, change) -> None:
+        try:
+            from runtime.config import CONFIG
+            CONFIG.workspace = str(change["new"] or ".")
+        except Exception:
+            pass
+        self._render_header()
+        self._render_status()
+
+    def _on_max_turns_change(self, change) -> None:
+        value = max(1, int(change["new"]))
+        try:
+            from runtime.config import CONFIG
+            CONFIG.max_turns = value
+        except Exception:
+            pass
+        try:
+            engine = getattr(self.agent, "_engine", None)
+            if engine is not None and hasattr(engine, "max_turns"):
+                engine.max_turns = value
+        except Exception:
+            pass
+        self._render_status()
+
+    def _on_iteration_budget_change(self, change) -> None:
+        value = max(1, int(change["new"]))
+        try:
+            from runtime.config import CONFIG
+            CONFIG.max_iteration_budget = value
+        except Exception:
+            pass
+        try:
+            budget = getattr(self.agent, "budget", None)
+            lock = getattr(budget, "_lock", None)
+            if budget is not None and hasattr(budget, "_max"):
+                if lock is not None:
+                    with lock:
+                        budget._max = value
+                else:
+                    budget._max = value
+        except Exception:
+            pass
+        self.budget_widget.update()
+        self._render_status()
+
+    def _on_mock_mode_change(self, change) -> None:
+        enabled = bool(change["new"])
+        try:
+            from runtime.config import CONFIG
+            CONFIG.mock_mode = enabled
+            client = getattr(self.agent, "client", None)
+            if client is not None and hasattr(client, "mock_mode"):
+                client.mock_mode = enabled
+                if enabled and hasattr(client, "client"):
+                    client.client = None
+                elif (
+                    not enabled
+                    and getattr(client, "client", None) is None
+                    and hasattr(client, "_rebuild_bedrock_client")
+                ):
+                    client._rebuild_bedrock_client()
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("[chat-ui] Mock Mode update failed: %s", exc)
+            self._append_message(
+                "system",
+                f"Mock Mode update failed: {type(exc).__name__}: {exc}",
+            )
         self._render_status()
 
     def _on_chat_height_change(self, change) -> None:

@@ -14,21 +14,22 @@ from entry import (
     _make_notebook_controls,
     launch_config_ui,
     launch_chat_ui,
+    launch_ui,
 )
+from ui.chat_ui import V4WidgetChatUI
 
 
 def test_chat_notebook_launcher_cells_stay_thin():
     nb = json.loads((ROOT / "chat.ipynb").read_text(encoding="utf-8"))
-    config_cell = "".join(nb["cells"][2]["source"])
-    launch_cell = "".join(nb["cells"][3]["source"])
+    launch_cell = "".join(nb["cells"][2]["source"])
 
-    assert len(config_cell.splitlines()) <= 20
-    assert len(launch_cell.splitlines()) <= 10
-    assert "launch_config_ui" in config_cell
-    assert "launch_chat_ui" in launch_cell
-    assert "def _ensure_sageagent_path" not in config_cell + launch_cell
-    assert "display(ui.render())" not in config_cell + launch_cell
-    assert "render_parts" not in config_cell + launch_cell
+    assert len(launch_cell.splitlines()) <= 20
+    assert "launch_ui" in launch_cell
+    assert "launch_config_ui" not in launch_cell
+    assert "launch_chat_ui" not in launch_cell
+    assert "def _ensure_sageagent_path" not in launch_cell
+    assert "display(ui.render())" not in launch_cell
+    assert "render_parts" not in launch_cell
 
 
 def test_notebook_config_helper_applies_console_safe_defaults():
@@ -77,6 +78,35 @@ def test_notebook_launch_defaults_to_v4_widget_ui():
         entry.create_chat_ui = fake_create_chat_ui
         assert launch_chat_ui(state) == "widget-ui"
         assert captured["force_console"] is False
+    finally:
+        entry.create_chat_ui = old_factory
+        for name, value in old.items():
+            setattr(CONFIG, name, value)
+
+
+def test_combined_launch_ui_defaults_to_v4_widget_ui():
+    captured = {}
+    old_factory = entry.create_chat_ui
+    old = {
+        "model_id": CONFIG.model_id,
+        "workspace": CONFIG.workspace,
+        "mock_mode": CONFIG.mock_mode,
+        "thinking_enabled": CONFIG.thinking_enabled,
+        "aws_bedrock_only": CONFIG.aws_bedrock_only,
+        "max_turns": CONFIG.max_turns,
+        "max_iteration_budget": CONFIG.max_iteration_budget,
+    }
+
+    def fake_create_chat_ui(**kwargs):
+        captured.update(kwargs)
+        return "combined-widget-ui"
+
+    try:
+        entry.create_chat_ui = fake_create_chat_ui
+        assert launch_ui(use_widgets=True, workspace="workspace-y", max_turns=120) == "combined-widget-ui"
+        assert captured["force_console"] is False
+        assert CONFIG.workspace == "workspace-y"
+        assert CONFIG.max_turns == 120
     finally:
         entry.create_chat_ui = old_factory
         for name, value in old.items():
@@ -171,13 +201,49 @@ def test_launch_chat_ui_explicit_widget_override_is_honored():
             setattr(CONFIG, name, value)
 
 
+def test_combined_ui_mock_mode_toggle_rebuilds_real_client_when_disabled():
+    class FakeClient:
+        def __init__(self):
+            self.mock_mode = False
+            self.client = object()
+            self.rebuild_count = 0
+
+        def _rebuild_bedrock_client(self):
+            self.rebuild_count += 1
+            self.client = object()
+            return True
+
+    fake_client = FakeClient()
+    ui = V4WidgetChatUI.__new__(V4WidgetChatUI)
+    ui.agent = SimpleNamespace(client=fake_client)
+    ui._render_status = lambda: None
+    ui._append_message = lambda *args, **kwargs: None
+
+    old_mock = CONFIG.mock_mode
+    try:
+        ui._on_mock_mode_change({"new": True})
+        assert CONFIG.mock_mode is True
+        assert fake_client.mock_mode is True
+        assert fake_client.client is None
+
+        ui._on_mock_mode_change({"new": False})
+        assert CONFIG.mock_mode is False
+        assert fake_client.mock_mode is False
+        assert fake_client.rebuild_count == 1
+        assert fake_client.client is not None
+    finally:
+        CONFIG.mock_mode = old_mock
+
+
 if __name__ == "__main__":
     test_chat_notebook_launcher_cells_stay_thin()
     test_notebook_config_helper_applies_console_safe_defaults()
     test_notebook_launch_defaults_to_v4_widget_ui()
+    test_combined_launch_ui_defaults_to_v4_widget_ui()
     test_notebook_console_fallback_is_explicit_opt_in()
     test_notebook_control_defaults_match_production_docs()
     test_notebook_overrides_accept_numeric_values()
     test_notebook_invalid_numeric_overrides_are_ignored()
     test_launch_chat_ui_explicit_widget_override_is_honored()
+    test_combined_ui_mock_mode_toggle_rebuilds_real_client_when_disabled()
     print("notebook thin launcher smoke: OK")

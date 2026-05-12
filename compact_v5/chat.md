@@ -9,13 +9,12 @@ v5 keeps the v4-style notebook experience, but the engine underneath is the fina
 Run the notebook cells in order:
 
 1. Install dependencies.
-2. Run the configuration cell. It displays the v4-style ipywidgets controls
-   and refreshes the launcher/UI modules so a reused kernel does not run stale
-   code from a previous zip.
-3. Launch the v4-style chat UI.
-4. Send messages from the chat box, or from a new cell with
+2. Launch the single v4-style v5 UI. This one displayed widget contains both
+   configuration controls and the chat surface, and refreshes launcher/UI
+   modules so a reused kernel does not run stale code from a previous zip.
+3. Send messages from the chat box, or from a new cell with
    `ui.send("your message")`.
-5. Read the quick reference section when you need commands or skills.
+4. Read the quick reference section when you need commands or skills.
 
 The usual production file to open is:
 
@@ -175,8 +174,8 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 |---|---|
 | `ModuleNotFoundError: No module named 'entry'` | Use the rebuilt zip and re-run Cell 2. The thin notebook bootstrap locates the runtime from the shipped zip root, `compact_v5/`, or a repo root that contains `compact_v5/`. |
 | `ModuleNotFoundError: No module named 'runtime'` | This usually means an old or partial zip was extracted. Re-extract the latest `compact_v5_ship.zip`; it must contain `runtime/__init__.py`, `core/__init__.py`, `tools/`, `subagent/`, and `ui/` beside `entry.py`. |
-| Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-3 from the latest zip. Cell 2 intentionally drops cached `entry` and UI modules before importing so a reused kernel picks up the files on disk. |
-| `Error displaying widget: model not found` or repeated `Loading widget...` | First confirm you are using the latest `compact_v5_ship.zip`; Cell 1 should install `boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib requests scikit-learn` and should **not** install `jupyterlab_widgets` or `widgetsnbextension`. Restart the kernel and rerun Cells 1-3. If the error remains, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`. If the simple slider also fails, the target widget stack is broken or mismatched independent of v5. If the slider works but v5 fails, capture the screenshot and versions for a v5 UI fix. For emergency headless use only, call `launch_config_ui(use_widgets=False)` and `launch_chat_ui(config_ui, use_widgets=False)`, then send with `ui.send("your message")`. |
+| Widgets do not render | Run the install cell, restart the kernel, clear old outputs, and rerun Cells 1-2 from the latest zip. Cell 2 intentionally drops cached `entry` and UI modules before importing so a reused kernel picks up the files on disk. |
+| `Error displaying widget: model not found` or repeated `Loading widget...` | First confirm you are using the latest `compact_v5_ship.zip`; Cell 1 should install `boto3 ipywidgets Pillow python-docx pandas openpyxl matplotlib requests scikit-learn` and should **not** install `jupyterlab_widgets` or `widgetsnbextension`. Restart the kernel and rerun Cells 1-2. If the error remains, run `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`. If the simple slider also fails, the target widget stack is broken or mismatched independent of v5. If the slider works but v5 fails, capture the screenshot and versions for a v5 UI fix. For emergency headless use only, call `launch_ui(use_widgets=False)`, then send with `ui.send("your message")`. |
 | Console fallback blocks a mutating tool | The fallback is only for headless/debug use. Use the v4-style widget UI for normal validation because it provides the intended approval and live-supervisor controls. |
 | Bedrock access denied | Check IAM and region; use mock mode for local smoke. |
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
@@ -198,12 +197,13 @@ Final evidence summary:
 - Current production-test readiness: 98% confidence for target SageMaker
   production testing, with the remaining risk explicitly limited to target
   environment widget/IAM/package variance.
-- Current focused smoke suite: `31 passed`.
+- Current focused smoke suite: `33 passed`.
 - Latest independent Claude CLI notebook/v4 comparison review: `APPROVE`, no
   HIGH/MEDIUM findings.
-- Latest local visual evidence: Cell 2 rendered real ipywidgets controls,
-  Cell 3 rendered the dark v4-style chat UI, and browser text contained
-  `HAS_WIDGET_ERROR False`.
+- Latest local visual evidence: Cell 2 rendered one combined config/chat UI
+  from the rebuilt ship zip with no `model not found`, no separate
+  `Agent Configuration` panel, chat input present, line metrics present, and
+  no old widget-extension install text.
 
 ## What Is Not In The Runtime Zip
 
