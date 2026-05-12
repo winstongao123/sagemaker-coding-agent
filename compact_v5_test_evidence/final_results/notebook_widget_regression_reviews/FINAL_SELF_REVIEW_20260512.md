@@ -30,6 +30,7 @@ and independent Claude review approved the v5-vs-v4 comparison.
 | Zip verify | `testzip=None`, required missing `[]`, forbidden `[]`, required hash parity `True` |
 | Claude Round 1 | APPROVE, no HIGH/MEDIUM |
 | Claude final v5-vs-v4 | APPROVE, no HIGH/MEDIUM |
+| Round 2 non-widget fallback | APPROVE after re-review, no HIGH/MEDIUM |
 
 ## v5 vs v4
 
@@ -42,8 +43,7 @@ package/evidence gates.
 
 ## Remaining Gate
 
-The only remaining proof is environmental: run the rebuilt zip in the target
-SageMaker/Jupyter kernel after clearing outputs and restarting the kernel. Local
-Python can prove notebook shape and package integrity, but not the frontend
-widget manager.
-
+The first target visual check failed because the frontend could not render any
+ipywidgets models. The shipped default now bypasses ipywidgets, so the next
+target check should verify that Cells 2-3 render plain HTML/console fallback
+without `model not found`, then validate `ui.send("hello")`.

@@ -147,10 +147,33 @@ Fixed in the follow-up notebook regression patch:
 | Smoke tests passed | `py -3.10 -m pytest` over S3/UI plus notebook thin tests: 25 passed. |
 | Independent review | Claude Round 1 returned `VERDICT: APPROVE` with no HIGH/MEDIUM findings. |
 
-Remaining caveat: a true frontend `Error displaying widget: model not found`
-cannot be fully proven by local Python execution. The rebuilt zip still needs a
-fresh-kernel SageMaker visual smoke before claiming the notebook UI path is
-100% production proven.
+## Visual validation failure after first fix
+
+The user's next screenshot still showed:
+
+```text
+Cell 2 config: Error displaying widget: model not found
+Cell 3 chat:   Error displaying widget: model not found
+```
+
+That proved the issue was not only a large chat root widget. The target
+SageMaker/Jupyter frontend could not render even simple config widgets.
+
+Second follow-up fix:
+
+| Change | Result |
+|---|---|
+| Default `launch_config_ui()` avoids ipywidgets | Cell 2 renders a plain HTML/text configuration summary instead of widget models. |
+| Default `launch_chat_ui()` avoids ipywidgets | Cell 3 launches `ConsoleChatUI`; users send with `ui.send("message")`. |
+| Rich widgets are opt-in | Use `launch_config_ui(use_widgets=True)` and `launch_chat_ui(config_ui, use_widgets=True)` only after the frontend is proven. |
+| `create_chat_ui(force_console=True)` added | Runtime can bypass ipywidgets even when the package imports successfully. |
+| Regression test updated | The notebook test asserts default launch forces console fallback. |
+| Production defaults preserved | Non-widget fallback keeps `mock_mode=False`, `thinking=False`, `bedrock_only=True`, workspace `.`, max turns 60, and iteration budget 600. |
+| Claude re-review | Round 2 re-review returned `APPROVE`, no HIGH/MEDIUM. |
+
+Current status: the shipped notebook no longer depends on ipywidgets for the
+default path, so the specific `model not found` widget-rendering failure should
+not appear unless the user explicitly opts into rich widgets.
 
 ## Future Software Lesson
 

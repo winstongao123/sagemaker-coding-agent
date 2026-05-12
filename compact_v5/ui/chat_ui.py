@@ -1670,6 +1670,7 @@ def create_chat_ui(
     mock_mode: Optional[bool] = None,
     skill_manager: Optional[Any] = None,
     auto_display: bool = True,
+    force_console: bool = False,
 ) -> Any:
     """Build a chat UI bound to the given (or freshly constructed) Agent.
 
@@ -1682,6 +1683,9 @@ def create_chat_ui(
         skill_manager: optional SkillManager for the lazy path.
         auto_display: display the complete widget immediately. Defaults to
             True to match compact_v4's SageMaker notebook behavior.
+        force_console: bypass ipywidgets even when installed. This is the
+            shipped notebook fallback for SageMaker/Jupyter frontends whose
+            widget manager raises "model not found".
 
     Returns:
         A `WidgetChatUI` when ipywidgets is available, otherwise a
@@ -1713,6 +1717,17 @@ def create_chat_ui(
             thinking_enabled=getattr(CONFIG, "thinking_enabled", False),
             thinking_budget=getattr(CONFIG, "thinking_budget", 4096),
         )
+
+    if force_console:
+        ui = ConsoleChatUI(agent)
+        if auto_display:
+            try:
+                from IPython.display import display
+
+                display(ui.render())
+            except Exception:
+                print(ui.render_html())
+        return ui
 
     if _IPYWIDGETS_OK:
         if auto_display:

@@ -215,7 +215,13 @@ Implemented:
 - Claude Round 1 review returned `VERDICT: APPROVE`, no HIGH/MEDIUM findings.
 
 Important caveat:
-- local Python can prove the notebook shape, import path, config propagation,
-  and no saved outputs/widget metadata. It cannot fully prove the frontend
-  SageMaker/Jupyter widget manager. The rebuilt zip still needs a fresh-kernel
-  target visual smoke before calling the UI launch path 100% production-proven.
+- the first thin-notebook patch still failed target visual validation because
+  the SageMaker/Jupyter widget manager could not render even the config
+  widgets. The shipped default now bypasses ipywidgets entirely:
+  `launch_config_ui()` renders a plain HTML summary and `launch_chat_ui()`
+  returns a `ConsoleChatUI` handle. Rich widgets are opt-in only through
+  `use_widgets=True`.
+- Round 2 Claude review first requested one fix because the fallback default
+  accidentally set `mock_mode=True`; this is corrected to `mock_mode=False`
+  and locked by tests. Claude re-review returned `APPROVE`, no HIGH/MEDIUM.
+- focused pytest now passes 28 tests.

@@ -128,6 +128,12 @@ def _widget_value(widget_or_value):
     return getattr(widget_or_value, "value", widget_or_value)
 
 
+def _set_widget_value(widget_or_value, value):
+    if hasattr(widget_or_value, "value"):
+        widget_or_value.value = value
+    return widget_or_value
+
+
 def _label_for_model(model_id):
     for label, mid in BEDROCK_MODELS:
         if mid == model_id:
@@ -149,7 +155,7 @@ def _make_notebook_controls(widgets=None):
             "max_turns": _NotebookValue(60),
             "iteration_budget": _NotebookValue(600),
             "workspace": _NotebookValue("."),
-            "mock_mode": _NotebookValue(True),
+            "mock_mode": _NotebookValue(False),
             "thinking": _NotebookValue(False),
             "bedrock_only": _NotebookValue(True),
         }
@@ -219,6 +225,31 @@ def _make_notebook_controls(widgets=None):
     }
 
 
+def _apply_control_overrides(controls, overrides):
+    key_map = {
+        "model": "model",
+        "model_label": "model",
+        "temperature": "temperature",
+        "thinking_budget": "thinking_budget",
+        "max_turns": "max_turns",
+        "iteration_budget": "iteration_budget",
+        "max_iteration_budget": "iteration_budget",
+        "workspace": "workspace",
+        "mock_mode": "mock_mode",
+        "thinking": "thinking",
+        "thinking_enabled": "thinking",
+        "bedrock_only": "bedrock_only",
+        "aws_bedrock_only": "bedrock_only",
+    }
+    for name, value in overrides.items():
+        if value is None:
+            continue
+        key = key_map.get(name)
+        if key in controls:
+            _set_widget_value(controls[key], value)
+    return controls
+
+
 def _apply_notebook_config(config_ui=None):
     controls = getattr(config_ui, "controls", None) or _make_notebook_controls(None)
     available_models = dict(BEDROCK_MODELS)
@@ -238,16 +269,67 @@ def _apply_notebook_config(config_ui=None):
     return CONFIG
 
 
-def launch_config_ui():
-    """Display v4-style config controls and return a small config handle."""
+def _display_plain_config_summary():
+    html = (
+        "<div style='font-family:sans-serif;border:1px solid #555;"
+        "border-left:4px solid #4a9eff;padding:12px;margin:8px 0;"
+        "background:#111;color:#eee;'>"
+        "<h3 style='margin:0 0 8px;'>Agent Configuration</h3>"
+        "<div><b>Widget mode:</b> off (safe fallback for this SageMaker frontend)</div>"
+        f"<div><b>Model:</b> {CONFIG.model_id}</div>"
+        f"<div><b>Region:</b> {CONFIG.region}</div>"
+        f"<div><b>Workspace:</b> {CONFIG.workspace}</div>"
+        f"<div><b>Mock mode:</b> {CONFIG.mock_mode} | "
+        f"<b>Thinking:</b> {CONFIG.thinking_enabled} | "
+        f"<b>Bedrock-only:</b> {CONFIG.aws_bedrock_only}</div>"
+        f"<div><b>Max turns:</b> {CONFIG.max_turns} | "
+        f"<b>Iter budget:</b> {CONFIG.max_iteration_budget} | "
+        f"<b>Cost limit:</b> ${CONFIG.session_cost_limit:.0f}</div>"
+        "<p style='color:#aaa;margin:8px 0 0;'>"
+        "Run the next cell to start. Use "
+        "<code>ui.send(&quot;your message&quot;)</code> in a new cell. "
+        "For rich widgets only after confirming the frontend works, call "
+        "<code>launch_config_ui(use_widgets=True)</code> and "
+        "<code>launch_chat_ui(config_ui, use_widgets=True)</code>."
+        "</p></div>"
+    )
+    try:
+        from IPython.display import HTML, display
+
+        display(HTML(html))
+    except Exception:
+        print("Agent Configuration")
+        print(f"Model: {CONFIG.model_id}")
+        print(f"Region: {CONFIG.region}")
+        print(f"Workspace: {CONFIG.workspace}")
+        print("Run ui.send('your message') after launching the chat UI.")
+
+
+def launch_config_ui(use_widgets: bool = False, **overrides):
+    """Display notebook config and return a small config handle.
+
+    Default is non-widget HTML because the target SageMaker frontend can report
+    "Error displaying widget: model not found" even when ipywidgets imports.
+    """
     global _LAST_NOTEBOOK_CONFIG_UI
+
+    if not use_widgets:
+        controls = _make_notebook_controls(None)
+        _apply_control_overrides(controls, overrides)
+        state = _SimpleNamespace(controls=controls, use_widgets=False)
+        state.apply = lambda: _apply_notebook_config(state)
+        state.apply()
+        _LAST_NOTEBOOK_CONFIG_UI = state
+        _display_plain_config_summary()
+        return state
 
     try:
         import ipywidgets as widgets
         from IPython.display import HTML, display
     except Exception:
         controls = _make_notebook_controls(None)
-        state = _SimpleNamespace(controls=controls)
+        _apply_control_overrides(controls, overrides)
+        state = _SimpleNamespace(controls=controls, use_widgets=False)
         state.apply = lambda: _apply_notebook_config(state)
         state.apply()
         _LAST_NOTEBOOK_CONFIG_UI = state
@@ -258,7 +340,8 @@ def launch_config_ui():
         return state
 
     controls = _make_notebook_controls(widgets)
-    state = _SimpleNamespace(controls=controls)
+    _apply_control_overrides(controls, overrides)
+    state = _SimpleNamespace(controls=controls, use_widgets=True)
     state.apply = lambda: _apply_notebook_config(state)
     state.apply()
     _LAST_NOTEBOOK_CONFIG_UI = state
@@ -297,12 +380,20 @@ def launch_config_ui():
     return state
 
 
-def launch_chat_ui(config_ui=None):
-    """Apply notebook controls and launch the auto-displayed chat UI."""
+def launch_chat_ui(config_ui=None, use_widgets=None):
+    """Apply notebook controls and launch the chat UI.
+
+    Default is ConsoleChatUI / HTML fallback. Pass `use_widgets=True` only for
+    environments where ipywidgets are visually confirmed to work.
+    """
     if config_ui is None:
         config_ui = _LAST_NOTEBOOK_CONFIG_UI
     _apply_notebook_config(config_ui)
-    return create_chat_ui()
+    if use_widgets is None and config_ui is not None:
+        use_widgets = bool(getattr(config_ui, "use_widgets", use_widgets))
+    if use_widgets is None:
+        use_widgets = False
+    return create_chat_ui(force_console=not use_widgets)
 
 # Skill manager helper for power users who want to inspect / activate
 # skills programmatically (Phase 10).
