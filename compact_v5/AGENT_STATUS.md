@@ -292,3 +292,38 @@ Required next validation:
 5. If the error remains, run a basic ipywidgets smoke:
    `import ipywidgets as widgets; display(widgets.IntSlider(description="Widget test"))`.
 6. Run the S3 inventory and notes_cli-style acceptance prompts.
+
+---
+
+## 2026-05-12 ask_user UI Parity Fix
+
+Current task state: closed a v5/v4 parity gap for model-initiated user input.
+
+Problem:
+- approval prompts already used a widget dialog, but the `ask_user` tool did
+  not receive a notebook UI response provider from `V4WidgetChatUI`;
+- without that provider, a model asking the user for clarification could fall
+  back to console `input()`, which is not the v4 notebook contract.
+
+Implemented:
+- `V4WidgetChatUI` now includes a v4-style inline `Agent Question` prompt
+  inside the single combined UI, directly below the chat transcript;
+- the prompt has Submit and Skip buttons and also accepts the main Send button
+  as a fallback while the agent is waiting;
+- Stop resolves a pending ask prompt with `(stopped)`;
+- `Agent.run(...)` and `QueryEngine.run(...)` now pass
+  `ask_user_response_provider` through to tool dispatch;
+- `_dispatch_single_tool_call(...)` forwards the provider into
+  `tool.execute(..., context={...})`, so `tools/ask_user.py` uses the notebook
+  UI path instead of console input.
+
+Verification:
+- `py -3.10 -m pytest compact_v5\tests\test_ui_ask_user_smoke.py -q` ->
+  3 passed;
+- `py -3.10 -m pytest compact_v5\tests -q` -> 36 passed;
+- `py_compile` passed for `ui/chat_ui.py`, `agent.py`,
+  `core/query_engine.py`, and `tools/ask_user.py`;
+- Playwright screenshot:
+  `compact_v5_test_evidence/final_results/ask_user_ui_reviews/ask_user_prompt_fixture.png`;
+- Claude CLI subscription review Round 1 found a real provider propagation
+  bug; Round 2 returned `APPROVE`, no HIGH/MEDIUM blockers.

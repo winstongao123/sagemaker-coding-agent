@@ -24,10 +24,11 @@ but the target SageMaker widget manager still must pass a real smoke test.
 | Thin launch cells | v4 was familiar but carried long config/launch cells. | v5 Cell 2 is a thin combined launcher; logic lives in `entry.py` and `ui/chat_ui.py`. | `compact_v5/tests/test_notebook_thin_launcher.py`. |
 | Widget regression | v4 rendered widgets; v5 temporarily showed `model not found`, then still had config separated from chat. | v5 refreshes launcher/UI modules in Cell 2, matches v4's dependency posture by not installing frontend widget extension packages, and launches one combined config/chat UI. | Local Jupyter/Playwright from rebuilt ship zip: `HAS_MODEL_NOT_FOUND False`, `HAS_SEPARATE_AGENT_CONFIG_HEADING False`, `HAS_SINGLE_COMBINED_UI True`, `HAS_CHAT_INPUT True`, `HAS_LINE_METRICS True`, `HAS_OLD_WIDGET_INSTALL False`. |
 | Tool visibility | Runnable has strong tool/progress affordances; v4 had better visible flow than early v5. | v5 has live output routing and collapsed/grouped tool cards. | UI smoke tests and Claude UI reviews. |
+| Model asks user for input | v4 `ask_user` shows an inline Agent Question box with Submit/Skip and Send fallback. | v5 now routes `ask_user` through the combined notebook UI instead of console input: inline prompt, Submit, Skip, Send fallback, Stop unblocks. | `test_ui_ask_user_smoke.py`; `ask_user_ui_reviews/ask_user_prompt_fixture.png`; `ROUND_2_ASK_USER_UI_claude_review.md` -> `APPROVE`. |
 | Thinking display/cost | Earlier v5 thinking placement/cost was confusing. | Thinking is collapsed and placed before metrics; simple S3 inventory disables thinking for that turn. | `test_ui_thinking_smoke.py`; `test_s3_cost_controls.py`. |
 | S3 real use | User asked for S3 inventory and early v5 drifted to local source inventory. | v5 has `aws_s3_list`, accurate sandbox diagnostics, S3 intent guard, and one-strike blocked retry. | S3 real-use review blocks and tests. |
 | Runnable lessons | Runnable patterns matter, but terminal UI does not map directly to SageMaker notebooks. | v5 adapted relevant patterns: progress visibility, review discipline, status tracking, cache/cost awareness, subagent observability. | `V5_DEEP_SCAN_RUNNABLE_COMPARE_20260511.md`; `V5_DESIGN_OVERVIEW.html`. |
-| Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `python -m pytest compact_v5/tests -q` -> 33 passed. |
+| Tests | v4 was stable; v5 is more modular and testable. | Focused suite passes. | `python -m pytest compact_v5/tests -q` -> 36 passed. |
 | Independent review | User required Claude CLI review with subscription auth. | Final Claude CLI review loop approved; no HIGH/MEDIUM findings; the v4-dependency alignment and combined config/chat UI patches both received `APPROVE`. | `notebook_widget_regression_reviews/ROUND3_*`; `notebook_widget_regression_reviews/claude/ROUND_1_WIDGET_DEPENDENCY_FIX_claude_review.md`; `notebook_widget_regression_reviews/claude/ROUND_4_COMBINED_CONFIG_CHAT_UI_REREVIEW_claude_review.md`. |
 | Package | Source fixes must be in the runtime ship zip. | Minimum ship zip rebuilt and verified. | `compact_v5_ship.zip`; SHA recorded in zip verify doc. |
 
@@ -62,6 +63,8 @@ target SageMaker runtime after uploading the new ship zip.
 6. Run:
    - S3 inventory prompt;
    - notes_cli style build/test/review prompt;
+   - an ambiguous prompt that makes the model call `ask_user`, confirming the
+     inline Agent Question box displays and resumes after Submit/Skip;
    - one long-running task with subagent/reviewer visibility.
 
 ## Lesson

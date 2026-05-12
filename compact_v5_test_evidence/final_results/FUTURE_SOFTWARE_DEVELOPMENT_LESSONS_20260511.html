@@ -53,6 +53,7 @@
       <tr><td>Packaging is implementation</td><td>Source fixes do not matter if the zip is stale.</td><td>Rebuild and hash-verify shipped artifacts after relevant changes.</td></tr>
       <tr><td>Lessons need synthesis</td><td>The repo had much evidence but needed a principle layer.</td><td>Every serious incident gets a technical issue doc plus a learning note.</td></tr>
       <tr><td>Notebook thinness is a product contract</td><td>v5 copied parts of v4's UI ritual but let the notebook become a long integration script.</td><td>Keep launch cells small; move path/config/display complexity into tested Python helpers and render-check the target widget runtime.</td></tr>
+      <tr><td>Callback plumbing needs end-to-end proof</td><td>The first ask_user UI patch looked right visually, but the engine did not pass the provider into tool dispatch.</td><td>For every interactive callback, pair the screenshot with an engine/tool smoke test that proves the model can actually reach it.</td></tr>
     </tbody>
   </table>
 

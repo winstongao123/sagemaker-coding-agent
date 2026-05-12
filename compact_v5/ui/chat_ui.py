@@ -286,6 +286,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._live_assistant_index = None
         self._tool_card_indices: Dict[str, int] = {}
         self._ui_running = False
+        self._pending_user_input = {"result": None, "event": None, "active": False}
         self._build()
 
     @staticmethod
@@ -399,6 +400,18 @@ class V4WidgetChatUI(WidgetChatUI):
         self._chat_height_slider = widgets.IntSlider(value=500, min=200, max=1200, step=50, description="Chat Height:", style={"description_width": "100px"}, layout=widgets.Layout(width="250px"))
 
         self._input = widgets.Textarea(placeholder="Type your message...", layout=widgets.Layout(width="100%", height="80px"))
+        self._ask_user_prompt = widgets.HTML(value="")
+        self._ask_user_input = widgets.Text(
+            placeholder="Type your answer...",
+            layout=widgets.Layout(width="70%"),
+        )
+        self._ask_user_submit = widgets.Button(description="Submit", button_style="success", icon="check")
+        self._ask_user_skip = widgets.Button(description="Skip", button_style="warning", icon="forward")
+        self._ask_user_box = widgets.VBox([
+            self._ask_user_prompt,
+            widgets.HBox([self._ask_user_input, self._ask_user_submit, self._ask_user_skip]),
+        ])
+        self._ask_user_box.layout.display = "none"
         self._send_btn = widgets.Button(description="Send", button_style="primary", icon="paper-plane")
         self._stop_btn = widgets.Button(
             description="Stop",
@@ -421,6 +434,8 @@ class V4WidgetChatUI(WidgetChatUI):
 
     def _wire_events(self) -> None:
         self._send_btn.on_click(self._on_send)
+        self._ask_user_submit.on_click(self._on_ask_user_submit)
+        self._ask_user_skip.on_click(self._on_ask_user_skip)
         self._stop_btn.on_click(self._on_stop)
         self._clear_btn.on_click(self._on_clear)
         self._save_btn.on_click(lambda _b: self._dispatch_ui_command("/save " + self._session_name.value.strip() if self._session_name.value.strip() else "/save"))
@@ -514,7 +529,7 @@ class V4WidgetChatUI(WidgetChatUI):
         self._render_header()
         self._render_chat()
         self._render_status()
-        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, runtime_row, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._input, action_row, sep4, self._tokens_html, self._mode_html])
+        self._panel = widgets.VBox([style, self._header, session_row, sep, model_row, self._subagent_panel, runtime_row, sep2, thinking_row, sep3, self._todo_display, self._chat_display, self._ask_user_box, self._input, action_row, sep4, self._tokens_html, self._mode_html])
         self._panel.add_class("sageagent-v4-dark")
 
     def _refresh_sessions(self) -> None:
@@ -1374,9 +1389,72 @@ class V4WidgetChatUI(WidgetChatUI):
             self._refresh_sessions()
             self._render_status()
 
+    def _finish_user_input_prompt(self, value: str) -> None:
+        pending = getattr(self, "_pending_user_input", {})
+        pending["result"] = value
+        event = pending.get("event")
+        if event is not None:
+            event.set()
+
+    def _on_ask_user_submit(self, _btn) -> None:
+        answer = (getattr(self._ask_user_input, "value", "") or "").strip()
+        self._finish_user_input_prompt(answer or "(no response)")
+
+    def _on_ask_user_skip(self, _btn) -> None:
+        self._finish_user_input_prompt("(user skipped)")
+
+    def _request_user_input(self, prompt: str) -> str:
+        """Render the v4-style ask_user prompt and block for a response."""
+        event = threading.Event()
+        pending = self._pending_user_input
+        pending.update({"result": None, "event": event, "active": True})
+        self._ask_user_input.value = ""
+        c = self._colors()
+        bg = "#202b3f" if self._dark_mode else "#f0f4ff"
+        border = "#5577aa" if self._dark_mode else "#aac4e6"
+        self._ask_user_prompt.value = (
+            f"<div style='padding:10px;background:{bg};border:1px solid {border};"
+            "border-radius:6px;margin:6px 0;'>"
+            f"<div style='font-weight:700;color:#7db5ff;margin-bottom:6px;'>Agent Question</div>"
+            f"<div style='color:{c['fg']};white-space:pre-wrap;line-height:1.45;'>"
+            f"{self._escape(prompt)}</div>"
+            f"<div style='color:{c['muted']};font-size:11px;margin-top:6px;'>"
+            "Answer here, or type in the main chat box and press Send.</div>"
+            "</div>"
+        )
+        self._ask_user_box.layout.display = ""
+        self._input.placeholder = "Answer the agent question here, then press Send..."
+        self._send_btn.disabled = False
+        self._status_html.value = (
+            "<span style='color:#4a9eff'><b>* Waiting for your answer</b></span>"
+        )
+
+        waited = 0.0
+        max_wait = 300.0
+        while pending.get("result") is None and waited < max_wait:
+            if self.agent and getattr(self.agent, "_stop_requested", False):
+                pending["result"] = "(stopped)"
+                break
+            event.wait(timeout=0.1)
+            waited += 0.1
+
+        result = pending.get("result") or "(timed out - no response)"
+        pending.update({"result": None, "event": None, "active": False})
+        self._ask_user_box.layout.display = "none"
+        self._ask_user_prompt.value = ""
+        self._ask_user_input.value = ""
+        self._input.placeholder = "Type your message..."
+        self._send_btn.disabled = True
+        self._append_message("system", f"User answered: {result}")
+        return str(result)
+
     def _on_send(self, _btn) -> None:
         msg = (self._input.value or "").strip()
         if not msg:
+            return
+        if self._pending_user_input.get("active"):
+            self._input.value = ""
+            self._finish_user_input_prompt(msg)
             return
         if self._run_thread is not None and self._run_thread.is_alive():
             self._append_message("system", "Agent is already running. Click Stop before sending another request.")
@@ -1420,6 +1498,7 @@ class V4WidgetChatUI(WidgetChatUI):
                 msg,
                 output_fn=lambda s: self._live_output_router(s, streamed),
                 tool_gen_callback=self._on_tool_generation,
+                ask_user_response_provider=self._request_user_input,
             )
             after_stats = self._stats_snapshot()
             turn_meta = self._turn_meta_from_stats(before_stats, after_stats, result)
@@ -1444,6 +1523,9 @@ class V4WidgetChatUI(WidgetChatUI):
 
     def _on_stop(self, _btn) -> None:
         self.agent.stop()
+        if self._pending_user_input.get("active"):
+            self._finish_user_input_prompt("(stopped)")
+            self._ask_user_box.layout.display = "none"
         self._status_html.value = (
             "<span style='color:#ff9800'><b>* Stop requested</b> "
             "finishing current Bedrock/tool/subagent call</span>"

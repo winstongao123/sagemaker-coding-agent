@@ -181,6 +181,7 @@ This is the same anti-drift principle used to build v5 itself: long work must le
 | Budget exhausted | Use `/cost`; raise configured budget only if you intend to spend. |
 | Context feels too large | Use `/context`; compaction and result replay should help. |
 | Long task got interrupted | Use `/resume <id>`, read `AGENT_STATUS.md`, and continue from saved status. |
+| Agent asks you a question mid-run | v5 should show an inline `Agent Question` box inside the same chat UI. Use Submit, Skip, or type the answer in the main message box and press Send. |
 | Need rollback | Use `/checkpoint list` and `/checkpoint restore ...` with preview first. |
 
 ## Production Evidence
@@ -197,7 +198,7 @@ Final evidence summary:
 - Current production-test readiness: 98% confidence for target SageMaker
   production testing, with the remaining risk explicitly limited to target
   environment widget/IAM/package variance.
-- Current focused smoke suite: `33 passed`.
+- Current focused smoke suite: `36 passed`.
 - Latest independent Claude CLI notebook/v4 comparison review: `APPROVE`, no
   HIGH/MEDIUM findings.
 - Latest local visual evidence: Cell 2 rendered one combined config/chat UI
@@ -226,6 +227,9 @@ The notebook chat is now a live supervisor surface:
 - Agent output appears during `agent.run()` as soon as the runtime emits it.
 - Tool calls and results render as separate bounded cards instead of being
   merged into the final assistant answer.
+- Model-initiated `ask_user` prompts render as an inline `Agent Question`
+  panel with Submit, Skip, and main-Send fallback, matching the v4 notebook
+  contract.
 - Markdown tables, lists, and code blocks render in assistant messages.
 - Assistant messages that begin with bracketed headings, such as
   `[SPEC vs SHIPPED]`, remain assistant messages. Only known engine/status

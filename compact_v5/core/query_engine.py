@@ -444,6 +444,7 @@ class QueryEngine:
         temperature: float = 0.0,
         query_source: str = "user",
         prompt_cache_now: bool = False,
+        ask_user_response_provider: Optional[Callable[[str], str]] = None,
     ) -> QueryResult:
         """Execute the agent loop until a stop condition is reached.
 
@@ -1164,6 +1165,7 @@ class QueryEngine:
                             tools=tools,
                             plan_mode=plan_mode,
                             output_fn=output_fn,
+                            ask_user_response_provider=ask_user_response_provider,
                             bookkeeping_lock=_parallel_bookkeeping_lock,
                         )
 
@@ -1205,6 +1207,7 @@ class QueryEngine:
                     tools=tools,
                     plan_mode=plan_mode,
                     output_fn=output_fn,
+                    ask_user_response_provider=ask_user_response_provider,
                 ))
 
             # Append the tool_results as a user turn (Bedrock convention).
@@ -1251,6 +1254,7 @@ class QueryEngine:
         tools: List[Any],
         plan_mode: bool,
         output_fn: Callable[[str], None],
+        ask_user_response_provider: Optional[Callable[[str], str]] = None,
         bookkeeping_lock: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Dispatch one tool call through the canonical QueryEngine pipeline.
@@ -1541,6 +1545,7 @@ class QueryEngine:
                 "session_id": self.session_id,
                 "abort_events": self.abort_events,
                 "output_fn": output_fn,
+                "ask_user_response_provider": ask_user_response_provider,
             })
             text = _coerce_tool_result_to_text(raw)
             self._notify_tool_result(call, text, is_error=False)

@@ -259,6 +259,7 @@ class Agent:
         tools: Optional[List[Any]] = None,
         output_fn: Callable[[str], None] = print,
         tool_gen_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        ask_user_response_provider: Optional[Callable[[str], str]] = None,
     ) -> QueryResult:
         """Execute a single user turn. Returns the `QueryResult`."""
         # Lazy-import to avoid circular import on package init
@@ -360,6 +361,7 @@ class Agent:
                 max_tokens=_max_tokens,
                 temperature=_temperature,
                 prompt_cache_now=bool(state_blocks),
+                ask_user_response_provider=ask_user_response_provider,
             )
         finally:
             if tool_gen_callback is not None:
