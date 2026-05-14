@@ -1,5 +1,36 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-14 — Hermes Agent deep scan (3 rounds, doc-only)
+
+First focused scan of the Hermes Agent repo (NousResearch fork v0.11.0,
+2026-04-25) targeted at long-running coding-task ability. Three parallel
+rounds covered (H1) session persistence + cron + supervision, (H2) subagent
+delegation + RPC + batch trajectory, (H3) autonomous skill nudges +
+FTS5 search + Honcho user modeling.
+
+Findings + plain-English adoption table in
+`compact_v5_test_evidence/final_results/20260514_hermes_deep_scan.md`,
+mirrored into both `learning_archive_20260513/` subfolders.
+
+Hermes is NOT mac-only — it's cross-platform (Debian Docker, WSL2, Termux,
+6 terminal backends). MIT-licensed; fork-and-adapt is fine.
+
+Adoption ranking:
+- Tier 1 (high value, modest effort, fits SageMaker): background skill +
+  memory nudges, FTS5 session search, process supervision/inactivity
+  timeout, auto-resume compression chains. ~700 LOC total.
+- Tier 2: cron scheduler, parallel sub-agent delegation.
+- Tier 3 / optional: RPC tool bridge, batch runner, Honcho dialectic
+  user modeling.
+- Skip (intentional): terminal backends, ACP server, messaging gateways.
+
+5 new v5 wins identified (Bedrock-native client, propose-not-apply gate,
+banned-subsystem guard, deterministic verify/done gate, rich skill
+conditionals). Cumulative v5 wins across all Runnable + Hermes scans: 19.
+
+No blockers for final SageMaker testing of current `compact_v5_ship.zip`
+SHA256 `79d04c5d7162da04f4b1a9a1c20f80b2cc901571b7ea90681c8c48009ad99a6c`.
+
 ## 2026-05-13 — Runnable deep-scan rounds 7-9 + learning archive update (doc-only)
 
 Three more Runnable Claude Code deep-scan rounds appended to
