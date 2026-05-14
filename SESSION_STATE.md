@@ -1,5 +1,31 @@
 # SESSION STATE — sagemaker-coding-agent
 
+## 2026-05-14 — v5 forward backlog doc created
+
+Created `compact_v5/docs/V5_NEXT_BACKLOG.md` — the missing forward-looking
+roadmap for v5. Every Runnable (9 rounds) + Hermes (3 rounds) adoption
+item is now a numbered Block with:
+- priority (P0/P1/P2/P3)
+- effort estimate (XS/S/M/L/XL)
+- source file:line in Runnable AND/OR Hermes
+- v5 target file:line
+- plain-English value
+- user constraints (e.g. "never auto-apply; propose only")
+- acceptance criteria
+
+29 active blocks (B-01 to B-29) + 6 intentional SKIP entries + ranked
+top-10 for single-user-long-running-coding profile.
+
+Hard user constraint applied across the doc: **never auto-apply skills
+or memories**. Hermes' background nudge pattern is adopted as
+*detection trigger* only; v5's existing propose-not-apply gate
+(`tools/skill_propose_patch.py:33-51`) stays. Every nudge Block (B-12,
+B-13) ends in a `.proposed/` file + chat notification — never a write
+to live skill/memory.
+
+Knowledge index (`compact_v5/docs/V5_KNOWLEDGE_INDEX.md`) updated to
+point at the new backlog as the single forward-looking source.
+
 ## 2026-05-14 — Hermes Agent deep scan (3 rounds, doc-only)
 
 First focused scan of the Hermes Agent repo (NousResearch fork v0.11.0,
